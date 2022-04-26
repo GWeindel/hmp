@@ -59,10 +59,10 @@ class hsmm:
     def fit_single(self, n_bumps, initializing, magnitudes=None, parameters=None, threshold=0):
         lkh,magnitudes,parameters,eventprobs = \
             self.__fit(n_bumps, initializing, magnitudes, parameters, threshold)
-        xrlikelihoods = xr.DataArray(self.likelihoods , name="likelihoods")
-        xrparams = xr.DataArray(self.parameters, dims=("stage",'params'), name="parameters")
-        xrmags = xr.DataArray(self.magnitudes, dims=("component","bump"), name="magnitudes")
-        xreventprobs =  xr.DataArray(self.eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
+        xrlikelihoods = xr.DataArray(likelihoods , name="likelihoods")
+        xrparams = xr.DataArray(parameters, dims=("stage",'params'), name="parameters")
+        xrmags = xr.DataArray(magnitudes, dims=("component","bump"), name="magnitudes")
+        xreventprobs =  xr.DataArray(eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
         estimated = xr.merge((xrlikelihoods,xrparams,xrmags,xreventprobs))
         return estimated
         
@@ -76,11 +76,12 @@ class hsmm:
         
         lkh1 = -np.inf#initialize likelihood     
         lkh, eventprobs = self.calc_EEG_50h(parameters, magnitudes, n_bumps)
+        magnitudes1 = np.copy(magnitudes)
+        parameters1 = np.copy(parameters)
+        eventprobs1 = np.copy(eventprobs)
         if threshold == 0:
             lkh1 = np.copy(lkh)
-            magnitudes1 = np.copy(magnitudes)
-            parameters1 = np.copy(parameters)
-            eventprobs1 = np.copy(eventprobs)
+
         else : 
             means = np.zeros((self.max_d, self.n_trials, self.n_dims))
             for i in np.arange(self.n_trials):
