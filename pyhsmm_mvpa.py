@@ -18,8 +18,7 @@ import multiprocessing as mp
 
 class hsmm:
     
-    
-    def __init__(self, data, starts, ends, width = 5, gamma_shape = 2):
+    def __init__(self, data, starts, ends, width = 5):
         '''
          HSMM calculates the probability of data summing over all ways of 
          placing the n bumps to break the trial into n + 1 flats.
@@ -32,109 +31,21 @@ class hsmm:
             1D array with start of each trial
         ends : ndarray
             1D array with end of each trial
-        magnitudes : ndarray
-            2D ndarray components * nBumps, initial conditions for bumps magnitudes
-        parameters : list
-            list of initial conditions for Gamma distribution scale parameter
         width : int
             width of bumps, originally 5 samples
         threshold : float
             threshold for the HsMM algorithm, 0 skips HsMM
 
-        Returns
-        -------
-        TODO
         '''
         self.starts = starts
         self.ends = ends    
         self.n_trials = len(self.starts)  #number of trials
         self.width = width#width of the bumps in samples
         self.offset = self.width//2#offset on data linked to the choosen width
-        self.gamma_shape = gamma_shape
         self.n_samples, self.n_dims = np.shape(data)
         self.bumps = self.calc_bumps(data)#bump morphology added
         self.durations = self.ends - self.starts+1#length of each trial
         self.max_d = np.max(self.durations)
-
-    def fit_single(self, n_bumps, initializing, magnitudes=None, parameters=None, threshold=0):
-        lkh,magnitudes,parameters,eventprobs = \
-            self.__fit(n_bumps, initializing, magnitudes, parameters, threshold)
-        xrlikelihoods = xr.DataArray(likelihoods , name="likelihoods")
-        xrparams = xr.DataArray(parameters, dims=("stage",'params'), name="parameters")
-        xrmags = xr.DataArray(magnitudes, dims=("component","bump"), name="magnitudes")
-        xreventprobs =  xr.DataArray(eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
-        estimated = xr.merge((xrlikelihoods,xrparams,xrmags,xreventprobs))
-        return estimated
-        
-    def __fit(self, n_bumps, initializing, magnitudes, parameters, threshold):
-        '''
-        Hidden fitting function underlying sngle and iterative fit
-        '''
-        if initializing == True:
-            parameters = np.tile([2, math.ceil(self.max_d)/(n_bumps+1)/2], (n_bumps+1,1))
-            magnitudes = np.zeros((self.n_dims,n_bumps))
-        
-        lkh1 = -np.inf#initialize likelihood     
-        lkh, eventprobs = self.calc_EEG_50h(parameters, magnitudes, n_bumps)
-        magnitudes1 = np.copy(magnitudes)
-        parameters1 = np.copy(parameters)
-        eventprobs1 = np.copy(eventprobs)
-        if threshold == 0:
-            lkh1 = np.copy(lkh)
-
-        else : 
-            means = np.zeros((self.max_d, self.n_trials, self.n_dims))
-            for i in np.arange(self.n_trials):
-                means[:self.durations[i],i,:] = self.bumps[self.starts[i]:self.ends[i]+1,:]
-                # arrange bumps dimensions by trials [max_d*trial*PCs]
-
-            while (lkh - lkh1) > threshold:
-                #As long as new run gives better likelihood, go on  
-                lkh1 = np.copy(lkh)
-                magnitudes1 = np.copy(magnitudes)
-                parameters1 = np.copy(parameters)
-                eventprobs1 = np.copy(eventprobs)
-                for i in np.arange(n_bumps):
-                    for j in np.arange(self.n_dims):
-                        magnitudes[j,i] = np.mean(np.sum( \
-                        eventprobs[:,:,i]*means[:,:,j], axis=0))
-                    # 2) sum of all samples in a trial
-                    # 3) mean across trials of the sum of samples in a trial
-                    # repeated for each PC (j) and later for each bump (i)
-                    # magnitudes [nPCAs, nBumps]
-                parameters, averagepos = self.gamma_parameters(eventprobs, n_bumps)
-
-                for i in np.arange(n_bumps + 1): #PCG: seems unefficient
-                    if parameters[i,:].prod() < self.width:
-                        # multiply scale and shape parameters to get 
-                        # the mean distance of the gamma-2 pdf. 
-                        # It constrains that bumps are separated at 
-                        # least a bump length
-                        parameters[i,:] = parameters1[i,:]
-                lkh, eventprobs = self.calc_EEG_50h(parameters,magnitudes,n_bumps)
-        return lkh1,magnitudes1,parameters1,eventprobs1
-    
-    def fit_iterative(self, max_bumps, initializing, magnitudes=None, parameters=None, threshold=0):
-        xrlikelihoods, xrparams, xrmags = [],[],[]
-        for n_bumps in np.arange(1, max_bumps+1):
-            lkh,magnitudes,parameters,eventprobs = \
-                self.__fit(n_bumps,initializing,magnitudes,parameters,threshold)
-
-            if len(parameters) != max_bumps+1:#Xarray needs same dimension size for merging
-                parameters = np.concatenate((self.parameters, np.tile(np.nan, \
-                    (self.max_bumps+1-len(self.parameters),2))))
-                magnitudes = np.concatenate((self.magnitudes, \
-                    np.tile(np.nan, (np.shape(self.magnitudes)[0], \
-                    self.max_bumps-np.shape(self.magnitudes)[1]))),axis=1)
-            xrlikelihoods.append(xr.DataArray(lkh, name="likelihood"))
-            xrparams.append(xr.DataArray(parameters, dims=("stage",'params'), name="parameters"))
-            xrmags.append(xr.DataArray(magnitudes, dims=("component","bump"), name="magnitudes"))
-            
-        xrlikelihoods = xr.concat(xrlikelihoods, dim="n_bumps")
-        xrparams = xr.concat(xrparams, dim="n_bumps")
-        xrmags = xr.concat(xrmags, dim="n_bumps")
-        #xreventprobs =  xr.DataArray(self.eventprobs, dims=("bumps","samples",'trial','bump'), name="eventprobs")
-        return xr.merge((xrlikelihoods,xrparams,xrmags))
     
     def calc_bumps(self,data):
         '''
@@ -173,24 +84,106 @@ class hsmm:
         bumps[[0,1,-2,-1],:] = 0 #Centering
         return bumps
 
-    def calc_EEG_50h(self, parameters, magnitudes, n_bumps):
+    def fit_single(self, n_bumps, initializing, threshold=0, magnitudes=0, parameters=0):
         '''
-        Defines the likelihood function to be maximized as described in Anderson, Zhang, Borst and Walsh, 2016
+        Fit HsMM for a single n_bumps model
 
         Parameters
         ----------
-        bumps : ndarray
-            2D ndarray with n_samples * ncomponents obtained with the calc_bump function, 
-            each sample is adapted to a 5-sample bump morphology
-        starts : ndarray
-            1D array with start of each trial
-        ends : ndarray
-            1D array with end of each trial
+        n_bumps : int
+            how many bumps are estimated
         magnitudes : ndarray
-            2D ndarray components * nBumps, initial conditions for bumps magnitudes
+            2D ndarray components * n_bumps, initial conditions for bumps magnitudes
         parameters : list
             list of initial conditions for Gamma distribution scale parameter
+        threshold : float
+            threshold for the HsMM algorithm, 0 skips HsMM
 
+        '''
+        lkh,mags,pars,eventprobs = \
+            self.fit(n_bumps, initializing, threshold, magnitudes, parameters)
+        
+        xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
+        xrparams = xr.DataArray(pars, dims=("stage",'params'), name="parameters")
+        xrmags = xr.DataArray(mags, dims=("component","bump"), name="magnitudes")
+        xreventprobs = xr.DataArray(eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
+        estimated = xr.merge((xrlikelihoods,xrparams,xrmags,xreventprobs))
+        return estimated
+    
+    def fit_iterative(self, max_bumps, initializing, threshold=0,magnitudes=None, parameters=None):
+        xrlikelihoods, xrparams, xrmags = [],[],[]
+        for n_bumps in np.arange(1, max_bumps+1):
+            lkh,mags,pars,_ = \
+                self.__fit(n_bumps,initializing,threshold, magnitudes,parameters)
+
+            if len(pars) != max_bumps+1:#Xarray needs same dimension size for merging
+                pars = np.concatenate((self.parameters, np.tile(np.nan, \
+                    (max_bumps+1-len(self.parameters),2))))
+                mags = np.concatenate((self.magnitudes, \
+                    np.tile(np.nan, (np.shape(self.magnitudes)[0], \
+                    self.max_bumps-np.shape(self.magnitudes)[1]))),axis=1)
+            xrlikelihoods.append(xr.DataArray(lkh, name="likelihood"))
+            xrparams.append(xr.DataArray(pars, dims=("stage",'params'), name="parameters"))
+            xrmags.append(xr.DataArray(mags, dims=("component","bump"), name="magnitudes"))
+            
+        xrlikelihoods = xr.concat(xrlikelihoods, dim="n_bumps")
+        xrparams = xr.concat(xrparams, dim="n_bumps")
+        xrmags = xr.concat(xrmags, dim="n_bumps")
+        #xreventprobs =  xr.DataArray(self.eventprobs, dims=("bumps","samples",'trial','bump'), name="eventprobs")
+        return xr.merge((xrlikelihoods,xrparams,xrmags))
+        
+    def fit(self, n_bumps, initializing, threshold, magnitudes=0, parameters=0):
+        '''
+        Hidden fitting function underlying single and iterative fit
+        '''
+        
+        if initializing == True:
+            parameters = np.tile([2, math.ceil(self.max_d)/(n_bumps+1)/2], (n_bumps+1,1))
+            magnitudes = np.zeros((self.n_dims,n_bumps))
+        
+        lkh1 = -np.inf#initialize likelihood     
+        lkh, eventprobs = self.calc_EEG_50h(magnitudes, parameters, n_bumps)
+        if threshold == 0:
+            lkh1 = np.copy(lkh)
+            magnitudes1 = np.copy(magnitudes)
+            parameters1 = np.copy(parameters)
+            eventprobs1 = np.copy(eventprobs)
+        else : 
+            means = np.zeros((self.max_d, self.n_trials, self.n_dims))
+            for i in np.arange(self.n_trials):
+                means[:self.durations[i],i,:] = self.bumps[self.starts[i]:self.ends[i]+1,:]
+                # arrange bumps dimensions by trials [max_d*trial*PCs]
+
+            while (lkh - lkh1) > threshold:
+                #As long as new run gives better likelihood, go on  
+                lkh1 = np.copy(lkh)
+                magnitudes1 = np.copy(magnitudes)
+                parameters1 = np.copy(parameters)
+                eventprobs1 = np.copy(eventprobs)
+                for i in np.arange(n_bumps):
+                    for j in np.arange(self.n_dims):
+                        magnitudes[j,i] = np.mean(np.sum( \
+                        eventprobs[:,:,i]*means[:,:,j], axis=0))
+                    # 2) sum of all samples in a trial
+                    # 3) mean across trials of the sum of samples in a trial
+                    # repeated for each PC (j) and later for each bump (i)
+                    # magnitudes [nPCAs, nBumps]
+                parameters, averagepos = self.gamma_parameters(eventprobs, n_bumps)
+
+                for i in np.arange(n_bumps + 1): #PCG: seems unefficient
+                    if parameters[i,:].prod() < self.width:
+                        # multiply scale and shape parameters to get 
+                        # the mean distance of the gamma-2 pdf. 
+                        # It constrains that bumps are separated at 
+                        # least a bump length
+                        parameters[i,:] = parameters1[i,:]
+                lkh, eventprobs = self.calc_EEG_50h(magnitudes,parameters,n_bumps)
+        return lkh1,magnitudes1,parameters1,eventprobs1
+
+
+    def calc_EEG_50h(self, magnitudes, parameters, n_bumps):
+        '''
+        Defines the likelihood function to be maximized as described in Anderson, Zhang, Borst and Walsh, 2016
 
         Returns
         -------
@@ -210,7 +203,6 @@ class hsmm:
                     np.tile((magnitudes[i,:]**2),(self.n_samples,1))/2 
             #Previous : gains + bumps[:,i][np.newaxis].T * magnitudes[i,:] -  \
             #        np.tile((magnitudes[i,:]**2),(n_samples,1))/2 
-            #MATLAB:gains=gains + bumps(:,i)*magnitudes(i,:) - repmat(magnitudes(i,:).^2,nsamples,1)/2;
             # bump*magnitudes-> gives [n_samples*nBumps] It scales bumps prob. by the
             # global magnitudes of the bumps topology 'magnitudes' of each bump. 
             # tile append vertically the (estimated bump-magnitudes)^2 of one PC 
@@ -236,12 +228,11 @@ class hsmm:
                 # assign the reverse of gains per trial
 
         LP = np.zeros([self.max_d, n_bumps + 1]) # Gamma pdf with each stage parameters
-        for j in np.arange(n_bumps):
+        for j in np.arange(n_bumps + 1):
             LP[:,j] = self.gamma_EEG(parameters[j,0], parameters[j,1], self.max_d)
             # Compute Gamma pdf from 0 to max_d with parameters 'parameters'
         BLP = np.zeros([self.max_d, n_bumps + 1]) 
         BLP[:,:] = LP[:,::-1] # States reversed gamma pdf
-
         forward = np.zeros((self.max_d, self.n_trials, n_bumps))
         forward_b = np.zeros((self.max_d, self.n_trials, n_bumps))
         backward = np.zeros((self.max_d, self.n_trials, n_bumps))
@@ -322,14 +313,14 @@ class hsmm:
         # correction for time locations
         flats = averagepos - np.hstack((0,averagepos[:-1]))
         params = np.zeros((n_bumps+1,2))
-        params[:,0] = self.gamma_shape 
-        params[:,1] = flats.T / self.gamma_shape 
+        params[:,0] = 2 
+        params[:,1] = flats.T / 2 
         # correct flats between bumps for the fact that the gamma is 
         # calculated at midpoint
-        params[1:-1,1] = params[1:-1,1] + .5 / self.gamma_shape  
+        params[1:-1,1] = params[1:-1,1] + .5 / 2  
         # first flat is bounded on left while last flat may go 
         # beyond on right
-        params[0,1] = params[0,1] - .5 / self.gamma_shape 
+        params[0,1] = params[0,1] - .5 / 2 
         return params, averagepos
 
     
