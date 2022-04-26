@@ -19,9 +19,7 @@ import multiprocessing as mp
 class hsmm:
     
     
-    def __init__(self, data, starts, ends, n_bumps, initializing = True, \
-                 magnitudes = None, parameters = None, \
-                 width = 5, threshold = 1, gamma_shape = 2):
+    def __init__(self, data, starts, ends, width = 5, gamma_shape = 2):
         '''
          HSMM calculates the probability of data summing over all ways of 
          placing the n bumps to break the trial into n + 1 flats.
@@ -50,29 +48,23 @@ class hsmm:
         self.starts = starts
         self.ends = ends    
         self.n_trials = len(self.starts)  #number of trials
-        self.width = width
-        self.offset = self.width//2
-        self.threshold = threshold
+        self.width = width#width of the bumps in samples
+        self.offset = self.width//2#offset on data linked to the choosen width
         self.gamma_shape = gamma_shape
         self.n_samples, self.n_dims = np.shape(data)
-        self.bumps = self.calc_bumps(data)
+        self.bumps = self.calc_bumps(data)#bump morphology added
         self.durations = self.ends - self.starts+1#length of each trial
         self.max_d = np.max(self.durations)
-#        if initializing == True:
-#            self.parameters = np.tile([2, math.ceil(self.max_d)/(self.n_bumps+1)/2], (self.n_bumps+1,1))
-#            self.magnitudes = np.zeros((self.n_dims,self.n_bumps))
-#        else: 
-#            self.parameters = parameters
-#            self.magnitudes = magnitudes
-        self.n_dims = np.shape(self.bumps)[1] #numbers of components
 
-    def fit(self, n_bumps):
-        lkh1 = -np.inf#initialize likelihood
-        magnitudes = np.copy(self.magnitudes)
-        parameters = np.copy(self.parameters)       
-        lkh, eventprobs = self.calc_EEG_50h(parameters, magnitudes)
         
-        if self.threshold == 0:
+    def fit(self, n_bumps, initializing, magnitudes=None, parameters=None, threshold=0):
+        if initializing == True:
+            parameters = np.tile([2, math.ceil(self.max_d)/(n_bumps+1)/2], (n_bumps+1,1))
+            magnitudes = np.zeros((self.n_dims,n_bumps))
+        
+        lkh1 = -np.inf#initialize likelihood     
+        lkh, eventprobs = self.calc_EEG_50h(parameters, magnitudes, n_bumps)
+        if threshold == 0:
             lkh1 = np.copy(lkh)
             magnitudes1 = np.copy(magnitudes)
             parameters1 = np.copy(parameters)
@@ -83,7 +75,7 @@ class hsmm:
                 means[:self.durations[i],i,:] = self.bumps[self.starts[i]:self.ends[i]+1,:]
                 # arrange bumps dimensions by trials [max_d*trial*PCs]
 
-            while (lkh - lkh1) > self.threshold:
+            while (lkh - lkh1) > threshold:
                 #As long as new run gives better likelihood, go on  
                 lkh1 = np.copy(lkh)
                 magnitudes1 = np.copy(magnitudes)
@@ -97,7 +89,7 @@ class hsmm:
                     # 3) mean across trials of the sum of samples in a trial
                     # repeated for each PC (j) and later for each bump (i)
                     # magnitudes [nPCAs, nBumps]
-                parameters, averagepos = self.gamma_parameters(eventprobs)
+                parameters, averagepos = self.gamma_parameters(eventprobs, n_bumps)
 
                 for i in np.arange(n_bumps + 1): #PCG: seems unefficient
                     if parameters[i,:].prod() < self.width:
@@ -106,14 +98,18 @@ class hsmm:
                         # It constrains that bumps are separated at 
                         # least a bump length
                         parameters[i,:] = parameters1[i,:]
-                lkh, eventprobs = self.calc_EEG_50h(parameters,magnitudes)
+                lkh, eventprobs = self.calc_EEG_50h(parameters,magnitudes,n_bumps)
         self.likelihoods = lkh1
         self.magnitudes = magnitudes1
         self.parameters = parameters1
         self.eventprobs = eventprobs1
 
     
-    def fit_iterative(self, max_bumps)
+    def fit_iterative(self, max_bumps, initializing, magnitudes=None, parameters=None, threshold=0):
+        estimated_iterative = []
+        for n_bumps in np.arange(max_bumps):
+            self.fit(1,initializing,magnitudes,parameters,threshold)
+            
     
     def calc_bumps(self,data):
         '''
@@ -150,10 +146,9 @@ class hsmm:
             # template(sine wave bump in samples - 5*1)
         bumps[2:,:] = bumps[:-2,:]#Centering
         bumps[[0,1,-2,-1],:] = 0 #Centering
-        self.bumps = bumps
-        return self.bumps
+        return bumps
 
-    def calc_EEG_50h(self, parameters, magnitudes):
+    def calc_EEG_50h(self, parameters, magnitudes, n_bumps):
         '''
         Defines the likelihood function to be maximized as described in Anderson, Zhang, Borst and Walsh, 2016
 
@@ -179,7 +174,7 @@ class hsmm:
         eventprobs : ndarray
             [samples(max_d)*n_trials*n_bumps] = [max_d*trials*nBumps]
         '''
-        gains = np.zeros((self.n_samples,self.n_bumps))
+        gains = np.zeros((self.n_samples, n_bumps))
 
         for i in np.arange(self.n_dims):
             # computes the gains, i.e. how much the bumps reduce the variance at 
@@ -201,30 +196,30 @@ class hsmm:
             # sum for all PCs of the 'normalized' correlation of P(having a sin)
             # and bump morphology
         gains = np.exp(gains)
-        probs = np.zeros([self.max_d,self.n_trials,self.n_bumps]) # prob per trial
-        probs_b = np.zeros([self.max_d,self.n_trials,self.n_bumps])
+        probs = np.zeros([self.max_d,self.n_trials,n_bumps]) # prob per trial
+        probs_b = np.zeros([self.max_d,self.n_trials,n_bumps])
 
         for i in np.arange(self.n_trials):
             # Following assigns gain per trial to variable probs 
             # in direct and reverse order
             probs[self.offset+1:self.ends[i] - self.starts[i]+1 - self.offset,i,:] = \
                 gains[self.starts[i]+ self.offset : self.ends[i] - self.offset,:] 
-            for j in np.arange(self.n_bumps): # PCG: for-loop IMPROVE
+            for j in np.arange(n_bumps): # PCG: for-loop IMPROVE
                 probs_b[self.offset+1:self.ends[i]- self.starts[i]+1 - self.offset,i,j] = \
                 np.flipud(gains[self.starts[i]+ self.offset : self.ends[i]- self.offset,\
-                self.n_bumps-1-j])
+                n_bumps-1-j])
                 # assign the reverse of gains per trial
 
-        LP = np.zeros([self.max_d, self.n_bumps + 1]) # Gamma pdf with each stage parameters
-        for j in np.arange(self.n_bumps + 1):
+        LP = np.zeros([self.max_d, n_bumps + 1]) # Gamma pdf with each stage parameters
+        for j in np.arange(n_bumps + 1):
             LP[:,j] = self.gamma_EEG(parameters[j,0], parameters[j,1], self.max_d)
             # Compute Gamma pdf from 0 to max_d with parameters 'parameters'
-        BLP = np.zeros([self.max_d, self.n_bumps + 1]) 
+        BLP = np.zeros([self.max_d, n_bumps + 1]) 
         BLP[:,:] = LP[:,::-1] # States reversed gamma pdf
 
-        forward = np.zeros((self.max_d, self.n_trials, self.n_bumps))
-        forward_b = np.zeros((self.max_d, self.n_trials, self.n_bumps))
-        backward = np.zeros((self.max_d, self.n_trials, self.n_bumps))
+        forward = np.zeros((self.max_d, self.n_trials, n_bumps))
+        forward_b = np.zeros((self.max_d, self.n_trials, n_bumps))
+        backward = np.zeros((self.max_d, self.n_trials, n_bumps))
 
         # eq1 in Appendix, first definition of likelihood
 
@@ -233,7 +228,7 @@ class hsmm:
 
         forward_b[self.offset:self.max_d,:,0] = np.tile(BLP[:self.max_d-self.offset,0], (self.n_trials,1)).T # reversed Gamma pdf
 
-        for i in np.arange(1,self.n_bumps):
+        for i in np.arange(1,n_bumps):
             next_ = np.concatenate((np.zeros(self.width), LP[:self.max_d - self.width, i]), axis=0)
             # next_ 5 bump width samples followed by gamma pdf
             next_b = np.concatenate((np.zeros(self.width), BLP[:self.max_d - self.width, i]), axis=0)
@@ -251,7 +246,7 @@ class hsmm:
         forward_b = forward_b[:,:,::-1]
 
         for j in np.arange(self.n_trials): #PCG: IMPROVE
-            for i in np.arange(self.n_bumps):
+            for i in np.arange(n_bumps):
                 backward[:self.durations[j],j,i] = np.flipud(forward_b[:self.durations[j],j,i])
 
         backward[:self.offset,:,:] = 0
@@ -263,7 +258,7 @@ class hsmm:
         return [likelihood, eventprobs]
     
 
-    def gamma_parameters(self, eventprobs):
+    def gamma_parameters(self, eventprobs, n_bumps):
         '''
         Given that the shape is fixed the calculation of the maximum likelihood
         scales becomes simple.  One just calculates the means expected lengths 
@@ -290,18 +285,18 @@ class hsmm:
 
         # Expected value, time location
         averagepos = np.hstack((np.sum( \
-                np.tile(np.arange(1,self.max_d+1)[np.newaxis].T, (1, self.n_bumps))\
-                * np.mean(eventprobs, axis=1).reshape(self.max_d, self.n_bumps,\
+                np.tile(np.arange(1,self.max_d+1)[np.newaxis].T, (1, n_bumps))\
+                * np.mean(eventprobs, axis=1).reshape(self.max_d, n_bumps,\
                 order="F").copy(), axis=0), np.mean(self.durations)))
         # 1) mean accross trials of eventprobs -> mP[max_l, nbump]
         # 2) global expected location of each bump
         # concatenate horizontaly to last column the length of each trial
         averagepos = averagepos - (self.offset + \
-                        np.hstack([np.arange(0, self.n_bumps*self.width, self.width), \
-                        (self.n_bumps-1)*self.width+self.offset]))
+                        np.hstack([np.arange(0, n_bumps*self.width, self.width), \
+                        (n_bumps-1)*self.width+self.offset]))
         # correction for time locations
         flats = averagepos - np.hstack((0,averagepos[:-1]))
-        params = np.zeros((self.n_bumps+1,2))
+        params = np.zeros((n_bumps+1,2))
         params[:,0] = self.gamma_shape 
         params[:,1] = flats.T / self.gamma_shape 
         # correct flats between bumps for the fact that the gamma is 
