@@ -15,6 +15,7 @@ import math
 import scipy.stats as stats
 import xarray as xr
 import multiprocessing as mp
+import warnings
 
 class hsmm:
     
@@ -84,7 +85,7 @@ class hsmm:
         bumps[[0,1,-2,-1],:] = 0 #Centering
         return bumps
 
-    def fit_single(self, n_bumps, initializing, threshold=0, magnitudes=0, parameters=0):
+    def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1):
         '''
         Fit HsMM for a single n_bumps model
 
@@ -100,28 +101,36 @@ class hsmm:
             threshold for the HsMM algorithm, 0 skips HsMM
 
         '''
+        print("Estimating parameters")
         lkh,mags,pars,eventprobs = \
-            self.fit(n_bumps, initializing, threshold, magnitudes, parameters)
+            self.__fit(n_bumps, magnitudes, parameters, threshold)
         
         xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
         xrparams = xr.DataArray(pars, dims=("stage",'params'), name="parameters")
         xrmags = xr.DataArray(mags, dims=("component","bump"), name="magnitudes")
         xreventprobs = xr.DataArray(eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
         estimated = xr.merge((xrlikelihoods,xrparams,xrmags,xreventprobs))
+        print("Parameters estimated")
         return estimated
     
-    def fit_iterative(self, max_bumps, initializing, threshold=0,magnitudes=None, parameters=None):
+    def fit_iterative(self, max_bumps, magnitudes=None, parameters=None, threshold=1):
         xrlikelihoods, xrparams, xrmags = [],[],[]
         for n_bumps in np.arange(1, max_bumps+1):
+            if np.any(magnitudes)!= None:
+                mags = magnitudes[n_bumps-1,:,:n_bumps]
+                pars = parameters[n_bumps-1,:n_bumps+1,:]
+            else: 
+                mags=magnitudes
+                pars=parameters
             lkh,mags,pars,_ = \
-                self.__fit(n_bumps,initializing,threshold, magnitudes,parameters)
+                self.__fit(n_bumps, mags,pars,threshold)
 
             if len(pars) != max_bumps+1:#Xarray needs same dimension size for merging
-                pars = np.concatenate((self.parameters, np.tile(np.nan, \
-                    (max_bumps+1-len(self.parameters),2))))
-                mags = np.concatenate((self.magnitudes, \
-                    np.tile(np.nan, (np.shape(self.magnitudes)[0], \
-                    self.max_bumps-np.shape(self.magnitudes)[1]))),axis=1)
+                pars = np.concatenate((pars, np.tile(np.nan, \
+                    (max_bumps+1-len(pars),2))))
+                mags = np.concatenate((mags, \
+                    np.tile(np.nan, (np.shape(mags)[0], \
+                    max_bumps-np.shape(mags)[1]))),axis=1)
             xrlikelihoods.append(xr.DataArray(lkh, name="likelihood"))
             xrparams.append(xr.DataArray(pars, dims=("stage",'params'), name="parameters"))
             xrmags.append(xr.DataArray(mags, dims=("component","bump"), name="magnitudes"))
@@ -132,12 +141,13 @@ class hsmm:
         #xreventprobs =  xr.DataArray(self.eventprobs, dims=("bumps","samples",'trial','bump'), name="eventprobs")
         return xr.merge((xrlikelihoods,xrparams,xrmags))
         
-    def fit(self, n_bumps, initializing, threshold, magnitudes=0, parameters=0):
+    def __fit(self, n_bumps, magnitudes, parameters,  threshold):
         '''
         Hidden fitting function underlying single and iterative fit
         '''
         
-        if initializing == True:
+        if np.any(magnitudes)== None:
+            warnings.warn('Using default parameters value for magnitudes and gamma')
             parameters = np.tile([2, math.ceil(self.max_d)/(n_bumps+1)/2], (n_bumps+1,1))
             magnitudes = np.zeros((self.n_dims,n_bumps))
         
