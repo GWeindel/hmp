@@ -19,7 +19,7 @@ import warnings
 
 class hsmm:
     
-    def __init__(self, data, starts, ends, width = 5):
+    def __init__(self, data, starts, ends, sf, bump_width = 50, bump_frequency=10):
         '''
          HSMM calculates the probability of data summing over all ways of 
          placing the n bumps to break the trial into n + 1 flats.
@@ -32,19 +32,24 @@ class hsmm:
             1D array with start of each trial
         ends : ndarray
             1D array with end of each trial
+        sf : int
+            Sampling frequency of the signal (initially 100)
         width : int
-            width of bumps, originally 5 samples
-        threshold : float
-            threshold for the HsMM algorithm, 0 skips HsMM
-
+            width of bumps in milliseconds, originally 5 samples
+        bump_frequency : int
+            frequency of the expected bumps, originally 10 Hz
         '''
+        
         self.starts = starts
         self.ends = ends    
+        self.sf = sf
+        self.bump_frequency = bump_frequency
         self.n_trials = len(self.starts)  #number of trials
-        self.width = width#width of the bumps in samples
-        self.offset = self.width//2#offset on data linked to the choosen width
+        self.bump_width = bump_width
+        self.bump_width_samples = int(self.bump_width * (self.sf/1000))
+        self.offset = self.bump_width_samples//2#offset on data linked to the choosen width
         self.n_samples, self.n_dims = np.shape(data)
-        self.bumps = self.calc_bumps(data)#bump morphology added
+        self.bumps = self.calc_bumps(data)#adds bump morphology
         self.durations = self.ends - self.starts+1#length of each trial
         self.max_d = np.max(self.durations)
     
@@ -64,8 +69,11 @@ class hsmm:
             a 2D ndarray with samples * PC components where cell values have
             been correlated with bump morphology
         '''
-
-        template = np.array([0.3090, 0.8090, 1.0000, 0.8090, 0.3090])#bump morph #PCG HARD CODED TO 5 SAMPLES
+        bump_idx = np.arange(0,bump_width_samples)*(1000/self.sf)+(1000/self.sf)/2
+        template = np.sin(2*np.pi*np.linspace(0,1,1000)*self.bump_frequency)[[int(x) for x in bump_idx]]#bump morph based on a half sine with given bump width and sampling frequency #previously np.array([0.3090, 0.8090, 1.0000, 0.8090, 0.3090]) 
+        
+        ### TESTING : plt.plot(np.linspace(0,1,1000),np.sin((2*np.pi*np.linspace(0,1,1000)*bump_frequency)))
+#plt.plot(bump_idx/1000, np.sin(2*np.pi*np.linspace(0,1,1000)*bump_frequency)[[int(x) for x in bump_idx]],'.')
         template = template/np.sum(template**2)#Weight normalized to sum(P) = 1.294
         
         bumps = np.zeros(data.shape)
@@ -73,7 +81,7 @@ class hsmm:
         for j in np.arange(self.n_dims):#For each PC
             temp = np.zeros((self.n_samples,5))
             temp[:,0] = data[:,j]#first col = samples of PC
-            for i in np.arange(1,self.width):
+            for i in np.arange(1,self.bump_width_samples):
                 temp[:,i] = np.concatenate((temp[1:, i-1], [0]), axis=0)
                 # puts the component in a [n_samples X length(bump)] matrix shifted.
                 # each column is a copy of the first one but shifted one sample
@@ -184,7 +192,7 @@ class hsmm:
                 parameters, averagepos = self.gamma_parameters(eventprobs, n_bumps)
 
                 for i in np.arange(n_bumps + 1): #PCG: seems unefficient
-                    if parameters[i,:].prod() < self.width:
+                    if parameters[i,:].prod() < self.bump_width_samples:
                         # multiply scale and shape parameters to get 
                         # the mean distance of the gamma-2 pdf. 
                         # It constrains that bumps are separated at 
@@ -258,9 +266,9 @@ class hsmm:
         forward_b[self.offset:self.max_d,:,0] = np.tile(BLP[:self.max_d-self.offset,0], (self.n_trials,1)).T # reversed Gamma pdf
 
         for i in np.arange(1,n_bumps):
-            next_ = np.concatenate((np.zeros(self.width), LP[:self.max_d - self.width, i]), axis=0)
+            next_ = np.concatenate((np.zeros(self.bump_width_samples), LP[:self.max_d - self.bump_width_samples, i]), axis=0)
             # next_ 5 bump width samples followed by gamma pdf
-            next_b = np.concatenate((np.zeros(self.width), BLP[:self.max_d - self.width, i]), axis=0)
+            next_b = np.concatenate((np.zeros(self.bump_width_samples), BLP[:self.max_d - self.bump_width_samples, i]), axis=0)
             # next_b same with reversed gamma
             add_b = forward_b[:,:,i-1] * probs_b[:,:,i-1]
             for j in np.arange(self.n_trials):
@@ -321,8 +329,8 @@ class hsmm:
         # 2) global expected location of each bump
         # concatenate horizontaly to last column the length of each trial
         averagepos = averagepos - (self.offset + \
-                        np.hstack([np.arange(0, n_bumps*self.width, self.width), \
-                        (n_bumps-1)*self.width+self.offset]))
+                        np.hstack([np.arange(0, n_bumps*self.bump_width_samples, self.bump_width_samples), \
+                        (n_bumps-1)*self.bump_width_samples+self.offset]))
         # correction for time locations
         flats = averagepos - np.hstack((0,averagepos[:-1]))
         params = np.zeros((n_bumps+1,2))
