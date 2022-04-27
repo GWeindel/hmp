@@ -101,7 +101,7 @@ class hsmm:
             threshold for the HsMM algorithm, 0 skips HsMM
 
         '''
-        print("Estimating parameters")
+        print(f"Estimating parameters for {n_bumps} bumps model")
         lkh,mags,pars,eventprobs = \
             self.__fit(n_bumps, magnitudes, parameters, threshold)
         
@@ -110,20 +110,20 @@ class hsmm:
         xrmags = xr.DataArray(mags, dims=("component","bump"), name="magnitudes")
         xreventprobs = xr.DataArray(eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
         estimated = xr.merge((xrlikelihoods,xrparams,xrmags,xreventprobs))
-        print("Parameters estimated")
+        print(f"Parameters estimated for {n_bumps} bumps model")
         return estimated
     
     def fit_iterative(self, max_bumps, magnitudes=None, parameters=None, threshold=1):
         xrlikelihoods, xrparams, xrmags = [],[],[]
         for n_bumps in np.arange(1, max_bumps+1):
             if np.any(magnitudes)!= None:
-                mags = magnitudes[n_bumps-1,:,:n_bumps]
-                pars = parameters[n_bumps-1,:n_bumps+1,:]
+                magnitudes_n = magnitudes[n_bumps-1,:,:n_bumps]
+                parameters_n = parameters[n_bumps-1,:n_bumps+1,:]
             else: 
-                mags=magnitudes
-                pars=parameters
+                magnitudes_n = magnitudes
+                parameters_n = parameters
             lkh,mags,pars,_ = \
-                self.__fit(n_bumps, mags,pars,threshold)
+                self.__fit(n_bumps, magnitudes_n,parameters_n,threshold)
 
             if len(pars) != max_bumps+1:#Xarray needs same dimension size for merging
                 pars = np.concatenate((pars, np.tile(np.nan, \
@@ -140,6 +140,9 @@ class hsmm:
         xrmags = xr.concat(xrmags, dim="n_bumps")
         #xreventprobs =  xr.DataArray(self.eventprobs, dims=("bumps","samples",'trial','bump'), name="eventprobs")
         return xr.merge((xrlikelihoods,xrparams,xrmags))
+    
+    #def fit_loo(self, max_bumps, magnitudes=None, parameters=None, threshold=1):
+
         
     def __fit(self, n_bumps, magnitudes, parameters,  threshold):
         '''
