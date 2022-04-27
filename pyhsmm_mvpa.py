@@ -19,7 +19,7 @@ import warnings
 
 class hsmm:
     
-    def __init__(self, data, starts, ends, sf, bump_width = 50, bump_frequency=10):
+    def __init__(self, data, starts, ends, sf, bump_width = 50):
         '''
          HSMM calculates the probability of data summing over all ways of 
          placing the n bumps to break the trial into n + 1 flats.
@@ -36,14 +36,11 @@ class hsmm:
             Sampling frequency of the signal (initially 100)
         width : int
             width of bumps in milliseconds, originally 5 samples
-        bump_frequency : int
-            frequency of the expected bumps, originally 10 Hz
         '''
         
         self.starts = starts
         self.ends = ends    
         self.sf = sf
-        self.bump_frequency = bump_frequency
         self.n_trials = len(self.starts)  #number of trials
         self.bump_width = bump_width
         self.bump_width_samples = int(self.bump_width * (self.sf/1000))
@@ -69,8 +66,10 @@ class hsmm:
             a 2D ndarray with samples * PC components where cell values have
             been correlated with bump morphology
         '''
-        bump_idx = np.arange(0,bump_width_samples)*(1000/self.sf)+(1000/self.sf)/2
-        template = np.sin(2*np.pi*np.linspace(0,1,1000)*self.bump_frequency)[[int(x) for x in bump_idx]]#bump morph based on a half sine with given bump width and sampling frequency #previously np.array([0.3090, 0.8090, 1.0000, 0.8090, 0.3090]) 
+        bump_idx = np.arange(0,self.bump_width_samples)*(1000/self.sf)+(1000/self.sf)/2
+        bump_frequency = self.sf/self.bump_width_samples*2 #gives bump frequency given that bumps are defined as hal-sines
+        print(bump_idx)
+        template = np.sin(2*np.pi*np.linspace(0,1,1000)*bump_frequency)[[int(x) for x in bump_idx]]#bump morph based on a half sine with given bump width and sampling frequency #previously np.array([0.3090, 0.8090, 1.0000, 0.8090, 0.3090]) 
         
         ### TESTING : plt.plot(np.linspace(0,1,1000),np.sin((2*np.pi*np.linspace(0,1,1000)*bump_frequency)))
 #plt.plot(bump_idx/1000, np.sin(2*np.pi*np.linspace(0,1,1000)*bump_frequency)[[int(x) for x in bump_idx]],'.')
@@ -79,7 +78,7 @@ class hsmm:
         bumps = np.zeros(data.shape)
 
         for j in np.arange(self.n_dims):#For each PC
-            temp = np.zeros((self.n_samples,5))
+            temp = np.zeros((self.n_samples,self.bump_width_samples))
             temp[:,0] = data[:,j]#first col = samples of PC
             for i in np.arange(1,self.bump_width_samples):
                 temp[:,i] = np.concatenate((temp[1:, i-1], [0]), axis=0)
