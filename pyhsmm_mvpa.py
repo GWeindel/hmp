@@ -45,6 +45,7 @@ class hsmm:
         self.bump_width = bump_width
         self.bump_width_samples = int(self.bump_width * (self.sf/1000))
         self.offset = self.bump_width_samples//2#offset on data linked to the choosen width
+        print(self.offset)
         self.n_samples, self.n_dims = np.shape(data)
         self.bumps = self.calc_bumps(data)#adds bump morphology
         self.durations = self.ends - self.starts+1#length of each trial
@@ -67,8 +68,8 @@ class hsmm:
             been correlated with bump morphology
         '''
         bump_idx = np.arange(0,self.bump_width_samples)*(1000/self.sf)+(1000/self.sf)/2
-        bump_frequency = self.sf/self.bump_width_samples*2 #gives bump frequency given that bumps are defined as hal-sines
-        print(bump_idx)
+        print(len(bump_idx))
+        bump_frequency = 1000/(self.bump_width*2)#gives bump frequency given that bumps are defined as hal-sines
         template = np.sin(2*np.pi*np.linspace(0,1,1000)*bump_frequency)[[int(x) for x in bump_idx]]#bump morph based on a half sine with given bump width and sampling frequency #previously np.array([0.3090, 0.8090, 1.0000, 0.8090, 0.3090]) 
         
         ### TESTING : plt.plot(np.linspace(0,1,1000),np.sin((2*np.pi*np.linspace(0,1,1000)*bump_frequency)))
@@ -88,8 +89,9 @@ class hsmm:
             bumps[:,j] = temp @ template
             # for each PC we calculate its correlation with bump temp(data samples * 5) *  
             # template(sine wave bump in samples - 5*1)
-        bumps[2:,:] = bumps[:-2,:]#Centering
-        bumps[[0,1,-2,-1],:] = 0 #Centering
+        bumps[self.offset:,:] = bumps[:-self.offset,:]#Centering
+        bumps[:self.offset,:] = 0 #Centering
+        bumps[-self.offset:,:] = 0 #Centering
         return bumps
 
     def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1):
@@ -256,7 +258,6 @@ class hsmm:
         forward = np.zeros((self.max_d, self.n_trials, n_bumps))
         forward_b = np.zeros((self.max_d, self.n_trials, n_bumps))
         backward = np.zeros((self.max_d, self.n_trials, n_bumps))
-
         # eq1 in Appendix, first definition of likelihood
 
         forward[self.offset:self.max_d,:,0] = np.tile(LP[:self.max_d-self.offset,0],\
@@ -432,7 +433,12 @@ class iterative_fit(hsmm):
                                       
     def get_results(self):
         return xr.concat(estimated, dim="bumps")
-
+      
+    def bump_times(self, n_bumps):
+        params = self.estimated.parameters.sel(bumps=n_bumps).values
+        scales = [(bump[-1]+self.offset)*(2000/self.sf) for bump in params[:n_bumps+1]]
+        return scales
+    
 class generate_pcs():
     pass
 
@@ -448,11 +454,7 @@ class results():
         self.offset = width//2
         self.n_bumps = np.shape(estimated.magnitudes) 
         self.durations = starts - ends + 1
-    
-    def bump_times(self, n_bumps):
-        params = self.estimated.parameters.sel(bumps=n_bumps).values
-        scales = [(bump[-1]+self.offset)*(2000/self.sf) for bump in params[:n_bumps+1]]
-        return scales
+
     
 class LOOCV(hsmm):
     
