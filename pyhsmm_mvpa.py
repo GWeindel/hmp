@@ -11,11 +11,11 @@ TODO :
 '''
 
 import numpy as np
-import math
 import scipy.stats as stats
 import xarray as xr
 import multiprocessing as mp
 import warnings
+import math
 
 class hsmm:
     
@@ -45,7 +45,6 @@ class hsmm:
         self.bump_width = bump_width
         self.bump_width_samples = int(self.bump_width * (self.sf/1000))
         self.offset = self.bump_width_samples//2#offset on data linked to the choosen width
-        print(self.offset)
         self.n_samples, self.n_dims = np.shape(data)
         self.bumps = self.calc_bumps(data)#adds bump morphology
         self.durations = self.ends - self.starts+1#length of each trial
@@ -68,7 +67,6 @@ class hsmm:
             been correlated with bump morphology
         '''
         bump_idx = np.arange(0,self.bump_width_samples)*(1000/self.sf)+(1000/self.sf)/2
-        print(len(bump_idx))
         bump_frequency = 1000/(self.bump_width*2)#gives bump frequency given that bumps are defined as hal-sines
         template = np.sin(2*np.pi*np.linspace(0,1,1000)*bump_frequency)[[int(x) for x in bump_idx]]#bump morph based on a half sine with given bump width and sampling frequency #previously np.array([0.3090, 0.8090, 1.0000, 0.8090, 0.3090]) 
         
@@ -215,7 +213,8 @@ class hsmm:
             [samples(max_d)*n_trials*n_bumps] = [max_d*trials*nBumps]
         '''
         gains = np.zeros((self.n_samples, n_bumps))
-
+        if len(np.shape(magnitudes)) <2:
+            magnitudes = magnitudes[np.newaxis].T
         for i in np.arange(self.n_dims):
             # computes the gains, i.e. how much the bumps reduce the variance at 
             # the location where they are placed, see Appendix Anderson,Zhang, 
@@ -237,7 +236,7 @@ class hsmm:
         gains = np.exp(gains)
         probs = np.zeros([self.max_d,self.n_trials,n_bumps]) # prob per trial
         probs_b = np.zeros([self.max_d,self.n_trials,n_bumps])
-
+        print(gains)
         for i in np.arange(self.n_trials):
             # Following assigns gain per trial to variable probs 
             # in direct and reverse order
@@ -317,9 +316,6 @@ class hsmm:
         params : ndarray
             shape and scale for the gamma distributions
         '''
-
-        n_bumps = np.size(eventprobs,2) #number of bumps 
-
         # Expected value, time location
         averagepos = np.hstack((np.sum( \
                 np.tile(np.arange(1,self.max_d+1)[np.newaxis].T, (1, n_bumps))\
@@ -387,7 +383,7 @@ class hsmm:
         return estimated
     
     def max_bumps(self):
-        max_bumps = math.floor(np.min(self.ends - self.starts + 1)/self.bump_width_samples)
+        max_bumps = np.min(self.ends - self.starts + 1)//self.bump_width_samples
         return max_bumps
 
     def save_fit(self, filename):
