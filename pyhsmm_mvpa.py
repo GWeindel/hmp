@@ -385,6 +385,10 @@ class hsmm:
         xreventprobs =  xr.DataArray(self.eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
         estimated = xr.merge((xrlikelihoods,xrparams,xrmags,xreventprobs))
         return estimated
+    
+    def max_bumps(self):
+        max_bumps = math.floor(np.min(self.ends - self.starts + 1)/self.bump_width_samples)
+        return max_bumps
 
     def save_fit(self, filename):
         estimated = self.extract_results()
