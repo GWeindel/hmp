@@ -151,6 +151,10 @@ class hsmm:
     
     #def fit_loo(self, max_bumps, magnitudes=None, parameters=None, threshold=1):
 
+    def get_init_parameters(self, n_bumps):
+        parameters = np.tile([2, math.ceil(self.max_d)/(n_bumps+1)/2], (n_bumps+1,1))
+        magnitudes = np.zeros((self.n_dims,n_bumps))
+        return [parameters,magnitudes]
         
     def __fit(self, n_bumps, magnitudes, parameters,  threshold):
         '''
@@ -159,8 +163,8 @@ class hsmm:
         
         if np.any(magnitudes)== None:
             warnings.warn('Using default parameters value for magnitudes and gamma')
-            parameters = np.tile([2, math.ceil(self.max_d)/(n_bumps+1)/2], (n_bumps+1,1))
-            magnitudes = np.zeros((self.n_dims,n_bumps))
+            parameters, magnitudes = self.get_init_parameters(n_bumps)
+
         
         lkh1 = -np.inf#initialize likelihood     
         lkh, eventprobs = self.calc_EEG_50h(magnitudes, parameters, n_bumps)
@@ -201,7 +205,7 @@ class hsmm:
         return lkh1,magnitudes1,parameters1,eventprobs1
 
 
-    def calc_EEG_50h(self, magnitudes, parameters, n_bumps):
+    def calc_EEG_50h(self, magnitudes, parameters, n_bumps, mp=False):
         '''
         Defines the likelihood function to be maximized as described in Anderson, Zhang, Borst and Walsh, 2016
 
@@ -212,6 +216,8 @@ class hsmm:
         eventprobs : ndarray
             [samples(max_d)*n_trials*n_bumps] = [max_d*trials*nBumps]
         '''
+        if mp==True: #PCG: Dirty temporarilly needed for multiprocessing in the iterative backroll estimation...
+            magnitudes = magnitudes.T
         gains = np.zeros((self.n_samples, n_bumps))
         if len(np.shape(magnitudes)) <2:
             magnitudes = magnitudes[np.newaxis].T
@@ -288,7 +294,6 @@ class hsmm:
                 backward[:self.durations[j],j,i] = np.flipud(forward_b[:self.durations[j],j,i])
         backward[:self.offset,:,:] = 0
         temp = forward * backward # [max_d,n_trials,n_bumps] .* [max_d,n_trials,n_bumps];
-        print(np.where(np.mean(temp[:,:,0], axis=(0))==0))
         likelihood = np.sum(np.log(temp[:,:,0].sum(axis=0)))# why 0 index? PCG shouldn't it also be for all dim??
         # sum(log(sum of 'temp' by columns, samples in a trial)) 
         eventprobs = temp / np.tile(temp.sum(axis=0), [self.max_d, 1, 1])
@@ -384,6 +389,12 @@ class hsmm:
         xreventprobs =  xr.DataArray(self.eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
         estimated = xr.merge((xrlikelihoods,xrparams,xrmags,xreventprobs))
         return estimated
+    
+    def bump_times(self, fit, n_bumps):
+        params = fit.parameters.values
+        scales = [(bump[-1])*(2000/self.sf) for bump in params[:n_bumps+1]]
+        return scales
+    
     
     def max_bumps(self):
         max_bumps = np.min(self.ends - self.starts + 1)//self.bump_width_samples
