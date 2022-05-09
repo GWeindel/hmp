@@ -93,7 +93,7 @@ class hsmm:
         bumps[-self.offset:,:] = 0 #Centering
         return bumps
 
-    def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1):
+    def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, mp=False,xarr=False):
         '''
         Fit HsMM for a single n_bumps model
 
@@ -110,14 +110,27 @@ class hsmm:
 
         '''
         print(f"Estimating parameters for {n_bumps} bumps model")
+        if mp==True: #PCG: Dirty temporarilly needed for multiprocessing in the iterative backroll estimation...
+            magnitudes = magnitudes.T
+        if xarr==True:
+            magnitudes = magnitudes.dropna(dim='bump').values
+            parameters = parameters.dropna(dim='stage').values
         lkh,mags,pars,eventprobs = \
             self.__fit(n_bumps, magnitudes, parameters, threshold)
+        
+        max_bumps = self.max_bumps()
+        if len(pars) != max_bumps+1:#align all dimensions
+            pars = np.concatenate((pars, np.tile(np.nan, (max_bumps+1-len(pars),2))))
+            mags = np.concatenate((mags, np.tile(np.nan, (np.shape(mags)[0], \
+                max_bumps-np.shape(mags)[1]))),axis=1)
+           # eventprobs = np.concatenate((eventprobs, np.tile(np.nan, (np.shape(eventprobs)[0],np.shape(eventprobs)[1], \
+            #    max_bumps-np.shape(eventprobs)[2]))),axis=1)
         
         xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
         xrparams = xr.DataArray(pars, dims=("stage",'params'), name="parameters")
         xrmags = xr.DataArray(mags, dims=("component","bump"), name="magnitudes")
-        xreventprobs = xr.DataArray(eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
-        estimated = xr.merge((xrlikelihoods,xrparams,xrmags,xreventprobs))
+        #xreventprobs = xr.DataArray(eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
+        estimated = xr.merge((xrlikelihoods,xrparams,xrmags))#,xreventprobs))
         print(f"Parameters estimated for {n_bumps} bumps model")
         return estimated
     
@@ -153,19 +166,25 @@ class hsmm:
 
     def get_init_parameters(self, n_bumps):
         parameters = np.tile([2, math.ceil(self.max_d)/(n_bumps+1)/2], (n_bumps+1,1))
-        magnitudes = np.zeros((self.n_dims,n_bumps))
-        return [parameters,magnitudes]
+        return parameters
         
     def __fit(self, n_bumps, magnitudes, parameters,  threshold):
         '''
         Hidden fitting function underlying single and iterative fit
         '''
         
-        if np.any(magnitudes)== None:
-            warnings.warn('Using default parameters value for magnitudes and gamma')
-            parameters, magnitudes = self.get_init_parameters(n_bumps)
-
-        
+        try:
+            if np.any(parameters)== None:
+                warnings.warn('Using default parameters value for gamma parameters')
+                parameters = self.get_init_parameters(n_bumps)
+        except:
+            print("Using magnitudes provided")
+        try:
+            if np.any(magnitudes)== None:
+                warnings.warn('Using default parameters value for magnitudes')
+                magnitudes = np.zeros((self.n_dims,n_bumps))
+        except:
+            print("Using parameters provided")
         lkh1 = -np.inf#initialize likelihood     
         lkh, eventprobs = self.calc_EEG_50h(magnitudes, parameters, n_bumps)
         if threshold == 0:
@@ -205,7 +224,7 @@ class hsmm:
         return lkh1,magnitudes1,parameters1,eventprobs1
 
 
-    def calc_EEG_50h(self, magnitudes, parameters, n_bumps, mp=False):
+    def calc_EEG_50h(self, magnitudes, parameters, n_bumps, lkh_only=False, xarr=False):
         '''
         Defines the likelihood function to be maximized as described in Anderson, Zhang, Borst and Walsh, 2016
 
@@ -216,11 +235,12 @@ class hsmm:
         eventprobs : ndarray
             [samples(max_d)*n_trials*n_bumps] = [max_d*trials*nBumps]
         '''
-        if mp==True: #PCG: Dirty temporarilly needed for multiprocessing in the iterative backroll estimation...
-            magnitudes = magnitudes.T
+        if xarr == True:
+            magnitudes = magnitudes.dropna(dim='bump').values
+            parameters = parameters.dropna(dim='stage').values
         gains = np.zeros((self.n_samples, n_bumps))
-        if len(np.shape(magnitudes)) <2:
-            magnitudes = magnitudes[np.newaxis].T
+        #if len(np.shape(magnitudes)) <2:
+        #    magnitudes = magnitudes[np.newaxis].T
         for i in np.arange(self.n_dims):
             # computes the gains, i.e. how much the bumps reduce the variance at 
             # the location where they are placed for all samples, see Appendix Anderson,Zhang, 
@@ -298,7 +318,10 @@ class hsmm:
         # sum(log(sum of 'temp' by columns, samples in a trial)) 
         eventprobs = temp / np.tile(temp.sum(axis=0), [self.max_d, 1, 1])
         #normalization [-1, 1] divide each trial and state by the sum of the n points in a trial
-        return [likelihood, eventprobs]
+        if lkh_only == False:
+            return [likelihood, eventprobs]
+        else:
+            return likelihood
     
 
     def gamma_parameters(self, eventprobs, n_bumps):
@@ -342,7 +365,7 @@ class hsmm:
         params[:,1] = flats.T / 2 
         # correct flats between bumps for the fact that the gamma is 
         # calculated at midpoint
-        params[1:,1] = params[1:,1] + .5 / 2 #PCG: previous params[1:-1,1] = params[1:-1,1] + .5 / 2 
+        params[1:-1,1] = params[1:-1,1] + .5 / 2  #PCG: previous params[1:-1,1] = params[1:-1,1] + .5 / 2 
         # first flat is bounded on left while last flat may go 
         # beyond on right
         params[0,1] = params[0,1] - .5 / 2 
@@ -369,7 +392,7 @@ class hsmm:
         d : ndarray
             density for a gamma with given parameters
         '''
-        d = [stats.gamma.pdf(t+.5,a,scale=b) for t in np.arange(max_length)]
+        d = [stats.gamma.pdf(t-.5,a,scale=b) for t in np.arange(1,max_length+1)]
         d = d/np.sum(d)
         return d
         
@@ -391,7 +414,8 @@ class hsmm:
         return estimated
     
     def bump_times(self, fit, n_bumps):
-        params = fit.parameters.values
+        params = fit.parameters
+        params = params.where(np.isfinite(params))
         scales = [(bump[-1])*(2000/self.sf) for bump in params[:n_bumps+1]]
         return scales
     
