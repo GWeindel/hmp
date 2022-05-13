@@ -239,8 +239,7 @@ class hsmm:
             magnitudes = magnitudes.dropna(dim='bump').values
             parameters = parameters.dropna(dim='stage').values
         gains = np.zeros((self.n_samples, n_bumps))
-        #if len(np.shape(magnitudes)) <2:
-        #    magnitudes = magnitudes[np.newaxis].T
+
         for i in np.arange(self.n_dims):
             # computes the gains, i.e. how much the bumps reduce the variance at 
             # the location where they are placed for all samples, see Appendix Anderson,Zhang, 
@@ -285,11 +284,11 @@ class hsmm:
         # eq1 in Appendix, first definition of likelihood
         # For each trial (given a length of max duration) compute gamma pdf * gains
         # Start with first bump
-        forward[self.offset:self.max_d,:,0] = np.tile(LP[:self.max_d-self.offset,0],\
-            (self.n_trials,1)).T*probs[self.offset:self.max_d+1,:,0]
+        forward[self.offset:self.max_d,:,0] = np.tile(LP[:self.max_d-self.offset,0][np.newaxis].T,\
+            (1,self.n_trials))*probs[self.offset:self.max_d,:,0]
 
-        forward_b[self.offset:self.max_d,:,0] = np.tile(BLP[:self.max_d-self.offset,0],\
-                    (self.n_trials,1)).T # reversed Gamma pdf
+        forward_b[self.offset:self.max_d,:,0] = np.tile(BLP[:self.max_d-self.offset,0][np.newaxis].T,\
+                    (1,self.n_trials)) # reversed Gamma pdf
 
         for i in np.arange(1,n_bumps):#continue with other bumps
             next_ = np.concatenate((np.zeros(self.bump_width_samples), LP[:self.max_d - \
@@ -326,6 +325,7 @@ class hsmm:
 
     def gamma_parameters(self, eventprobs, n_bumps):
         '''
+        Gives the average positions of each bump 
         Given that the shape is fixed the calculation of the maximum likelihood
         scales becomes simple.  One just calculates the means expected lengths 
         of the flats and divides by the shape
@@ -346,20 +346,18 @@ class hsmm:
         params : ndarray
             shape and scale for the gamma distributions
         '''
-        width = self.offset-1 #unaccounted samples
+        width = self.bump_width_samples-1 #unaccounted samples
         # Expected value, time location
         averagepos = np.hstack((np.sum(np.tile(np.arange(self.max_d)[np.newaxis].T,\
             (1, n_bumps)) * np.mean(eventprobs, axis=1).reshape(self.max_d, n_bumps,\
                 order="F"), axis=0), np.mean(self.durations)))
-        #PCG 2???
         # 1) mean accross trials of eventprobs -> mP[max_l, nbump]
         # 2) global expected location of each bump
         # concatenate horizontaly to last column the length of each trial
-        averagepos = averagepos - (np.hstack(width/2+np.asarray([np.arange(0, (n_bumps-1)*width+1, width), (n_bumps-1)*width+1],dtype='object')))
-        
-        #PCG unsure about the width/2, is it the shape parameter or width/2
-        # correction for time locations
-        flats = averagepos - np.array(np.hstack((0,averagepos[:-1])))
+        averagepos = averagepos - np.hstack(np.asarray([width/2+np.append(np.arange(0, (n_bumps-1)*width+1, width),(n_bumps-1)*width+1)],dtype='object')) - 1
+        # PCG hat part is sensible and should be carefully checked, should'nt it take -1 
+        # correction for time locations with number of bumps and size in samples
+        flats = averagepos - np.hstack((0,averagepos[:-1]))
         params = np.zeros((n_bumps+1,2))
         params[:,0] = 2 #PCG shape is hardcoded
         params[:,1] = flats.T / 2 
@@ -392,7 +390,7 @@ class hsmm:
         d : ndarray
             density for a gamma with given parameters
         '''
-        d = [stats.gamma.pdf(t-.5,a,scale=b) for t in np.arange(1,max_length+1)]
+        d = [stats.gamma.pdf(t+.5,a,scale=b) for t in np.arange(max_length)]
         d = d/np.sum(d)
         return d
         
@@ -416,7 +414,7 @@ class hsmm:
     def bump_times(self, fit, n_bumps):
         params = fit.parameters
         params = params.where(np.isfinite(params))
-        scales = [(bump[-1])*(2000/self.sf) for bump in params[:n_bumps+1]]
+        scales = [(bump[-1])*2*self.sf for bump in params[:n_bumps+1]]
         return scales
     
     
