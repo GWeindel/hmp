@@ -54,7 +54,8 @@ class hsmm:
     def calc_bumps(self,data):
         '''
         This function puts on each sample the correlation of that sample and the previous
-        five samples with a Bump morphology on time domain.
+        five samples with a Bump morphology on time domain.  Will be used fot the likelihood 
+        of the EEG data given that the bumps are centered at each time point
 
         Parameters
         ----------
@@ -68,11 +69,9 @@ class hsmm:
             been correlated with bump morphology
         '''
         bump_idx = np.arange(0,self.bump_width_samples)*(1000/self.sf)+(1000/self.sf)/2
-        bump_frequency = 1000/(self.bump_width*2)#gives bump frequency given that bumps are defined as hal-sines
+        bump_frequency = 1000/(self.bump_width*2)#gives bump frequency given that bumps are defined as half-sines
         template = np.sin(2*np.pi*np.linspace(0,1,1000)*bump_frequency)[[int(x) for x in bump_idx]]#bump morph based on a half sine with given bump width and sampling frequency #previously np.array([0.3090, 0.8090, 1.0000, 0.8090, 0.3090]) 
         
-        ### TESTING : plt.plot(np.linspace(0,1,1000),np.sin((2*np.pi*np.linspace(0,1,1000)*bump_frequency)))
-#plt.plot(bump_idx/1000, np.sin(2*np.pi*np.linspace(0,1,1000)*bump_frequency)[[int(x) for x in bump_idx]],'.')
         template = template/np.sum(template**2)#Weight normalized to sum(P) = 1.294
         
         bumps = np.zeros(data.shape)
@@ -265,11 +264,11 @@ class hsmm:
             # Following assigns gain per trial to variable probs 
             # in direct and reverse order
             probs[self.offset:self.ends[i] - self.starts[i]+1 - self.offset,i,:] = \
-                gains[self.starts[i]+ self.offset-1 : self.ends[i] - self.offset,:] 
+                gains[self.starts[i]+ self.offset : self.ends[i] - self.offset+1,:] 
             for j in np.arange(n_bumps): # PCG: for-loop IMPROVE
                 probs_b[self.offset:self.ends[i]- self.starts[i]+1 - self.offset,i,j] = \
-                np.flipud(gains[self.starts[i]+ self.offset-1 : self.ends[i]- self.offset,\
-                n_bumps-1-j])
+                np.flipud(gains[self.starts[i]+ self.offset : self.ends[i]- self.offset+1,\
+                n_bumps-j-1])
                 # assign the reverse of gains per trial
 
         LP = np.zeros([self.max_d, n_bumps + 1]) # Gamma pdf for each stage parameters
@@ -354,8 +353,8 @@ class hsmm:
         # 1) mean accross trials of eventprobs -> mP[max_l, nbump]
         # 2) global expected location of each bump
         # concatenate horizontaly to last column the length of each trial
-        averagepos = averagepos - np.hstack(np.asarray([width/2+np.append(np.arange(0, (n_bumps-1)*width+1, width),(n_bumps-1)*width+1)],dtype='object')) - 1
-        # PCG hat part is sensible and should be carefully checked, should'nt it take -1 
+        averagepos = averagepos - np.hstack(np.asarray([self.offset+np.append(np.arange(0,(n_bumps-1)*width+1, width),(n_bumps-1)*width+self.offset)],dtype='object'))
+        # PCG hat part is sensible and should be carefully checked
         # correction for time locations with number of bumps and size in samples
         flats = averagepos - np.hstack((0,averagepos[:-1]))
         params = np.zeros((n_bumps+1,2))
@@ -363,7 +362,7 @@ class hsmm:
         params[:,1] = flats.T / 2 
         # correct flats between bumps for the fact that the gamma is 
         # calculated at midpoint
-        params[1:-1,1] = params[1:-1,1] + .5 / 2  #PCG: previous params[1:-1,1] = params[1:-1,1] + .5 / 2 
+        params[1:,1] = params[1:,1] + .5 / 2  
         # first flat is bounded on left while last flat may go 
         # beyond on right
         params[0,1] = params[0,1] - .5 / 2 
@@ -411,12 +410,14 @@ class hsmm:
         estimated = xr.merge((xrlikelihoods,xrparams,xrmags,xreventprobs))
         return estimated
     
-    def bump_times(self, fit, n_bumps):
-        params = fit.parameters
-        params = params.where(np.isfinite(params))
-        scales = [(bump[-1])*2*self.sf for bump in params[:n_bumps+1]]
-        return scales
     
+    def bump_times(self, fit, time=True):
+        params = fit.parameters.copy(deep=True).dropna(dim="stage")
+        if time:
+            scales = [(bump[-1])*2*(1000/self.sf) for bump in params]
+        else:
+            scales = [(bump[-1])*2 for bump in params]
+        return scales
     
     def max_bumps(self):
         max_bumps = np.min(self.ends - self.starts + 1)//self.bump_width_samples
@@ -470,7 +471,7 @@ class iterative_fit(hsmm):
     def get_results(self):
         return xr.concat(estimated, dim="bumps")
       
-    def bump_times(self, n_bumps):
+    def bump_times(self):
         params = self.estimated.parameters.sel(bumps=n_bumps).values
         scales = [(bump[-1]+self.offset)*(2000/self.sf) for bump in params[:n_bumps+1]]
         return scales
