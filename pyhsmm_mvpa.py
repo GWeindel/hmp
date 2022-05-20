@@ -122,47 +122,16 @@ class hsmm:
             pars = np.concatenate((pars, np.tile(np.nan, (max_bumps+1-len(pars),2))))
             mags = np.concatenate((mags, np.tile(np.nan, (np.shape(mags)[0], \
                 max_bumps-np.shape(mags)[1]))),axis=1)
-           # eventprobs = np.concatenate((eventprobs, np.tile(np.nan, (np.shape(eventprobs)[0],np.shape(eventprobs)[1], \
-            #    max_bumps-np.shape(eventprobs)[2]))),axis=1)
+            eventprobs = np.concatenate((eventprobs, np.tile(np.nan, (np.shape(eventprobs)[0],np.shape(eventprobs)[1], max_bumps-np.shape(eventprobs)[2]))),axis=2)
         
         xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
         xrparams = xr.DataArray(pars, dims=("stage",'params'), name="parameters")
         xrmags = xr.DataArray(mags, dims=("component","bump"), name="magnitudes")
-        #xreventprobs = xr.DataArray(eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
-        estimated = xr.merge((xrlikelihoods,xrparams,xrmags))#,xreventprobs))
+        xreventprobs = xr.DataArray(eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
+        estimated = xr.merge((xrlikelihoods,xrparams,xrmags,xreventprobs))#,xreventprobs))
         print(f"Parameters estimated for {n_bumps} bumps model")
         return estimated
     
-    def fit_iterative(self, max_bumps, magnitudes=None, parameters=None, threshold=1):
-        xrlikelihoods, xrparams, xrmags = [],[],[]
-        for n_bumps in np.arange(1, max_bumps+1):
-            if np.any(magnitudes)!= None:
-                magnitudes_n = magnitudes[n_bumps-1,:,:n_bumps]
-                parameters_n = parameters[n_bumps-1,:n_bumps+1,:]
-            else: 
-                magnitudes_n = magnitudes
-                parameters_n = parameters
-            lkh,mags,pars,_ = \
-                self.__fit(n_bumps, magnitudes_n,parameters_n,threshold)
-
-            if len(pars) != max_bumps+1:#Xarray needs same dimension size for merging
-                pars = np.concatenate((pars, np.tile(np.nan, \
-                    (max_bumps+1-len(pars),2))))
-                mags = np.concatenate((mags, \
-                    np.tile(np.nan, (np.shape(mags)[0], \
-                    max_bumps-np.shape(mags)[1]))),axis=1)
-            xrlikelihoods.append(xr.DataArray(lkh, name="likelihood"))
-            xrparams.append(xr.DataArray(pars, dims=("stage",'params'), name="parameters"))
-            xrmags.append(xr.DataArray(mags, dims=("component","bump"), name="magnitudes"))
-            
-        xrlikelihoods = xr.concat(xrlikelihoods, dim="n_bumps")
-        xrparams = xr.concat(xrparams, dim="n_bumps")
-        xrmags = xr.concat(xrmags, dim="n_bumps")
-        #xreventprobs =  xr.DataArray(self.eventprobs, dims=("bumps","samples",'trial','bump'), name="eventprobs")
-        return xr.merge((xrlikelihoods,xrparams,xrmags))
-    
-    #def fit_loo(self, max_bumps, magnitudes=None, parameters=None, threshold=1):
-
     def get_init_parameters(self, n_bumps):
         parameters = np.tile([2, math.ceil(self.max_d)/(n_bumps+1)/2], (n_bumps+1,1))
         return parameters
@@ -368,6 +337,13 @@ class hsmm:
         params[0,1] = params[0,1] - .5 / 2 
         return params, averagepos
 
+    def mean_bump_times(self,fit, time=True):
+        samples = np.where(fit.eventprobs.mean(dim=['trial']).dropna(dim='bump') == 
+                np.max(fit.eventprobs.mean(dim=['trial']).dropna(dim='bump'),axis=0))[0]
+        if time:
+            times = samples*(1000/self.sf)
+        else: times = samples
+        return times
     
     @staticmethod
     def gamma_EEG(a, b, max_length):
