@@ -1,4 +1,5 @@
 *.nc
+*.npy
 /documentation
 /temp
 /papers
