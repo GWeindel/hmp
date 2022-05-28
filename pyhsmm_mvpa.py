@@ -314,7 +314,7 @@ class hsmm:
         params : ndarray
             shape and scale for the gamma distributions
         '''
-        width = self.bump_width_samples-1 #unaccounted samples
+        width = self.bump_width_samples #unaccounted samples -1?
         # Expected value, time location
         averagepos = np.hstack((np.sum(np.tile(np.arange(self.max_d)[np.newaxis].T,\
             (1, n_bumps)) * np.mean(eventprobs, axis=1).reshape(self.max_d, n_bumps,\
@@ -322,7 +322,7 @@ class hsmm:
         # 1) mean accross trials of eventprobs -> mP[max_l, nbump]
         # 2) global expected location of each bump
         # concatenate horizontaly to last column the length of each trial
-        averagepos = averagepos - np.hstack(np.asarray([self.offset+np.append(np.arange(0,(n_bumps-1)*width+1, width),(n_bumps-1)*width+self.offset)],dtype='object'))
+        averagepos = averagepos - np.hstack(np.asarray([self.offset+np.append(np.arange(0,(n_bumps-1)*width+1, width),(n_bumps-1)*width+self.offset)],dtype='object'))-1
         # PCG hat part is sensible and should be carefully checked
         # correction for time locations with number of bumps and size in samples
         flats = averagepos - np.hstack((0,averagepos[:-1]))
