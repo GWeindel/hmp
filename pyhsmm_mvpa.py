@@ -17,6 +17,63 @@ import multiprocessing as mp
 import warnings
 import math
 
+warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later
+
+def standardize(x):
+    # Scaling variances to mean variance of the group
+    return ((x.data / x.data.std(dim=...)*x.mean_std))
+
+def vcov_mat(x):
+    x = x.dropna(dim="samples").squeeze().data
+    xT = x.T.data
+    return x @ xT
+
+def zscore(data):
+    data = data
+    return (data - data.mean()) / data.std()
+
+def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=10, stack=True):
+    #Extract durations of epochs (equivalent to RTs) to partition the stacked data
+    data = data.reset_index(dims_or_levels="epochs",drop=True)
+    durations = np.unique(data.sel(electrodes='Fpz').stack(trial=\
+       [subjects_variable,'epochs']).reset_index([subjects_variable,'epochs']).\
+       groupby('trial').count(dim="samples").data.cumsum())
+    while durations[0] == 0:
+        durations = durations[1:]
+    starts = np.insert(durations[:-1],0,0)
+    ends = durations-1
+    from sklearn.decomposition import PCA
+    if apply_standard:
+        mean_std = data.groupby(subjects_variable).std(dim=...).data.mean()
+        data = data.assign(mean_std=mean_std.data)
+        data = data.groupby(subjects_variable).map(standardize)
+    if method == 'pca':
+        var_cov_matrices = []
+        # Computing cov matrices by trial and take the average of those
+        for i,trial_dat in data.stack(trial=("participant", "epochs")).groupby('trial'):
+            var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
+        average_var_cov_matrix = np.mean(var_cov_matrices,axis=0)    
+        
+        # Performing spatial PCA on the average var-cov matrix
+        pca = PCA(n_components=n_comp, svd_solver='arpack')#selecting Principale components (PC)
+        pca_data = pca.fit_transform(average_var_cov_matrix)
+
+        #Rebuilding pca PCs as xarray to ease computation
+        coords = dict(electrodes=("electrodes", data.coords["electrodes"].values),
+                     component=("component", np.arange(10)))
+        pca_data = xr.DataArray(pca_data, dims=("electrodes","component"), coords=coords)
+        data = data @ pca_data
+        if apply_zscore:
+            data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
+        
+    else:
+        raise NameError('Method unknown')
+    
+    if stack:
+        data = data.stack(all_samples=[subjects_variable,'epochs',"samples"]).dropna(dim="all_samples")
+    return data,starts,ends
+
+
 class hsmm:
     
     def __init__(self, data, starts, ends, sf, bump_width = 50):
@@ -452,8 +509,7 @@ class iterative_fit(hsmm):
         scales = [(bump[-1]+self.offset)*(2000/self.sf) for bump in params[:n_bumps+1]]
         return scales
     
-class generate_pcs():
-    pass
+
 
 class results():
     
