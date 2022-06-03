@@ -19,6 +19,90 @@ import math
 
 warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later
 
+def read_mne_EEG(path_to_files, participant_list, event_id, resp_id, sfreq, resampling=False, \
+                 tmin=-.2, tmax=2.2, offset_after_resp = 100, low_pass=.5, high_pass = 30, \
+                 correction_event_value=True, upper_limit_RT=2, lower_limit_RT=.2):
+    import mne
+    epoch_data = [] 
+    for participant in participant_list:
+        data = mne.io.read_raw_fif(path_to_files+'/preprocessed_%s.fif'%participant, preload=False, verbose=False)
+        data.load_data()
+        data.filter(low_pass, high_pass, fir_design='firwin', verbose=False)#Filtering out frequency outside range .5 and 30Hz, as study by Anderson et al. (Berberyan used 40 Hz)
+        # Loading events (in our case one event = one trial)
+        events = mne.find_events(data, verbose=False)
+        if sfreq < data.info['sfreq']:
+            print(f'Downsampling to {sfreq} Hz')
+            data, events = data.resample(sfreq, events=events)#100 Hz is the standard used for previous applications of HsMM
+        events[:,2] = events[:,2]-events[:,1]#correction on event value
+        events_wresp = events
+
+        #Only pick electrodes placed on the scalp:
+        picks = mne.pick_types(data.info, eeg=True, stim=False, eog=False, misc=False,
+                           exclude='bads') 
+        offset_after_resp_samples = int(offset_after_resp/(1000/data.info['sfreq']))
+
+        metadata, events, event_id = mne.epochs.make_metadata(
+            events=events, event_id= event_id,
+            tmin=tmin, tmax=tmax, sfreq=data.info['sfreq'])
+
+        epochs = mne.Epochs(data, events, event_id, tmin, tmax, proj=False,
+                        picks=picks, baseline=(None, 0), preload=True,
+                        verbose=False,detrend=1,on_missing = 'warn',
+                        metadata=metadata,reject_by_annotation=True)
+        data_epoch = epochs.get_data()
+
+        valid_epochs_idx = [x for x in np.arange(len(epochs.drop_log)) if epochs.drop_log[x] == ()]
+
+        rts=[]#reaction times
+        trigger = []
+        i,j = 0,0
+        while i < len(events_wresp):
+            if events_wresp[i,2] in event_id.values() :
+                if j in valid_epochs_idx:
+                    if events_wresp[i+1,2] in resp_id.values() and events_wresp[i-1,2] == 2:#2 for high force condition 
+                        rts.append(events_wresp[i+1,0] - events_wresp[i,0] )
+                    if events_wresp[i+1,2] in resp_id.values() and events_wresp[i-1,2] ==1:#1 for low force condition 
+                        rts.append(0)
+                    elif events_wresp[i+1,2] not in resp_id.values(): #trials without resp
+                        rts.append(0)
+                j += 1
+            i += 1
+        rts = np.array(rts)
+        rts[rts > data.info['sfreq']*upper_limit_RT] = 0 #removes RT above 2 sec
+        rts[rts < data.info['sfreq']*lower_limit_RT] = 0 #removes RT below 300 ms, important as determines max bumps
+
+        triggers = epochs.metadata["event_name"].reset_index(drop=True)
+        cropped_data_epoch = np.empty([len(rts[rts!= 0]), len(epochs.ch_names), max(rts)+offset_after_resp_samples])
+        cropped_data_epoch[:] = np.nan
+        cropped_trigger = []
+        i, j = 0, 0
+        for i in np.arange(len(data_epoch)):
+            if rts[i] != 0:
+            #Crops the epochs to time 0 (stim onset) up to RT
+                cropped_data_epoch[j,:,:rts[i]+offset_after_resp_samples] = (data_epoch[i,:,epochs.time_as_index(0)[0]:
+                                    epochs.time_as_index(0)[0]+int(rts[i])+offset_after_resp_samples])
+                j += 1
+                cropped_trigger.append(triggers[i])
+        # recover actual data points in a 3D matrix with dimensions trials X electrodes X sample
+        epoch_data.append(xr.Dataset(
+            {
+                "data": (["epochs", "electrodes", "samples"],cropped_data_epoch),
+                "event": (["epochs"], cropped_trigger),
+            },
+            coords={
+                "epochs" : np.arange(len(cropped_data_epoch)),
+                "electrodes":  epochs.ch_names,
+                # TODO When time "electrodes": (['name','x','y','z'], epochs.ch_names,
+                "samples": np.arange(max(rts)+offset_after_resp_samples)#+1)
+            },
+            attrs={'sfreq':epochs.info['sfreq']}
+            )
+        )
+
+    epoch_data = xr.concat(epoch_data, dim="participant")
+    epoch_data.coords['participant'] =  participant_list
+    return epoch_data
+
 def standardize(x):
     # Scaling variances to mean variance of the group
     return ((x.data / x.data.std(dim=...)*x.mean_std))
@@ -371,7 +455,7 @@ class hsmm:
         params : ndarray
             shape and scale for the gamma distributions
         '''
-        width = self.bump_width_samples #unaccounted samples -1?
+        width = self.bump_width_samples-1 #unaccounted samples -1?
         # Expected value, time location
         averagepos = np.hstack((np.sum(np.tile(np.arange(self.max_d)[np.newaxis].T,\
             (1, n_bumps)) * np.mean(eventprobs, axis=1).reshape(self.max_d, n_bumps,\
@@ -379,7 +463,7 @@ class hsmm:
         # 1) mean accross trials of eventprobs -> mP[max_l, nbump]
         # 2) global expected location of each bump
         # concatenate horizontaly to last column the length of each trial
-        averagepos = averagepos - np.hstack(np.asarray([self.offset+np.append(np.arange(0,(n_bumps-1)*width+1, width),(n_bumps-1)*width+self.offset)],dtype='object'))
+        averagepos = averagepos - np.hstack(np.asarray([self.offset+np.append(np.arange(-1,(n_bumps-1)*width+1, width),(n_bumps-1)*width+self.offset)],dtype='object'))
         # PCG hat part is sensible and should be carefully checked
         # correction for time locations with number of bumps and size in samples
         flats = averagepos - np.hstack((0,averagepos[:-1]))
@@ -388,10 +472,10 @@ class hsmm:
         params[:,1] = flats.T / 2 
         # correct flats between bumps for the fact that the gamma is 
         # calculated at midpoint
-        params[1:,1] = params[1:,1] + .5 / 2  
+        #params[1:,1] = params[1:,1] + .5 / 2  
         # first flat is bounded on left while last flat may go 
         # beyond on right
-        params[0,1] = params[0,1] - .5 / 2 
+        params[:,1] = params[:,1] - .5 / 2 
         return params, averagepos
 
     def mean_bump_times(self,fit, time=True):
