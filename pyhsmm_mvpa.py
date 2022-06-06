@@ -118,14 +118,7 @@ def zscore(data):
 
 def transform_data(data, subjects_variable, comp_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=10, stack=True):
     #Extract durations of epochs (equivalent to RTs) to partition the stacked data
-    data = data.reset_index(dims_or_levels="epochs",drop=True)
-    durations = np.unique(data.isel(comp_variable=0).stack(trial=\
-       [subjects_variable,'epochs']).reset_index([subjects_variable,'epochs']).\
-       groupby('trial').count(dim="samples").data.cumsum())
-    while durations[0] == 0:
-        durations = durations[1:]
-    starts = np.insert(durations[:-1],0,0)
-    ends = durations-1
+
     from sklearn.decomposition import PCA
     if apply_standard:
         mean_std = data.groupby(subjects_variable).std(dim=...).data.mean()
@@ -152,7 +145,14 @@ def transform_data(data, subjects_variable, comp_variable, apply_standard=True, 
         
 #    else:
 #        raise NameError('Method unknown')
-    
+    data = data.reset_index(dims_or_levels="epochs",drop=True)
+    durations = np.unique(data.isel(component=0).stack(trial=\
+       [subjects_variable,'epochs']).reset_index([subjects_variable,'epochs']).\
+       groupby('trial').count(dim="samples").data.cumsum())
+    while durations[0] == 0:
+        durations = durations[1:]
+    starts = np.insert(durations[:-1],0,0)
+    ends = durations-1
     if stack:
         data = data.stack(all_samples=[subjects_variable,'epochs',"samples"]).dropna(dim="all_samples")
     return data,starts,ends
