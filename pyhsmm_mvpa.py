@@ -150,8 +150,8 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
         if apply_zscore:
             data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
         
-    else:
-        raise NameError('Method unknown')
+#    else:
+#        raise NameError('Method unknown')
     
     if stack:
         data = data.stack(all_samples=[subjects_variable,'epochs',"samples"]).dropna(dim="all_samples")
