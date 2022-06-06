@@ -116,7 +116,7 @@ def zscore(data):
     data = data
     return (data - data.mean()) / data.std()
 
-def transform_data(data, subjects_variable, comp_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=10, stack=True):
+def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=10, stack=True):
     #Extract durations of epochs (equivalent to RTs) to partition the stacked data
 
     from sklearn.decomposition import PCA
@@ -157,6 +157,29 @@ def transform_data(data, subjects_variable, comp_variable, apply_standard=True, 
         data = data.stack(all_samples=[subjects_variable,'epochs',"samples"]).dropna(dim="all_samples")
     return data,starts,ends
 
+def LOOCV(data, subject, n_bumps, iterative_fits, initial_init):
+    #Looping over possible number of bumps
+    subjects_idx = data.participant.values
+    likelihoods_loo = []
+    
+    print(f'Subject {subject}')
+
+    #Extracting data without left out subject
+    stacked_loo, starts_loo, ends_loo = hsmm.transform_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=True),\
+                           'participant', apply_standard=False,  apply_zscore=False, method='', n_comp=10, stack=True)
+
+    #Fitting the HsMM using previous estimated parameters as initial parameters
+    model_loo = hsmm.hsmm(stacked_loo.to_numpy().T, starts_loo, ends_loo, sf=epoch_data.sfreq)
+    fit = model_loo.fit_single(n_bumps, bests.magnitudes, bests.parameters, itertools.repeat(1), itertools.repeat(False), itertools.repeat(True))
+
+    #Evaluating likelihood for left out subject
+    #Extracting data of left out subject
+    stacked_left_out, starts_left_out, ends_left_out = hsmm.transform_data(data.sel(participant=subject, drop=True),\
+                           'participant', apply_standard=False,  apply_zscore=False, method='', n_comp=10, stack=True)
+
+    model_left_out = hsmm.hsmm(stacked_left_out.to_numpy().T, starts_left_out, ends_left_out, sf=epoch_data.sfreq)
+    likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bump ,itertools.repeat(True),itertools.repeat(True)))
+    return likelihood
 
 class hsmm:
     
