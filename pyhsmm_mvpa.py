@@ -116,10 +116,10 @@ def zscore(data):
     data = data
     return (data - data.mean()) / data.std()
 
-def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=10, stack=True):
+def transform_data(data, subjects_variable, comp_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=10, stack=True):
     #Extract durations of epochs (equivalent to RTs) to partition the stacked data
     data = data.reset_index(dims_or_levels="epochs",drop=True)
-    durations = np.unique(data.sel(electrodes='Fpz').stack(trial=\
+    durations = np.unique(data.isel(comp_variable=0).stack(trial=\
        [subjects_variable,'epochs']).reset_index([subjects_variable,'epochs']).\
        groupby('trial').count(dim="samples").data.cumsum())
     while durations[0] == 0:
