@@ -116,7 +116,7 @@ def zscore(data):
     data = data
     return (data - data.mean()) / data.std()
 
-def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=10, stack=True):
+def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=10, stack=True, single=False):
     #Extract durations of epochs (equivalent to RTs) to partition the stacked data
 
     from sklearn.decomposition import PCA
@@ -146,40 +146,45 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
 #    else:
 #        raise NameError('Method unknown')
     data = data.reset_index(dims_or_levels="epochs",drop=True)
-    durations = np.unique(data.isel(component=0).stack(trial=\
-       [subjects_variable,'epochs']).reset_index([subjects_variable,'epochs']).\
-       groupby('trial').count(dim="samples").data.cumsum())
+    if single:
+        durations = np.unique(data.isel(component=0).\
+           groupby('epochs').count(dim="samples").data.cumsum())
+        if stack:
+            data = data.stack(all_samples=['epochs',"samples"]).dropna(dim="all_samples")
+    else:
+        durations = np.unique(data.isel(component=0).stack(trial=\
+           [subjects_variable,'epochs']).reset_index([subjects_variable,'epochs']).\
+           groupby('trial').count(dim="samples").data.cumsum())
+        if stack:
+            data = data.stack(all_samples=[subjects_variable,'epochs',"samples"]).dropna(dim="all_samples")
     while durations[0] == 0:
         durations = durations[1:]
     starts = np.insert(durations[:-1],0,0)
     ends = durations-1
-    if stack:
-        data = data.stack(all_samples=[subjects_variable,'epochs',"samples"]).dropna(dim="all_samples")
+    
     return data,starts,ends
 
-def LOOCV(data, subject, n_bumps, iterative_fits, initial_init):
+def LOOCV(data, subject, n_bumps, iterative_fits, sfreq):
     #Looping over possible number of bumps
     subjects_idx = data.participant.values
     likelihoods_loo = []
     
-    print(f'Subject {subject}')
-
     #Extracting data without left out subject
-    stacked_loo, starts_loo, ends_loo = hsmm.transform_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=True),\
+    stacked_loo, starts_loo, ends_loo = transform_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False),\
                            'participant', apply_standard=False,  apply_zscore=False, method='', n_comp=10, stack=True)
 
     #Fitting the HsMM using previous estimated parameters as initial parameters
-    model_loo = hsmm.hsmm(stacked_loo.to_numpy().T, starts_loo, ends_loo, sf=epoch_data.sfreq)
-    fit = model_loo.fit_single(n_bumps, bests.magnitudes, bests.parameters, itertools.repeat(1), itertools.repeat(False), itertools.repeat(True))
+    model_loo = hsmm(stacked_loo.to_numpy().T, starts_loo, ends_loo, sf=sfreq)
+    fit = model_loo.fit_single(n_bumps, iterative_fits.magnitudes, iterative_fits.parameters, 1, False, True)
 
     #Evaluating likelihood for left out subject
     #Extracting data of left out subject
-    stacked_left_out, starts_left_out, ends_left_out = hsmm.transform_data(data.sel(participant=subject, drop=True),\
-                           'participant', apply_standard=False,  apply_zscore=False, method='', n_comp=10, stack=True)
+    stacked_left_out, starts_left_out, ends_left_out = transform_data(data.sel(participant=subject, drop=False),\
+                           'participant', apply_standard=False,  apply_zscore=False, method='', n_comp=10, stack=True,single=True)
 
-    model_left_out = hsmm.hsmm(stacked_left_out.to_numpy().T, starts_left_out, ends_left_out, sf=epoch_data.sfreq)
-    likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bump ,itertools.repeat(True),itertools.repeat(True)))
-    return likelihood
+    model_left_out = hsmm(stacked_left_out.to_numpy().T, starts_left_out, ends_left_out, sf=sfreq)
+    likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bumps,True,True)
+    return likelihood, subject
 
 class hsmm:
     
@@ -630,45 +635,3 @@ class results():
         self.offset = width//2
         self.n_bumps = np.shape(estimated.magnitudes) 
         self.durations = starts - ends + 1
-
-    
-class LOOCV(hsmm):
-    
-    def __init__(self, data, starts, ends, n_bumps, subjects,\
-                 initializing = True, magnitudes = None, parameters = None, \
-                 width = 5, threshold = 1, gamma_shape = 2, subject=1):
-        subjects_idx = np.unique(subjects)
-        subjects_idx_loo = subjects_idx[subjects_idx != subject]
-        subjects_loo = np.array([s for s in subjects if s not in subjects_idx_loo])
-        starts_left_out_idx = np.array([starts[idx] for idx, s in enumerate(subjects) if s not in subjects_idx_loo])
-        ends_left_out_idx = np.array([ends[idx] for idx, s in enumerate(subjects) if s not in subjects_idx_loo])
-
-        #Correct starts indexes to account for reoved subject, whole indexing needs improvement
-        starts_loo = np.concatenate([starts[starts < starts_left_out_idx[0]], starts[starts > ends_left_out_idx[-1]]-ends_left_out_idx[-1]+1])
-        ends_loo = np.concatenate([ends[ends < starts_left_out_idx[0]], ends[ends > ends_left_out_idx[-1]]-ends_left_out_idx[-1]])
-        starts_left_out = np.array([start - starts_left_out_idx[0]  for start in starts if start >= starts_left_out_idx[0] and start <= ends_left_out_idx[-1]])
-        ends_left_out = np.array([end - starts_left_out_idx[0]  for end in ends if end >= starts_left_out_idx[0] and end <= ends_left_out_idx[-1]])
-
-
-        samples_loo = np.array([sample for idx,sample in enumerate(data) if idx < starts_left_out_idx[0] or idx > ends_left_out_idx[-1]])
-        samples_left_out = np.array([sample for idx,sample in enumerate(data) if idx >= starts_left_out_idx[0] and idx <= ends_left_out_idx[-1]])
-        
-        #Fitting the HsMM using previous estimated parameters as initial parameters
-        super().__init__(samples_loo, starts_loo, ends_loo, n_bumps= n_bumps,initializing=initializing, \
-                 magnitudes = magnitudes[:,:n_bumps],
-                 parameters = parameters[:n_bumps+1,:])
-        hsmm.fit(self)
-        
-        super().__init__(samples_left_out, starts_left_out, ends_left_out, n_bumps, initializing=False,\
-            magnitudes = self.magnitudes[:,:n_bumps].values,
-            parameters = self.parameters[:n_bumps+1,:].values,
-            threshold=0)
-        hsmm.fit(self)        
-
-    def extract_results(self):
-        xrlikelihoods = xr.DataArray(self.likelihoods , name="likelihoods")
-        xrparams = xr.DataArray(self.parameters, dims=("stage",'params'), name="parameters")
-        xrmags = xr.DataArray(self.magnitudes, dims=("component","bump"), name="magnitudes")
-        xreventprobs =  xr.DataArray(self.eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
-        estimated = xr.merge((xrlikelihoods,xrparams,xrmags,xreventprobs))
-        return estimated

@@ -9,3 +9,5 @@
 /old
 *.txt
 /__pycache__
+/Bruno
+/preprocessed_data
