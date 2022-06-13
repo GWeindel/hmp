@@ -19,27 +19,33 @@ import math
 
 warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later
 
-def read_mne_EEG(path_to_files, participant_list, event_id, resp_id, sfreq, resampling=False, \
-                 tmin=-.2, tmax=2.2, offset_after_resp = 100, low_pass=.5, high_pass = 30, \
-                 correction_event_value=True, upper_limit_RT=2, lower_limit_RT=.2):
+def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, resampling=False, \
+                 tmin=-.2, tmax=2.2, offset_after_resp = .1, low_pass=.5, \
+                 high_pass = 30, upper_limit_RT=2, lower_limit_RT=.2):
     import mne
+    tstep = 1/sfreq
     epoch_data = [] 
-    for participant in participant_list:
-        data = mne.io.read_raw_fif(path_to_files+'/preprocessed_%s.fif'%participant, preload=False, verbose=False)
+    for participant in pfiles:
+        data = mne.io.read_raw_fif(participant, preload=False, verbose=False)
         data.load_data()
         data.filter(low_pass, high_pass, fir_design='firwin', verbose=False)#Filtering out frequency outside range .5 and 30Hz, as study by Anderson et al. (Berberyan used 40 Hz)
         # Loading events (in our case one event = one trial)
-        events = mne.find_events(data, verbose=False)
+        if events is None:
+            events = mne.find_events(data, verbose=False)
+            if sfreq < data.info['sfreq']:
+                raise ValueError('Cannot provide events and specify downsampling')
+
         if sfreq < data.info['sfreq']:
             print(f'Downsampling to {sfreq} Hz')
             data, events = data.resample(sfreq, events=events)#100 Hz is the standard used for previous applications of HsMM
-        events[:,2] = events[:,2]-events[:,1]#correction on event value
+        if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicated offset in the trggers
+            events[:,2] = events[:,2]-events[:,1]#correction on event value
         events_wresp = events
 
         #Only pick electrodes placed on the scalp:
         picks = mne.pick_types(data.info, eeg=True, stim=False, eog=False, misc=False,
                            exclude='bads') 
-        offset_after_resp_samples = int(offset_after_resp/(1000/data.info['sfreq']))
+        offset_after_resp_samples = int(offset_after_resp*tstep)
 
         metadata, events, event_id = mne.epochs.make_metadata(
             events=events, event_id= event_id,
@@ -59,17 +65,17 @@ def read_mne_EEG(path_to_files, participant_list, event_id, resp_id, sfreq, resa
         while i < len(events_wresp):
             if events_wresp[i,2] in event_id.values() :
                 if j in valid_epochs_idx:
-                    if events_wresp[i+1,2] in resp_id.values() and events_wresp[i-1,2] == 2:#2 for high force condition 
+                    if events_wresp[i+1,2] in resp_id.values():# and events_wresp[i-1,2] == 2:#2 for high force condition 
                         rts.append(events_wresp[i+1,0] - events_wresp[i,0] )
-                    if events_wresp[i+1,2] in resp_id.values() and events_wresp[i-1,2] ==1:#1 for low force condition 
-                        rts.append(0)
+                    #if events_wresp[i+1,2] in resp_id.values() and events_wresp[i-1,2] ==1:#1 for low force condition 
+                        #rts.append(0)
                     elif events_wresp[i+1,2] not in resp_id.values(): #trials without resp
                         rts.append(0)
                 j += 1
             i += 1
         rts = np.array(rts)
-        rts[rts > data.info['sfreq']*upper_limit_RT] = 0 #removes RT above 2 sec
-        rts[rts < data.info['sfreq']*lower_limit_RT] = 0 #removes RT below 300 ms, important as determines max bumps
+        rts[rts > sfreq*upper_limit_RT] = 0 #removes RT above x sec
+        rts[rts < sfreq*lower_limit_RT] = 0 #removes RT below x sec, important as determines max bumps
 
         triggers = epochs.metadata["event_name"].reset_index(drop=True)
         cropped_data_epoch = np.empty([len(rts[rts!= 0]), len(epochs.ch_names), max(rts)+offset_after_resp_samples])
@@ -79,10 +85,11 @@ def read_mne_EEG(path_to_files, participant_list, event_id, resp_id, sfreq, resa
         for i in np.arange(len(data_epoch)):
             if rts[i] != 0:
             #Crops the epochs to time 0 (stim onset) up to RT
-                cropped_data_epoch[j,:,:rts[i]+offset_after_resp_samples] = (data_epoch[i,:,epochs.time_as_index(0)[0]:
-                                    epochs.time_as_index(0)[0]+int(rts[i])+offset_after_resp_samples])
-                j += 1
+                cropped_data_epoch[j,:,:rts[i]+offset_after_resp_samples] = \
+                (data_epoch[i,:,epochs.time_as_index(0)[0]:\
+                epochs.time_as_index(0)[0]+int(rts[i])+offset_after_resp_samples])
                 cropped_trigger.append(triggers[i])
+                j += 1
         # recover actual data points in a 3D matrix with dimensions trials X electrodes X sample
         epoch_data.append(xr.Dataset(
             {
@@ -100,7 +107,6 @@ def read_mne_EEG(path_to_files, participant_list, event_id, resp_id, sfreq, resa
         )
 
     epoch_data = xr.concat(epoch_data, dim="participant")
-    epoch_data.coords['participant'] =  participant_list
     return epoch_data
 
 def standardize(x):
@@ -113,10 +119,9 @@ def vcov_mat(x):
     return x @ xT
 
 def zscore(data):
-    data = data
     return (data - data.mean()) / data.std()
 
-def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=10, stack=True, single=False):
+def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=10, stack=True, single=False, return_weights=False):
     #Extract durations of epochs (equivalent to RTs) to partition the stacked data
 
     from sklearn.decomposition import PCA
@@ -127,22 +132,32 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
     if method == 'pca':
         var_cov_matrices = []
         # Computing cov matrices by trial and take the average of those
-        for i,trial_dat in data.stack(trial=("participant", "epochs")).groupby('trial'):
-            var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
-        average_var_cov_matrix = np.mean(var_cov_matrices,axis=0)    
-        
+        if not single:
+            for i,trial_dat in data.stack(trial=("participant", "epochs")).groupby('trial'):
+                var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
+            var_cov_matrix = np.mean(var_cov_matrices,axis=0)
+        else:
+            for i,trial_dat in data.groupby('epochs'):
+                var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
+            var_cov_matrix = np.mean(var_cov_matrices,axis=0)    
         # Performing spatial PCA on the average var-cov matrix
         pca = PCA(n_components=n_comp, svd_solver='arpack')#selecting Principale components (PC)
-        pca_data = pca.fit_transform(average_var_cov_matrix)
+        pca_data = pca.fit_transform(var_cov_matrix)
 
         #Rebuilding pca PCs as xarray to ease computation
         coords = dict(electrodes=("electrodes", data.coords["electrodes"].values),
                      component=("component", np.arange(10)))
         pca_data = xr.DataArray(pca_data, dims=("electrodes","component"), coords=coords)
         data = data @ pca_data
-        if apply_zscore:
+        if apply_zscore and not single:
             data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
-        
+        elif apply_zscore and single :
+            data = data.stack(trial=['epochs','component']).groupby('trial').map(zscore).unstack()
+            for comp in data.component:
+                if data.sel(component=comp).std() > 0:#corner case in  (some) simulations
+                    data.sel(component=comp).groupby('epochs').map(zscore).unstack()
+                else:
+                    data.sel(component=comp)+ 1e-10
 #    else:
 #        raise NameError('Method unknown')
     data = data.reset_index(dims_or_levels="epochs",drop=True)
@@ -161,8 +176,10 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
         durations = durations[1:]
     starts = np.insert(durations[:-1],0,0)
     ends = durations-1
-    
-    return data,starts,ends
+    if return_weights:
+        return data.squeeze(),starts,ends, pca_data
+    else:
+        return data.squeeze(),starts,ends
 
 def LOOCV(data, subject, n_bumps, iterative_fits, sfreq):
     #Looping over possible number of bumps
@@ -210,6 +227,7 @@ class hsmm:
         self.starts = starts
         self.ends = ends    
         self.sf = sf
+        self.tseps = 1000/sf
         self.n_trials = len(self.starts)  #number of trials
         self.bump_width = bump_width
         self.bump_width_samples = int(self.bump_width * (self.sf/1000))
@@ -237,7 +255,7 @@ class hsmm:
             a 2D ndarray with samples * PC components where cell values have
             been correlated with bump morphology
         '''
-        bump_idx = np.arange(0,self.bump_width_samples)*(1000/self.sf)+(1000/self.sf)/2
+        bump_idx = np.arange(0,self.bump_width_samples)*self.tseps+self.tseps/2
         bump_frequency = 1000/(self.bump_width*2)#gives bump frequency given that bumps are defined as half-sines
         template = np.sin(2*np.pi*np.linspace(0,1,1000)*bump_frequency)[[int(x) for x in bump_idx]]#bump morph based on a half sine with given bump width and sampling frequency #previously np.array([0.3090, 0.8090, 1.0000, 0.8090, 0.3090]) 
         
@@ -491,7 +509,7 @@ class hsmm:
         # 1) mean accross trials of eventprobs -> mP[max_l, nbump]
         # 2) global expected location of each bump
         # concatenate horizontaly to last column the length of each trial
-        averagepos = averagepos - np.hstack(np.asarray([self.offset+np.append(np.arange(-1,(n_bumps-1)*width+1, width),(n_bumps-1)*width+self.offset)],dtype='object'))
+        averagepos = averagepos# - np.hstack(np.asarray([self.offset+np.append(np.arange(0,(n_bumps-1)*width+1, width),(n_bumps-1)*width+self.offset)],dtype='object'))
         # PCG hat part is sensible and should be carefully checked
         # correction for time locations with number of bumps and size in samples
         flats = averagepos - np.hstack((0,averagepos[:-1]))
@@ -500,17 +518,17 @@ class hsmm:
         params[:,1] = flats.T / 2 
         # correct flats between bumps for the fact that the gamma is 
         # calculated at midpoint
-        #params[1:,1] = params[1:,1] + .5 / 2  
+        #params[1:-1,1] = params[1:-1,1] + .5 / 2  
         # first flat is bounded on left while last flat may go 
         # beyond on right
-        params[:,1] = params[:,1] - .5 / 2 
+        #params[0,1] = params[0,1] - .5 / 2 
         return params, averagepos
 
     def mean_bump_times(self,fit, time=True):
         samples = np.where(fit.eventprobs.mean(dim=['trial']).dropna(dim='bump') == 
                 np.max(fit.eventprobs.mean(dim=['trial']).dropna(dim='bump'),axis=0))[0]
         if time:
-            times = samples*(1000/self.sf)
+            times = samples*self.tseps
         else: times = samples
         return times
     
@@ -559,7 +577,7 @@ class hsmm:
     def bump_times(self, fit, time=True):
         params = fit.parameters.copy(deep=True).dropna(dim="stage")
         if time:
-            scales = [(bump[-1])*2*(1000/self.sf) for bump in params]
+            scales = [(bump[-1])*2*self.tseps for bump in params]
         else:
             scales = [(bump[-1])*2 for bump in params]
         return scales
@@ -635,3 +653,48 @@ class results():
         self.offset = width//2
         self.n_bumps = np.shape(estimated.magnitudes) 
         self.durations = starts - ends + 1
+
+        self.n_bumps = np.shape(estimated.magnitudes) 
+        self.durations = starts - ends + 1
+
+    
+class LOOCV(hsmm):
+    
+    def __init__(self, data, starts, ends, n_bumps, subjects,\
+                 initializing = True, magnitudes = None, parameters = None, \
+                 width = 5, threshold = 1, gamma_shape = 2, subject=1):
+        subjects_idx = np.unique(subjects)
+        subjects_idx_loo = subjects_idx[subjects_idx != subject]
+        subjects_loo = np.array([s for s in subjects if s not in subjects_idx_loo])
+        starts_left_out_idx = np.array([starts[idx] for idx, s in enumerate(subjects) if s not in subjects_idx_loo])
+        ends_left_out_idx = np.array([ends[idx] for idx, s in enumerate(subjects) if s not in subjects_idx_loo])
+
+        #Correct starts indexes to account for reoved subject, whole indexing needs improvement
+        starts_loo = np.concatenate([starts[starts < starts_left_out_idx[0]], starts[starts > ends_left_out_idx[-1]]-ends_left_out_idx[-1]+1])
+        ends_loo = np.concatenate([ends[ends < starts_left_out_idx[0]], ends[ends > ends_left_out_idx[-1]]-ends_left_out_idx[-1]])
+        starts_left_out = np.array([start - starts_left_out_idx[0]  for start in starts if start >= starts_left_out_idx[0] and start <= ends_left_out_idx[-1]])
+        ends_left_out = np.array([end - starts_left_out_idx[0]  for end in ends if end >= starts_left_out_idx[0] and end <= ends_left_out_idx[-1]])
+
+
+        samples_loo = np.array([sample for idx,sample in enumerate(data) if idx < starts_left_out_idx[0] or idx > ends_left_out_idx[-1]])
+        samples_left_out = np.array([sample for idx,sample in enumerate(data) if idx >= starts_left_out_idx[0] and idx <= ends_left_out_idx[-1]])
+        
+        #Fitting the HsMM using previous estimated parameters as initial parameters
+        super().__init__(samples_loo, starts_loo, ends_loo, n_bumps= n_bumps,initializing=initializing, \
+                 magnitudes = magnitudes[:,:n_bumps],
+                 parameters = parameters[:n_bumps+1,:])
+        hsmm.fit(self)
+        
+        super().__init__(samples_left_out, starts_left_out, ends_left_out, n_bumps, initializing=False,\
+            magnitudes = self.magnitudes[:,:n_bumps].values,
+            parameters = self.parameters[:n_bumps+1,:].values,
+            threshold=0)
+        hsmm.fit(self)        
+
+    def extract_results(self):
+        xrlikelihoods = xr.DataArray(self.likelihoods , name="likelihoods")
+        xrparams = xr.DataArray(self.parameters, dims=("stage",'params'), name="parameters")
+        xrmags = xr.DataArray(self.magnitudes, dims=("component","bump"), name="magnitudes")
+        xreventprobs =  xr.DataArray(self.eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
+        estimated = xr.merge((xrlikelihoods,xrparams,xrmags,xreventprobs))
+        return estimated
