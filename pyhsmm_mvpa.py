@@ -25,6 +25,8 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, resampling=False
     import mne
     tstep = 1/sfreq
     epoch_data = [] 
+    if isinstance(pfiles,str):#only one participant
+        pfiles = [pfiles]
     for participant in pfiles:
         data = mne.io.read_raw_fif(participant, preload=False, verbose=False)
         data.load_data()
@@ -32,6 +34,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, resampling=False
         # Loading events (in our case one event = one trial)
         if events is None:
             events = mne.find_events(data, verbose=False)
+        else:
             if sfreq < data.info['sfreq']:
                 raise ValueError('Cannot provide events and specify downsampling')
 
@@ -592,109 +595,3 @@ class hsmm:
 
     def load_fit(self, filename):
         return xr.open_dataset(filename+'.nc')
-
-class iterative_fit(hsmm):
-    
-    def __init__(self, data, starts, ends, max_bumps,initializing, \
-                 magnitudes = None, parameters = None, \
-                 width = 5, threshold = 1, gamma_shape = 2):
-        
-        #super().__init__(data, starts, ends, n_bumps=max_bumps,
-        #         magnitudes = None, parameters = None, \
-        #         width = 5, threshold = 1, gamma_shape = 2)
-        #max_bumps = math.floor(np.min(ends - starts + 1)/5)
-        self.max_bumps = max_bumps
-        estimated = []
-        for n_bumps in np.arange(self.max_bumps)+1:
-            print(f'Fitting {n_bumps} bump model')
-            super().__init__(data, starts, ends, n_bumps=n_bumps,initializing=initializing, \
-                 magnitudes = None, parameters = None, \
-                 width = 5, threshold = 1, gamma_shape = 2)
-
-            hsmm.fit(self)
-            
-            estimated.append(self.extract_results_iterative())
-        self.estimated = estimated#xr.concat(estimated, dim="n_bumps", join='left')
-
-    def extract_results_iterative(self):
-        if len(self.parameters) != self.max_bumps+1:
-            self.parameters = np.concatenate((self.parameters, np.tile(np.nan, \
-                (self.max_bumps+1-len(self.parameters),2))))
-            self.magnitudes = np.concatenate((self.magnitudes, \
-                np.tile(np.nan, (np.shape(self.magnitudes)[0], \
-                self.max_bumps-np.shape(self.magnitudes)[1]))),axis=1)
-        #    self.eventprobs
-        xrlikelihoods = xr.DataArray(self.likelihoods, name="likelihoods")
-        xrparams = xr.DataArray(self.parameters, dims=("stage",'params'), name="parameters")
-        xrmags = xr.DataArray(self.magnitudes, dims=("component","bump"), name="magnitudes")
-        #xreventprobs =  xr.DataArray(self.eventprobs, dims=("bumps","samples",'trial','bump'), name="eventprobs")
-        estimated = xr.merge((xrlikelihoods,xrparams,xrmags))#,xreventprobs))
-        return estimated
-                                      
-    def get_results(self):
-        return xr.concat(estimated, dim="bumps")
-      
-    def bump_times(self):
-        params = self.estimated.parameters.sel(bumps=n_bumps).values
-        scales = [(bump[-1]+self.offset)*(2000/self.sf) for bump in params[:n_bumps+1]]
-        return scales
-    
-
-
-class results():
-    
-    def __init__(self, estimated, data, starts, ends, width=5,sf=100):
-        self.estimated = estimated
-        self.data = data
-        self.starts = starts
-        self.ends = ends
-        self.sf = sf
-        self.width = width
-        self.offset = width//2
-        self.n_bumps = np.shape(estimated.magnitudes) 
-        self.durations = starts - ends + 1
-
-        self.n_bumps = np.shape(estimated.magnitudes) 
-        self.durations = starts - ends + 1
-
-    
-class LOOCV(hsmm):
-    
-    def __init__(self, data, starts, ends, n_bumps, subjects,\
-                 initializing = True, magnitudes = None, parameters = None, \
-                 width = 5, threshold = 1, gamma_shape = 2, subject=1):
-        subjects_idx = np.unique(subjects)
-        subjects_idx_loo = subjects_idx[subjects_idx != subject]
-        subjects_loo = np.array([s for s in subjects if s not in subjects_idx_loo])
-        starts_left_out_idx = np.array([starts[idx] for idx, s in enumerate(subjects) if s not in subjects_idx_loo])
-        ends_left_out_idx = np.array([ends[idx] for idx, s in enumerate(subjects) if s not in subjects_idx_loo])
-
-        #Correct starts indexes to account for reoved subject, whole indexing needs improvement
-        starts_loo = np.concatenate([starts[starts < starts_left_out_idx[0]], starts[starts > ends_left_out_idx[-1]]-ends_left_out_idx[-1]+1])
-        ends_loo = np.concatenate([ends[ends < starts_left_out_idx[0]], ends[ends > ends_left_out_idx[-1]]-ends_left_out_idx[-1]])
-        starts_left_out = np.array([start - starts_left_out_idx[0]  for start in starts if start >= starts_left_out_idx[0] and start <= ends_left_out_idx[-1]])
-        ends_left_out = np.array([end - starts_left_out_idx[0]  for end in ends if end >= starts_left_out_idx[0] and end <= ends_left_out_idx[-1]])
-
-
-        samples_loo = np.array([sample for idx,sample in enumerate(data) if idx < starts_left_out_idx[0] or idx > ends_left_out_idx[-1]])
-        samples_left_out = np.array([sample for idx,sample in enumerate(data) if idx >= starts_left_out_idx[0] and idx <= ends_left_out_idx[-1]])
-        
-        #Fitting the HsMM using previous estimated parameters as initial parameters
-        super().__init__(samples_loo, starts_loo, ends_loo, n_bumps= n_bumps,initializing=initializing, \
-                 magnitudes = magnitudes[:,:n_bumps],
-                 parameters = parameters[:n_bumps+1,:])
-        hsmm.fit(self)
-        
-        super().__init__(samples_left_out, starts_left_out, ends_left_out, n_bumps, initializing=False,\
-            magnitudes = self.magnitudes[:,:n_bumps].values,
-            parameters = self.parameters[:n_bumps+1,:].values,
-            threshold=0)
-        hsmm.fit(self)        
-
-    def extract_results(self):
-        xrlikelihoods = xr.DataArray(self.likelihoods , name="likelihoods")
-        xrparams = xr.DataArray(self.parameters, dims=("stage",'params'), name="parameters")
-        xrmags = xr.DataArray(self.magnitudes, dims=("component","bump"), name="magnitudes")
-        xreventprobs =  xr.DataArray(self.eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
-        estimated = xr.merge((xrlikelihoods,xrparams,xrmags,xreventprobs))
-        return estimated
