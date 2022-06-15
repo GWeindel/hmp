@@ -14,6 +14,7 @@ import numpy as np
 import scipy.stats as stats
 import xarray as xr
 import multiprocessing as mp
+import itertools
 import warnings
 import math
 
@@ -22,6 +23,9 @@ warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird 
 def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, resampling=False, \
                  tmin=-.2, tmax=2.2, offset_after_resp = .1, low_pass=.5, \
                  high_pass = 30, upper_limit_RT=2, lower_limit_RT=.2):
+    ''' 
+    Reads EEG data using MNE's integrated function. This function 
+    '''
     import mne
     tstep = 1/sfreq
     epoch_data = [] 
@@ -163,26 +167,35 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
                     data.sel(component=comp)+ 1e-10
 #    else:
 #        raise NameError('Method unknown')
-    data = data.reset_index(dims_or_levels="epochs",drop=True)
+    #data = data.reset_index(dims_or_levels="epochs")
     if single:
         durations = np.unique(data.isel(component=0).\
            groupby('epochs').count(dim="samples").data.cumsum())
+        while durations[0] == 0:#Dirty due to repeition should be fixed
+            durations = durations[1:]
+        starts = np.insert(durations[:-1],0,0)
+        starts = xr.DataArray(starts, coords={'trial':np.arange(len(durations))})
+        ends = durations-1
+        ends = xr.DataArray(ends, coords={'trial':np.arange(len(durations))})
         if stack:
             data = data.stack(all_samples=['epochs',"samples"]).dropna(dim="all_samples")
     else:
         durations = np.unique(data.isel(component=0).stack(trial=\
            [subjects_variable,'epochs']).reset_index([subjects_variable,'epochs']).\
            groupby('trial').count(dim="samples").data.cumsum())
+        while durations[0] == 0:
+            durations = durations[1:]
+        starts = np.insert(durations[:-1],0,0)
+        starts = xr.DataArray(starts, coords={'trial':np.arange(len(durations))})
+        ends = durations-1
+        ends = xr.DataArray(ends, coords={'trial':np.arange(len(durations))})
         if stack:
             data = data.stack(all_samples=[subjects_variable,'epochs',"samples"]).dropna(dim="all_samples")
-    while durations[0] == 0:
-        durations = durations[1:]
-    starts = np.insert(durations[:-1],0,0)
-    ends = durations-1
+    
     if return_weights:
-        return data.squeeze(),starts,ends, pca_data
+        return xr.Dataset({'data':data, 'starts':starts, 'ends':ends, 'PCs':pca_data})
     else:
-        return data.squeeze(),starts,ends
+        return data.squeeze(),starts.values,ends.values
 
 def LOOCV(data, subject, n_bumps, iterative_fits, sfreq):
     #Looping over possible number of bumps
@@ -192,7 +205,6 @@ def LOOCV(data, subject, n_bumps, iterative_fits, sfreq):
     #Extracting data without left out subject
     stacked_loo, starts_loo, ends_loo = transform_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False),\
                            'participant', apply_standard=False,  apply_zscore=False, method='', n_comp=10, stack=True)
-
     #Fitting the HsMM using previous estimated parameters as initial parameters
     model_loo = hsmm(stacked_loo.to_numpy().T, starts_loo, ends_loo, sf=sfreq)
     fit = model_loo.fit_single(n_bumps, iterative_fits.magnitudes, iterative_fits.parameters, 1, False, True)
@@ -206,9 +218,10 @@ def LOOCV(data, subject, n_bumps, iterative_fits, sfreq):
     likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bumps,True,True)
     return likelihood, subject
 
+
 class hsmm:
     
-    def __init__(self, data, starts, ends, sf, bump_width = 50):
+    def __init__(self, data, starts, ends, sf, cpus=1, bump_width = 50):
         '''
          HSMM calculates the probability of data summing over all ways of 
          placing the n bumps to break the trial into n + 1 flats.
@@ -233,6 +246,10 @@ class hsmm:
         self.tseps = 1000/sf
         self.n_trials = len(self.starts)  #number of trials
         self.bump_width = bump_width
+        self.cpus = cpus
+#        if self.cpus > 1:
+#            import itertools
+#            import multiprocessing
         self.bump_width_samples = int(self.bump_width * (self.sf/1000))
         self.offset = self.bump_width_samples//2#offset on data linked to the choosen width
         # Offset is how soon the first peak can be or how late the last,originaly offset = 2
@@ -240,6 +257,7 @@ class hsmm:
         self.bumps = self.calc_bumps(data)#adds bump morphology
         self.durations = self.ends - self.starts+1#length of each trial
         self.max_d = np.max(self.durations)
+        self.max_bumps = self.compute_max_bumps()
     
     def calc_bumps(self,data):
         '''
@@ -307,12 +325,11 @@ class hsmm:
         lkh,mags,pars,eventprobs = \
             self.__fit(n_bumps, magnitudes, parameters, threshold)
         
-        max_bumps = self.max_bumps()
-        if len(pars) != max_bumps+1:#align all dimensions
-            pars = np.concatenate((pars, np.tile(np.nan, (max_bumps+1-len(pars),2))))
+        if len(pars) != self.max_bumps+1:#align all dimensions
+            pars = np.concatenate((pars, np.tile(np.nan, (self.max_bumps+1-len(pars),2))))
             mags = np.concatenate((mags, np.tile(np.nan, (np.shape(mags)[0], \
-                max_bumps-np.shape(mags)[1]))),axis=1)
-            eventprobs = np.concatenate((eventprobs, np.tile(np.nan, (np.shape(eventprobs)[0],np.shape(eventprobs)[1], max_bumps-np.shape(eventprobs)[2]))),axis=2)
+                self.max_bumps-np.shape(mags)[1]))),axis=1)
+            eventprobs = np.concatenate((eventprobs, np.tile(np.nan, (np.shape(eventprobs)[0],np.shape(eventprobs)[1], self.max_bumps-np.shape(eventprobs)[2]))),axis=2)
         
         xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
         xrparams = xr.DataArray(pars, dims=("stage",'params'), name="parameters")
@@ -527,6 +544,38 @@ class hsmm:
         #params[0,1] = params[0,1] - .5 / 2 
         return params, averagepos
 
+    def backward_estimation(self):
+        '''
+        first estimate max_bump solution then estimate max_bump - 1 solution by 
+        iteratively removing one of the bump and pick the one with the highest 
+        likelihood
+        '''
+        bump_loo_results = [self.fit_single(self.max_bumps)]
+
+        i = 1
+        for n_bumps in np.arange(self.max_bumps-1,0,-1):
+            temp_best = bump_loo_results[-i]
+            n_bumps_list = np.arange(n_bumps+1)
+            possible_bumps = np.array(list(itertools.combinations(n_bumps_list, n_bumps)))
+            possible_flats = [x + 1 for x in possible_bumps]
+            possible_flats = [np.insert(x,0,0) for x in possible_flats]
+            if self.cpus > 1:
+                with mp.Pool(processes=self.cpus) as pool:
+                    bump_loo_likelihood_temp = pool.starmap(self.fit_single, 
+                        zip(itertools.repeat(n_bumps),temp_best.magnitudes.values.T[possible_bumps,:],
+                            temp_best.parameters.values[possible_flats,:],
+                            itertools.repeat(1),itertools.repeat(True)))
+            else:
+                raise ValueError('For loop not yet written use cpus >1')
+            models = xr.concat(bump_loo_likelihood_temp, dim="iteration")
+            bump_loo_results.append(models.sel(iteration=[np.where(models.likelihoods == models.likelihoods.max())[0][0]]))
+            i+=1
+        bests = xr.concat(bump_loo_results, dim="n_bumps")
+        bests = bests.assign_coords({"n_bumps": np.arange(self.max_bumps,0,-1)})
+        bests = bests.squeeze('iteration')
+        return bests
+
+    
     def mean_bump_times(self,fit, time=True):
         samples = np.where(fit.eventprobs.mean(dim=['trial']).dropna(dim='bump') == 
                 np.max(fit.eventprobs.mean(dim=['trial']).dropna(dim='bump'),axis=0))[0]
@@ -585,7 +634,7 @@ class hsmm:
             scales = [(bump[-1])*2 for bump in params]
         return scales
     
-    def max_bumps(self):
+    def compute_max_bumps(self):
         max_bumps = np.min(self.ends - self.starts + 1)//self.bump_width_samples
         return max_bumps
 
