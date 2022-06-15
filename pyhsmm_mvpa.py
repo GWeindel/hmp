@@ -218,6 +218,51 @@ def LOOCV(data, subject, n_bumps, iterative_fits, sfreq):
     likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bumps,True,True)
     return likelihood, subject
 
+def plot_topo_timecourse(init, data, fit, raw_eeg, max_time = None, time=False, figsize=[12, 2], magnify=1):
+    import matplotlib.pyplot as plt
+    import mne
+    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    if not max_time:
+        max_time = np.mean(data.ends - data.starts)
+        if time:
+            max_time = max_time * (1000/init.sf)
+    if time:
+        bump_size = init.bump_width*magnify
+    else:
+        bump_size = init.bump_width_samples*magnify
+    yoffset = .4*magnify
+    axes = []
+    if 'n_bumps' in fit:
+        for n_bump in fit.n_bumps:
+            times = init.mean_bump_times(fit.sel(n_bumps=n_bump), time=time)    
+            for bump in np.arange(n_bump):
+                axes.append(ax.inset_axes([times[bump]-bump_size/2,n_bump-yoffset/2,bump_size,yoffset], transform=ax.transData))
+                mne.viz.plot_topomap(data.PCs@fit.sel(n_bumps=n_bump).magnitudes.dropna(dim='bump').T[bump], raw_eeg.pick_types(eeg=True).info, axes=axes[-1], show=False)
+        ax.set_ylim(1-yoffset, fit.n_bumps.max()+yoffset)
+        ax.set_ylabel('Number of estimated bumps')
+    else :
+        n_bumps = 1
+        n_bump = fit.dropna('bump').bump.max().values
+        times = init.mean_bump_times(fit, time=time)    
+        for bump in np.arange(n_bump+1):
+            axes.append(ax.inset_axes([times[bump]-bump_size/2,n_bumps-yoffset,bump_size,yoffset], transform=ax.transData))
+            mne.viz.plot_topomap(data.PCs@fit.magnitudes.dropna(dim='bump').T[bump], raw_eeg.pick_types(eeg=True).info, axes=axes[-1], show=False)
+        ax.set_ylim(1-yoffset, 1+yoffset)
+        ax.set_yticks([])
+        ax.spines['left'].set_visible(False)
+
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_xlim(0,max_time)
+
+    if time:
+        ax.set_xlabel('Time (in ms)')
+    else:
+        ax.set_xlabel('Time (in samples)')
+
+    plt.show()
+
 
 class hsmm:
     
@@ -644,3 +689,4 @@ class hsmm:
 
     def load_fit(self, filename):
         return xr.open_dataset(filename+'.nc')
+
