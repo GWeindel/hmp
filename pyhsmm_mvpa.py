@@ -38,9 +38,9 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, resampling=False
         # Loading events (in our case one event = one trial)
         if events is None:
             events = mne.find_events(data, verbose=False)
-        else:
-            if sfreq < data.info['sfreq']:
-                raise ValueError('Cannot provide events and specify downsampling')
+        #else:
+        #    if sfreq < data.info['sfreq']:
+        #        raise ValueError('Cannot provide events and specify downsampling')
 
         if sfreq < data.info['sfreq']:
             print(f'Downsampling to {sfreq} Hz')
