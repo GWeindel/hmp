@@ -128,7 +128,7 @@ def vcov_mat(x):
 def zscore(data):
     return (data - data.mean()) / data.std()
 
-def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=10, stack=True, single=False, return_weights=False):
+def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, stack=True, single=False, return_weights=False):
     #Extract durations of epochs (equivalent to RTs) to partition the stacked data
 
     from sklearn.decomposition import PCA
@@ -148,12 +148,30 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
                 var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
             var_cov_matrix = np.mean(var_cov_matrices,axis=0)    
         # Performing spatial PCA on the average var-cov matrix
+        if n_comp == None:
+            import matplotlib.pyplot as plt
+            n_comp = np.shape(var_cov_matrix)[0]-1
+            fig, ax = plt.subplots(1,2, figsize=(.2*n_comp, 4))
+            pca = PCA(n_components=n_comp, svd_solver='arpack')#selecting Principale components (PC)
+            pca_data = pca.fit_transform(var_cov_matrix)
+            var = pca.transform(var_cov_matrix)
+            var = np.var(var, axis=0)
+            ax[0].plot(np.arange(pca.n_components)+1, var/np.sum(var),'.-')
+            ax[0].set_ylabel('Normalized explained variance')
+            ax[0].set_xlabel('Component')
+            ax[1].plot(np.arange(pca.n_components)+1, np.cumsum(var/np.sum(var)),'.-')
+            ax[1].set_ylabel('Cumulative normalized explained variance')
+            ax[1].set_xlabel('Component')
+            plt.tight_layout()
+            plt.show()
+            n_comp = int(input(f'How many PCs (80 and 95% explained variance at component n{np.where(np.cumsum(var/np.sum(var)) >= .80)[0][0]+1} and n{np.where(np.cumsum(var/np.sum(var)) >= .95)[0][0]+1})?'))
         pca = PCA(n_components=n_comp, svd_solver='arpack')#selecting Principale components (PC)
+
         pca_data = pca.fit_transform(var_cov_matrix)
 
         #Rebuilding pca PCs as xarray to ease computation
         coords = dict(electrodes=("electrodes", data.coords["electrodes"].values),
-                     component=("component", np.arange(10)))
+                     component=("component", np.arange(n_comp)))
         pca_data = xr.DataArray(pca_data, dims=("electrodes","component"), coords=coords)
         data = data @ pca_data
         if apply_zscore and not single:
@@ -218,15 +236,16 @@ def LOOCV(data, subject, n_bumps, iterative_fits, sfreq):
     likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bumps,True,True)
     return likelihood, subject
 
-def plot_topo_timecourse(init, data, fit, raw_eeg, max_time = None, time=False, figsize=[12, 2], magnify=1):
+def plot_topo_timecourse(init, data, fit, raw_eeg, max_time = None, time=False, figsize=[12, 2], magnify=1, plot_response=True):
     import matplotlib.pyplot as plt
     import mne
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
     fig, ax = plt.subplots(1, 1, figsize=figsize)
+    mean_time = np.mean(data.ends - data.starts)
+    if time:
+        mean_time = mean_time * (1000/init.sf)
     if not max_time:
-        max_time = np.mean(data.ends - data.starts)
-        if time:
-            max_time = max_time * (1000/init.sf)
+        max_time = mean_time + mean_time/10
     if time:
         bump_size = init.bump_width*magnify
     else:
@@ -234,6 +253,7 @@ def plot_topo_timecourse(init, data, fit, raw_eeg, max_time = None, time=False, 
     yoffset = .4*magnify
     axes = []
     if 'n_bumps' in fit:
+        n_bumps = fit.n_bumps.max()
         for n_bump in fit.n_bumps:
             times = init.mean_bump_times(fit.sel(n_bumps=n_bump), time=time)    
             for bump in np.arange(n_bump):
@@ -248,14 +268,14 @@ def plot_topo_timecourse(init, data, fit, raw_eeg, max_time = None, time=False, 
         for bump in np.arange(n_bump+1):
             axes.append(ax.inset_axes([times[bump]-bump_size/2,n_bumps-yoffset,bump_size,yoffset], transform=ax.transData))
             mne.viz.plot_topomap(data.PCs@fit.magnitudes.dropna(dim='bump').T[bump], raw_eeg.pick_types(eeg=True).info, axes=axes[-1], show=False)
-        ax.set_ylim(1-yoffset, 1+yoffset)
         ax.set_yticks([])
         ax.spines['left'].set_visible(False)
 
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.set_xlim(0,max_time)
-
+    ax.vlines(mean_time, 1-yoffset, n_bumps+yoffset, color='k')
+    ax.set_ylim(1-yoffset, n_bumps+yoffset)
     if time:
         ax.set_xlabel('Time (in ms)')
     else:
