@@ -128,7 +128,7 @@ def vcov_mat(x):
 def zscore(data):
     return (data - data.mean()) / data.std()
 
-def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, stack=True, single=False, return_weights=False):
+def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, single=False, return_weights=False):
     #Extract durations of epochs (equivalent to RTs) to partition the stacked data
 
     from sklearn.decomposition import PCA
@@ -183,6 +183,11 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
                     data.sel(component=comp).groupby('epochs').map(zscore).unstack()
                 else:
                     data.sel(component=comp)+ 1e-10
+        return data, pca_data
+    else:
+        return data
+
+def stack_data(data, subjects_variable, single=False):
 #    else:
 #        raise NameError('Method unknown')
     #data = data.reset_index(dims_or_levels="epochs")
@@ -195,8 +200,7 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
         starts = xr.DataArray(starts, coords={'trial':np.arange(len(durations))})
         ends = durations-1
         ends = xr.DataArray(ends, coords={'trial':np.arange(len(durations))})
-        if stack:
-            data = data.stack(all_samples=['epochs',"samples"]).dropna(dim="all_samples")
+        data = data.stack(all_samples=['epochs',"samples"]).dropna(dim="all_samples")
     else:
         durations = np.unique(data.isel(component=0).stack(trial=\
            [subjects_variable,'epochs']).reset_index([subjects_variable,'epochs']).\
@@ -207,13 +211,9 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
         starts = xr.DataArray(starts, coords={'trial':np.arange(len(durations))})
         ends = durations-1
         ends = xr.DataArray(ends, coords={'trial':np.arange(len(durations))})
-        if stack:
-            data = data.stack(all_samples=[subjects_variable,'epochs',"samples"]).dropna(dim="all_samples")
-    
-    if return_weights:
-        return xr.Dataset({'data':data, 'starts':starts, 'ends':ends, 'PCs':pca_data})
-    else:
-        return data.squeeze(),starts.values,ends.values
+        data = data.stack(all_samples=[subjects_variable,'epochs',"samples"]).dropna(dim="all_samples")
+    return xr.Dataset({'data':data, 'starts':starts, 'ends':ends})
+
 
 def LOOCV(data, subject, n_bumps, iterative_fits, sfreq):
     #Looping over possible number of bumps
@@ -221,27 +221,32 @@ def LOOCV(data, subject, n_bumps, iterative_fits, sfreq):
     likelihoods_loo = []
     
     #Extracting data without left out subject
-    stacked_loo, starts_loo, ends_loo = transform_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False),\
-                           'participant', apply_standard=False,  apply_zscore=False, method='', n_comp=10, stack=True)
+    stacked_loo = stack_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False),\
+                           'participant')
     #Fitting the HsMM using previous estimated parameters as initial parameters
-    model_loo = hsmm(stacked_loo.to_numpy().T, starts_loo, ends_loo, sf=sfreq)
+    model_loo = hsmm(stacked_loo.data.data.T, stacked_loo.starts.data, stacked_loo.ends.data, sf=sfreq)
     fit = model_loo.fit_single(n_bumps, iterative_fits.magnitudes, iterative_fits.parameters, 1, False, True)
 
     #Evaluating likelihood for left out subject
     #Extracting data of left out subject
-    stacked_left_out, starts_left_out, ends_left_out = transform_data(data.sel(participant=subject, drop=False),\
-                           'participant', apply_standard=False,  apply_zscore=False, method='', n_comp=10, stack=True,single=True)
+    stacked_left_out = stack_data(data.sel(participant=subject, drop=False),\
+                           'participant',single=True)
 
-    model_left_out = hsmm(stacked_left_out.to_numpy().T, starts_left_out, ends_left_out, sf=sfreq)
+    model_left_out = hsmm(stacked_left_out.data.T, stacked_left_out.starts.data, stacked_left_out.ends.data, sf=sfreq)
     likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bumps,True,True)
     return likelihood, subject
 
-def plot_topo_timecourse(init, data, fit, raw_eeg, max_time = None, time=False, figsize=[12, 2], magnify=1, plot_response=True):
+def plot_topo_timecourse(init, data, pcs, fit, raw_eeg, max_time = None, time=False, figsize=None, magnify=1, plot_response=True):
     import matplotlib.pyplot as plt
     import mne
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    if 'n_bumps' in fit and not figsize:
+        n_bumps = fit.n_bumps.max()
+        figsize = (12, n_bumps*1)
+    else:
+        figzise = (12, 2)
     fig, ax = plt.subplots(1, 1, figsize=figsize)
-    mean_time = np.mean(data.ends - data.starts)
+    mean_time = np.mean(data.ends-data.starts)
     if time:
         mean_time = mean_time * (1000/init.sf)
     if not max_time:
@@ -258,7 +263,7 @@ def plot_topo_timecourse(init, data, fit, raw_eeg, max_time = None, time=False, 
             times = init.mean_bump_times(fit.sel(n_bumps=n_bump), time=time)    
             for bump in np.arange(n_bump):
                 axes.append(ax.inset_axes([times[bump]-bump_size/2,n_bump-yoffset/2,bump_size,yoffset], transform=ax.transData))
-                mne.viz.plot_topomap(data.PCs@fit.sel(n_bumps=n_bump).magnitudes.dropna(dim='bump').T[bump], raw_eeg.pick_types(eeg=True).info, axes=axes[-1], show=False)
+                mne.viz.plot_topomap(pcs@fit.sel(n_bumps=n_bump).magnitudes.dropna(dim='bump').T[bump], raw_eeg.pick_types(eeg=True).info, axes=axes[-1], show=False)
         ax.set_ylim(1-yoffset, fit.n_bumps.max()+yoffset)
         ax.set_ylabel('Number of estimated bumps')
     else :
@@ -267,7 +272,7 @@ def plot_topo_timecourse(init, data, fit, raw_eeg, max_time = None, time=False, 
         times = init.mean_bump_times(fit, time=time)    
         for bump in np.arange(n_bump+1):
             axes.append(ax.inset_axes([times[bump]-bump_size/2,n_bumps-yoffset,bump_size,yoffset], transform=ax.transData))
-            mne.viz.plot_topomap(data.PCs@fit.magnitudes.dropna(dim='bump').T[bump], raw_eeg.pick_types(eeg=True).info, axes=axes[-1], show=False)
+            mne.viz.plot_topomap(pcs@fit.magnitudes.dropna(dim='bump').T[bump], raw_eeg.pick_types(eeg=True).info, axes=axes[-1], show=False)
         ax.set_yticks([])
         ax.spines['left'].set_visible(False)
 
@@ -283,7 +288,33 @@ def plot_topo_timecourse(init, data, fit, raw_eeg, max_time = None, time=False, 
 
     plt.show()
 
+def plot_LOOCV(loocv_estimates, pval=True, figsize=(12,5)):
+    import matplotlib.pyplot as plt
+    if pval:
+        from statsmodels.stats.descriptivestats import sign_test 
+    fig, ax = plt.subplots(1,2, figsize=figsize)
+    ax[0].errorbar(x=np.arange(loocv_estimates.n_bump.max())+1,y=np.mean(loocv_estimates.data,axis=1),yerr=np.std(loocv_estimates.data,axis=1)/np.sqrt(len(loocv_estimates.participants))*1.96,marker='o')
+    ax[0].set_ylabel('LOOCV Loglikelihood')
+    ax[0].set_xlabel('Number of bumps')
+    ax[0].set_xticks(ticks=np.arange(1,loocv_estimates.n_bump.max()+1))
 
+    diffs, diff_bin, labels, pvals = [],[],[],[]
+    for n_bump in np.arange(2,loocv_estimates.n_bump.max()+1):
+        diffs.append(loocv_estimates.sel(n_bump=n_bump).data - loocv_estimates.sel(n_bump=n_bump-1).data)
+        diff_bin.append([1 for x in diffs[-1] if x > 0])
+        labels.append(str(n_bump-1)+'->'+str(n_bump))
+        if pval:
+            pvals.append((sign_test(diffs[-1])))
+            ax[0].text(x=n_bump-.5, y=np.mean(loocv_estimates.sel(n_bump=n_bump).data), s=str(np.sum(diff_bin[-1]))+'/'+str(len(diffs[-1]))+':'+str(np.around(pvals[-1][-1],2)))
+    ax[1].plot(diffs,'.-', alpha=.3)
+    ax[1].set_xticks(ticks=np.arange(0,loocv_estimates.n_bump.max()-1), labels=labels)
+    ax[1].hlines(0,0,len(np.arange(2,loocv_estimates.n_bump.max())),color='k')
+    ax[1].set_ylabel('Change in likelihood')
+    ax[1].set_xlabel('')
+
+    plt.tight_layout()
+    plt.show()
+    
 class hsmm:
     
     def __init__(self, data, starts, ends, sf, cpus=1, bump_width = 50):
