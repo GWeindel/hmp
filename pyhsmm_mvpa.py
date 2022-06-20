@@ -215,7 +215,7 @@ def stack_data(data, subjects_variable, single=False):
     return xr.Dataset({'data':data, 'starts':starts, 'ends':ends})
 
 
-def LOOCV(data, subject, n_bumps, iterative_fits, sfreq):
+def LOOCV(data, subject, n_bumps, iterative_fits, sfreq, bump_width=50):
     #Looping over possible number of bumps
     subjects_idx = data.participant.values
     likelihoods_loo = []
@@ -224,7 +224,7 @@ def LOOCV(data, subject, n_bumps, iterative_fits, sfreq):
     stacked_loo = stack_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False),\
                            'participant')
     #Fitting the HsMM using previous estimated parameters as initial parameters
-    model_loo = hsmm(stacked_loo.data.data.T, stacked_loo.starts.data, stacked_loo.ends.data, sf=sfreq)
+    model_loo = hsmm(stacked_loo.data.data.T, stacked_loo.starts.data, stacked_loo.ends.data, sf=sfreq, bump_width=bump_width)
     fit = model_loo.fit_single(n_bumps, iterative_fits.magnitudes, iterative_fits.parameters, 1, False, True)
 
     #Evaluating likelihood for left out subject
