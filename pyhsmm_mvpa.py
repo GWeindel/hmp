@@ -232,7 +232,7 @@ def LOOCV(data, subject, n_bumps, iterative_fits, sfreq, bump_width=50):
     stacked_left_out = stack_data(data.sel(participant=subject, drop=False),\
                            'participant',single=True)
 
-    model_left_out = hsmm(stacked_left_out.data.T, stacked_left_out.starts.data, stacked_left_out.ends.data, sf=sfreq)
+    model_left_out = hsmm(stacked_left_out.data.T, stacked_left_out.starts.data, stacked_left_out.ends.data, sf=sfreq, bump_width=bump_width)
     likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bumps,True,True)
     return likelihood, subject
 
