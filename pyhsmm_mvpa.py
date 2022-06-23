@@ -20,11 +20,23 @@ import math
 
 warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later
 
-def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, resampling=False, \
+def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None,
                  tmin=-.2, tmax=2.2, offset_after_resp = .1, low_pass=.5, \
                  high_pass = 30, upper_limit_RT=2, lower_limit_RT=.2):
     ''' 
-    Reads EEG data using MNE's integrated function. This function 
+    Reads EEG data using MNE's integrated function. If no events is provided 
+    
+    Parameters
+    ----------
+    ...
+    data : ndarray
+        2D ndarray with n_samples * components
+
+    Returns
+    -------
+    bumbs : ndarray
+        a 2D ndarray with samples * PC components where cell values have
+        been correlated with bump morphology
     '''
     import mne
     tstep = 1/sfreq
@@ -38,6 +50,8 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, resampling=False
         # Loading events (in our case one event = one trial)
         if events is None:
             events = mne.find_events(data, verbose=False)
+            events_values = np.concatenate([np.array([x for x in event_id.values()]), np.array([x for x in resp_id.values()])])
+            events = np.array([list(x) for x in events if x[2] in events_values])#only keeps events with stim or response
         #else:
         #    if sfreq < data.info['sfreq']:
         #        raise ValueError('Cannot provide events and specify downsampling')
@@ -45,41 +59,36 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, resampling=False
         if sfreq < data.info['sfreq']:
             print(f'Downsampling to {sfreq} Hz')
             data, events = data.resample(sfreq, events=events)#100 Hz is the standard used for previous applications of HsMM
-        if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicated offset in the trggers
+        if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicates offset in the trggers
             events[:,2] = events[:,2]-events[:,1]#correction on event value
-        events_wresp = events
 
-        #Only pick electrodes placed on the scalp:
+        #Only pick eeg electrodes
         picks = mne.pick_types(data.info, eeg=True, stim=False, eog=False, misc=False,
                            exclude='bads') 
         offset_after_resp_samples = int(offset_after_resp*tstep)
-
-        metadata, events, event_id = mne.epochs.make_metadata(
+        
+        metadata, meta_events, event_id = mne.epochs.make_metadata(
             events=events, event_id= event_id,
             tmin=tmin, tmax=tmax, sfreq=data.info['sfreq'])
-
-        epochs = mne.Epochs(data, events, event_id, tmin, tmax, proj=False,
+        epochs = mne.Epochs(data, meta_events, event_id, tmin, tmax, proj=False,
                         picks=picks, baseline=(None, 0), preload=True,
-                        verbose=False,detrend=1,on_missing = 'warn',
-                        metadata=metadata,reject_by_annotation=True)
+                        verbose=True,detrend=1, on_missing = 'warn',
+                        metadata=metadata, reject_by_annotation=True)
         data_epoch = epochs.get_data()
 
         valid_epochs_idx = [x for x in np.arange(len(epochs.drop_log)) if epochs.drop_log[x] == ()]
-
+        correct_stim_timing  = np.array([list(x) for x in events if x[2] in event_id.values()])[valid_epochs_idx,0]
+        stim_events = np.array([x for x in np.arange(len(events)) if events[x,0] in correct_stim_timing])
+        
         rts=[]#reaction times
         trigger = []
-        i,j = 0,0
-        while i < len(events_wresp):
-            if events_wresp[i,2] in event_id.values() :
-                if j in valid_epochs_idx:
-                    if events_wresp[i+1,2] in resp_id.values():# and events_wresp[i-1,2] == 2:#2 for high force condition 
-                        rts.append(events_wresp[i+1,0] - events_wresp[i,0] )
-                    #if events_wresp[i+1,2] in resp_id.values() and events_wresp[i-1,2] ==1:#1 for low force condition 
-                        #rts.append(0)
-                    elif events_wresp[i+1,2] not in resp_id.values(): #trials without resp
-                        rts.append(0)
-                j += 1
-            i += 1
+        for i in stim_events:
+            if events[i+1,2] in resp_id.values():
+                rts.append(events[i+1,0] - events[i,0] )
+            elif events[i+1,2] not in resp_id.values(): #trials without resp
+                rts.append(0)
+            else:
+                raise ValueError('Problem in event values')
         rts = np.array(rts)
         rts[rts > sfreq*upper_limit_RT] = 0 #removes RT above x sec
         rts[rts < sfreq*lower_limit_RT] = 0 #removes RT below x sec, important as determines max bumps
@@ -287,8 +296,10 @@ def plot_topo_timecourse(init, data, pcs, fit, raw_eeg, max_time = None, time=Fa
         ax.set_xlabel('Time (in samples)')
 
     plt.show()
+    
 
-def plot_LOOCV(loocv_estimates, pval=True, figsize=(12,5)):
+
+def plot_LOOCV(loocv_estimates, pval=True, figsize=(16,5)):
     import matplotlib.pyplot as plt
     if pval:
         from statsmodels.stats.descriptivestats import sign_test 
