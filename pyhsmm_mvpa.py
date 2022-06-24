@@ -44,12 +44,15 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None,
     if isinstance(pfiles,str):#only one participant
         pfiles = [pfiles]
     for participant in pfiles:
+        print(participant)
         data = mne.io.read_raw_fif(participant, preload=False, verbose=False)
         data.load_data()
         data.filter(low_pass, high_pass, fir_design='firwin', verbose=False)#Filtering out frequency outside range .5 and 30Hz, as study by Anderson et al. (Berberyan used 40 Hz)
         # Loading events (in our case one event = one trial)
         if events is None:
             events = mne.find_events(data, verbose=False)
+            if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicates offset in the trggers
+                events[:,2] = events[:,2]-events[:,1]#correction on event value
             events_values = np.concatenate([np.array([x for x in event_id.values()]), np.array([x for x in resp_id.values()])])
             events = np.array([list(x) for x in events if x[2] in events_values])#only keeps events with stim or response
         #else:
@@ -59,8 +62,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None,
         if sfreq < data.info['sfreq']:
             print(f'Downsampling to {sfreq} Hz')
             data, events = data.resample(sfreq, events=events)#100 Hz is the standard used for previous applications of HsMM
-        if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicates offset in the trggers
-            events[:,2] = events[:,2]-events[:,1]#correction on event value
+
 
         #Only pick eeg electrodes
         picks = mne.pick_types(data.info, eeg=True, stim=False, eog=False, misc=False,
@@ -92,20 +94,26 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None,
         rts = np.array(rts)
         rts[rts > sfreq*upper_limit_RT] = 0 #removes RT above x sec
         rts[rts < sfreq*lower_limit_RT] = 0 #removes RT below x sec, important as determines max bumps
-
         triggers = epochs.metadata["event_name"].reset_index(drop=True)
-        cropped_data_epoch = np.empty([len(rts[rts!= 0]), len(epochs.ch_names), max(rts)+offset_after_resp_samples])
+        cropped_data_epoch = np.empty([len(rts[rts> 0]), len(epochs.ch_names), max(rts)+offset_after_resp_samples])
         cropped_data_epoch[:] = np.nan
         cropped_trigger = []
-        i, j = 0, 0
+        j = 0
         for i in np.arange(len(data_epoch)):
-            if rts[i] != 0:
+            if rts[i] > 0:
+                cropped_trigger.append(triggers[i])
             #Crops the epochs to time 0 (stim onset) up to RT
                 cropped_data_epoch[j,:,:rts[i]+offset_after_resp_samples] = \
                 (data_epoch[i,:,epochs.time_as_index(0)[0]:\
                 epochs.time_as_index(0)[0]+int(rts[i])+offset_after_resp_samples])
-                cropped_trigger.append(triggers[i])
                 j += 1
+        x = 0
+        while np.isnan(cropped_data_epoch[-1]).all():#Weird bug I guess it is perhps due to too long epoch?
+            cropped_data_epoch = cropped_data_epoch[:-1]
+            x += 1
+        if x > 0:
+            print(f'RTs > 0 longer than expected ({x})')
+
         # recover actual data points in a 3D matrix with dimensions trials X electrodes X sample
         epoch_data.append(xr.Dataset(
             {
@@ -120,7 +128,8 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None,
             },
             attrs={'sfreq':epochs.info['sfreq']}
             )
-        )
+
+            )
 
     epoch_data = xr.concat(epoch_data, dim="participant")
     return epoch_data
@@ -628,7 +637,7 @@ class hsmm:
         params : ndarray
             shape and scale for the gamma distributions
         '''
-        width = self.bump_width_samples-1 #unaccounted samples -1?
+        width = self.bump_width_samples #unaccounted samples -1?
         # Expected value, time location
         averagepos = np.hstack((np.sum(np.tile(np.arange(self.max_d)[np.newaxis].T,\
             (1, n_bumps)) * np.mean(eventprobs, axis=1).reshape(self.max_d, n_bumps,\
@@ -636,8 +645,7 @@ class hsmm:
         # 1) mean accross trials of eventprobs -> mP[max_l, nbump]
         # 2) global expected location of each bump
         # concatenate horizontaly to last column the length of each trial
-        averagepos = averagepos# - np.hstack(np.asarray([self.offset+np.append(np.arange(0,(n_bumps-1)*width+1, width),(n_bumps-1)*width+self.offset)],dtype='object'))
-        # PCG hat part is sensible and should be carefully checked
+        averagepos = averagepos - (self.offset+np.hstack(np.asarray([np.append(np.repeat(0,n_bumps),-self.offset)],dtype='object')))
         # correction for time locations with number of bumps and size in samples
         flats = averagepos - np.hstack((0,averagepos[:-1]))
         params = np.zeros((n_bumps+1,2))
@@ -645,10 +653,10 @@ class hsmm:
         params[:,1] = flats.T / 2 
         # correct flats between bumps for the fact that the gamma is 
         # calculated at midpoint
-        #params[1:-1,1] = params[1:-1,1] + .5 / 2  
+        params[-1,1] = params[-1,1] - .5 / 2
         # first flat is bounded on left while last flat may go 
         # beyond on right
-        #params[0,1] = params[0,1] - .5 / 2 
+        params[0,1] = params[0,1] + .5 / 2 
         return params, averagepos
 
     def backward_estimation(self):
