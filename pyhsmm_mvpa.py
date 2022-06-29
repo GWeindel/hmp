@@ -254,56 +254,53 @@ def LOOCV(data, subject, n_bumps, iterative_fits, sfreq, bump_width=50):
     likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bumps,True,True)
     return likelihood, subject
 
-def plot_topo_timecourse(init, data, pcs, fit, raw_eeg, max_time = None, time=False, figsize=None, magnify=1, plot_response=True):
+def plot_topo_timecourse(magnitudes, eventprobs, pcs, channel_position, time_step=1, bump_size=50,  
+                         time=False, figsize=None, magnify=1, matcolor=False, mean_rt=None,cmap='Spectral_r',
+                         ylabels=[], max_time = None):
     import matplotlib.pyplot as plt
-    import mne
+    from mne.viz import plot_topomap
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-    if 'n_bumps' in fit and not figsize:
-        n_bumps = fit.n_bumps.max()
-        figsize = (12, n_bumps*1)
-    else:
+    if not figsize:
         figzise = (12, 2)
     fig, ax = plt.subplots(1, 1, figsize=figsize)
-    mean_time = np.mean(data.ends-data.starts)
-    if time:
-        mean_time = mean_time * (1000/init.sf)
-    if not max_time:
-        max_time = mean_time + mean_time/10
-    if time:
-        bump_size = init.bump_width*magnify
-    else:
-        bump_size = init.bump_width_samples*magnify
-    yoffset = .4*magnify
+    bump_size = bump_size*time_step*magnify
+    yoffset =.25*magnify
     axes = []
-    if 'n_bumps' in fit:
-        n_bumps = fit.n_bumps.max()
-        for n_bump in fit.n_bumps:
-            times = init.mean_bump_times(fit.sel(n_bumps=n_bump), time=time)    
-            for bump in np.arange(n_bump):
-                axes.append(ax.inset_axes([times[bump]-bump_size/2,n_bump-yoffset/2,bump_size,yoffset], transform=ax.transData))
-                mne.viz.plot_topomap(pcs@fit.sel(n_bumps=n_bump).magnitudes.dropna(dim='bump').T[bump], raw_eeg.pick_types(eeg=True).info, axes=axes[-1], show=False)
-        ax.set_ylim(1-yoffset, fit.n_bumps.max()+yoffset)
-        ax.set_ylabel('Number of estimated bumps')
-    else :
-        n_bumps = 1
-        n_bump = fit.dropna('bump').bump.max().values
-        times = init.mean_bump_times(fit, time=time)    
-        for bump in np.arange(n_bump+1):
-            axes.append(ax.inset_axes([times[bump]-bump_size/2,n_bumps-yoffset,bump_size,yoffset], transform=ax.transData))
-            mne.viz.plot_topomap(pcs@fit.magnitudes.dropna(dim='bump').T[bump], raw_eeg.pick_types(eeg=True).info, axes=axes[-1], show=False)
+    
+    if isinstance(magnitudes, list) or len(np.shape(magnitudes))>2:#either list or xr.Dataset
+        n_iter = len(magnitudes)
+    else:
+        n_iter = 1
+    
+    for iteration in np.arange(n_iter):
+        if n_iter > 1:
+            times = mean_bump_times(eventprobs[iteration])*time_step
+            mags = magnitudes[iteration].dropna('bump')
+        else:
+            times = mean_bump_times(eventprobs)*time_step
+            mags = magnitudes.dropna('bump')
+        n_bump = np.shape(mags)[1]
+        for bump in np.arange(n_bump):
+            axes.append(ax.inset_axes([times[bump]-bump_size/2,iteration-yoffset,
+                                       bump_size*2,yoffset*2], transform=ax.transData))
+            plot_topomap(pcs@mags[:,bump], channel_position, axes=axes[-1], show=False, cmap=cmap)
+    if isinstance(ylabels, dict):
+        ax.set_yticks(np.arange(len(list(ylabels.values()))), list(ylabels.values()))
+        ax.set_ylabel(str(list(ylabels.keys())[0]))
+    else:
         ax.set_yticks([])
-        ax.spines['left'].set_visible(False)
-
+    ax.spines['left'].set_visible(False)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.set_xlim(0,max_time)
-    ax.vlines(mean_time, 1-yoffset, n_bumps+yoffset, color='k')
-    ax.set_ylim(1-yoffset, n_bumps+yoffset)
-    if time:
-        ax.set_xlabel('Time (in ms)')
+    ax.set_ylim(0-yoffset, n_iter-1+yoffset)
+    if mean_rt:
+        ax.vlines(mean_rt*time_step, 0-yoffset, n_iter-1+yoffset, ls='--', color='darkgrey')
+        ax.set_xlim(0, mean_rt*time_step+(mean_rt*time_step/20))
+    elif max_time:
+        ax.set_xlim(0, max_time)
     else:
-        ax.set_xlabel('Time (in samples)')
-
+        ax.set_xlim(0, times[-1])
+    ax.set_xlabel('Time')
     plt.show()
     
 
@@ -334,6 +331,11 @@ def plot_LOOCV(loocv_estimates, pval=True, figsize=(16,5)):
 
     plt.tight_layout()
     plt.show()
+    
+def mean_bump_times(eventprobs):
+    samples = np.where(eventprobs.mean(dim=['trial']).dropna(dim='bump') == 
+            np.max(eventprobs.mean(dim=['trial']).dropna(dim='bump'),axis=0))[0]
+    return samples
     
 class hsmm:
     
@@ -648,7 +650,7 @@ class hsmm:
         # 2) global expected location of each bump
         # concatenate horizontaly to last column the length of each trial
         averagepos = averagepos - (self.offset+np.hstack(np.asarray([\
-                np.append(np.repeat(0,n_bumps),-self.offset)],dtype='object')))
+                np.append(np.arange(0,n_bumps*width,width),n_bumps*width-self.offset)],dtype='object')))
         # correction for time locations with number of bumps and size in samples
         flats = averagepos - np.hstack((0,averagepos[:-1]))
         params = np.zeros((n_bumps+1,2))
@@ -656,10 +658,10 @@ class hsmm:
         params[:,1] = flats.T / 2 
         # correct flats between bumps for the fact that the gamma is 
         # calculated at midpoint
-        params[-1,1] = params[-1,1] - .5 / 2
+        params[:,1] = params[:,1] - .5 / 2
         # first flat is bounded on left while last flat may go 
         # beyond on right
-        params[0,1] = params[0,1] + .5 / 2 
+        params[0,1] = params[0,1] + .5 / 2
         return params, averagepos
 
     def backward_estimation(self,max_fit=None):
@@ -713,13 +715,7 @@ class hsmm:
         return bests
 
     
-    def mean_bump_times(self,fit, time=True):
-        samples = np.where(fit.eventprobs.mean(dim=['trial']).dropna(dim='bump') == 
-                np.max(fit.eventprobs.mean(dim=['trial']).dropna(dim='bump'),axis=0))[0]
-        if time:
-            times = samples*self.tseps
-        else: times = samples
-        return times
+
     
     @staticmethod
     def gamma_EEG(a, b, max_length):
