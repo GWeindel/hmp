@@ -283,7 +283,7 @@ def plot_topo_timecourse(magnitudes, eventprobs, pcs, channel_position, time_ste
         for bump in np.arange(n_bump):
             axes.append(ax.inset_axes([times[bump]-bump_size/2,iteration-yoffset,
                                        bump_size*2,yoffset*2], transform=ax.transData))
-            plot_topomap(pcs@mags[:,bump].data, channel_position, axes=axes[-1], show=False, cmap=cmap)
+            plot_topomap(pcs.data@mags[:,bump].data, channel_position, axes=axes[-1], show=False, cmap=cmap)
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])
@@ -566,12 +566,12 @@ class hsmm:
                 probs_b[self.offset:self.ends[i]- self.starts[i]+1 - self.offset,i,j] = \
                 np.flipud(gains[self.starts[i]+ self.offset : self.ends[i]- self.offset+1,\
                 n_bumps-j-1])
-                # assign the reverse of gains per trial
+                # assign reversed gains array per trial
 
         LP = np.zeros([self.max_d, n_bumps + 1]) # Gamma pdf for each stage parameters
         for j in np.arange(n_bumps + 1):
             LP[:,j] = self.gamma_EEG(parameters[j,0], parameters[j,1], self.max_d)
-            # Compute Gamma pdf from 0 to max_d with parameters 'parameters'
+            # Compute Gamma pdf from 0 to max_d with parameters
         BLP = np.zeros([self.max_d, n_bumps + 1]) 
         BLP[:,:] = LP[:,::-1] # States reversed gamma pdf
         forward = np.zeros((self.max_d, self.n_trials, n_bumps))
@@ -579,7 +579,7 @@ class hsmm:
         backward = np.zeros((self.max_d, self.n_trials, n_bumps))
         # eq1 in Appendix, first definition of likelihood
         # For each trial (given a length of max duration) compute gamma pdf * gains
-        # Start with first bump
+        # Start with first bump as first stage only one gamma and no bumps
         forward[self.offset:self.max_d,:,0] = np.tile(LP[:self.max_d-self.offset,0][np.newaxis].T,\
             (1,self.n_trials))*probs[self.offset:self.max_d,:,0]
 
@@ -589,22 +589,21 @@ class hsmm:
         for i in np.arange(1,n_bumps):#continue with other bumps
             next_ = np.concatenate((np.zeros(self.bump_width_samples), LP[:self.max_d - \
                     self.bump_width_samples, i]), axis=0)
-            # next_ bump width samples followed by gamma pdf
+            # next_ bump width samples followed by gamma pdf (one state)
             next_b = np.concatenate((np.zeros(self.bump_width_samples), BLP[:self.max_d - \
                     self.bump_width_samples, i]), axis=0)
             # next_b same with reversed gamma
             add_b = forward_b[:,:,i-1] * probs_b[:,:,i-1]
             for j in np.arange(self.n_trials):
                 temp = np.convolve(forward[:,j,i-1],next_)
-                # convolution between gamma * gains at state i and 
-                # gamma at state i-1
+                # convolution between gamma * gains at previous states and state i
                 forward[:,j,i] = temp[:self.max_d]
                 temp = np.convolve(add_b[:,j],next_b)
                 # same but backwards
                 forward_b[:,j,i] = temp[:self.max_d]
             forward[:,:,i] = forward[:,:,i] * probs[:,:,i]
-        forward_b = forward_b[:,:,::-1]
-        for j in np.arange(self.n_trials): #PCG: IMPROVE
+        forward_b = forward_b[:,:,::-1] # undoes inversion
+        for j in np.arange(self.n_trials): # TODO : IMPROVE
             for i in np.arange(n_bumps):
                 backward[:self.durations[j],j,i] = np.flipud(forward_b[:self.durations[j],j,i])
         backward[:self.offset,:,:] = 0
@@ -613,11 +612,10 @@ class hsmm:
         # sum(log(sum of 'temp' by columns, samples in a trial)) 
         eventprobs = temp / np.tile(temp.sum(axis=0), [self.max_d, 1, 1])
         #normalization [-1, 1] divide each trial and state by the sum of the n points in a trial
-        if lkh_only == False:
-            return [likelihood, eventprobs]
-        else:
+        if lkh_only:
             return likelihood
-    
+        else:
+            return [likelihood, eventprobs]
 
     def gamma_parameters(self, eventprobs, n_bumps):
         '''
