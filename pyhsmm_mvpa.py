@@ -243,7 +243,7 @@ def LOOCV(data, subject, n_bumps, iterative_fits, sfreq, bump_width=50):
                            'participant')
     #Fitting the HsMM using previous estimated parameters as initial parameters
     model_loo = hsmm(stacked_loo.data.data.T, stacked_loo.starts.data, stacked_loo.ends.data, sf=sfreq, bump_width=bump_width)
-    fit = model_loo.fit_single(n_bumps, iterative_fits.magnitudes, iterative_fits.parameters, 1, False, True)
+    fit = model_loo.fit_single(n_bumps, iterative_fits.magnitudes, iterative_fits.parameters, 1, False, True, verbose=False)
 
     #Evaluating likelihood for left out subject
     #Extracting data of left out subject
@@ -283,9 +283,10 @@ def plot_topo_timecourse(magnitudes, eventprobs, pcs, channel_position, time_ste
         for bump in np.arange(n_bump):
             axes.append(ax.inset_axes([times[bump]-bump_size/2,iteration-yoffset,
                                        bump_size*2,yoffset*2], transform=ax.transData))
-            plot_topomap(pcs@mags[:,bump], channel_position, axes=axes[-1], show=False, cmap=cmap)
+            plot_topomap(pcs@mags[:,bump].data, channel_position, axes=axes[-1], show=False, cmap=cmap)
     if isinstance(ylabels, dict):
-        ax.set_yticks(np.arange(len(list(ylabels.values()))), list(ylabels.values()))
+        ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
+                      [str(x) for x in list(ylabels.values())[0]])
         ax.set_ylabel(str(list(ylabels.keys())[0]))
     else:
         ax.set_yticks([])
