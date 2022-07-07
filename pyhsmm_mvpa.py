@@ -290,7 +290,7 @@ def plot_topo_timecourse(magnitudes, eventprobs, pcs, channel_position, time_ste
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.set_ylim(0-yoffset, n_iter-1+yoffset)
-    if bool(np.array(mean_rt).any()):
+    if isinstance(mean_rt, np.ndarray):
         if len(np.array(mean_rt)) > 1:
             ax.vlines(mean_rt*time_step, np.arange(len(mean_rt))-yoffset, np.arange(len(mean_rt))+yoffset, ls='--')
         ax.set_xlim(0, max(mean_rt*time_step+(mean_rt*time_step/20)))
