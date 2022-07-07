@@ -1,13 +1,5 @@
 '''
-Copyright (C) 2018, Qiong Zhang, Matthew M Walsh, John R Anderson
-Modification and comments by H.Berberyan, ALICE, RUG
-Python adaptation and additional comments by Gabriel Weindel
 
-TODO :
-- Object oriented programming (add classes and classmethod to avoid redundnant parameters
-- Implement multiprocessing
-- soft-code the size of bumps/sampling rate
-- 
 '''
 
 import numpy as np
@@ -22,7 +14,7 @@ warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird 
 
 def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None,
                  tmin=-.2, tmax=2.2, offset_after_resp = .1, low_pass=.5, \
-                 high_pass = 30, upper_limit_RT=2, lower_limit_RT=.2):
+                 high_pass = 30, upper_limit_RT=2, lower_limit_RT=.2, reject_threshold=None):
     ''' 
     Reads EEG data using MNE's integrated function. If no events is provided 
     
@@ -44,8 +36,12 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None,
     if isinstance(pfiles,str):#only one participant
         pfiles = [pfiles]
     for participant in pfiles:
-        print(participant)
-        data = mne.io.read_raw_fif(participant, preload=False, verbose=False)
+        if '.fif' in participant:
+            data = mne.io.read_raw_fif(participant, preload=False, verbose=False)
+        elif '.bdf' in participant:
+            data = mne.io.read_raw_bdf(participant, preload=False, verbose=False)
+        else:
+            raise ValueError(f'Unknown EEG file format for participant {participant}')
         data.load_data()
         data.filter(low_pass, high_pass, fir_design='firwin', verbose=False)#Filtering out frequency outside range .5 and 30Hz, as study by Anderson et al. (Berberyan used 40 Hz)
         # Loading events (in our case one event = one trial)
@@ -75,7 +71,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None,
         epochs = mne.Epochs(data, meta_events, event_id, tmin, tmax, proj=False,
                         picks=picks, baseline=(None, 0), preload=True,
                         verbose=True,detrend=1, on_missing = 'warn',
-                        metadata=metadata, reject_by_annotation=True)
+                        metadata=metadata, reject_by_annotation=True, reject=reject_threshold)
         data_epoch = epochs.get_data()
 
         valid_epochs_idx = [x for x in np.arange(len(epochs.drop_log)) if epochs.drop_log[x] == ()]
@@ -294,9 +290,10 @@ def plot_topo_timecourse(magnitudes, eventprobs, pcs, channel_position, time_ste
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.set_ylim(0-yoffset, n_iter-1+yoffset)
-    if mean_rt:
-        ax.vlines(mean_rt*time_step, 0-yoffset, n_iter-1+yoffset, ls='--', color='darkgrey')
-        ax.set_xlim(0, mean_rt*time_step+(mean_rt*time_step/20))
+    if bool(np.array(mean_rt).any()):
+        if len(np.array(mean_rt)) > 1:
+            ax.vlines(mean_rt*time_step, np.arange(len(mean_rt))-yoffset, np.arange(len(mean_rt))+yoffset, ls='--')
+        ax.set_xlim(0, max(mean_rt*time_step+(mean_rt*time_step/20)))
     elif max_time:
         ax.set_xlim(0, max_time)
     else:
@@ -549,7 +546,6 @@ class hsmm:
             # global magnitudes of the bumps topology 'magnitudes' of each bump. 
             # tile append vertically the (estimated bump-magnitudes)^2 of one PC 
             # for all samples divided by 2.
-            # n -> Total N of samples
             # gain(n,sum(pca)) = gain(n,pca) + corrBump(n,pca) * 
             # estBumpsMorph(pca,bumps) - (estBumpMorph(pca,bumps)^2)/2
             # sum for all PCs of the 'normalized' correlation of P(having a sin)
@@ -572,8 +568,7 @@ class hsmm:
         for j in np.arange(n_bumps + 1):
             LP[:,j] = self.gamma_EEG(parameters[j,0], parameters[j,1], self.max_d)
             # Compute Gamma pdf from 0 to max_d with parameters
-        BLP = np.zeros([self.max_d, n_bumps + 1]) 
-        BLP[:,:] = LP[:,::-1] # States reversed gamma pdf
+        BLP = LP[:,::-1] # States reversed gamma pdf
         forward = np.zeros((self.max_d, self.n_trials, n_bumps))
         forward_b = np.zeros((self.max_d, self.n_trials, n_bumps))
         backward = np.zeros((self.max_d, self.n_trials, n_bumps))
@@ -617,7 +612,7 @@ class hsmm:
         else:
             return [likelihood, eventprobs]
 
-    def gamma_parameters(self, eventprobs, n_bumps):
+    def gamma_parameters(self, eventprobs, n_bumps, shape=2):
         '''
         Gives the average positions of each bump 
         Given that the shape is fixed the calculation of the maximum likelihood
@@ -653,14 +648,14 @@ class hsmm:
         # correction for time locations with number of bumps and size in samples
         flats = averagepos - np.hstack((0,averagepos[:-1]))
         params = np.zeros((n_bumps+1,2))
-        params[:,0] = 2 #PCG shape is hardcoded
-        params[:,1] = flats.T / 2 
+        params[:,0] = shape #PCG shape is hardcoded
+        params[:,1] = flats.T / shape
         # correct flats between bumps for the fact that the gamma is 
         # calculated at midpoint
-        params[:,1] = params[:,1] - .5 / 2
+        params[:,1] = params[:,1] - .5 /shape
         # first flat is bounded on left while last flat may go 
         # beyond on right
-        params[0,1] = params[0,1] + .5 / 2
+        params[0,1] = params[0,1] + .5 /shape
         return params, averagepos
 
     def backward_estimation(self,max_fit=None):
