@@ -250,8 +250,8 @@ def LOOCV(data, subject, n_bumps, iterative_fits, sfreq, bump_width=50):
     likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bumps,True,True)
     return likelihood, subject
 
-def plot_topo_timecourse(magnitudes, eventprobs, pcs, channel_position, time_step=1, bump_size=50,  
-                         time=False, figsize=None, magnify=1, matcolor=False, mean_rt=None,cmap='Spectral_r',
+def plot_topo_timecourse(electrodes, eventprobs, pcs, channel_position, time_step=1, bump_size=50,
+                         time=False, figsize=None, magnify=1, matcolor=False, mean_rt=None, cmap='Spectral_r',
                          ylabels=[], max_time = None):
     import matplotlib.pyplot as plt
     from mne.viz import plot_topomap
@@ -263,23 +263,24 @@ def plot_topo_timecourse(magnitudes, eventprobs, pcs, channel_position, time_ste
     yoffset =.25*magnify
     axes = []
     
-    if isinstance(magnitudes, list) or len(np.shape(magnitudes))>2:#either list or xr.Dataset
-        n_iter = len(magnitudes)
+    if len(np.shape(electrodes)) >2:
+        n_iter = np.shape(electrodes)[0]
     else:
         n_iter = 1
     
     for iteration in np.arange(n_iter):
         if n_iter > 1:
             times = mean_bump_times(eventprobs[iteration])*time_step
-            mags = magnitudes[iteration].dropna('bump')
+            electrodes_ = electrodes[iteration,:]
+            n_bump = sum(np.isfinite(electrodes_[:,0]))
         else:
             times = mean_bump_times(eventprobs)*time_step
-            mags = magnitudes.dropna('bump')
-        n_bump = np.shape(mags)[1]
+            n_bump = np.shape(electrodes)[0]
+            electrodes_ = electrodes
         for bump in np.arange(n_bump):
             axes.append(ax.inset_axes([times[bump]-bump_size/2,iteration-yoffset,
                                        bump_size*2,yoffset*2], transform=ax.transData))
-            plot_topomap(pcs.data@mags[:,bump].data, channel_position, axes=axes[-1], show=False, cmap=cmap)
+            plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False, cmap=cmap, outlines='skirt',vmin=-12,vmax=12,extrapolate='box')
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])
@@ -291,9 +292,10 @@ def plot_topo_timecourse(magnitudes, eventprobs, pcs, channel_position, time_ste
     ax.spines['right'].set_visible(False)
     ax.set_ylim(0-yoffset, n_iter-1+yoffset)
     if isinstance(mean_rt, (np.ndarray, np.generic)):
+        print(True)
         if isinstance(mean_rt, np.ndarray):
             ax.vlines(mean_rt*time_step, np.arange(len(mean_rt))-yoffset, np.arange(len(mean_rt))+yoffset, ls='--')
-            ax.set_xlim(0, max(mean_rt*time_step))
+            ax.set_xlim(0, max(mean_rt)*time_step)
         else:
             ax.vlines(mean_rt*time_step, -yoffset,+yoffset, ls='--')
             ax.set_xlim(0, mean_rt*time_step)
@@ -302,8 +304,7 @@ def plot_topo_timecourse(magnitudes, eventprobs, pcs, channel_position, time_ste
     else:
         ax.set_xlim(0, times[-1])
     ax.set_xlabel('Time')
-    plt.show()
-    
+    plt.show()    
 
 
 def plot_LOOCV(loocv_estimates, pval=True, figsize=(16,5)):
@@ -337,6 +338,38 @@ def mean_bump_times(eventprobs):
     samples = np.where(eventprobs.mean(dim=['trial']).dropna(dim='bump') == 
             np.max(eventprobs.mean(dim=['trial']).dropna(dim='bump'),axis=0))[0]
     return samples
+
+def reconstruct(magnitudes, PCs, eigen, means):
+    '''
+    Reconstruct electrode activity from PCA
+    Parameters
+    ----------
+    magnitudes:  
+        2D ndarray with n_components * n_bumps
+    PCs: 
+        2D ndarray with PCA loadings channels x channels
+    eigen: 
+        PCA eigenvalues of the covariance matrix of data [ch x 1]
+    means: 
+        Grand mean [1 x ch]
+        
+    Returns
+    -------
+    electrodes : ndarray
+        a 2D ndarray with electrodes * bumps        
+    '''
+    if len(np.shape(magnitudes))>2:
+        n_iter, n_comp, n_bumps = np.shape(magnitudes)
+    else:
+        n_comp, n_bumps = np.shape(magnitudes)
+        magnitudes = [magnitudes]
+        n_iter = 1
+    list_electrodes = []
+    for iter_ in np.arange(n_iter): 
+        electrodes = (magnitudes[iter_].T*np.tile(np.sqrt(eigen[:n_comp]).T, (n_bumps,1))).data @ PCs.T[:n_comp,:]
+        list_electrodes.append(electrodes + np.tile(means,(n_bumps,1)))#add means for each electrode
+    return list_electrodes
+
     
 class hsmm:
     
@@ -759,3 +792,61 @@ class hsmm:
         max_bumps = np.min(self.ends - self.starts + 1)//self.bump_width_samples
         return max_bumps
 
+
+
+def plot_topo_timecourse(electrodes, eventprobs, pcs, channel_position, time_step=1, bump_size=50,
+                         time=False, figsize=None, magnify=1, matcolor=False, mean_rt=None, cmap='Spectral_r',
+                         ylabels=[], max_time = None):
+    import matplotlib.pyplot as plt
+    from mne.viz import plot_topomap
+    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    if not figsize:
+        figzise = (12, 2)
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    bump_size = bump_size*time_step*magnify
+    yoffset =.25*magnify
+    axes = []
+    
+    if len(np.shape(electrodes)) >2:
+        n_iter = np.shape(electrodes)[0]
+    else:
+        n_iter = 1
+    
+    for iteration in np.arange(n_iter):
+        if n_iter > 1:
+            times = mean_bump_times(eventprobs[iteration])*time_step
+            electrodes_ = electrodes[iteration,:]
+            n_bump = sum(np.isfinite(electrodes_[:,0]))
+        else:
+            times = mean_bump_times(eventprobs)*time_step
+            n_bump = np.shape(electrodes)[0]
+            electrodes_ = electrodes
+        for bump in np.arange(n_bump):
+            axes.append(ax.inset_axes([times[bump]-bump_size/2,iteration-yoffset,
+                                       bump_size*2,yoffset*2], transform=ax.transData))
+            plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False, cmap=cmap, outlines='skirt',vmin=-12,vmax=12,extrapolate='box')
+    if isinstance(ylabels, dict):
+        ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
+                      [str(x) for x in list(ylabels.values())[0]])
+        ax.set_ylabel(str(list(ylabels.keys())[0]))
+    else:
+        ax.set_yticks([])
+    ax.spines['left'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_ylim(0-yoffset, n_iter-1+yoffset)
+    if isinstance(mean_rt, (np.ndarray, np.generic)):
+        print(True)
+        if isinstance(mean_rt, np.ndarray):
+            ax.vlines(mean_rt*time_step, np.arange(len(mean_rt))-yoffset, np.arange(len(mean_rt))+yoffset, ls='--')
+            ax.set_xlim(0, max(mean_rt)*time_step)
+        else:
+            ax.vlines(mean_rt*time_step, -yoffset,+yoffset, ls='--')
+            ax.set_xlim(0, mean_rt*time_step)
+    elif max_time:
+        ax.set_xlim(0, max_time)
+    else:
+        ax.set_xlim(0, times[-1])
+    ax.set_xlabel('Time')
+    plt.show()
+    
