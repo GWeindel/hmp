@@ -146,7 +146,9 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
     #Extract durations of epochs (equivalent to RTs) to partition the stacked data
 
     from sklearn.decomposition import PCA
-    if apply_standard:
+    means = data.groupby('electrodes').mean(...)
+    data = data.groupby('electrodes') - means
+    if apply_standard and not single:
         mean_std = data.groupby(subjects_variable).std(dim=...).data.mean()
         data = data.assign(mean_std=mean_std.data)
         data = data.groupby(subjects_variable).map(standardize)
@@ -161,14 +163,14 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
             for i,trial_dat in data.groupby('epochs'):
                 var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
             var_cov_matrix = np.mean(var_cov_matrices,axis=0)    
+
         # Performing spatial PCA on the average var-cov matrix
         if n_comp == None:
             import matplotlib.pyplot as plt
             n_comp = np.shape(var_cov_matrix)[0]-1
             fig, ax = plt.subplots(1,2, figsize=(.2*n_comp, 4))
-            pca = PCA(n_components=n_comp, svd_solver='arpack')#selecting Principale components (PC)
+            pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
             pca_data = pca.fit_transform(var_cov_matrix)
-            var = pca.transform(var_cov_matrix)
             var = np.var(var, axis=0)
             ax[0].plot(np.arange(pca.n_components)+1, var/np.sum(var),'.-')
             ax[0].set_ylabel('Normalized explained variance')
@@ -179,7 +181,7 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
             plt.tight_layout()
             plt.show()
             n_comp = int(input(f'How many PCs (80 and 95% explained variance at component n{np.where(np.cumsum(var/np.sum(var)) >= .80)[0][0]+1} and n{np.where(np.cumsum(var/np.sum(var)) >= .95)[0][0]+1})?'))
-        pca = PCA(n_components=n_comp, svd_solver='arpack')#selecting Principale components (PC)
+        pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
 
         pca_data = pca.fit_transform(var_cov_matrix)
 
@@ -197,7 +199,7 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
                     data.sel(component=comp).groupby('epochs').map(zscore).unstack()
                 else:
                     data.sel(component=comp)+ 1e-10
-        return data, pca_data
+        return data, pca_data, pca.explained_variance_, pca.singular_values_,means
     else:
         return data
 
@@ -262,26 +264,22 @@ def plot_topo_timecourse(electrodes, eventprobs, pcs, channel_position, time_ste
     bump_size = bump_size*time_step*magnify
     yoffset =.25*magnify
     axes = []
-    
-    if len(np.shape(electrodes)) >2:
-        n_iter = np.shape(electrodes)[0]
-    else:
-        n_iter = 1
-    
+
+    n_iter = np.shape(electrodes)[0]
+
     for iteration in np.arange(n_iter):
         if n_iter > 1:
             times = mean_bump_times(eventprobs[iteration])*time_step
-            electrodes_ = electrodes[iteration,:]
-            n_bump = sum(np.isfinite(electrodes_[:,0]))
         else:
             times = mean_bump_times(eventprobs)*time_step
-            n_bump = np.shape(electrodes)[0]
-            electrodes_ = electrodes
+        electrodes_ = electrodes[iteration,:,:]
+        n_bump = int(sum(np.isfinite(electrodes_[:,0])))
+        electrodes_ = electrodes_[:n_bump,:]
         for bump in np.arange(n_bump):
             axes.append(ax.inset_axes([times[bump]-bump_size/2,iteration-yoffset,
                                        bump_size*2,yoffset*2], transform=ax.transData))
             plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False,
-                         cmap=cmap, outlines='skirt',vmin=-12,vmax=12,extrapolate='box')
+                         cmap=cmap, outlines='skirt', extrapolate='box')
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])
@@ -359,14 +357,14 @@ def reconstruct(magnitudes, PCs, eigen, means):
         a 2D ndarray with electrodes * bumps        
     '''
     if len(np.shape(magnitudes))>2:
-        n_iter, n_comp, n_bumps = np.shape(magnitudes)
+        n_iter, _, n_bumps = np.shape(magnitudes)
     else:
-        n_comp, n_bumps = np.shape(magnitudes)
+        n_bumps = np.shape(magnitudes)[1]
         magnitudes = [magnitudes]
         n_iter = 1
     list_electrodes = []
-    for iter_ in np.arange(n_iter): 
-        electrodes = (magnitudes[iter_].T*np.tile(np.sqrt(eigen[:n_comp]).T, (n_bumps,1))).data @ PCs.T[:n_comp,:]
+    for iteration in np.arange(n_iter): 
+        electrodes = (magnitudes[iteration].T*np.tile(np.sqrt(eigen).T, (n_bumps,1))).data @ PCs.T
         list_electrodes.append(electrodes + np.tile(means,(n_bumps,1)))#add means for each electrode
     return list_electrodes
 
@@ -375,8 +373,8 @@ class hsmm:
     
     def __init__(self, data, starts, ends, sf, cpus=1, bump_width = 50):
         '''
-         HSMM calculates the probability of data summing over all ways of 
-         placing the n bumps to break the trial into n + 1 flats.
+        HSMM calculates the probability of data summing over all ways of 
+        placing the n bumps to break the trial into n + 1 flats.
 
         Parameters
         ----------
@@ -730,7 +728,7 @@ class hsmm:
             if self.cpus > 1:
                 with mp.Pool(processes=self.cpus) as pool:
                     bump_loo_likelihood_temp = pool.starmap(self.fit_single, 
-                        zip(itertools.repeat(n_bumps), bumps_temp, flats_temp,
+                        zip(itertools.repeat(n_bumps), bumps_temp, itertools.repeat(np.tile([2,50], (n_bumps+1,1))),#flats_temp,
                             #temp_best.parameters.values[possible_flats,:],
                             #itertools.repeat(self.get_init_parameters(n_bumps)),
                             itertools.repeat(1),itertools.repeat(True),itertools.repeat(False),itertools.repeat(False)))
@@ -789,6 +787,5 @@ class hsmm:
         return scales
     
     def compute_max_bumps(self):
-        max_bumps = np.min(self.ends - self.starts + 1)//self.bump_width_samples
-        return max_bumps
+        return int(np.min(self.durations)/self.bump_width_samples)
 
