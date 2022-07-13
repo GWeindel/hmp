@@ -13,8 +13,8 @@ import math
 warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later
 
 def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None,
-                 tmin=-.2, tmax=2.2, offset_after_resp = .1, low_pass=.5, \
-                 high_pass = 30, upper_limit_RT=2, lower_limit_RT=.2, reject_threshold=None):
+                 tmin=-.2, tmax=4, offset_after_resp = .1, low_pass=.5, \
+                 high_pass = 30, upper_limit_RT=4, lower_limit_RT=0.001, reject_threshold=None):
     ''' 
     Reads EEG data using MNE's integrated function. If no events is provided 
     
@@ -88,6 +88,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None,
             else:
                 raise ValueError('Problem in event values')
         rts = np.array(rts)
+        print(f'Applying reaction time trim to keep RTs between {lower_limit_RT} and {upper_limit_RT} seconds')
         rts[rts > sfreq*upper_limit_RT] = 0 #removes RT above x sec
         rts[rts < sfreq*lower_limit_RT] = 0 #removes RT below x sec, important as determines max bumps
         triggers = epochs.metadata["event_name"].reset_index(drop=True)
@@ -146,8 +147,8 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
     #Extract durations of epochs (equivalent to RTs) to partition the stacked data
 
     from sklearn.decomposition import PCA
-    means = data.groupby('electrodes').mean(...)
-    data = data.groupby('electrodes') - means
+    #var = data.var(...)
+    #means = data.groupby('electrodes').mean(...)
     if apply_standard and not single:
         mean_std = data.groupby(subjects_variable).std(dim=...).data.mean()
         data = data.assign(mean_std=mean_std.data)
@@ -181,10 +182,11 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
             plt.tight_layout()
             plt.show()
             n_comp = int(input(f'How many PCs (80 and 95% explained variance at component n{np.where(np.cumsum(var/np.sum(var)) >= .80)[0][0]+1} and n{np.where(np.cumsum(var/np.sum(var)) >= .95)[0][0]+1})?'))
+
         pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
 
         pca_data = pca.fit_transform(var_cov_matrix)
-
+        
         #Rebuilding pca PCs as xarray to ease computation
         coords = dict(electrodes=("electrodes", data.coords["electrodes"].values),
                      component=("component", np.arange(n_comp)))
@@ -199,7 +201,7 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
                     data.sel(component=comp).groupby('epochs').map(zscore).unstack()
                 else:
                     data.sel(component=comp)+ 1e-10
-        return data, pca_data, pca.explained_variance_, pca.singular_values_,means
+        return data, pca_data, pca.explained_variance_, pca.mean_
     else:
         return data
 
@@ -252,9 +254,9 @@ def LOOCV(data, subject, n_bumps, iterative_fits, sfreq, bump_width=50):
     likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bumps,True,True)
     return likelihood, subject
 
-def plot_topo_timecourse(electrodes, eventprobs, pcs, channel_position, time_step=1, bump_size=50,
-                         time=False, figsize=None, magnify=1, matcolor=False, mean_rt=None, cmap='Spectral_r',
-                         ylabels=[], max_time = None):
+def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_size=50,
+                        figsize=None, magnify=1, mean_rt=None, cmap='Spectral_r',
+                        ylabels=[], max_time = None, vmin=None, vmax=None):
     import matplotlib.pyplot as plt
     from mne.viz import plot_topomap
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -266,20 +268,19 @@ def plot_topo_timecourse(electrodes, eventprobs, pcs, channel_position, time_ste
     axes = []
 
     n_iter = np.shape(electrodes)[0]
-
+    if n_iter == 1:
+        times = [times]
+    times = np.array(times)
     for iteration in np.arange(n_iter):
-        if n_iter > 1:
-            times = mean_bump_times(eventprobs[iteration])*time_step
-        else:
-            times = mean_bump_times(eventprobs)*time_step
+        times_iteration = times[iteration]*time_step
         electrodes_ = electrodes[iteration,:,:]
         n_bump = int(sum(np.isfinite(electrodes_[:,0])))
         electrodes_ = electrodes_[:n_bump,:]
         for bump in np.arange(n_bump):
-            axes.append(ax.inset_axes([times[bump]-bump_size/2,iteration-yoffset,
+            axes.append(ax.inset_axes([times_iteration[bump]-bump_size/2,iteration-yoffset,
                                        bump_size*2,yoffset*2], transform=ax.transData))
             plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False,
-                         cmap=cmap, outlines='skirt', extrapolate='box')
+                         cmap=cmap, extrapolate='box', vmin=vmin, vmax=vmax)
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])
@@ -292,7 +293,7 @@ def plot_topo_timecourse(electrodes, eventprobs, pcs, channel_position, time_ste
     ax.set_ylim(0-yoffset, n_iter-1+yoffset)
     if isinstance(mean_rt, (np.ndarray, np.generic)):
         if isinstance(mean_rt, np.ndarray):
-            ax.vlines(mean_rt*time_step, np.arange(len(mean_rt))-yoffset, np.arange(len(mean_rt))+yoffset, ls='--')
+            ax.vlines(mean_rt*time_step,0-yoffset, np.arange(len(mean_rt))+yoffset, ls='--')
             ax.set_xlim(0, max(mean_rt)*time_step+((max(mean_rt)*time_step)/15))
         else:
             ax.vlines(mean_rt*time_step,0-yoffset, n_iter-1+yoffset, ls='--')
@@ -300,7 +301,7 @@ def plot_topo_timecourse(electrodes, eventprobs, pcs, channel_position, time_ste
     elif max_time:
         ax.set_xlim(0, max_time)
     else:
-        ax.set_xlim(0, times[-1])
+        ax.set_xlim(0, np.nanmax(times.flatten()))
     ax.set_xlabel('Time')
     plt.show()    
 
@@ -328,14 +329,8 @@ def plot_LOOCV(loocv_estimates, pval=True, figsize=(16,5)):
     ax[1].hlines(0,0,len(np.arange(2,loocv_estimates.n_bump.max())),color='k')
     ax[1].set_ylabel('Change in likelihood')
     ax[1].set_xlabel('')
-
     plt.tight_layout()
     plt.show()
-    
-def mean_bump_times(eventprobs):
-    samples = np.where(eventprobs.mean(dim=['trial']).dropna(dim='bump') == 
-            np.max(eventprobs.mean(dim=['trial']).dropna(dim='bump'),axis=0))[0]
-    return samples
 
 def reconstruct(magnitudes, PCs, eigen, means):
     '''
@@ -343,30 +338,28 @@ def reconstruct(magnitudes, PCs, eigen, means):
     Parameters
     ----------
     magnitudes:  
-        2D ndarray with n_components * n_bumps
+        2D or 3D ndarray with [n_components * n_bumps] can also contain several estimations\ [estimation * n_components * n_bumps]
     PCs: 
-        2D ndarray with PCA loadings channels x channels
+        2D ndarray with PCA loadings [channels x n_components]
     eigen: 
-        PCA eigenvalues of the covariance matrix of data [ch x 1]
+        PCA eigenvalues of the covariance matrix of data [n_components]
     means: 
-        Grand mean [1 x ch]
+        Grand mean [channels]
         
     Returns
     -------
     electrodes : ndarray
-        a 2D ndarray with electrodes * bumps        
+        a 2D ndarray with [electrodes * bumps]
     '''
-    if len(np.shape(magnitudes))>2:
-        n_iter, _, n_bumps = np.shape(magnitudes)
-    else:
-        n_bumps = np.shape(magnitudes)[1]
-        magnitudes = [magnitudes]
-        n_iter = 1
+    if len(np.shape(magnitudes))==2:
+        magnitudes = np.array([magnitudes])
+    n_iter, n_comp, n_bumps = np.shape(magnitudes)
     list_electrodes = []
     for iteration in np.arange(n_iter): 
-        electrodes = (magnitudes[iteration].T*np.tile(np.sqrt(eigen).T, (n_bumps,1))).data @ PCs.T
+        #electrodes = np.array(magnitudes[iteration].T * 
+        electrodes =  np.array(magnitudes[iteration, ].T * np.tile(np.sqrt(eigen[:n_comp]).T, (n_bumps,1))) @ np.array(PCs[:,:n_comp]).T
         list_electrodes.append(electrodes + np.tile(means,(n_bumps,1)))#add means for each electrode
-    return list_electrodes
+    return np.array(list_electrodes)
 
     
 class hsmm:
@@ -397,12 +390,8 @@ class hsmm:
         self.n_trials = len(self.starts)  #number of trials
         self.bump_width = bump_width
         self.cpus = cpus
-#        if self.cpus > 1:
-#            import itertools
-#            import multiprocessing
         self.bump_width_samples = int(self.bump_width * (self.sf/1000))
-        self.offset = self.bump_width_samples//2#offset on data linked to the choosen width
-        # Offset is how soon the first peak can be or how late the last,originaly offset = 2
+        self.offset = self.bump_width_samples//2#offset on data linked to the choosen width how soon the first peak can be or how late the last,
         self.n_samples, self.n_dims = np.shape(data)
         self.bumps = self.calc_bumps(data)#adds bump morphology
         self.durations = self.ends - self.starts+1#length of each trial
@@ -490,28 +479,17 @@ class hsmm:
         if verbose:
             print(f"Parameters estimated for {n_bumps} bumps model")
         return estimated
-    
-    def get_init_parameters(self, n_bumps):
-        parameters = np.tile([2, math.ceil(self.max_d)/(n_bumps+1)/2], (n_bumps+1,1))
-        return parameters
         
     def __fit(self, n_bumps, magnitudes, parameters,  threshold, estimate_mags=True, estimate_parameters=True):
         '''
         Hidden fitting function underlying single and iterative fit
         '''
-        
-        try:
-            if np.any(parameters)== None:
-                warnings.warn('Using default parameters value for gamma parameters')
-                parameters = self.get_init_parameters(n_bumps)
-        except:
-            print("Using magnitudes provided")
-        try:
-            if np.any(magnitudes)== None:
-                warnings.warn('Using default parameters value for magnitudes')
-                magnitudes = np.zeros((self.n_dims,n_bumps))
-        except:
-            print("Using parameters provided")
+        if np.any(parameters)== None:
+            warnings.warn('Using default parameters value for gamma parameters')
+            parameters = np.tile([2, math.ceil(self.max_d)/(n_bumps+1)/2], (n_bumps+1,1))#np.tile([2,50], (n_bumps+1,1))
+        if np.any(magnitudes)== None:
+            warnings.warn('Using default parameters value for magnitudes')
+            magnitudes = np.zeros((self.n_dims,n_bumps))
         lkh1 = -np.inf#initialize likelihood     
         lkh, eventprobs = self.calc_EEG_50h(magnitudes, parameters, n_bumps)
         if threshold == 0:
@@ -540,17 +518,17 @@ class hsmm:
                             # repeated for each PC (j) and later for each bump (i)
                             # magnitudes [nPCAs, nBumps]
                 if estimate_parameters:
-                    parameters, averagepos = self.gamma_parameters(eventprobs, n_bumps)
+                    parameters = self.gamma_parameters(eventprobs, n_bumps)
 
-                    for i in np.arange(n_bumps + 1): #PCG: seems unefficient
+                    for i in np.arange(n_bumps + 1): #PCG: seems unefficient likely slows down process, isn't there a better way to bound the estimation??
                         if parameters[i,:].prod() < self.bump_width_samples:
                             # multiply scale and shape parameters to get 
                             # the mean distance of the gamma-2 pdf. 
                             # It constrains that bumps are separated at 
                             # least a bump length
                             parameters[i,:] = parameters1[i,:]
-                lkh, eventprobs = self.calc_EEG_50h(magnitudes,parameters,n_bumps)
-        return lkh1,magnitudes1,parameters1,eventprobs1
+                lkh, eventprobs = self.calc_EEG_50h(magnitudes, parameters, n_bumps)
+        return lkh1, magnitudes1, parameters1, eventprobs1
 
 
     def calc_EEG_50h(self, magnitudes, parameters, n_bumps, lkh_only=False, xarr=False):
@@ -686,11 +664,12 @@ class hsmm:
         params[:,1] = flats.T / shape
         # correct flats between bumps for the fact that the gamma is 
         # calculated at midpoint
-        params[:,1] = params[:,1] - .5 /shape
+        #params[:,1] = params[:,1] - .5 /shape
         # first flat is bounded on left while last flat may go 
         # beyond on right
         params[0,1] = params[0,1] + .5 /shape
-        return params, averagepos
+        params[-1,1] = params[-1,1] - .5 /shape
+        return params
 
     def backward_estimation(self,max_fit=None):
         '''
@@ -776,16 +755,23 @@ class hsmm:
     @staticmethod
     def save_fit(data, filename):
         data.to_netcdf(filename+".nc")
-
-    
-    def bump_times(self, fit, time=True):
-        params = fit.parameters.copy(deep=True).dropna(dim="stage")
-        if time:
-            scales = [(bump[-1])*2*self.tseps for bump in params]
-        else:
-            scales = [(bump[-1])*2 for bump in params]
-        return scales
     
     def compute_max_bumps(self):
         return int(np.min(self.durations)/self.bump_width_samples)
 
+    def bump_times(self, eventprobs):
+        onsets = np.empty((len(eventprobs.trial),len(eventprobs.bump)))
+        i = 0
+        for trial in eventprobs.trial.values:
+            onsets[i, :] = np.arange(self.max_d) @ eventprobs.sel(trial=trial).data#np.concatenate([np.arange(self.max_d) @ eventprobs.sel(trial=trial).data, np.array([self.ends[i] - self.starts[i]])])
+            i += 1
+        return onsets
+    
+    def mean_bump_times(self, eventprobs):
+        if len(np.shape(eventprobs)) > 3:
+            onsets = np.empty([np.shape(eventprobs)[0],  np.shape(eventprobs)[3]])
+            for iteration in np.arange(np.shape(eventprobs)[0]):
+                onsets[iteration,:] = (np.mean(self.bump_times(eventprobs[iteration]),axis=0))
+        else:
+            onsets = np.mean(self.bump_times(eventprobs),axis=0)
+        return onsets
