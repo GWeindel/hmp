@@ -13,8 +13,8 @@ import math
 warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later
 
 def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None,
-                 tmin=-.2, tmax=4, offset_after_resp = .1, low_pass=.5, \
-                 high_pass = 30, upper_limit_RT=4, lower_limit_RT=0.001, reject_threshold=None):
+                 tmin=-.2, tmax=5, offset_after_resp = .1, low_pass=.5, \
+                 high_pass = 30, upper_limit_RT=5, lower_limit_RT=0.001, reject_threshold=None):
     ''' 
     Reads EEG data using MNE's integrated function. If no events is provided 
     
@@ -148,7 +148,6 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
 
     from sklearn.decomposition import PCA
     #var = data.var(...)
-    #means = data.groupby('electrodes').mean(...)
     if apply_standard and not single:
         mean_std = data.groupby(subjects_variable).std(dim=...).data.mean()
         data = data.assign(mean_std=mean_std.data)
@@ -185,12 +184,13 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
 
         pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
 
-        pca_data = pca.fit_transform(var_cov_matrix)
+        pca_data = pca.fit_transform(var_cov_matrix)/pca.explained_variance_ # divided by explained var for compatibility with matlab's PCA
         
         #Rebuilding pca PCs as xarray to ease computation
         coords = dict(electrodes=("electrodes", data.coords["electrodes"].values),
                      component=("component", np.arange(n_comp)))
         pca_data = xr.DataArray(pca_data, dims=("electrodes","component"), coords=coords)
+        means = data.groupby('electrodes').mean(...)
         data = data @ pca_data
         if apply_zscore and not single:
             data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
@@ -201,7 +201,7 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
                     data.sel(component=comp).groupby('epochs').map(zscore).unstack()
                 else:
                     data.sel(component=comp)+ 1e-10
-        return data, pca_data, pca.explained_variance_, pca.mean_
+        return data, pca_data, pca.explained_variance_, means
     else:
         return data
 
@@ -280,7 +280,7 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
             axes.append(ax.inset_axes([times_iteration[bump]-bump_size/2,iteration-yoffset,
                                        bump_size*2,yoffset*2], transform=ax.transData))
             plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False,
-                         cmap=cmap, extrapolate='box', vmin=vmin, vmax=vmax)
+                         cmap=cmap, vmin=vmin, vmax=vmax)
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])
@@ -298,7 +298,7 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
         else:
             ax.vlines(mean_rt*time_step,0-yoffset, n_iter-1+yoffset, ls='--')
             ax.set_xlim(0, mean_rt*time_step+(mean_rt*time_step)/15)
-    elif max_time:
+    if max_time:
         ax.set_xlim(0, max_time)
     else:
         ax.set_xlim(0, np.nanmax(times.flatten()))
