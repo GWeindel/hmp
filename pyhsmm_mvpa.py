@@ -300,7 +300,7 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
             ax.set_xlim(0, mean_rt*time_step+(mean_rt*time_step)/15)
     if max_time:
         ax.set_xlim(0, max_time)
-    else:
+    if not max_time and not isinstance(mean_rt, (np.ndarray, np.generic)):
         ax.set_xlim(0, np.nanmax(times.flatten()))
     ax.set_xlabel('Time')
     plt.show()    
