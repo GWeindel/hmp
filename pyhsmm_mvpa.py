@@ -306,24 +306,37 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
     plt.show()    
 
 
-def plot_LOOCV(loocv_estimates, pval=True, figsize=(16,5)):
+def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True):
     import matplotlib.pyplot as plt
-    if pval:
-        from statsmodels.stats.descriptivestats import sign_test 
+    if pvals:
+        if test == 'sign':
+            from statsmodels.stats.descriptivestats import sign_test 
+        elif test == 't-test':
+            from scipy.stats import ttest_1samp
+        else:
+            print('Expected sign or t-test arguments')
     fig, ax = plt.subplots(1,2, figsize=figsize)
     ax[0].errorbar(x=np.arange(loocv_estimates.n_bump.max())+1,y=np.mean(loocv_estimates.data,axis=1),yerr=np.std(loocv_estimates.data,axis=1)/np.sqrt(len(loocv_estimates.participants))*1.96,marker='o')
+    if indiv:
+        for loo in loocv_estimates.T:
+            ax[0].plot(np.arange(loocv_estimates.n_bump.max())+1,loo, alpha=.2)
     ax[0].set_ylabel('LOOCV Loglikelihood')
     ax[0].set_xlabel('Number of bumps')
     ax[0].set_xticks(ticks=np.arange(1,loocv_estimates.n_bump.max()+1))
 
-    diffs, diff_bin, labels, pvals = [],[],[],[]
+    diffs, diff_bin, labels = [],[],[]
     for n_bump in np.arange(2,loocv_estimates.n_bump.max()+1):
         diffs.append(loocv_estimates.sel(n_bump=n_bump).data - loocv_estimates.sel(n_bump=n_bump-1).data)
         diff_bin.append([1 for x in diffs[-1] if x > 0])
         labels.append(str(n_bump-1)+'->'+str(n_bump))
-        if pval:
-            pvals.append((sign_test(diffs[-1])))
-            ax[0].text(x=n_bump-.5, y=np.mean(loocv_estimates.sel(n_bump=n_bump).data), s=str(np.sum(diff_bin[-1]))+'/'+str(len(diffs[-1]))+':'+str(np.around(pvals[-1][-1],2)))
+        if pvals:
+            pvalues = []
+            if test == 'sign':
+                pvalues.append((sign_test(diffs[-1])))
+            elif test == 't-test':
+                pvalues.append((ttest_1samp(diffs[-1], 0, alternative='greater')))
+            mean = np.mean(loocv_estimates.sel(n_bump=n_bump).data)
+            ax[0].text(x=n_bump-.5, y=mean+mean/10, s=str(np.sum(diff_bin[-1]))+'/'+str(len(diffs[-1]))+':'+str(np.around(pvalues[-1][-1],2)))
     ax[1].plot(diffs,'.-', alpha=.3)
     ax[1].set_xticks(ticks=np.arange(0,loocv_estimates.n_bump.max()-1), labels=labels)
     ax[1].hlines(0,0,len(np.arange(2,loocv_estimates.n_bump.max())),color='k')
