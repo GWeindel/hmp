@@ -171,6 +171,7 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
             fig, ax = plt.subplots(1,2, figsize=(.2*n_comp, 4))
             pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
             pca_data = pca.fit_transform(var_cov_matrix)
+            var = pca.transform(var_cov_matrix)
             var = np.var(var, axis=0)
             ax[0].plot(np.arange(pca.n_components)+1, var/np.sum(var),'.-')
             ax[0].set_ylabel('Normalized explained variance')
