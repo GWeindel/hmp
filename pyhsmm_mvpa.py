@@ -707,8 +707,8 @@ class hsmm:
         
         '''
         if not max_fit:
+            print(f'Estimating all solutions for maximal number of bumps ({self.max_bumps}) with {max_starting_points-1} random starting points')
             bump_loo_results = [self.fit_single(self.max_bumps, starting_points=max_starting_points)]
-            print(f'Estimating all solutions for {n_bumps} bumps with {max_starting_points-1} random starting points')
         else:
             bump_loo_results = [max_fit]
         i = 0
