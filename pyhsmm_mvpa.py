@@ -480,7 +480,7 @@ class hsmm:
         for sp in np.arange(starting_points):
             if sp  > 1:
                 #For now the random starting point are uninformed, might be worth to switch to a cleverer solution
-                parameters = np.array([[2,x] for x in np.random.uniform(0,self.max_d/2,n_bumps)])
+                parameters = np.array([[self.shape,x] for x in np.random.uniform(0,self.max_d/self.shape,n_bumps+1)])
                 magnitudes = np.random.normal(0, .5, (self.n_dims,n_bumps))
             elif np.any(parameters)== None:
                 parameters = np.tile([self.shape, math.ceil(self.max_d/(n_bumps+1))/self.shape], (n_bumps+1,1))
