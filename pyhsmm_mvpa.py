@@ -708,11 +708,11 @@ class hsmm:
         '''
         if not max_fit:
             bump_loo_results = [self.fit_single(self.max_bumps, starting_points=max_starting_points)]
+            print(f'Estimating all solutions for {n_bumps} bumps with {max_starting_points-1} random starting points')
         else:
             bump_loo_results = [max_fit]
         i = 0
         for n_bumps in np.arange(self.max_bumps-1,0,-1):
-            print(f'Estimating all solutions for {n_bumps} bumps with {max_starting_points-1} random starting points')
             temp_best = bump_loo_results[i]#previous bump solution
             temp_best = temp_best.dropna('bump')
             temp_best = temp_best.dropna('stage')
