@@ -378,7 +378,7 @@ def reconstruct(magnitudes, PCs, eigen, means):
     
 class hsmm:
     
-    def __init__(self, data, starts, ends, sf, cpus=1, bump_width = 50):
+    def __init__(self, data, starts, ends, sf, cpus=1, bump_width = 50, shape=2):
         '''
         HSMM calculates the probability of data summing over all ways of 
         placing the n bumps to break the trial into n + 1 flats.
@@ -396,7 +396,6 @@ class hsmm:
         width : int
             width of bumps in milliseconds, originally 5 samples
         '''
-        
         self.starts = starts
         self.ends = ends    
         self.sf = sf
@@ -411,6 +410,7 @@ class hsmm:
         self.durations = self.ends - self.starts+1#length of each trial
         self.max_d = np.max(self.durations)
         self.max_bumps = self.compute_max_bumps()
+        self.shape = shape
     
     def calc_bumps(self,data):
         '''
@@ -453,7 +453,7 @@ class hsmm:
         bumps[-self.offset:,:] = 0 #Centering
         return bumps
 
-    def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, mp=False,xarr=False,verbose=True):
+    def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, mp=False, xarr=False, verbose=True, starting_points=1):
         '''
         Fit HsMM for a single n_bumps model
 
@@ -476,11 +476,23 @@ class hsmm:
         if xarr==True:
             magnitudes = magnitudes.dropna(dim='bump').values
             parameters = parameters.dropna(dim='stage').values
-        lkh,mags,pars,eventprobs = \
-            self.__fit(n_bumps, magnitudes, parameters, threshold)
+        likelihood_prev = -np.inf
+        for sp in np.arange(starting_points):
+            if sp  > 1:
+                #For now the random starting point are uninformed, might be worth to switch to a cleverer solution
+                parameters = np.array([[2,x] for x in np.random.uniform(0,max_d/2,n_bumps)])
+                magnitudes = np.random.normal(0, .5, (self.n_dims,n_bumps))
+            elif np.any(parameters)== None:
+                parameters = np.tile([self.shape, math.ceil(self.max_d/(n_bumps+1))/self.shape], (n_bumps+1,1))
+                magnitudes = np.zeros((self.n_dims,n_bumps))
+            likelihood, magnitudes_, parameters_, eventprobs_ = \
+                self.__fit(n_bumps, magnitudes, parameters, threshold)
+            if likelihood > likelihood_prev:
+                lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
+                likelihood_prev = likelihood
         
         if len(pars) != self.max_bumps+1:#align all dimensions
-            pars = np.concatenate((pars, np.tile(np.nan, (self.max_bumps+1-len(pars),2))))
+            parameters = np.concatenate((pars, np.tile(np.nan, (self.max_bumps+1-len(pars),2))))
             mags = np.concatenate((mags, np.tile(np.nan, (np.shape(mags)[0], \
                 self.max_bumps-np.shape(mags)[1]))),axis=1)
             eventprobs = np.concatenate((eventprobs, np.tile(np.nan, (np.shape(eventprobs)[0],np.shape(eventprobs)[1], self.max_bumps-np.shape(eventprobs)[2]))),axis=2)
@@ -489,7 +501,7 @@ class hsmm:
         xrparams = xr.DataArray(pars, dims=("stage",'params'), name="parameters")
         xrmags = xr.DataArray(mags, dims=("component","bump"), name="magnitudes")
         xreventprobs = xr.DataArray(eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
-        estimated = xr.merge((xrlikelihoods,xrparams,xrmags,xreventprobs))#,xreventprobs))
+        estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs))#,xreventprobs))
         if verbose:
             print(f"Parameters estimated for {n_bumps} bumps model")
         return estimated
@@ -498,12 +510,6 @@ class hsmm:
         '''
         Hidden fitting function underlying single and iterative fit
         '''
-        if np.any(parameters)== None:
-            warnings.warn('Using default parameters value for gamma parameters')
-            parameters = np.tile([2, math.ceil(self.max_d)/(n_bumps+1)/2], (n_bumps+1,1))#np.tile([2,50], (n_bumps+1,1))
-        if np.any(magnitudes)== None:
-            warnings.warn('Using default parameters value for magnitudes')
-            magnitudes = np.zeros((self.n_dims,n_bumps))
         lkh1 = -np.inf#initialize likelihood     
         lkh, eventprobs = self.calc_EEG_50h(magnitudes, parameters, n_bumps)
         if threshold == 0:
@@ -638,7 +644,7 @@ class hsmm:
         else:
             return [likelihood, eventprobs]
 
-    def gamma_parameters(self, eventprobs, n_bumps, shape=2):
+    def gamma_parameters(self, eventprobs, n_bumps):
         '''
         Gives the average positions of each bump 
         Given that the shape is fixed the calculation of the maximum likelihood
@@ -674,18 +680,18 @@ class hsmm:
         # correction for time locations with number of bumps and size in samples
         flats = averagepos - np.hstack((0,averagepos[:-1]))
         params = np.zeros((n_bumps+1,2))
-        params[:,0] = shape #PCG shape is hardcoded
-        params[:,1] = flats.T / shape
+        params[:,0] = self.shape #PCG shape is hardcoded
+        params[:,1] = flats.T / self.shape
         # correct flats between bumps for the fact that the gamma is 
         # calculated at midpoint
         #params[:,1] = params[:,1] - .5 /shape
         # first flat is bounded on left while last flat may go 
         # beyond on right
-        params[0,1] = params[0,1] + .5 /shape
-        params[-1,1] = params[-1,1] - .5 /shape
+        params[0,1] = params[0,1] + .5 /self.shape
+        params[-1,1] = params[-1,1] - .5 /self.shape
         return params
 
-    def backward_estimation(self,max_fit=None):
+    def backward_estimation(self,max_fit=None, max_starting_points=1):
         '''
         first read or estimate max_bump solution then estimate max_bump - 1 solution by 
         iteratively removing one of the bump and pick the one with the highest 
@@ -696,10 +702,12 @@ class hsmm:
         max_fit : xarray
             To avoid re-estimating the model with maximum number of bumps it can be provided 
             with this arguments, defaults to None
+        max_starting_points: int
+            how many random starting points iteration to try for the model estimating the maximal number of bumps
         
         '''
         if not max_fit:
-            bump_loo_results = [self.fit_single(self.max_bumps)]
+            bump_loo_results = [self.fit_single(self.max_bumps, starting_points=max_starting_points)]
         else:
             bump_loo_results = [max_fit]
         i = 0
@@ -734,8 +742,6 @@ class hsmm:
         bests = bests.assign_coords({"n_bumps": np.arange(self.max_bumps,0,-1)})
         #bests = bests.squeeze('iteration')
         return bests
-
-    
 
     
     @staticmethod
