@@ -480,7 +480,7 @@ class hsmm:
         for sp in np.arange(starting_points):
             if sp  > 1:
                 #For now the random starting point are uninformed, might be worth to switch to a cleverer solution
-                parameters = np.array([[2,x] for x in np.random.uniform(0,max_d/2,n_bumps)])
+                parameters = np.array([[2,x] for x in np.random.uniform(0,self.max_d/2,n_bumps)])
                 magnitudes = np.random.normal(0, .5, (self.n_dims,n_bumps))
             elif np.any(parameters)== None:
                 parameters = np.tile([self.shape, math.ceil(self.max_d/(n_bumps+1))/self.shape], (n_bumps+1,1))
@@ -712,7 +712,7 @@ class hsmm:
             bump_loo_results = [max_fit]
         i = 0
         for n_bumps in np.arange(self.max_bumps-1,0,-1):
-            print(f'Estimating all solutions for {n_bumps} bumps')
+            print(f'Estimating all solutions for {n_bumps} bumps with {max_starting_points-1} random starting points')
             temp_best = bump_loo_results[i]#previous bump solution
             temp_best = temp_best.dropna('bump')
             temp_best = temp_best.dropna('stage')
