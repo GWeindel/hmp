@@ -378,7 +378,7 @@ def reconstruct(magnitudes, PCs, eigen, means):
     
 class hsmm:
     
-    def __init__(self, data, starts, ends, sf, cpus=1, bump_width = 50, shape=2):
+    def __init__(self, data, starts, ends, sf, cpus=1, bump_width = 50, shape=2, estimate_magnitudes=True, estimate_parameters=True):
         '''
         HSMM calculates the probability of data summing over all ways of 
         placing the n bumps to break the trial into n + 1 flats.
@@ -411,6 +411,8 @@ class hsmm:
         self.max_d = np.max(self.durations)
         self.max_bumps = self.compute_max_bumps()
         self.shape = shape
+        self.estimate_magnitudes = estimate_magnitudes 
+        self.estimate_parameters = estimate_parameters
     
     def calc_bumps(self,data):
         '''
@@ -453,7 +455,7 @@ class hsmm:
         bumps[-self.offset:,:] = 0 #Centering
         return bumps
 
-    def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, mp=False, xarr=False, verbose=True, starting_points=1):
+    def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, mp=False, verbose=True, starting_points=1):
         '''
         Fit HsMM for a single n_bumps model
 
@@ -473,18 +475,22 @@ class hsmm:
             print(f"Estimating parameters for {n_bumps} bumps model")
         if mp==True: #PCG: Dirty temporarilly needed for multiprocessing in the iterative backroll estimation...
             magnitudes = magnitudes.T
-        if xarr==True:
-            magnitudes = magnitudes.dropna(dim='bump').values
+        if isinstance(parameters, xr.DataArray):
             parameters = parameters.dropna(dim='stage').values
+        if isinstance(magnitudes, xr.DataArray):
+            magnitudes = magnitudes.dropna(dim='bump').values
+
         likelihood_prev = -np.inf
         for sp in np.arange(starting_points):
             if sp  > 1:
                 #For now the random starting point are uninformed, might be worth to switch to a cleverer solution
                 parameters = np.array([[self.shape,x] for x in np.random.uniform(0,self.max_d/self.shape,n_bumps+1)])
                 magnitudes = np.random.normal(0, .5, (self.n_dims,n_bumps))
-            elif np.any(parameters)== None:
-                parameters = np.tile([self.shape, math.ceil(self.max_d/(n_bumps+1))/self.shape], (n_bumps+1,1))
-                magnitudes = np.zeros((self.n_dims,n_bumps))
+            elif np.any(parameters)== None or np.any(magnitudes)== None :
+                if np.any(parameters)== None:
+                    parameters = np.tile([self.shape, math.ceil(self.max_d/(n_bumps+1))/self.shape], (n_bumps+1,1))
+                if np.any(magnitudes)== None:
+                    magnitudes = np.zeros((self.n_dims,n_bumps))
             likelihood, magnitudes_, parameters_, eventprobs_ = \
                 self.__fit(n_bumps, magnitudes, parameters, threshold)
             if likelihood > likelihood_prev:
@@ -506,7 +512,7 @@ class hsmm:
             print(f"Parameters estimated for {n_bumps} bumps model")
         return estimated
         
-    def __fit(self, n_bumps, magnitudes, parameters,  threshold, estimate_mags=True, estimate_parameters=True):
+    def __fit(self, n_bumps, magnitudes, parameters,  threshold):
         '''
         Hidden fitting function underlying single and iterative fit
         '''
@@ -528,7 +534,7 @@ class hsmm:
                 magnitudes1 = np.copy(magnitudes)
                 parameters1 = np.copy(parameters)
                 eventprobs1 = np.copy(eventprobs)
-                if estimate_mags:
+                if self.estimate_magnitudes:
                     for i in np.arange(n_bumps):
                         for j in np.arange(self.n_dims):
                             magnitudes[j,i] = np.mean(np.sum( \
@@ -537,7 +543,7 @@ class hsmm:
                             # 3) mean across trials of the sum of samples in a trial
                             # repeated for each PC (j) and later for each bump (i)
                             # magnitudes [nPCAs, nBumps]
-                if estimate_parameters:
+                if self.estimate_parameters:
                     parameters = self.gamma_parameters(eventprobs, n_bumps)
 
                     for i in np.arange(n_bumps + 1): #PCG: seems unefficient likely slows down process, isn't there a better way to bound the estimation??
