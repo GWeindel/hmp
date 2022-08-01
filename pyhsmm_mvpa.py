@@ -492,7 +492,7 @@ class hsmm:
                 likelihood_prev = likelihood
         
         if len(pars) != self.max_bumps+1:#align all dimensions
-            parameters = np.concatenate((pars, np.tile(np.nan, (self.max_bumps+1-len(pars),2))))
+            pars = np.concatenate((pars, np.tile(np.nan, (self.max_bumps+1-len(pars),2))))
             mags = np.concatenate((mags, np.tile(np.nan, (np.shape(mags)[0], \
                 self.max_bumps-np.shape(mags)[1]))),axis=1)
             eventprobs = np.concatenate((eventprobs, np.tile(np.nan, (np.shape(eventprobs)[0],np.shape(eventprobs)[1], self.max_bumps-np.shape(eventprobs)[2]))),axis=2)
