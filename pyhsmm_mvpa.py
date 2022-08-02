@@ -252,7 +252,7 @@ def LOOCV(data, subject, n_bumps, iterative_fits, sfreq, bump_width=50):
                            'participant',single=True)
 
     model_left_out = hsmm(stacked_left_out.data.T, stacked_left_out.starts.data, stacked_left_out.ends.data, sf=sfreq, bump_width=bump_width)
-    likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bumps,True,True)
+    likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bumps,True)
     return likelihood, subject
 
 def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_size=50,
