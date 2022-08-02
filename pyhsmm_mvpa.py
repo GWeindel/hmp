@@ -497,11 +497,11 @@ class hsmm:
                 lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
                 likelihood_prev = likelihood
         #Comparing to uninitialized gamma parameters
-        parameters = np.tile([self.shape, 50], (n_bumps+1,1))
-        likelihood, magnitudes_, parameters_, eventprobs_ = \
-                self.__fit(n_bumps, magnitudes, parameters, threshold)
-        if likelihood > lkh:
-            lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
+        #parameters = np.tile([self.shape, 50], (n_bumps+1,1))
+        #likelihood, magnitudes_, parameters_, eventprobs_ = \
+        #        self.__fit(n_bumps, magnitudes, parameters, threshold)
+        #if likelihood > lkh:
+        #    lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
 
         
         if len(pars) != self.max_bumps+1:#align all dimensions
