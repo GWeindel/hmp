@@ -244,7 +244,7 @@ def LOOCV(data, subject, n_bumps, iterative_fits, sfreq, bump_width=50):
                            'participant')
     #Fitting the HsMM using previous estimated parameters as initial parameters
     model_loo = hsmm(stacked_loo.data.data.T, stacked_loo.starts.data, stacked_loo.ends.data, sf=sfreq, bump_width=bump_width)
-    fit = model_loo.fit_single(n_bumps, iterative_fits.magnitudes, iterative_fits.parameters, 1, False, True, verbose=False)
+    fit = model_loo.fit_single(n_bumps, iterative_fits.magnitudes, iterative_fits.parameters, 1, False, verbose=False)
 
     #Evaluating likelihood for left out subject
     #Extracting data of left out subject
@@ -475,11 +475,11 @@ class hsmm:
             print(f"Estimating parameters for {n_bumps} bumps model")
         if mp==True: #PCG: Dirty temporarilly needed for multiprocessing in the iterative backroll estimation...
             magnitudes = magnitudes.T
-        if isinstance(parameters, xr.DataArray):
+        if isinstance(parameters, (xr.DataArray,xr.Dataset)):
             parameters = parameters.dropna(dim='stage').values
-        if isinstance(magnitudes, xr.DataArray):
+        if isinstance(magnitudes, (xr.DataArray,xr.Dataset)):
             magnitudes = magnitudes.dropna(dim='bump').values
-
+        
         likelihood_prev = -np.inf
         for sp in np.arange(starting_points):
             if sp  > 1:
@@ -496,6 +496,13 @@ class hsmm:
             if likelihood > likelihood_prev:
                 lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
                 likelihood_prev = likelihood
+        #Comparing to uninitialized gamma parameters
+        parameters = np.tile([self.shape, 50], (n_bumps+1,1))
+        likelihood, magnitudes_, parameters_, eventprobs_ = \
+                self.__fit(n_bumps, magnitudes, parameters, threshold)
+        if likelihood > lkh:
+            lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
+
         
         if len(pars) != self.max_bumps+1:#align all dimensions
             pars = np.concatenate((pars, np.tile(np.nan, (self.max_bumps+1-len(pars),2))))
@@ -557,7 +564,7 @@ class hsmm:
         return lkh1, magnitudes1, parameters1, eventprobs1
 
 
-    def calc_EEG_50h(self, magnitudes, parameters, n_bumps, lkh_only=False, xarr=False):
+    def calc_EEG_50h(self, magnitudes, parameters, n_bumps, lkh_only=False):
         '''
         Defines the likelihood function to be maximized as described in Anderson, Zhang, Borst and Walsh, 2016
 
@@ -568,9 +575,10 @@ class hsmm:
         eventprobs : ndarray
             [samples(max_d)*n_trials*n_bumps] = [max_d*trials*nBumps]
         '''
-        if xarr == True:
-            magnitudes = magnitudes.dropna(dim='bump').values
+        if isinstance(parameters, (xr.DataArray,xr.Dataset)):
             parameters = parameters.dropna(dim='stage').values
+        if isinstance(magnitudes, (xr.DataArray,xr.Dataset)):
+            magnitudes = magnitudes.dropna(dim='bump').values
         gains = np.zeros((self.n_samples, n_bumps))
 
         for i in np.arange(self.n_dims):
@@ -731,14 +739,14 @@ class hsmm:
                 temp = np.copy(flats[:,1])
                 temp[flat-1] = temp[flat-1] + temp[flat]
                 temp = np.delete(temp, flat)
-                flats_temp.append(np.reshape(np.concatenate([np.repeat(2, len(temp)), temp]), (2, len(temp))).T)
+                flats_temp.append(np.reshape(np.concatenate([np.repeat(self.shape, len(temp)), temp]), (2, len(temp))).T)
             if self.cpus > 1:
                 with mp.Pool(processes=self.cpus) as pool:
                     bump_loo_likelihood_temp = pool.starmap(self.fit_single, 
-                        zip(itertools.repeat(n_bumps), bumps_temp, itertools.repeat(np.tile([2,50], (n_bumps+1,1))),#flats_temp,
+                        zip(itertools.repeat(n_bumps), bumps_temp, flats_temp,#itertools.repeat(np.tile([self.shape,50], (n_bumps+1,1))),# ##
                             #temp_best.parameters.values[possible_flats,:],
                             #itertools.repeat(self.get_init_parameters(n_bumps)),
-                            itertools.repeat(1),itertools.repeat(True),itertools.repeat(False),itertools.repeat(False)))
+                            itertools.repeat(1),itertools.repeat(True),itertools.repeat(False)))
             else:
                 raise ValueError('For loop not yet written use cpus >1')
             models = xr.concat(bump_loo_likelihood_temp, dim="iteration")
