@@ -484,11 +484,11 @@ class hsmm:
         for sp in np.arange(starting_points):
             if sp  > 1:
                 #For now the random starting point are uninformed, might be worth to switch to a cleverer solution
-                parameters = np.array([[self.shape,x] for x in np.random.uniform(0,self.max_d/self.shape,n_bumps+1)])
+                parameters = np.array([[self.shape,x] for x in np.random.uniform(0,(self.max_d/self.shape)/1.3,n_bumps+1)])
                 magnitudes = np.random.normal(0, .5, (self.n_dims,n_bumps))
             elif np.any(parameters)== None or np.any(magnitudes)== None :
                 if np.any(parameters)== None:
-                    parameters = np.tile([self.shape, math.ceil(self.max_d/(n_bumps+1))/self.shape], (n_bumps+1,1))
+                    parameters = np.tile([self.shape, math.ceil(np.mean(self.durations)/self.shape)], (n_bumps+1,1))
                 if np.any(magnitudes)== None:
                     magnitudes = np.zeros((self.n_dims,n_bumps))
             likelihood, magnitudes_, parameters_, eventprobs_ = \
