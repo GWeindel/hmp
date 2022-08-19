@@ -480,26 +480,46 @@ class hsmm:
         if isinstance(magnitudes, (xr.DataArray,xr.Dataset)):
             magnitudes = magnitudes.dropna(dim='bump').values
         
-        likelihood_prev = -np.inf
-        for sp in np.arange(starting_points):
-            if sp  > 1:
-                #For now the random starting point are uninformed, might be worth to switch to a cleverer solution
-                parameters = np.array([[self.shape,x] for x in np.random.uniform(0,(np.mean(self.durations)/self.shape),n_bumps+1)])
-                magnitudes = np.random.normal(0, .5, (self.n_dims,n_bumps))
-            elif np.any(parameters)== None or np.any(magnitudes)== None :
-                if np.any(parameters)== None:
-                    parameters = np.tile([self.shape, math.ceil(np.mean(self.durations)/self.shape)], (n_bumps+1,1))
-                if np.any(magnitudes)== None:
-                    magnitudes = np.zeros((self.n_dims,n_bumps))
-            likelihood, magnitudes_, parameters_, eventprobs_ = \
-                self.__fit(n_bumps, magnitudes, parameters, threshold)
-            if likelihood > likelihood_prev:
-                lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
-                likelihood_prev = likelihood
+        if self.cpus > 1 and starting_points > 1:
+            import multiprocessing as mp
+            parameters = []
+            magnitudes = []
+            for sp in np.arange(starting_points):
+                parameters.append(np.array([[self.shape,x] for x in np.random.uniform(0,(np.mean(self.durations)/self.shape),n_bumps+1)]))
+                magnitudes.append(np.random.normal(0, .5, (self.n_dims,n_bumps)))
+            with mp.Pool(processes=self.cpus) as pool:
+                estimates = pool.starmap(self.fit, 
+                    zip(itertools.repeat(n_bumps), magnitudes, parameters, itertools.repeat(1)))
+            lkhs_sp = [x[0] for x in estimates]
+            mags_sp = [x[1] for x in estimates]
+            pars_sp = [x[2] for x in estimates]
+            eventprobs_sp = [x[3] for x in estimates]
+            max_lkhs = np.where(lkhs_sp == np.max(lkhs_sp))[0][0]
+            lkh = lkhs_sp[max_lkhs]
+            mags = mags_sp[max_lkhs]
+            pars = pars_sp[max_lkhs]
+            eventprobs = eventprobs_sp[max_lkhs]
+        elif starting_points > 1:
+            likelihood_prev = -np.inf
+            for sp in np.arange(starting_points):
+                if sp  > 1:
+                    #For now the random starting point are uninformed, might be worth to switch to a cleverer solution
+                    parameters = np.array([[self.shape,x] for x in np.random.uniform(0,(np.mean(self.durations)/self.shape),n_bumps+1)])
+                    magnitudes = np.random.normal(0, .5, (self.n_dims,n_bumps))
+                likelihood, magnitudes_, parameters_, eventprobs_ = \
+                    self.fit(n_bumps, magnitudes, parameters, threshold)
+                if likelihood > likelihood_prev:
+                    lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
+                    likelihood_prev = likelihood
+        elif np.any(parameters)== None or np.any(magnitudes)== None :
+            if np.any(parameters)== None:
+                parameters = np.tile([self.shape, math.ceil(np.mean(self.durations)/self.shape)], (n_bumps+1,1))
+            if np.any(magnitudes)== None:
+                magnitudes = np.zeros((self.n_dims,n_bumps))
         #Comparing to uninitialized gamma parameters
         #parameters = np.tile([self.shape, 50], (n_bumps+1,1))
         #likelihood, magnitudes_, parameters_, eventprobs_ = \
-        #        self.__fit(n_bumps, magnitudes, parameters, threshold)
+        #        self.fit(n_bumps, magnitudes, parameters, threshold)
         #if likelihood > lkh:
         #    lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
 
@@ -519,7 +539,7 @@ class hsmm:
             print(f"Parameters estimated for {n_bumps} bumps model")
         return estimated
         
-    def __fit(self, n_bumps, magnitudes, parameters,  threshold):
+    def fit(self, n_bumps, magnitudes, parameters,  threshold):
         '''
         Hidden fitting function underlying single and iterative fit
         '''
