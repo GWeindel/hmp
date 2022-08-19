@@ -516,6 +516,9 @@ class hsmm:
                 parameters = np.tile([self.shape, math.ceil(np.mean(self.durations)/self.shape)], (n_bumps+1,1))
             if np.any(magnitudes)== None:
                 magnitudes = np.zeros((self.n_dims,n_bumps))
+            lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters, threshold)
+        else:
+            lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters, threshold)
         #Comparing to uninitialized gamma parameters
         #parameters = np.tile([self.shape, 50], (n_bumps+1,1))
         #likelihood, magnitudes_, parameters_, eventprobs_ = \
