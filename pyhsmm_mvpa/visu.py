@@ -99,50 +99,20 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     plt.tight_layout()
     plt.show()
 
-def plot_latencies(fits, labels, bump_width):
-    from itertools import cycle
-    f, axs = plt.subplots(1,1, figsize=(6, 4),sharey=True, sharex=False,dpi=100)
-    j = 0
-    if not isinstance(fits, list) and 'n_bumps' not in fits:
-        fits = [fits]
-    for fit in fits:
-        cycol = cycle('bgrcm')
-        n_stages = len(fit.parameters.isel(params=0).dropna('stage'))
-        colors = [next(cycol) for x in np.arange(n_stages)]
-        stages = fit.parameters.isel(params=0).dropna('stage') * \
-                  fit.parameters.isel(params=1).dropna('stage') + \
-                  np.concatenate([[0],np.repeat(bump_width,n_stages-1)])
-        for stage in np.arange(len(stages)-1,0,-1):
-            colors.append(next(cycol))
-            plt.barh(j, stages[:stage].sum(), color=colors[stage-1], edgecolor='k')
-        j += 1
-
-    plt.yticks(np.arange(j),labels)
-    plt.ylim(0-1,j)
-    plt.xlabel('(Cumulative) Stages durations from stimulus onset (samples)')
-    plt.tight_layout()
-    # Hide the right and top spines
-    axs.spines.right.set_visible(False)
-    axs.spines.top.set_visible(False)
-
-    # Only show ticks on the left and bottom spines
-    axs.yaxis.set_ticks_position('left')
-    axs.xaxis.set_ticks_position('bottom')
-    plt.show()
     
-def plot_latencies_gammas(fits, labels, bump_width):
+def plot_latencies_gammas(fits, labels, bump_width,colors=['darkblue','indianred','darkgreen','gold','purple','grey']):
     from itertools import cycle
     f, axs = plt.subplots(1,1, figsize=(6, 4),sharey=True, sharex=False,dpi=100)
     j = 0
     if not isinstance(fits, list) and 'n_bumps' not in fits:
         fits = [fits]
-    if 'n_bumps' in fits:
+    elif 'n_bumps' in fits:
         xrfits = fits.copy(deep=True)
         fits = []
         for n_bump in xrfits.n_bumps:
             fits.append(xrfits.sel(n_bumps=n_bump))
     for fit in fits:
-        cycol = cycle('bgrcm')
+        cycol = cycle(colors)
         n_stages = len(fit.parameters.isel(params=0).dropna('stage'))
         colors = [next(cycol) for x in np.arange(n_stages)]
         stages = fit.parameters.isel(params=0).dropna('stage') * \
