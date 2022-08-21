@@ -209,7 +209,7 @@ class hsmm:
                 if self.estimate_parameters:
                     parameters = self.gamma_parameters(eventprobs, n_bumps)
 
-                    for i in np.arange(n_bumps + 1): #PCG: seems unefficient likely slows down process, isn't there a better way to bound the estimation??
+                    for i in np.arange(1,n_bumps): #PCG: seems unefficient likely slows down process, isn't there a better way to bound the estimation??
                         if parameters[i,:].prod() < self.bump_width_samples:
                             # multiply scale and shape parameters to get 
                             # the mean distance of the gamma-2 pdf. 
