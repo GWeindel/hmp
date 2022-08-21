@@ -454,7 +454,7 @@ class hsmm:
         onsets = np.empty((len(eventprobs.trial),len(eventprobs.bump)))
         i = 0
         for trial in eventprobs.trial.values:
-            onsets[i, :] = np.arange(self.max_d) @ eventprobs.sel(trial=trial).data#np.concatenate([np.arange(self.max_d) @ eventprobs.sel(trial=trial).data, np.array([self.ends[i] - self.starts[i]])])
+            onsets[i, :] = np.arange(self.max_d) @ eventprobs.sel(trial=trial).data - self.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
             i += 1
         return onsets
     
