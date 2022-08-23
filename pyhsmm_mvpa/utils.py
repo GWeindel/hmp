@@ -234,6 +234,7 @@ def stack_data(data, subjects_variable, single=False):
 
 
 def LOOCV(data, subject, n_bumps, iterative_fits, sfreq, bump_width=50):
+    from pyhsmm_mvpa.models import hsmm
     #Looping over possible number of bumps
     subjects_idx = data.participant.values
     likelihoods_loo = []

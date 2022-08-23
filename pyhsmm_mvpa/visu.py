@@ -99,10 +99,50 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     plt.tight_layout()
     plt.show()
 
-    
-def plot_latencies_gammas(fits, labels, bump_width,colors=['darkblue','indianred','darkgreen','gold','purple','grey']):
+def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=['darkblue','indianred','darkgreen','gold','purple','grey'], figsize=False):
     from itertools import cycle
-    f, axs = plt.subplots(1,1, figsize=(6, 4),sharey=True, sharex=False,dpi=100)
+    import xarray as xr
+    j = 0
+    if len(np.shape(times)) >2:
+        xrtimes = np.copy(times)
+        times = []
+        for n_bump in np.arange(np.shape(xrtimes)[0]):
+            times.append(xrtimes[n_bump,:,:])        
+    elif not isinstance(times, list):
+        times = [times]
+    if not figsize:
+        figzise = (8, 1*len(times)+2)
+    f, axs = plt.subplots(1,1, figsize=figzise,dpi=100)
+    for time in times:
+        time = time*time_step
+        cycol = cycle(colors)
+        n_stages = len(time[0][np.isfinite(time[0])])
+        colors = [next(cycol) for x in np.arange(n_stages)]
+        for stage in np.arange(n_stages,0,-1):
+            colors.append(next(cycol))
+            plt.barh(j+.02*stage, np.mean(time[:,stage-1]), color='w', edgecolor=colors[stage-1], alpha=.5)
+            plt.errorbar(np.mean(time[:,stage-1]), j+.02*stage, xerr=np.std(time[:,stage-1]), 
+                         color=colors[stage-1], fmt='none', capsize=10)
+
+        j += 1
+    plt.yticks(np.arange(len(labels)),labels)
+    plt.ylim(0-1,j)
+    if time_step == 1:
+        plt.xlabel('(Cumulative) Stages durations from stimulus onset (samples)')
+    else:
+        plt.xlabel('(Cumulative) Stages durations from stimulus onset')
+    plt.tight_layout()
+    # Hide the right and top spines
+    axs.spines.right.set_visible(False)
+    axs.spines.top.set_visible(False)
+
+    # Only show ticks on the left and bottom spines
+    axs.yaxis.set_ticks_position('left')
+    axs.xaxis.set_ticks_position('bottom')
+    plt.show()
+    
+def plot_latencies_gamma(fits, bump_width, time_step=1, labels=False, colors=['darkblue','indianred','darkgreen','gold','purple','grey'], figsize=False):
+    from itertools import cycle
     j = 0
     if not isinstance(fits, list) and 'n_bumps' not in fits:
         fits = [fits]
@@ -111,21 +151,27 @@ def plot_latencies_gammas(fits, labels, bump_width,colors=['darkblue','indianred
         fits = []
         for n_bump in xrfits.n_bumps:
             fits.append(xrfits.sel(n_bumps=n_bump))
+    if not figsize:
+        figzise = (8, 1*len(fits)+2)
+    f, axs = plt.subplots(1,1, figsize=figzise,dpi=100)
     for fit in fits:
         cycol = cycle(colors)
         n_stages = len(fit.parameters.isel(params=0).dropna('stage'))
         colors = [next(cycol) for x in np.arange(n_stages)]
         stages = fit.parameters.isel(params=0).dropna('stage') * \
-                  fit.parameters.isel(params=1).dropna('stage') + \
+                  fit.parameters.isel(params=1).dropna('stage') * time_step + \
                   np.concatenate([[0],np.repeat(bump_width,n_stages-1)])
-        for stage in np.arange(len(stages)-1,0,-1):
+        for stage in np.arange(n_stages,0,-1):
             colors.append(next(cycol))
             plt.barh(j, stages[:stage].sum(), color=colors[stage-1], edgecolor='k')
         j += 1
 
-    plt.yticks(np.arange(j),labels)
+    plt.yticks(np.arange(len(labels)),labels)
     plt.ylim(0-1,j)
-    plt.xlabel('(Cumulative) Stages durations from stimulus onset (samples)')
+    if time_step == 1:
+        plt.xlabel('Gamma derived (Cumulative) stage durations from stimulus onset (samples)')
+    else:
+        plt.xlabel('Gamma derived (Cumulative) stage durations from stimulus onset')
     plt.tight_layout()
     # Hide the right and top spines
     axs.spines.right.set_visible(False)
