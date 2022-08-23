@@ -146,7 +146,7 @@ class hsmm:
                     likelihood_prev = likelihood
         elif np.any(parameters)== None or np.any(magnitudes)== None :
             if np.any(parameters)== None:
-                parameters = np.tile([self.shape, math.ceil(np.mean(self.durations)/self.shape)], (n_bumps+1,1))
+                parameters = np.tile([self.shape, math.ceil(np.mean(self.durations)/(n_bumps+1)/self.shape)], (n_bumps+1,1))
             if np.any(magnitudes)== None:
                 magnitudes = np.zeros((self.n_dims,n_bumps))
             lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters, threshold)
