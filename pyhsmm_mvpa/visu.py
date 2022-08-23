@@ -28,7 +28,7 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
         electrodes_ = electrodes_[:n_bump,:]
         for bump in np.arange(n_bump):
             axes.append(ax.inset_axes([times_iteration[bump],iteration-yoffset,
-                                       bump_size,yoffset*2], transform=ax.transData))
+                                       bump_size/2,yoffset*2], transform=ax.transData))
             plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False,
                          cmap=cmap, vmin=vmin, vmax=vmax)
     if isinstance(ylabels, dict):
@@ -99,9 +99,10 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     plt.tight_layout()
     plt.show()
 
-def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=['darkblue','indianred','darkgreen','gold','purple','grey'], figsize=False):
+def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=['darkblue','indianred','darkgreen','gold','purple','grey'], figsize=False, errs='ci'):
     from itertools import cycle
     import xarray as xr
+    from seaborn.algorithms import bootstrap #might be too much to ask for seaborn install?
     j = 0
     if len(np.shape(times)) >2:
         xrtimes = np.copy(times)
@@ -121,9 +122,16 @@ def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=['d
         for stage in np.arange(n_stages,0,-1):
             colors.append(next(cycol))
             plt.barh(j+.02*stage, np.mean(time[:,stage-1]), color='w', edgecolor=colors[stage-1], alpha=.5)
-            plt.errorbar(np.mean(time[:,stage-1]), j+.02*stage, xerr=np.std(time[:,stage-1]), 
-                         color=colors[stage-1], fmt='none', capsize=10)
-
+            if errs == 'ci':
+                errorbars = np.transpose([np.nanpercentile(bootstrap(time[:,stage-1]), q=[2.5,97.5])])
+                errorbars = np.abs(errorbars-np.mean(time[:,stage-1]))
+            elif errs == 'std':
+                errorbars = np.std(time[:,stage-1])
+            else:
+                print('Unknown errorbar type')
+                errorbars = np.repeat(0,2)
+            plt.errorbar(np.mean(time[:,stage-1]), j+.02*stage, xerr=errorbars, 
+                     color=colors[stage-1], fmt='none', capsize=10)
         j += 1
     plt.yticks(np.arange(len(labels)),labels)
     plt.ylim(0-1,j)
@@ -181,3 +189,6 @@ def plot_latencies_gamma(fits, bump_width, time_step=1, labels=False, colors=['d
     axs.yaxis.set_ticks_position('left')
     axs.xaxis.set_ticks_position('bottom')
     plt.show()
+
+#def plot_survival_curve(eventprobs):
+    
