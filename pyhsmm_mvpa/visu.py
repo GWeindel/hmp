@@ -4,6 +4,8 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+from itertools import cycle
+default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold']
 
 def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_size=50,
                         figsize=None, magnify=1, mean_rt=None, cmap='Spectral_r',
@@ -37,21 +39,10 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
         ax.set_ylabel(str(list(ylabels.keys())[0]))
     else:
         ax.set_yticks([])
-    ax.spines['left'].set_visible(False)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.set_ylim(0-yoffset, n_iter-1+yoffset)
-    if isinstance(mean_rt, (np.ndarray, np.generic)):
-        if isinstance(mean_rt, np.ndarray):
-            ax.vlines(mean_rt*time_step,0-yoffset, np.arange(len(mean_rt))+yoffset, ls='--')
-            ax.set_xlim(0, max(mean_rt)*time_step+((max(mean_rt)*time_step)/15))
-        else:
-            ax.vlines(mean_rt*time_step,0-yoffset, n_iter-1+yoffset, ls='--')
-            ax.set_xlim(0, mean_rt*time_step+(mean_rt*time_step)/15)
-    if max_time:
-        ax.set_xlim(0, max_time)
-    if not max_time and not isinstance(mean_rt, (np.ndarray, np.generic)):
-        ax.set_xlim(0, np.nanmax(times.flatten()))
+    __display_rt(ax, mean_rt, 0, time_step, max_time, times)
     if time_step == 1:
         ax.set_xlabel('Time (in samples)')
     else:
@@ -99,42 +90,49 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     plt.tight_layout()
     plt.show()
 
-def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=['darkblue','indianred','darkgreen','gold','purple','grey'], figsize=False, errs='ci'):
-    from itertools import cycle
-    import xarray as xr
+def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=default_colors,
+    figsize=False, errs='ci', yoffset=0, max_time=None, mean_rt=None):
+    '''
+
+
+    Parameters
+    ----------
+    times : ndarray
+        2D or 3D numpy array, Either trials * bumps or conditions * trials * bumps
+        
+        
+    '''
     from seaborn.algorithms import bootstrap #might be too much to ask for seaborn install?
     j = 0
-    if len(np.shape(times)) >2:
-        xrtimes = np.copy(times)
-        times = []
-        for n_bump in np.arange(np.shape(xrtimes)[0]):
-            times.append(xrtimes[n_bump,:,:])        
-    elif not isinstance(times, list):
+    
+    if len(np.shape(times)) == 2:
         times = [times]
+
     if not figsize:
         figzise = (8, 1*len(times)+2)
     f, axs = plt.subplots(1,1, figsize=figzise,dpi=100)
     for time in times:
         time = time*time_step
         cycol = cycle(colors)
-        n_stages = len(time[0][np.isfinite(time[0])])
+        n_stages = len(time[-1][np.isfinite(time[-1])])
         colors = [next(cycol) for x in np.arange(n_stages)]
-        for stage in np.arange(n_stages,0,-1):
+        for stage in np.arange(n_stages-1,-1,-1):
             colors.append(next(cycol))
-            plt.barh(j+.02*stage, np.mean(time[:,stage-1]), color='w', edgecolor=colors[stage-1], alpha=.5)
+            plt.barh(j+.02*stage, np.mean(time[:,stage]), color='w', edgecolor=colors[stage])
             if errs == 'ci':
-                errorbars = np.transpose([np.nanpercentile(bootstrap(time[:,stage-1]), q=[2.5,97.5])])
-                errorbars = np.abs(errorbars-np.mean(time[:,stage-1]))
+                errorbars = np.transpose([np.nanpercentile(bootstrap(time[:,stage]), q=[2.5,97.5])])
+                errorbars = np.abs(errorbars-np.mean(time[:,stage]))
             elif errs == 'std':
-                errorbars = np.std(time[:,stage-1])
+                errorbars = np.std(time[:,stage])
             else:
                 print('Unknown errorbar type')
                 errorbars = np.repeat(0,2)
-            plt.errorbar(np.mean(time[:,stage-1]), j+.02*stage, xerr=errorbars, 
-                     color=colors[stage-1], fmt='none', capsize=10)
+            plt.errorbar(np.mean(time[:,stage]), j+.02*stage, xerr=errorbars, 
+                     color=colors[stage], fmt='none', capsize=10)
         j += 1
     plt.yticks(np.arange(len(labels)),labels)
     plt.ylim(0-1,j)
+    __display_rt(axs, mean_rt, np.arange(np.shape(times)[0]), time_step, max_time, times)
     if time_step == 1:
         plt.xlabel('(Cumulative) Stages durations from stimulus onset (samples)')
     else:
@@ -143,52 +141,89 @@ def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=['d
     # Hide the right and top spines
     axs.spines.right.set_visible(False)
     axs.spines.top.set_visible(False)
-
     # Only show ticks on the left and bottom spines
     axs.yaxis.set_ticks_position('left')
     axs.xaxis.set_ticks_position('bottom')
-    plt.show()
+    return axs
     
-def plot_latencies_gamma(fits, bump_width, time_step=1, labels=False, colors=['darkblue','indianred','darkgreen','gold','purple','grey'], figsize=False):
-    from itertools import cycle
-    j = 0
-    if not isinstance(fits, list) and 'n_bumps' not in fits:
-        fits = [fits]
-    elif 'n_bumps' in fits:
-        xrfits = fits.copy(deep=True)
-        fits = []
-        for n_bump in xrfits.n_bumps:
-            fits.append(xrfits.sel(n_bumps=n_bump))
-    if not figsize:
-        figzise = (8, 1*len(fits)+2)
-    f, axs = plt.subplots(1,1, figsize=figzise,dpi=100)
-    for fit in fits:
-        cycol = cycle(colors)
-        n_stages = len(fit.parameters.isel(params=0).dropna('stage'))
-        colors = [next(cycol) for x in np.arange(n_stages)]
-        stages = fit.parameters.isel(params=0).dropna('stage') * \
-                  fit.parameters.isel(params=1).dropna('stage') * time_step + \
-                  np.concatenate([[0],np.repeat(bump_width,n_stages-1)])
-        for stage in np.arange(n_stages,0,-1):
-            colors.append(next(cycol))
-            plt.barh(j, stages[:stage].sum(), color=colors[stage-1], edgecolor='k')
-        j += 1
 
-    plt.yticks(np.arange(len(labels)),labels)
-    plt.ylim(0-1,j)
-    if time_step == 1:
-        plt.xlabel('Gamma derived (Cumulative) stage durations from stimulus onset (samples)')
-    else:
-        plt.xlabel('Gamma derived (Cumulative) stage durations from stimulus onset')
-    plt.tight_layout()
+def plot_distribution(times, colors=default_colors, xlims=False, figsize=(8, 3), cumulative=False):
+    f, axs = plt.subplots(1,1, figsize=figsize, dpi=100)
+    '''
+
+
+    Parameters
+    ----------
+    times : ndarray
+        2D or 3D numpy array, Either trials * bumps or conditions * trials * bumps
+        
+        
+    '''
+    if len(np.shape(times)) == 2:
+        times = np.asarray([times],dtype = 'object')
+    cycol = cycle(colors)
+    for iteration in times:
+        for stage in iteration.T:
+            if cumulative:
+                axs.plot(1-stage.cumsum(axis=0), color=next(cycol) )
+            else: 
+                axs.plot(stage,color=next(cycol) )
+    axs.set_ylabel('p(event)')
+    axs.set_xlabel('Time (in samples)')
+    if xlims:
+        axs.set_xlim(xlims[0], xlims[1])
+    return axs
+
+def __display_rt(ax, mean_rt, yoffset, time_step, max_time, times):
+    n_iter = len(times)
+    times = np.asarray(times,dtype=object)
+    if isinstance(mean_rt, (np.ndarray, np.generic)):
+        if isinstance(mean_rt, np.ndarray):
+            ax.vlines(mean_rt*time_step, yoffset-.5, yoffset+1-.5, ls='--')
+            ax.set_xlim(0, max(mean_rt)*time_step+((max(mean_rt)*time_step)/15))
+        else:
+            ax.vlines(mean_rt*time_step, yoffset-.5, yoffset+1-.5, ls='--')
+            ax.set_xlim(0, mean_rt*time_step+(mean_rt*time_step)/15)
+    if max_time:
+        ax.set_xlim(0, max_time)
+    return ax
+
+def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[], colors=default_colors, 
+                         figsize=False, yoffset=0, max_time=None, mean_rt=None):
+    '''
+
+
+    Parameters
+    ----------
+    gammas : ndarray
+        2D or 3D numpy array, Either  bumps * parameters or conditions * bumps * parameters with parameters being [shape * scale]
+        
+        
+    '''
+    j = 0
+    
+    if len(np.shape(gammas)) == 2:
+        gammas = [gammas]
+
+    if not figsize:
+        figzise = (8, 1*len(gammas)+2)
+    f, axs = plt.subplots(1,1, figsize=figzise, dpi=100)
+    for time in gammas:
+        cycol = cycle(colors)
+        n_stages = int(len(time[np.isfinite(time)])/2)
+        colors = [next(cycol) for x in np.arange(n_stages)]
+        for stage in np.arange(n_stages,-1,-1):
+            colors.append(next(cycol))
+            axs.bar(stage+1, time[stage,0] *  time[stage,1], color='w', edgecolor=colors[stage])
+        j += 1
+    #plt.xticks(np.arange(len(labels)),labels)
+    #plt.xlim(0-1,j)
+    #__display_rt(axs, mean_rt, np.arange(np.shape(gammas)[0]), time_step, max_time, gammas)
+    axs.set_ylabel('Stages durations (Gamma)')
+    axs.set_xlabel('Stage number')
     # Hide the right and top spines
     axs.spines.right.set_visible(False)
     axs.spines.top.set_visible(False)
-
     # Only show ticks on the left and bottom spines
     axs.yaxis.set_ticks_position('left')
-    axs.xaxis.set_ticks_position('bottom')
-    plt.show()
-
-#def plot_survival_curve(eventprobs):
-    
+    return axs

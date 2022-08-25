@@ -9,7 +9,53 @@ import multiprocessing as mp
 import itertools
 import warnings
 
-warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later
+#warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later
+
+def hsmm_data_format(data, events, sfreq, participants=[], epochs=None, electrodes=None):
+    '''
+    Converting 3D matrix with dimensions (participant) x trials X electrodes X sample into xarray Dataset
+    '''
+    if len(np.shape(data)) == 4:#means group
+        n_subj, n_epochs, n_electrodes, n_samples = np.shape(data)
+    elif len(np.shape(data)) == 3:
+        n_epochs, n_electrodes, n_samples = np.shape(data)
+    else:
+        raise ValueError(f'Unknown data format with dimensions {np.shape(data)}')
+    if events is None:
+        events = np.repeat(np.nan, n_epochs)
+    if electrodes is None:
+        electrodes = np.arange(n_electrodes)
+    if epochs is None:
+         epochs = np.arange(n_epochs)
+    if len(participants) < 2:
+        data = xr.Dataset(
+                {
+                    "data": (["epochs", "electrodes", "samples"],data),
+                    "event": (["epochs"], events),
+                },
+                coords={
+                    "epochs" :epochs,
+                    "electrodes":  electrodes,
+                    "samples": np.arange(n_samples)
+                },
+                attrs={'sfreq':sfreq}
+                )
+    else:
+        data = xr.Dataset(
+                {
+                    "data": (['participant',"epochs", "electrodes", "samples"],data),
+                    "event": (['participant',"epochs"], events),
+                },
+                coords={
+                    'participant':participants,
+                    "epochs" :epochs,
+                    "electrodes":  electrodes,
+                    "samples": np.arange(n_samples)
+                },
+                attrs={'sfreq':sfreq}
+                )
+    return data
+        
 
 def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None,
                  tmin=-.2, tmax=5, offset_after_resp = .1, low_pass=.5, \
@@ -110,22 +156,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None,
         if x > 0:
             print(f'RTs > 0 longer than expected ({x})')
 
-        # recover actual data points in a 3D matrix with dimensions trials X electrodes X sample
-        epoch_data.append(xr.Dataset(
-            {
-                "data": (["epochs", "electrodes", "samples"],cropped_data_epoch),
-                "event": (["epochs"], cropped_trigger),
-            },
-            coords={
-                "epochs" : np.arange(len(cropped_data_epoch)),
-                "electrodes":  epochs.ch_names,
-                # TODO When time "electrodes": (['name','x','y','z'], epochs.ch_names,
-                "samples": np.arange(max(rts)+offset_after_resp_samples)#+1)
-            },
-            attrs={'sfreq':epochs.info['sfreq']}
-            )
-
-            )
+        epoch_data.append(hsmm_data_format(cropped_data_epoch, cropped_trigger, epochs.info['sfreq'], electrodes = epochs.ch_names))
 
     epoch_data = xr.concat(epoch_data, dim="participant")
     return epoch_data
