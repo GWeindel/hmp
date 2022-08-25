@@ -180,16 +180,16 @@ def __display_rt(ax, mean_rt, yoffset, time_step, max_time, times):
     if isinstance(mean_rt, (np.ndarray, np.generic)):
         if isinstance(mean_rt, np.ndarray):
             ax.vlines(mean_rt*time_step, yoffset-.5, yoffset+1-.5, ls='--')
-            ax.set_xlim(0, max(mean_rt)*time_step+((max(mean_rt)*time_step)/15))
+            ax.set_xlim(-1*time_step, max(mean_rt)*time_step+((max(mean_rt)*time_step)/15))
         else:
             ax.vlines(mean_rt*time_step, yoffset-.5, yoffset+1-.5, ls='--')
-            ax.set_xlim(0, mean_rt*time_step+(mean_rt*time_step)/15)
+            ax.set_xlim(-1*time_step, mean_rt*time_step+(mean_rt*time_step)/15)
     if max_time:
-        ax.set_xlim(0, max_time)
+        ax.set_xlim(-1*time_step, max_time)
     return ax
 
-def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[], colors=default_colors, 
-                         figsize=False, yoffset=0, max_time=None, mean_rt=None):
+def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[''], colors=default_colors, 
+                         figsize=False, yoffset=0, max_time=None, mean_rt=None, kind='bar', legend=False):
     '''
 
 
@@ -203,18 +203,25 @@ def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[], colors=de
     j = 0
     
     if len(np.shape(gammas)) == 2:
-        gammas = [gammas]
-
+        gammas = [gammas]#np.reshape([gammas], (1, np.shape(gammas)[0],np.shape(gammas)[1]))
     if not figsize:
         figzise = (8, 1*len(gammas)+2)
     f, axs = plt.subplots(1,1, figsize=figzise, dpi=100)
     for time in gammas:
         cycol = cycle(colors)
-        n_stages = int(len(time[np.isfinite(time)])/2)
+        try:
+            time = time[np.isfinite(time)]
+        except:
+            print('todo')
+        time = np.reshape(time, (np.shape(gammas)[1],np.shape(gammas)[2]))
+        n_stages = int(len(time))
         colors = [next(cycol) for x in np.arange(n_stages)]
-        for stage in np.arange(n_stages,-1,-1):
-            colors.append(next(cycol))
-            axs.bar(stage+1, time[stage,0] *  time[stage,1], color='w', edgecolor=colors[stage])
+        #for stage in np.arange(n_stages,-1,-1):
+        colors.append(next(cycol))
+        if kind=='bar':
+            axs.bar(np.arange(n_stages)+1, time[:,0] *  time[:,1], color='w', edgecolor=colors)
+        elif kind == 'point':
+            axs.plot(np.arange(n_stages)+1, time[:,0] * time[:,1],'o-', label=labels[j])#, color=colors)
         j += 1
     #plt.xticks(np.arange(len(labels)),labels)
     #plt.xlim(0-1,j)
@@ -226,4 +233,6 @@ def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[], colors=de
     axs.spines.top.set_visible(False)
     # Only show ticks on the left and bottom spines
     axs.yaxis.set_ticks_position('left')
+    if legend:
+        axs.legend()
     return axs
