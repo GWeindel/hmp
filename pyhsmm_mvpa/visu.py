@@ -8,13 +8,13 @@ from itertools import cycle
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold']
 
 def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_size=50,
-                        figsize=None, magnify=1, mean_rt=None, cmap='Spectral_r',
+                        figsize=None, magnify=1, times_to_display=None, cmap='Spectral_r',
                         ylabels=[], max_time = None, vmin=None, vmax=None, title=False):
     from mne.viz import plot_topomap
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
     if not figsize:
         figzise = (12, 2)
-    fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=200)
+    fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=100)
     bump_size = bump_size*time_step*magnify
     yoffset =.25*magnify
     axes = []
@@ -22,7 +22,7 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
     n_iter = np.shape(electrodes)[0]
     if n_iter == 1:
         times = [times]
-    times = np.array(times)
+    times = np.array(times, dtype=object)
     for iteration in np.arange(n_iter):
         times_iteration = times[iteration]*time_step
         electrodes_ = electrodes[iteration,:,:]
@@ -42,7 +42,7 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.set_ylim(0-yoffset, n_iter-1+yoffset)
-    __display_rt(ax, mean_rt, 0, time_step, max_time, times)
+    __display_times(ax, times_to_display, 0, time_step, max_time, times)
     if time_step == 1:
         ax.set_xlabel('Time (in samples)')
     else:
@@ -91,7 +91,7 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     plt.show()
 
 def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=default_colors,
-    figsize=False, errs='ci', yoffset=0, max_time=None, mean_rt=None):
+    figsize=False, errs='ci', yoffset=0, max_time=None, times_to_display=None):
     '''
 
 
@@ -132,7 +132,7 @@ def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=def
         j += 1
     plt.yticks(np.arange(len(labels)),labels)
     plt.ylim(0-1,j)
-    __display_rt(axs, mean_rt, np.arange(np.shape(times)[0]), time_step, max_time, times)
+    __display_times(axs, times_to_display, np.arange(np.shape(times)[0]), time_step, max_time, times)
     if time_step == 1:
         plt.xlabel('(Cumulative) Stages durations from stimulus onset (samples)')
     else:
@@ -147,7 +147,7 @@ def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=def
     return axs
     
 
-def plot_distribution(times, colors=default_colors, xlims=False, figsize=(8, 3), cumulative=False):
+def plot_distribution(times, colors=default_colors, xlims=False, figsize=(8, 3), survival=False):
     f, axs = plt.subplots(1,1, figsize=figsize, dpi=100)
     '''
 
@@ -164,7 +164,7 @@ def plot_distribution(times, colors=default_colors, xlims=False, figsize=(8, 3),
     cycol = cycle(colors)
     for iteration in times:
         for stage in iteration.T:
-            if cumulative:
+            if survival:
                 axs.plot(1-stage.cumsum(axis=0), color=next(cycol) )
             else: 
                 axs.plot(stage,color=next(cycol) )
@@ -174,22 +174,22 @@ def plot_distribution(times, colors=default_colors, xlims=False, figsize=(8, 3),
         axs.set_xlim(xlims[0], xlims[1])
     return axs
 
-def __display_rt(ax, mean_rt, yoffset, time_step, max_time, times):
+def __display_times(ax, times_to_display, yoffset, time_step, max_time, times):
     n_iter = len(times)
     times = np.asarray(times,dtype=object)
-    if isinstance(mean_rt, (np.ndarray, np.generic)):
-        if isinstance(mean_rt, np.ndarray):
-            ax.vlines(mean_rt*time_step, yoffset-.5, yoffset+1-.5, ls='--')
-            ax.set_xlim(-1*time_step, max(mean_rt)*time_step+((max(mean_rt)*time_step)/15))
+    if isinstance(times_to_display, (np.ndarray, np.generic)):
+        if isinstance(times_to_display, np.ndarray):
+            ax.vlines(times_to_display*time_step, yoffset-.5, yoffset+1-.5, ls='--')
+            ax.set_xlim(-1*time_step, max(times_to_display)*time_step+((max(times_to_display)*time_step)/15))
         else:
-            ax.vlines(mean_rt*time_step, yoffset-.5, yoffset+1-.5, ls='--')
-            ax.set_xlim(-1*time_step, mean_rt*time_step+(mean_rt*time_step)/15)
+            ax.vlines(times_to_display*time_step, yoffset-.5, yoffset+1-.5, ls='--')
+            ax.set_xlim(-1*time_step, times_to_display*time_step+(times_to_display*time_step)/15)
     if max_time:
         ax.set_xlim(-1*time_step, max_time)
     return ax
 
 def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[''], colors=default_colors, 
-                         figsize=False, yoffset=0, max_time=None, mean_rt=None, kind='bar', legend=False):
+                         figsize=False, yoffset=0, max_time=None, times_to_display=None, kind='bar', legend=False):
     '''
 
 
@@ -205,8 +205,8 @@ def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[''], colors=
     if len(np.shape(gammas)) == 2:
         gammas = [gammas]#np.reshape([gammas], (1, np.shape(gammas)[0],np.shape(gammas)[1]))
     if not figsize:
-        figzise = (8, 1*len(gammas)+2)
-    f, axs = plt.subplots(1,1, figsize=figzise, dpi=100)
+        figsize = (8, 1*len(gammas)+2)
+    f, axs = plt.subplots(1,1, figsize=figsize, dpi=100)
     for time in gammas:
         cycol = cycle(colors)
         try:
@@ -216,16 +216,15 @@ def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[''], colors=
         time = np.reshape(time, (np.shape(gammas)[1],np.shape(gammas)[2]))
         n_stages = int(len(time))
         colors = [next(cycol) for x in np.arange(n_stages)]
-        #for stage in np.arange(n_stages,-1,-1):
         colors.append(next(cycol))
         if kind=='bar':
             axs.bar(np.arange(n_stages)+1, time[:,0] *  time[:,1], color='w', edgecolor=colors)
         elif kind == 'point':
-            axs.plot(np.arange(n_stages)+1, time[:,0] * time[:,1],'o-', label=labels[j])#, color=colors)
+            axs.plot(np.arange(n_stages)+1, time[:,0] * time[:,1],'o-', label=labels[j], color=colors[j])
         j += 1
     #plt.xticks(np.arange(len(labels)),labels)
     #plt.xlim(0-1,j)
-    #__display_rt(axs, mean_rt, np.arange(np.shape(gammas)[0]), time_step, max_time, gammas)
+    #__display_times(axs, mean_rt, np.arange(np.shape(gammas)[0]), time_step, max_time, gammas)
     axs.set_ylabel('Stages durations (Gamma)')
     axs.set_xlabel('Stage number')
     # Hide the right and top spines
@@ -233,6 +232,66 @@ def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[''], colors=
     axs.spines.top.set_visible(False)
     # Only show ticks on the left and bottom spines
     axs.yaxis.set_ticks_position('left')
+    if legend:
+        axs.legend()
+    return axs
+
+def plot_latencies(times, bump_width, time_step=1, labels=[], colors=default_colors,
+    figsize=False, errs='ci',  max_time=None, times_to_display=None, kind='bar', legend=False):
+    '''
+
+
+    Parameters
+    ----------
+    times : ndarray
+        2D or 3D numpy array, Either trials * bumps or conditions * trials * bumps
+        
+        
+    '''
+    from seaborn.algorithms import bootstrap #might be too much to ask for seaborn install?
+    j = 0
+    
+    if len(np.shape(times)) == 2:
+        times = [times]
+
+    if not figsize:
+        figsize = (8, 1*len(times)+2)
+    f, axs = plt.subplots(1,1, figsize=figsize, dpi=100)
+    cycol = cycle(colors)
+    colors = [next(cycol) for x in np.arange(len(times))]
+    for time in times:
+        time = time*time_step
+        time = np.diff(time, axis=1, prepend=0)
+        n_stages = len(time[-1])
+        if errs == 'ci':
+            errorbars = np.nanpercentile(bootstrap(time, axis=0), q=[2.5,97.5], axis=0)
+            errorbars = np.abs(errorbars-np.mean(time, axis=0))
+        elif errs == 'std':
+            errorbars = np.std(time, axis=0)
+        else:
+            print('Unknown errorbar type')
+            errorbars = np.repeat(0,2)
+        if kind == 'bar':
+            plt.bar(np.arange(n_stages)+1, np.mean(time, axis=0), color='w', edgecolor=colors[j])
+            plt.errorbar(np.arange(n_stages)+1, np.mean(time, axis=0), yerr=errorbars, 
+                     color=colors[j], fmt='none', capsize=10)
+        elif kind == 'point':
+            plt.errorbar(np.arange(n_stages)+1, np.mean(time, axis=0), 
+                yerr=errorbars, color=colors[j], fmt='o-', capsize=10, label=labels[j])
+        j += 1
+
+    plt.xlim(1-.5, n_stages+.5)
+    if time_step == 1:
+        plt.ylabel('Stage durations (samples)')
+    else:
+        plt.ylabel('Stage durations')
+    plt.tight_layout()
+    # Hide the right and top spines
+    axs.spines.right.set_visible(False)
+    axs.spines.top.set_visible(False)
+    # Only show ticks on the left and bottom spines
+    axs.yaxis.set_ticks_position('left')
+    axs.xaxis.set_ticks_position('bottom')
     if legend:
         axs.legend()
     return axs

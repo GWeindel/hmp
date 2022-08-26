@@ -9,7 +9,7 @@ import multiprocessing as mp
 import itertools
 import warnings
 
-#warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later
+warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later
 
 def hsmm_data_format(data, events, sfreq, participants=[], epochs=None, electrodes=None):
     '''

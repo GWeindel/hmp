@@ -451,18 +451,12 @@ class hsmm:
         return int(np.min(self.durations)/self.bump_width_samples)
 
     def bump_times(self, eventprobs):
-        onsets = np.empty((len(eventprobs.trial),len(eventprobs.bump)))
+        eventprobs = eventprobs.dropna('bump')
+        onsets = np.empty((len(eventprobs.trial),len(eventprobs.bump)+1))
         i = 0
         for trial in eventprobs.trial.values:
-            onsets[i, :] = np.arange(self.max_d) @ eventprobs.sel(trial=trial).data - self.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
+            onsets[i, :len(eventprobs.bump)] = np.arange(self.max_d) @ eventprobs.sel(trial=trial).data - self.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
+            onsets[i, -1] = self.ends[i] - self.starts[i]
             i += 1
         return onsets
     
-    def mean_bump_times(self, eventprobs):
-        if len(np.shape(eventprobs)) > 3:
-            onsets = np.empty([np.shape(eventprobs)[0],  np.shape(eventprobs)[3]])
-            for iteration in np.arange(np.shape(eventprobs)[0]):
-                onsets[iteration,:] = (np.mean(self.bump_times(eventprobs[iteration]),axis=0))
-        else:
-            onsets = np.mean(self.bump_times(eventprobs),axis=0)
-        return onsets
