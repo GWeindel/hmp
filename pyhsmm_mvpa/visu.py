@@ -9,12 +9,13 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_size=50,
                         figsize=None, magnify=1, times_to_display=None, cmap='Spectral_r',
-                        ylabels=[], max_time = None, vmin=None, vmax=None, title=False):
+                        ylabels=[], max_time = None, vmin=None, vmax=None, title=False, ax=False, sensors=True):
     from mne.viz import plot_topomap
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-    if not figsize:
-        figzise = (12, 2)
-    fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=100)
+    if isinstance(ax, bool):
+        if not figsize:
+            figzise = (12, 2)
+        fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=100)
     bump_size = bump_size*time_step*magnify
     yoffset =.25*magnify
     axes = []
@@ -32,7 +33,7 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
             axes.append(ax.inset_axes([times_iteration[bump],iteration-yoffset,
                                        bump_size/2,yoffset*2], transform=ax.transData))
             plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False,
-                         cmap=cmap, vmin=vmin, vmax=vmax)
+                         cmap=cmap, vmin=vmin, vmax=vmax, sensors=sensors)
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])
@@ -52,7 +53,7 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
     plt.show()    
 
 
-def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True):
+def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=False):
     if pvals:
         if test == 'sign':
             from statsmodels.stats.descriptivestats import sign_test 
@@ -60,7 +61,8 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
             from scipy.stats import ttest_1samp
         else:
             print('Expected sign or t-test arguments')
-    fig, ax = plt.subplots(1,2, figsize=figsize)
+    if isinstance(ax, bool):
+        fig, ax = plt.subplots(1,2, figsize=figsize)
     ax[0].errorbar(x=np.arange(loocv_estimates.n_bump.max())+1,y=np.mean(loocv_estimates.data,axis=1),yerr=np.std(loocv_estimates.data,axis=1)/np.sqrt(len(loocv_estimates.participants))*1.96,marker='o')
     if indiv:
         for loo in loocv_estimates.T:
