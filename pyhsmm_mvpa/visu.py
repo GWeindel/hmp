@@ -8,14 +8,14 @@ from itertools import cycle
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold']
 
 def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_size=50,
-                        figsize=None, magnify=1, times_to_display=None, cmap='Spectral_r',
+                        figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
                         ylabels=[], max_time = None, vmin=None, vmax=None, title=False, ax=False, sensors=True):
     from mne.viz import plot_topomap
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
     if isinstance(ax, bool):
         if not figsize:
             figzise = (12, 2)
-        fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=100)
+        fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
     bump_size = bump_size*time_step*magnify
     yoffset =.25*magnify
     axes = []
@@ -111,8 +111,8 @@ def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=def
         times = [times]
 
     if not figsize:
-        figzise = (8, 1*len(times)+2)
-    f, axs = plt.subplots(1,1, figsize=figzise,dpi=100)
+        figsize = (8, 1*len(times)+2)
+    f, axs = plt.subplots(1,1, figsize=figsize,dpi=100)
     for time in times:
         time = time*time_step
         cycol = cycle(colors)

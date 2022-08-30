@@ -177,7 +177,7 @@ class hsmm:
         
     def fit(self, n_bumps, magnitudes, parameters,  threshold):
         '''
-        Hidden fitting function underlying single and iterative fit
+        Fitting function underlying single and iterative fit
         '''
         lkh1 = -np.inf#initialize likelihood     
         lkh, eventprobs = self.calc_EEG_50h(magnitudes, parameters, n_bumps)
@@ -209,6 +209,7 @@ class hsmm:
                 if self.estimate_parameters:
                     parameters = self.gamma_parameters(eventprobs, n_bumps)
 
+                    #Ensure constrain of gammas > bump_width, note that contrary to the matlab code this is not applied on the first stage (np.arange(1,n_bumps) 
                     for i in np.arange(1,n_bumps): #PCG: seems unefficient likely slows down process, isn't there a better way to bound the estimation??
                         if parameters[i,:].prod() < self.bump_width_samples:
                             # multiply scale and shape parameters to get 
@@ -316,7 +317,6 @@ class hsmm:
 
     def gamma_parameters(self, eventprobs, n_bumps):
         '''
-        Gives the average positions of each bump 
         Given that the shape is fixed the calculation of the maximum likelihood
         scales becomes simple.  One just calculates the means expected lengths 
         of the flats and divides by the shape
@@ -363,7 +363,7 @@ class hsmm:
 
     def backward_estimation(self,max_fit=None, max_starting_points=1):
         '''
-        first read or estimate max_bump solution then estimate max_bump - 1 solution by 
+        First read or estimate max_bump solution then estimate max_bump - 1 solution by 
         iteratively removing one of the bump and pick the one with the highest 
         likelihood
         
@@ -438,19 +438,32 @@ class hsmm:
         d = [gamma.pdf(t+.5,a,scale=b) for t in np.arange(max_length)]
         d = d/np.sum(d)
         return d
-        
-    @staticmethod
-    def load_fit(filename):
-        return xr.open_dataset(filename+'.nc')
-
-    @staticmethod
-    def save_fit(data, filename):
-        data.to_netcdf(filename+".nc")
     
     def compute_max_bumps(self):
+        '''
+        Compute the maximum possible number of bumps given bump width and minimum epoch size
+        '''
         return int(np.min(self.durations)/self.bump_width_samples)
 
     def bump_times(self, eventprobs):
+        '''
+        Compute bump onset times based on bump probabilities
+
+        Parameters
+        ----------
+        a : float
+            shape parameter
+        b : float
+            scale parameter
+        max_length : int
+            maximum length of the trials        
+
+        Returns
+        -------
+        d : ndarray
+            density for a gamma with given parameters
+        '''    
+        
         eventprobs = eventprobs.dropna('bump')
         onsets = np.empty((len(eventprobs.trial),len(eventprobs.bump)+1))
         i = 0
