@@ -1,16 +1,16 @@
-HSMM-MVpy
+pyHSMM-MVPA
 ==========
 
-HSMM-MVpy is an open-source Python package to estimate Hidden Semi-Markov Models in a Multivariate Pattern Analysis (HsMM-MVPA) of electro-encephalographic data based on the method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)) and Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HsMM_MVPA_BorstAnderson_preprint.pdf))
+pyHSMM-MVPA is an open-source Python package to estimate Hidden Semi-Markov Models in a Multivariate Pattern Analysis of electro-encephalographic data based on the method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)) and Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HsMM_MVPA_BorstAnderson_preprint.pdf))
 
 
 # Documentation
 
-The package will be soon available through *pip*, in the meantime, to install hsmm-mvpy you can clone the repository using *git*
+The package will be soon available through *pip*, in the meantime, to install pyhsmm-mvpa you can clone the repository using *git*
 
 Open a terminal and type:
 
-    $ git clone https://github.com/gweindel/hsmm-mvpy.git
+    $ git clone https://github.com/gweindel/pyhsmm-mvpa.git
    
 Then install the required dependencies:
 
@@ -22,18 +22,19 @@ Then install the required dependencies:
 
 A recommended way of installing these dependency is to use a new conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
 
-    $ conda create -n hsmm xarray mne seaborn
-    $ conda activate hsmm
+    $ conda create -n pyhsmm xarray mne 
+    $ conda activate pyhsmm
 
 Then naviguate to the cloned repository and import pyhsmm-mvpa in your favorite python IDE through:
 
 ```python
-    import hsmm_mvpy as hsmm
+    import pyhsmm_mvpa as hsmm
 ```
 
 ## Demo on simulated data
 
 The following section will quickly walk you through an example usage in simulated data
+
 
 First we load the libraries necessary for the demo on simulated data
 
@@ -64,10 +65,10 @@ path = 'simulated/'#Wehre simulated data will go, vreate that folder if you don'
 
 n_events = 30 #Number of trials to simulate
 
-sources = [['lateraloccipital-lh',1e-2, [np.random.gamma,2,30]],#One source = localization, acitvation amplitude and onset latencies
-           ['postcentral-lh', 1e-2, [np.random.gamma, 2, 50]],
-           ['posteriorcingulate-rh', 1e-2, [np.random.gamma, 2,40]],
-           ['postcentral-rh', 1e-2, [np.random.gamma, 2,100]],
+sources = [['lateraloccipital-lh',1e-8, [np.random.gamma,2,30]],#One source = localization, acitvation amplitude and onset latencies
+           ['postcentral-lh', 1e-8, [np.random.gamma, 2, 50]],
+           ['posteriorcingulate-rh', 1e-8, [np.random.gamma, 2,40]],
+           ['postcentral-rh', 1e-8, [np.random.gamma, 2,100]],
            ['postcentral-lh', 1e-10, [np.random.gamma, 2,75]]] #Equivalent to a response trigger as amplitude make it hardly visible
 
 max_trial_length = 3000 #length of a trial (ISI)
@@ -100,8 +101,17 @@ event_id = {'stimulus':0}
 resp_id = {'response':resp_trigger}
 events = generating_events[(generating_events[:,2] == 0) | (generating_events[:,2] == resp_trigger)]#only retain stimulus and response triggers
 
-raw.copy().pick_types(eeg=True).plot(scalings=dict(eeg=10), events=events);
+raw.copy().pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events);
 ```
+
+    Removing projector <Projection | PCA-v1, active : True, n_channels : 102>
+    Removing projector <Projection | PCA-v2, active : True, n_channels : 102>
+    Removing projector <Projection | PCA-v3, active : True, n_channels : 102>
+    Using matplotlib as 2D backend.
+    Opening raw-browser...
+
+
+
     
 ![png](README_files/README_6_1.png)
     
@@ -155,14 +165,14 @@ eeg_dat.sel(epochs=0,electrodes=['EEG 001','EEG 002','EEG 003']).plot.scatter(x=
 ```
 
     <xarray.Dataset>
-    Dimensions:     (participant: 1, epochs: 30, electrodes: 59, samples: 946)
+    Dimensions:     (participant: 1, epochs: 30, electrodes: 59, samples: 1070)
     Coordinates:
       * epochs      (epochs) int64 0 1 2 3 4 5 6 7 8 ... 21 22 23 24 25 26 27 28 29
       * electrodes  (electrodes) <U7 'EEG 001' 'EEG 002' ... 'EEG 059' 'EEG 060'
-      * samples     (samples) int64 0 1 2 3 4 5 6 7 ... 939 940 941 942 943 944 945
+      * samples     (samples) int64 0 1 2 3 4 5 6 ... 1064 1065 1066 1067 1068 1069
     Dimensions without coordinates: participant
     Data variables:
-        data        (participant, epochs, electrodes, samples) float64 -0.009796 ...
+        data        (participant, epochs, electrodes, samples) float64 2.037e-07 ...
         event       (participant, epochs) <U8 'stimulus' 'stimulus' ... 'stimulus'
     Attributes:
         sfreq:    600.614990234375
@@ -181,7 +191,7 @@ Note that if the number of components to retain is not specified, the scree plot
 
 ```python
 hsmm_dat, PCs, explained_var, means = hsmm.utils.transform_data(eeg_dat.data,'',
-        apply_standard=False, single=True, n_comp=10)
+        apply_standard=False, single=True, n_comp=10, return_weights=True)
 
 hsmm_dat = hsmm.utils.stack_data(hsmm_dat,'',single=True)
 ```
@@ -268,6 +278,15 @@ As HsMM-MVPA selected those bumps onset per trial we can also look at the predic
 ```python
 hsmm.visu.plot_distribution(selected.eventprobs.sel(trial=0), xlims=(0,1000))
 ```
+
+
+
+
+    <AxesSubplot:xlabel='Time (in samples)', ylabel='p(event)'>
+
+
+
+
     
 ![png](README_files/README_27_1.png)
     
