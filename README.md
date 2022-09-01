@@ -1,16 +1,16 @@
-pyHSMM-MVPA
+HSMM-MVpy
 ==========
 
-pyHSMM-MVPA is an open-source Python package to estimate Hidden Semi-Markov Models in a Multivariate Pattern Analysis of electro-encephalographic data based on the method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)) and Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HsMM_MVPA_BorstAnderson_preprint.pdf))
+HSMM-MVpy is an open-source Python package to estimate Hidden Semi-Markov Models in a Multivariate Pattern Analysis of electro-encephalographic data based on the method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)) and Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HsMM_MVPA_BorstAnderson_preprint.pdf))
 
 
 # Documentation
 
-The package will be soon available through *pip*, in the meantime, to install pyhsmm-mvpa you can clone the repository using *git*
+The package will be soon available through *pip*, in the meantime, to install hsmm-mvpy you can clone the repository using *git*
 
 Open a terminal and type:
 
-    $ git clone https://github.com/gweindel/pyhsmm-mvpa.git
+    $ git clone https://github.com/gweindel/hsmm-mvpy.git
    
 Then install the required dependencies:
 
@@ -22,13 +22,13 @@ Then install the required dependencies:
 
 A recommended way of installing these dependency is to use a new conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
 
-    $ conda create -n pyhsmm xarray mne seaborn
-    $ conda activate pyhsmm
+    $ conda create -n hsmm xarray mne seaborn
+    $ conda activate hsmm
 
 Then naviguate to the cloned repository and import pyhsmm-mvpa in your favorite python IDE through:
 
 ```python
-    import pyhsmm_mvpa as hsmm
+    import hsmm_mvpy as hsmm
 ```
 
 ## Demo on simulated data
@@ -48,8 +48,8 @@ import seaborn as sns
 from mne import channels
 
 ## Importing 
-import pyhsmm_mvpa as hsmm
-from pyhsmm_mvpa import simulations
+import hsmm_mvpy as hsmm
+from hsmm_mvpy import simulations
 ```
 
 ### Simulating data
