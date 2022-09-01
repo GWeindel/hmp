@@ -165,14 +165,14 @@ eeg_dat.sel(epochs=0,electrodes=['EEG 001','EEG 002','EEG 003']).plot.scatter(x=
 ```
 
     <xarray.Dataset>
-    Dimensions:     (participant: 1, epochs: 30, electrodes: 59, samples: 1070)
+    Dimensions:     (participant: 1, epochs: 30, electrodes: 59, samples: 1154)
     Coordinates:
       * epochs      (epochs) int64 0 1 2 3 4 5 6 7 8 ... 21 22 23 24 25 26 27 28 29
       * electrodes  (electrodes) <U7 'EEG 001' 'EEG 002' ... 'EEG 059' 'EEG 060'
-      * samples     (samples) int64 0 1 2 3 4 5 6 ... 1064 1065 1066 1067 1068 1069
+      * samples     (samples) int64 0 1 2 3 4 5 6 ... 1148 1149 1150 1151 1152 1153
     Dimensions without coordinates: participant
     Data variables:
-        data        (participant, epochs, electrodes, samples) float64 2.037e-07 ...
+        data        (participant, epochs, electrodes, samples) float64 -2.113e-08...
         event       (participant, epochs) <U8 'stimulus' 'stimulus' ... 'stimulus'
     Attributes:
         sfreq:    600.614990234375
