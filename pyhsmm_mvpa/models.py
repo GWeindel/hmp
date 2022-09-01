@@ -11,7 +11,8 @@ import math
 
 class hsmm:
     
-    def __init__(self, data, starts, ends, sf, cpus=1, bump_width = 50, shape=2, estimate_magnitudes=True, estimate_parameters=True):
+    def __init__(self, data, starts, ends, sf, cpus=1, bump_width = 50, shape=2, estimate_magnitudes=True, estimate_parameters=True,
+                parameters_to_fix = [], magnitudes_to_fix = []):
         '''
         HSMM calculates the probability of data summing over all ways of 
         placing the n bumps to break the trial into n + 1 flats.
@@ -46,6 +47,9 @@ class hsmm:
         self.shape = shape
         self.estimate_magnitudes = estimate_magnitudes 
         self.estimate_parameters = estimate_parameters
+        self.parameters_to_fix = parameters_to_fix
+        self.magnitudes_to_fix = magnitudes_to_fix
+        
     
     def calc_bumps(self,data):
         '''
@@ -206,6 +210,8 @@ class hsmm:
                             # 3) mean across trials of the sum of samples in a trial
                             # repeated for each PC (j) and later for each bump (i)
                             # magnitudes [nPCAs, nBumps]
+                        if i in self.magnitudes_to_fix:
+                            magnitudes[:,i] = magnitudes1[:,i]
                 if self.estimate_parameters:
                     parameters = self.gamma_parameters(eventprobs, n_bumps)
 
@@ -216,6 +222,8 @@ class hsmm:
                             # the mean distance of the gamma-2 pdf. 
                             # It constrains that bumps are separated at 
                             # least a bump length
+                            parameters[i,:] = parameters1[i,:]
+                        if i in self.parameters_to_fix:
                             parameters[i,:] = parameters1[i,:]
                 lkh, eventprobs = self.calc_EEG_50h(magnitudes, parameters, n_bumps)
         return lkh1, magnitudes1, parameters1, eventprobs1

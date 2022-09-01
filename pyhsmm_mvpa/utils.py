@@ -156,6 +156,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, verbose=True,
         if x > 0:
             print(f'RTs > 0 longer than expected ({x})')
         print(f'{len(cropped_data_epoch)} trials were retained for participant {participant}')
+        print(f'End sampling frequency is {sfreq}')
         epoch_data.append(hsmm_data_format(cropped_data_epoch, cropped_trigger, epochs.info['sfreq'], electrodes = epochs.ch_names))
 
     epoch_data = xr.concat(epoch_data, dim="participant")
@@ -242,7 +243,7 @@ def zscore(data):
     '''
     return (data - data.mean()) / data.std()
 
-def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, single=False):
+def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, single=False, return_weights=False):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hsmms. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -337,7 +338,10 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
                     data.sel(component=comp).groupby('epochs').map(zscore).unstack()
                 else:
                     data.sel(component=comp)+ 1e-10
-        return data, pca_data, pca.explained_variance_, means
+        if return_weights:
+            return data, pca_data, pca.explained_variance_, means
+        else:
+            return data
     else:
         return data
 
