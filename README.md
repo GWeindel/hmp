@@ -29,6 +29,18 @@ Then move to the clone repository and run
     
     $ pip install -e .
 
+## To get started
+To get started with the code:
+- Check the demo below 
+- Inspect the tutorials in the tutorials repository
+    - Load EEG data (tutorial 1)
+    - Test for the number of bumps that best explains the data (tutorial 2)
+    - Testing differences across conditions (tutorial 3)
+
+To get started or further learn about the method be sure to check the paper by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)) as well as the book chapter by Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HsMM_MVPA_BorstAnderson_preprint.pdf)). The following list also contains a non-exhaustive list of papers published with HsMM-MVPA:
+- Berberyan, H. S., van Maanen, L., van Rijn, H., & Borst, J. (2021). EEG-based identification of evidence accumulation stages in decision-making. Journal of Cognitive Neuroscience, 33(3), 510-527. [link](https://direct.mit.edu/jocn/article-abstract/33/3/510/9555)
+- Van Maanen, L., Portoles, O., & Borst, J. P. (2021). The discovery and interpretation of evidence accumulation stages. Computational brain & behavior, 4(4), 395-415. [link](https://link.springer.com/article/10.1007/s42113-021-00105-2)
+- Portoles, O., Blesa, M., van Vugt, M., Cao, M., & Borst, J. P. (2022). Thalamic bursts modulate cortical synchrony locally to switch between states of global functional connectivity in a cognitive task. PLoS computational biology, 18(3), e1009407. [link](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009407)
 
 ## Demo on simulated data
 
