@@ -1,0 +1,32 @@
+[build-system]
+requires = [ "setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "hsmm_mvpy"
+version = "0.0.4-0"
+authors = [
+  { name="Gabriel Weindel", email="gabriel.weindel@gmail.com" },
+  { name="Leendert van Maanen", email="e@mail.com" },
+  { name="Jelmer Borst", email="e@mail.com" },
+]
+description = "Package for fitting Hidden Semi-Markov Models to electro-encephalographic data"
+readme = "README.md"
+license = { file="LICENSE.md" }
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies=["mne >=1.0.0",
+"numpy >=1.20",
+"xarray >=2022.6.0",
+"sklearn",
+"seaborn",
+"scipy",
+"netcdf4"]
+
+[project.urls]
+"Homepage" = "https://github.com/GWeindel/hsmm_mvpy"
+"Bug Tracker" = "https://github.com/GWeindel/hsmm_mvpy/issues"
