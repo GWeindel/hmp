@@ -1,5 +1,8 @@
+import os
 from setuptools import setup, find_packages
 
+with open('requirements.txt') as f:
+    required = f.read().splitlines()
 
 setup(
     name='hsmm_mvpy',
@@ -10,8 +13,6 @@ setup(
     packages=find_packages('hsmm_mvpy'),
     package_dir={'': 'hsmm_mvpy'},
     url='https://github.com/GWeindel/hsmm_mvpy',
-    keywords='neuroscience EEG stage brain Hidden Semi Markov Model',
-    install_requires=[
-          'mne','xarray'
-      ],
+    keywords='neuroscience EEG stage state bump brain Semi-Markov',
+    install_requires=required,
 )

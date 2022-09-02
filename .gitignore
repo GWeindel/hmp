@@ -7,10 +7,10 @@
 /MCCA
 .ipynb_checkpoints
 /old
-*.txt
 /__pycache__
-/Bruno
 /preprocessed_data
 *Copy*
 *.fif
 *perso*
+/dist
+*egg*
