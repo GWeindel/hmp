@@ -6,7 +6,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='hsmm_mvpy',
-    version='0.0.1-alpha',
+    version='0.0.1',
     license='BSD-3-Clause',
     author="Gabriel Weindel, Leendert van Maanen, Jelmer Borst",
     author_email='gabriel.weindel@gmail.com',
