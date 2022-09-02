@@ -6,30 +6,29 @@ hsmm_mvpy is an open-source Python package to estimate Hidden Semi-Markov Models
 
 # Documentation
 
-The package will be soon available through *pip*, in the meantime, to install pyhsmm-mvpa you can clone the repository using *git*
-
-Open a terminal and type:
-
-    $ git clone https://github.com/gweindel/pyhsmm-mvpa.git
-   
-Then install the required dependencies:
-
-- Python >= 3.7
-- NumPy >= 1.18.1
-- MNE >= 1.0
-- Matplotlib >= 3.1.0
-- xarray >= 2022.6.0
-
-A recommended way of installing these dependency is to use a new conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
+The package v0.0.2 is available through *pip* with the command ```pip install hsmm_mvpy```. 
+A recommended way of using the package is to use a conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
 
     $ conda create -n hsmm xarray mne 
     $ conda activate hsmm
+    $ pip install hsmm_mvpy
 
-Then naviguate to the cloned repository and import pyhsmm-mvpa in your favorite python IDE through:
+Then import pyhsmm-mvpa in your favorite python IDE through:
 
 ```python
     import hsmm_mvpy as hsmm
 ```
+
+For the cutting edge version (not recommended) you can clone the repository using *git*
+
+Open a terminal and type:
+
+    $ git clone https://github.com/gweindel/hsmm-mvpy.git
+   
+Then move to the clone repository and run 
+    
+    $ pip install -e .
+
 
 ## Demo on simulated data
 
