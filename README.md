@@ -23,7 +23,7 @@ For the cutting edge version (not recommended) you can clone the repository usin
 
 Open a terminal and type:
 
-    $ git clone https://github.com/gweindel/hsmm-mvpy.git
+    $ git clone https://github.com/gweindel/hsmm_mvpy.git
    
 Then move to the clone repository and run 
     
@@ -78,9 +78,9 @@ n_events = 30 #Number of trials to simulate
 
 sources = [['lateraloccipital-lh',1e-8, [np.random.gamma,2,30]],#One source = localization, acitvation amplitude and onset latencies
            ['postcentral-lh', 1e-8, [np.random.gamma, 2, 50]],
-           ['posteriorcingulate-rh', 1e-8, [np.random.gamma, 2,40]],
-           ['postcentral-rh', 1e-8, [np.random.gamma, 2,100]],
-           ['postcentral-lh', 1e-10, [np.random.gamma, 2,75]]] #Equivalent to a response trigger as amplitude make it hardly visible
+           ['posteriorcingulate-rh', 1e-8, [np.random.gamma, 2,80]],
+           ['postcentral-rh', 1e-8, [np.random.gamma, 2,110]],
+           ['postcentral-lh', 1e-10, [np.random.gamma, 2,65]]] #Equivalent to a response trigger as amplitude make it hardly visible
 
 max_trial_length = 3000 #length of a trial (ISI)
 
@@ -94,8 +94,8 @@ raw, generating_events = simulations.simulate(sources, n_events, max_trial_lengt
     Aligning file name to MNE's convention
     Simulating dataset_tutorial_raw.fif in simulated/
     Overwriting existing file.
-    Writing /home/gweindel/owncloud/projects/RUGUU/pyhsmm-mvpa/simulated/dataset_tutorial_raw.fif
-    Closing /home/gweindel/owncloud/projects/RUGUU/pyhsmm-mvpa/simulated/dataset_tutorial_raw.fif
+    Writing /home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/simulated/dataset_tutorial_raw.fif
+    Closing /home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/simulated/dataset_tutorial_raw.fif
     [done]
     simulated/dataset_tutorial_raw.fif simulated
 
@@ -163,7 +163,7 @@ eeg_dat = hsmm.utils.read_mne_EEG(mne_path, event_id, resp_id, raw.info['sfreq']
     N trials without response event: 0
     Applying reaction time trim to keep RTs between 0.001 and 5 seconds
     30 trials were retained for participant simulated/dataset_tutorial_raw.fif
-    End sampling frequency is 600.614990234375
+    End sampling frequency is 600.614990234375 Hz
 
 
 The package uses [xarray](https://docs.xarray.dev/en/stable/) named dimension matrices, allowing to directly manipulate the data using the name of the dimensions:
@@ -176,14 +176,14 @@ eeg_dat.sel(epochs=0,electrodes=['EEG 001','EEG 002','EEG 003']).plot.scatter(x=
 ```
 
     <xarray.Dataset>
-    Dimensions:     (participant: 1, epochs: 30, electrodes: 59, samples: 1154)
+    Dimensions:     (participant: 1, epochs: 30, electrodes: 59, samples: 1238)
     Coordinates:
       * epochs      (epochs) int64 0 1 2 3 4 5 6 7 8 ... 21 22 23 24 25 26 27 28 29
       * electrodes  (electrodes) <U7 'EEG 001' 'EEG 002' ... 'EEG 059' 'EEG 060'
-      * samples     (samples) int64 0 1 2 3 4 5 6 ... 1148 1149 1150 1151 1152 1153
+      * samples     (samples) int64 0 1 2 3 4 5 6 ... 1232 1233 1234 1235 1236 1237
     Dimensions without coordinates: participant
     Data variables:
-        data        (participant, epochs, electrodes, samples) float64 -2.113e-08...
+        data        (participant, epochs, electrodes, samples) float64 -7.847e-07...
         event       (participant, epochs) <U8 'stimulus' 'stimulus' ... 'stimulus'
     Attributes:
         sfreq:    600.614990234375
@@ -219,6 +219,7 @@ init = hsmm.models.hsmm(hsmm_dat.data.T[:,:,0], hsmm_dat.starts.data,
 selected = init.fit_single(number_of_sources-1, starting_points=25)#function to fit an instance of a 4 bumps model with 25 random starting points for the expectation maximization algorithm
 ```
 
+    Estimating all solutions for 4 bumps model with 24 random starting points
     Estimating parameters for 4 bumps model
     Parameters estimated for 4 bumps model
 

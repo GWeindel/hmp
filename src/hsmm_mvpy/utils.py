@@ -93,7 +93,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, verbose=True,
         data.filter(high_pass, low_pass, fir_design='firwin', verbose=verbose)#Filtering out frequency outside range .5 and 30Hz, as study by Anderson et al.
         # Loading events (in our case one event = one trial)
         if events is None:
-            events = mne.find_events(data, verbose=verbose, min_duration = 1 / raw.info['sfreq'])
+            events = mne.find_events(data, verbose=verbose, min_duration = 1 / data.info['sfreq'])
             if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicates offset in the trggers
                 events[:,2] = events[:,2]-events[:,1]#correction on event value
             events_values = np.concatenate([np.array([x for x in event_id.values()]), np.array([x for x in resp_id.values()])])

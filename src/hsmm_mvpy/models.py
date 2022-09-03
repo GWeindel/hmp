@@ -109,9 +109,7 @@ class hsmm:
 
         '''
         if verbose:
-            print(f'Estimating all solutions for {n_bumps} bumps model with {max_starting_points-1} random starting points')
-
-            print(f"Estimating parameters for {n_bumps} bumps model")
+            print(f'Estimating parameters for {n_bumps} bumps model with {starting_points-1} random starting points')
         if mp==True: #PCG: Dirty temporarilly needed for multiprocessing in the iterative backroll estimation...
             magnitudes = magnitudes.T
         if isinstance(parameters, (xr.DataArray,xr.Dataset)):
@@ -412,7 +410,7 @@ class hsmm:
                         zip(itertools.repeat(n_bumps), bumps_temp, flats_temp,#itertools.repeat(np.tile([self.shape,50], (n_bumps+1,1))),# ##
                             #temp_best.parameters.values[possible_flats,:],
                             #itertools.repeat(self.get_init_parameters(n_bumps)),
-                            itertools.repeat(1),itertools.repeat(True),itertools.repeat(False)))
+                            itertools.repeat(1),itertools.repeat(True),itertools.repeat(True)))
             else:
                 raise ValueError('For loop not yet written use cpus >1')
             models = xr.concat(bump_loo_likelihood_temp, dim="iteration")
