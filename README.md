@@ -6,7 +6,7 @@ hsmm_mvpy is an open-source Python package to estimate Hidden Semi-Markov Models
 
 # Documentation
 
-The package v0.0.2 is available through *pip* with the command ```pip install hsmm_mvpy```. 
+The package is available through *pip* with the command ```pip install hsmm_mvpy```. 
 A recommended way of using the package is to use a conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
 
     $ conda create -n hsmm xarray mne 
