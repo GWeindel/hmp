@@ -93,7 +93,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, verbose=True,
         data.filter(high_pass, low_pass, fir_design='firwin', verbose=verbose)#Filtering out frequency outside range .5 and 30Hz, as study by Anderson et al.
         # Loading events (in our case one event = one trial)
         if events is None:
-            events = mne.find_events(data, verbose=verbose)
+            events = mne.find_events(data, verbose=verbose, min_duration = 1 / raw.info['sfreq'])
             if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicates offset in the trggers
                 events[:,2] = events[:,2]-events[:,1]#correction on event value
             events_values = np.concatenate([np.array([x for x in event_id.values()]), np.array([x for x in resp_id.values()])])
@@ -156,7 +156,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, verbose=True,
         #if x > 0:
         #    print(f'RTs > 0 longer than expected ({x})')
         print(f'{len(cropped_data_epoch)} trials were retained for participant {participant}')
-        print(f'End sampling frequency is {sfreq}')
+        print(f'End sampling frequency is {sfreq} Hz')
         epoch_data.append(hsmm_data_format(cropped_data_epoch, cropped_trigger, epochs.info['sfreq'], electrodes = epochs.ch_names))
 
     epoch_data = xr.concat(epoch_data, dim="participant")
@@ -345,7 +345,7 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
     else:
         return data
 
-def stack_data(data, subjects_variable, single=False):
+def stack_data(data, subjects_variable='', single=False):
     '''
     Stacks the data going from format [participant * epochs * samples * electrodes] to [samples * electrodes]
     with sample indexes starts and ends to delimitate the epochs.
@@ -420,7 +420,7 @@ def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
     subject : str
         name of the subject to remove
     '''    
-    from pyhsmm_mvpa.models import hsmm
+    from hsmm_mvpy.models import hsmm
     #Looping over possible number of bumps
     subjects_idx = data.participant.values
     likelihoods_loo = []

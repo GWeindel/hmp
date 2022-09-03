@@ -109,6 +109,8 @@ class hsmm:
 
         '''
         if verbose:
+            print(f'Estimating all solutions for {n_bumps} bumps model with {max_starting_points-1} random starting points')
+
             print(f"Estimating parameters for {n_bumps} bumps model")
         if mp==True: #PCG: Dirty temporarilly needed for multiprocessing in the iterative backroll estimation...
             magnitudes = magnitudes.T
