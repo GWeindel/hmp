@@ -149,12 +149,12 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, verbose=True,
                 (data_epoch[i,:,epochs.time_as_index(0)[0]:\
                 epochs.time_as_index(0)[0]+int(rts[i])+offset_after_resp_samples])
                 j += 1
-        x = 0
-        while np.isnan(cropped_data_epoch[-1]).all():#Weird bug I guess it is perhps due to too long epoch?
-            cropped_data_epoch = cropped_data_epoch[:-1]
-            x += 1
-        if x > 0:
-            print(f'RTs > 0 longer than expected ({x})')
+        #x = 0
+        #while np.isnan(cropped_data_epoch[-1]).all():#Weird bug I guess it is perhps due to too long epoch?
+        #    cropped_data_epoch = cropped_data_epoch[:-1]
+        #    x += 1
+        #if x > 0:
+        #    print(f'RTs > 0 longer than expected ({x})')
         print(f'{len(cropped_data_epoch)} trials were retained for participant {participant}')
         print(f'End sampling frequency is {sfreq}')
         epoch_data.append(hsmm_data_format(cropped_data_epoch, cropped_trigger, epochs.info['sfreq'], electrodes = epochs.ch_names))
