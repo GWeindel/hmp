@@ -34,8 +34,9 @@ To get started with the code:
 - Check the demo below 
 - Inspect the tutorials in the tutorials repository
     - Load EEG data (tutorial 1)
-    - Test for the number of bumps that best explains the data (tutorial 2)
-    - Testing differences across conditions (tutorial 3)
+    - Estimate a specific number of bumps (tutorial 2)
+    - Test for the number of bumps that best explains the data (tutorial 3)
+    - Testing differences across conditions (tutorial 4)
 
 To get started or further learn about the method be sure to check the paper by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)) as well as the book chapter by Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HsMM_MVPA_BorstAnderson_preprint.pdf)). The following list also contains a non-exhaustive list of papers published with HsMM-MVPA:
 - Berberyan, H. S., van Maanen, L., van Rijn, H., & Borst, J. (2021). EEG-based identification of evidence accumulation stages in decision-making. Journal of Cognitive Neuroscience, 33(3), 510-527. [link](https://doi.org/10.1162/jocn_a_01663)
