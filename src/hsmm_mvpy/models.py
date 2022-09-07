@@ -108,6 +108,7 @@ class hsmm:
             threshold for the HsMM algorithm, 0 skips HsMM
 
         '''
+        initial = parameters
         if verbose:
             print(f'Estimating parameters for {n_bumps} bumps model with {starting_points-1} random starting points')
         if mp==True: #PCG: Dirty temporarilly needed for multiprocessing in the iterative backroll estimation...
@@ -155,13 +156,16 @@ class hsmm:
                 magnitudes = np.zeros((self.n_dims,n_bumps))
             lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters, threshold)
         else:
+            initial = parameters
             lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters, threshold)
         #Comparing to uninitialized gamma parameters
-        #parameters = np.tile([self.shape, 50], (n_bumps+1,1))
-        #likelihood, magnitudes_, parameters_, eventprobs_ = \
-        #        self.fit(n_bumps, magnitudes, parameters, threshold)
-        #if likelihood > lkh:
-        #    lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
+        if starting_points == 1:
+            parameters = np.tile([self.shape, 50], (n_bumps+1,1))
+            likelihood, magnitudes_, parameters_, eventprobs_ = \
+                    self.fit(n_bumps, magnitudes, parameters, threshold)
+            if likelihood > lkh:
+                print('Likelihood of uninitialized parameters has been preferred over initialized model. Consider adding starting points?')
+                lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
 
         
         if len(pars) != self.max_bumps+1:#align all dimensions
@@ -391,6 +395,7 @@ class hsmm:
             bump_loo_results = [max_fit]
         i = 0
         for n_bumps in np.arange(self.max_bumps-1,0,-1):
+            print(f'Estimating all solutions for {n_bumps} number of bumps')
             temp_best = bump_loo_results[i]#previous bump solution
             temp_best = temp_best.dropna('bump')
             temp_best = temp_best.dropna('stage')
@@ -410,7 +415,7 @@ class hsmm:
                         zip(itertools.repeat(n_bumps), bumps_temp, flats_temp,#itertools.repeat(np.tile([self.shape,50], (n_bumps+1,1))),# ##
                             #temp_best.parameters.values[possible_flats,:],
                             #itertools.repeat(self.get_init_parameters(n_bumps)),
-                            itertools.repeat(1),itertools.repeat(True),itertools.repeat(True)))
+                            itertools.repeat(1),itertools.repeat(True),itertools.repeat(False)))
             else:
                 raise ValueError('For loop not yet written use cpus >1')
             models = xr.concat(bump_loo_likelihood_temp, dim="iteration")
@@ -481,3 +486,16 @@ class hsmm:
             i += 1
         return onsets
     
+    def compute_topo(self, data, eventprobs, mean=True):
+        topologies = np.empty((len(data.participant), len(eventprobs.trial), len(eventprobs.bump), len(data.electrodes)))
+        data = data.reset_index('epochs')
+        for participant in np.arange(len(data.participant.values)):
+            for trial in eventprobs.trial:
+                for bump in eventprobs.bump:
+                    trial_samples = np.arange(self.ends[trial] - self.starts[trial])
+                    topologies[participant, trial, bump, :] = data.sel(participant = data.participant.values[participant], epochs=trial, samples=trial_samples).data @ \
+                        eventprobs.sel(trial=trial, bump=bump, samples=trial_samples)
+        if mean:
+            return np.mean(topologies, axis=(0,1))
+        else:
+            return topologies
