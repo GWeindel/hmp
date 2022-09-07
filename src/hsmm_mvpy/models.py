@@ -11,7 +11,7 @@ import math
 
 class hsmm:
     
-    def __init__(self, data, starts, ends, sf, cpus=1, bump_width = 50, shape=2, estimate_magnitudes=True, estimate_parameters=True,
+    def __init__(self, data, sf, cpus=1, bump_width = 50, shape=2, estimate_magnitudes=True, estimate_parameters=True,
                 parameters_to_fix = [], magnitudes_to_fix = []):
         '''
         HSMM calculates the probability of data summing over all ways of 
@@ -30,8 +30,8 @@ class hsmm:
         width : int
             width of bumps in milliseconds, originally 5 samples
         '''
-        self.starts = starts
-        self.ends = ends    
+        self.starts = data.starts.data
+        self.ends = data.ends.data    
         self.sf = sf
         self.tseps = 1000/sf
         self.n_trials = len(self.starts)  #number of trials
@@ -39,6 +39,8 @@ class hsmm:
         self.cpus = cpus
         self.bump_width_samples = int(self.bump_width * (self.sf/1000))
         self.offset = self.bump_width_samples//2#offset on data linked to the choosen width how soon the first peak can be or how late the last,
+        self.coords = data.dropna('trial', how='all').trial.coords
+        data = data.data.T[:,:,0]
         self.n_samples, self.n_dims = np.shape(data)
         self.bumps = self.calc_bumps(data)#adds bump morphology
         self.durations = self.ends - self.starts+1#length of each trial
@@ -108,7 +110,6 @@ class hsmm:
             threshold for the HsMM algorithm, 0 skips HsMM
 
         '''
-        initial = parameters
         if verbose:
             print(f'Estimating parameters for {n_bumps} bumps model with {starting_points-1} random starting points')
         if mp==True: #PCG: Dirty temporarilly needed for multiprocessing in the iterative backroll estimation...
@@ -154,15 +155,19 @@ class hsmm:
                 parameters = np.tile([self.shape, math.ceil(np.mean(self.durations)/(n_bumps+1)/self.shape)], (n_bumps+1,1))
             if np.any(magnitudes)== None:
                 magnitudes = np.zeros((self.n_dims,n_bumps))
+            initial_p = parameters
+            initial_m = magnitudes
             lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters, threshold)
         else:
-            initial = parameters
+            initial_p = parameters
+            initial_m = magnitudes
             lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters, threshold)
         #Comparing to uninitialized gamma parameters
         if starting_points == 1:
             parameters = np.tile([self.shape, 50], (n_bumps+1,1))
+            magnitudes = np.zeros((self.n_dims,n_bumps))
             likelihood, magnitudes_, parameters_, eventprobs_ = \
-                    self.fit(n_bumps, magnitudes, parameters, threshold)
+                    self.fit(n_bumps, initial_m, parameters, threshold)
             if likelihood > lkh:
                 print('Likelihood of uninitialized parameters has been preferred over initialized model. Consider adding starting points?')
                 lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
@@ -178,6 +183,7 @@ class hsmm:
         xrparams = xr.DataArray(pars, dims=("stage",'params'), name="parameters")
         xrmags = xr.DataArray(mags, dims=("component","bump"), name="magnitudes")
         xreventprobs = xr.DataArray(eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
+        xreventprobs = xreventprobs.assign_coords(self.coords).unstack()
         estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs))#,xreventprobs))
         if verbose:
             print(f"Parameters estimated for {n_bumps} bumps model")
