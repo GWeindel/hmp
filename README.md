@@ -7,13 +7,13 @@ hsmm_mvpy is an open-source Python package to estimate Hidden Semi-Markov Models
 # Documentation
 
 The package is available through *pip* with the command ```pip install hsmm_mvpy```. 
-A recommended way of using the package is to use a python environment (e.g. see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
+A recommended way of using the package is to use a python environment e.g. through conda (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
 
     $ conda create -n hsmm xarray mne 
     $ conda activate hsmm
     $ pip install hsmm_mvpy
 
-Then import pyhsmm-mvpa in your favorite python IDE through:
+Then import hsmm-mvpy in your favorite python IDE through:
 
 ```python
     import hsmm_mvpy as hsmm
@@ -33,11 +33,12 @@ Then move to the clone repository and run
 To get started with the code:
 - Check the demo below 
 - Inspect the tutorials in the tutorials repository
-    - Load EEG data (tutorial 1)
-    - Test for the number of bumps that best explains the data (tutorial 2)
-    - Testing differences across conditions (tutorial 3)
+    - Load EEG data [tutorial 1](https://github.com/GWeindel/hsmm_mvpy/blob/main/tutorials/1-Data_loading.ipynb)
+    - Estimate a specific number of bumps [tutorial 2](https://github.com/GWeindel/hsmm_mvpy/blob/main/tutorials/2-Estimating_a_given_number_of_bumps.ipynb)
+    - Test for the number of bumps that best explains the data [tutorial 3](https://github.com/GWeindel/hsmm_mvpy/blob/main/tutorials/3-Testing_the_number_of_bumps.ipynb)
+    - Testing differences across conditions [tutorial 4](https://github.com/GWeindel/hsmm_mvpy/blob/main/tutorials/4-Inspecting_condition_differences.ipynb)
 
-To get started or further learn about the method be sure to check the paper by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)) as well as the book chapter by Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HsMM_MVPA_BorstAnderson_preprint.pdf)). The following list also contains a non-exhaustive list of papers published with HsMM-MVPA:
+To get started or further learn about the method be sure to check the paper by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)) as well as the book chapter by Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HsMM_MVPA_BorstAnderson_preprint.pdf)). The following also contains a non-exhaustive list of papers published with HsMM-MVPA:
 - Berberyan, H. S., van Maanen, L., van Rijn, H., & Borst, J. (2021). EEG-based identification of evidence accumulation stages in decision-making. Journal of Cognitive Neuroscience, 33(3), 510-527. [link](https://doi.org/10.1162/jocn_a_01663)
 - Van Maanen, L., Portoles, O., & Borst, J. P. (2021). The discovery and interpretation of evidence accumulation stages. Computational brain & behavior, 4(4), 395-415. [link](https://link.springer.com/article/10.1007/s42113-021-00105-2)
 - Portoles, O., Blesa, M., van Vugt, M., Cao, M., & Borst, J. P. (2022). Thalamic bursts modulate cortical synchrony locally to switch between states of global functional connectivity in a cognitive task. PLoS computational biology, 18(3), e1009407. [link](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009407)
@@ -66,7 +67,7 @@ from hsmm_mvpy import simulations
 
 ### Simulating data
 
-In the following code block we simulate 30 trials from four known sources. All these four sources are defined by a localization, an activation amplitude and a distribution (here gamma wuth shape and scale parameters) for the onsets of the bumps on each trial. The simulation functions are based on the [MNE tutorial ](https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html).
+In the following code block we simulate 30 trials from four known sources. All these four sources are defined by a localization, an activation amplitude and a distribution (here gamma with shape and scale parameters) for the onsets of the bumps on each trial. The simulation functions are based on this [MNE tutorial ](https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html).
 
 
 
@@ -103,7 +104,7 @@ raw, generating_events = simulations.simulate(sources, n_events, max_trial_lengt
 ### Creating the event structure and plotting the raw data
 
 
-To recover the data we need to create the event structure based on the triggers sent during simulation. This is the same as analyzing real EEG data and recovering events in the stimulus channel. In our case 0 signal the onset of the stimulus and 5 the onset of the response. Hence a trial is defined as the times occuring between the triggers 0 and 5.
+To recover the data we need to create the event structure based on the triggers sent during simulation. This is the same as analyzing real EEG data and recovering events in the stimulus channel. In our case 0 signals the onset of the stimulus and 5 the onset of the response. Hence a trial is defined as the times occuring between the triggers 0 and 5.
 
 
 ```python
@@ -147,9 +148,7 @@ while x < len(random_source_times):
     x += 1
 ```
 
-## Demo of the HsMM Code for a single participant in a single condition based on the simulated data
-
-First we read the EEG data as we would for a single participant:
+Then we read the EEG data as we would for a single participant:
 
 
 ```python
@@ -197,7 +196,7 @@ eeg_dat.sel(epochs=0,electrodes=['EEG 001','EEG 002','EEG 003']).plot.scatter(x=
 
 Next we transform the data as in Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)) including standardization of individual variances (not in this case as we have only one simulated participant), z-scoring and spatial principal components analysis (PCA). 
 
-Note that if the number of components to retain is not specified, the scree plot of the PCA is displayed and a prompt ask how many PCs should be retained 
+Note that if the number of components to retain is not specified, the scree plot of the PCA is displayed and a prompt ask how many PCs should be retained. Hence in your applications be sure to leave the n_comp to the default value.
 
 
 ```python
@@ -207,9 +206,9 @@ hsmm_dat, PCs, explained_var, means = hsmm.utils.transform_data(eeg_dat.data,'',
 hsmm_dat = hsmm.utils.stack_data(hsmm_dat,'',single=True)
 ```
 
-# Estimating an HsMM model
+## Estimating an HsMM model
 
-We know that we generate from four sources so let's just try to recover those four sources by directly estimating a 4 bump model. 
+We know that we generate from four sources so let's just try to recover those four sources by directly estimating a 4 bump model (but see tutorial 3 on how to infer the optimal number of bumps).
 
 
 ```python
@@ -284,7 +283,7 @@ hsmm.visu.plot_distribution(selected.eventprobs.mean(dim=['trial']), xlims=(0,10
     
 
 
-As HsMM-MVPA selected those bumps onset per trial we can also look at the predicted bump onsets for a single trial
+As HsMM-MVPA estimates bumps onset per trial we can also look at the predicted bump onsets for a single trial
 
 
 ```python
@@ -366,4 +365,4 @@ for bump in init.bump_times(selected.eventprobs)[:,:number_of_sources-1].T:
     
 
 
-For examples on how to use the package when the number of bumps are unkown, or to compare stage durations across conditions see the example notebooks
+For examples on how to use the package when the number of bumps are unkown, or to compare stage durations across conditions see the tutorial notebooks.
