@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hsmm_mvpy"
-version = "0.0.4-7"
+version = "0.0.5"
 authors = [
   { name="Gabriel Weindel", email="gabriel.weindel@gmail.com" },
   { name="Leendert van Maanen", email="e@mail.com" },
@@ -21,7 +21,7 @@ classifiers = [
 ]
 dependencies=["mne >=1.0.0",
 "numpy >=1.20",
-"xarray >=2022.6.0",
+"xarray >=2022.3.0, <2022.6.0",
 "sklearn",
 "seaborn",
 "scipy",

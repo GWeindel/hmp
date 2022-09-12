@@ -30,20 +30,20 @@ class hsmm:
         width : int
             width of bumps in milliseconds, originally 5 samples
         '''
-        self.starts = data.starts.data
-        self.ends = data.ends.data    
+        self.starts = data.durations.shift(trial=1, fill_value=0).data
+        self.ends = data.durations.data-1 
+        self.durations =  self.ends-self.starts+1
         self.sf = sf
-        self.tseps = 1000/sf
-        self.n_trials = len(self.starts)  #number of trials
+        self.tseps = 1000/self.sf
+        self.n_trials = len(self.durations)  
         self.bump_width = bump_width
         self.cpus = cpus
         self.bump_width_samples = int(self.bump_width * (self.sf/1000))
         self.offset = self.bump_width_samples//2#offset on data linked to the choosen width how soon the first peak can be or how late the last,
-        self.coords = data.dropna('trial', how='all').trial.coords
-        data = data.data.T[:,:,0]
+        self.coords = data.durations.coords
+        data = data.data.T
         self.n_samples, self.n_dims = np.shape(data)
         self.bumps = self.calc_bumps(data)#adds bump morphology
-        self.durations = self.ends - self.starts+1#length of each trial
         self.max_d = np.max(self.durations)
         self.max_bumps = self.compute_max_bumps()
         self.shape = shape
@@ -51,7 +51,6 @@ class hsmm:
         self.estimate_parameters = estimate_parameters
         self.parameters_to_fix = parameters_to_fix
         self.magnitudes_to_fix = magnitudes_to_fix
-        
     
     def calc_bumps(self,data):
         '''
@@ -110,6 +109,7 @@ class hsmm:
             threshold for the HsMM algorithm, 0 skips HsMM
 
         '''
+        import pandas as pd 
         if verbose:
             print(f'Estimating parameters for {n_bumps} bumps model with {starting_points-1} random starting points')
         if mp==True: #PCG: Dirty temporarilly needed for multiprocessing in the iterative backroll estimation...
@@ -169,7 +169,8 @@ class hsmm:
             likelihood, magnitudes_, parameters_, eventprobs_ = \
                     self.fit(n_bumps, initial_m, parameters, threshold)
             if likelihood > lkh:
-                print('Likelihood of uninitialized parameters has been preferred over initialized model. Consider adding starting points?')
+                if verbose:
+                    print('Likelihood of uninitialized parameters has been preferred over initialized model. Consider adding starting points?')
                 lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
 
         
@@ -182,9 +183,21 @@ class hsmm:
         xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
         xrparams = xr.DataArray(pars, dims=("stage",'params'), name="parameters")
         xrmags = xr.DataArray(mags, dims=("component","bump"), name="magnitudes")
-        xreventprobs = xr.DataArray(eventprobs, dims=("samples",'trial','bump'), name="eventprobs")
-        xreventprobs = xreventprobs.assign_coords(self.coords).unstack()
-        estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs))#,xreventprobs))
+        #xreventprobs = xr.DataArray(eventprobs, dims=("samples",'trialxPart','bump'), name="eventprobs")
+        #xreventprobs = xreventprobs.trialxPart.set_index(self.coords.values)
+        part, trial = self.coords['subjects'].values, self.coords['trials'].values
+
+        n_samples, n_participant_x_trials, bumps_n = np.shape(eventprobs)
+        xreventprobs = xr.Dataset({'eventprobs': (('bump', 'trial_x_participant','samples'), 
+                                         eventprobs.T)},
+                         {'bump':np.arange(bumps_n),
+                          'samples':np.arange(n_samples),
+                        'trial_x_participant':  pd.MultiIndex.from_arrays([part,trial],
+                                names=('participant','trial'))})
+        #xreventprobs = xreventprobs.unstack('trial_x_participant')
+        xreventprobs = xreventprobs.transpose('trial_x_participant','samples','bump')
+        estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs))
+
         if verbose:
             print(f"Parameters estimated for {n_bumps} bumps model")
         return estimated
@@ -418,9 +431,7 @@ class hsmm:
             if self.cpus > 1:
                 with mp.Pool(processes=self.cpus) as pool:
                     bump_loo_likelihood_temp = pool.starmap(self.fit_single, 
-                        zip(itertools.repeat(n_bumps), bumps_temp, flats_temp,#itertools.repeat(np.tile([self.shape,50], (n_bumps+1,1))),# ##
-                            #temp_best.parameters.values[possible_flats,:],
-                            #itertools.repeat(self.get_init_parameters(n_bumps)),
+                        zip(itertools.repeat(n_bumps), bumps_temp, flats_temp,
                             itertools.repeat(1),itertools.repeat(True),itertools.repeat(False)))
             else:
                 raise ValueError('For loop not yet written use cpus >1')
@@ -464,7 +475,7 @@ class hsmm:
         '''
         return int(np.min(self.durations)/self.bump_width_samples)
 
-    def bump_times(self, eventprobs):
+    def bump_times(self, eventprobs, mean=True):
         '''
         Compute bump onset times based on bump probabilities
 
@@ -486,22 +497,29 @@ class hsmm:
         eventprobs = eventprobs.dropna('bump')
         onsets = np.empty((len(eventprobs.trial),len(eventprobs.bump)+1))
         i = 0
-        for trial in eventprobs.trial.values:
-            onsets[i, :len(eventprobs.bump)] = np.arange(self.max_d) @ eventprobs.sel(trial=trial).data - self.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
+        for trial in eventprobs.trial_x_participant.values:
+            onsets[i, :len(eventprobs.bump)] = np.arange(self.max_d) @ eventprobs.sel(trial_x_participant=trial).data - self.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
             onsets[i, -1] = self.ends[i] - self.starts[i]
             i += 1
-        return onsets
+        if mean:
+            return np.mean(onsets, axis=0)
+        else:
+            return onsets
     
     def compute_topo(self, data, eventprobs, mean=True):
-        topologies = np.empty((len(data.participant), len(eventprobs.trial), len(eventprobs.bump), len(data.electrodes)))
-        data = data.reset_index('epochs')
-        for participant in np.arange(len(data.participant.values)):
-            for trial in eventprobs.trial:
-                for bump in eventprobs.bump:
-                    trial_samples = np.arange(self.ends[trial] - self.starts[trial])
-                    topologies[participant, trial, bump, :] = data.sel(participant = data.participant.values[participant], epochs=trial, samples=trial_samples).data @ \
-                        eventprobs.sel(trial=trial, bump=bump, samples=trial_samples)
+        if 'trial_x_participant' not in data:
+            data = data.stack(trial_x_participant=['participant','epochs'])
+        eventprobs = eventprobs.dropna('bump', how="all")
+        topologies = np.empty((len(eventprobs.trial_x_participant.data), 
+                               len(eventprobs.bump.data),
+                               len(data.electrodes.data)))
+        for i, trial_x_participant in enumerate(eventprobs.trial_x_participant):
+            for z, bump in enumerate(eventprobs.bump):
+                trial_samples = np.arange(self.ends[i] - self.starts[i])
+                topologies[i,z, :] = data.sel(trial_x_participant = trial_x_participant,
+                                              samples=trial_samples).data @ \
+                    eventprobs.sel(trial_x_participant = trial_x_participant,  bump=bump, samples=trial_samples)
         if mean:
-            return np.mean(topologies, axis=(0,1))
+            return np.mean(topologies, axis=0)
         else:
             return topologies

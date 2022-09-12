@@ -11,7 +11,7 @@ import warnings
 
 warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later  
 
-def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, verbose=True,
+def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provided=None, verbose=True,
                  tmin=-.2, tmax=5, offset_after_resp = .1, high_pass=.5, \
                  low_pass = 30, upper_limit_RT=5, lower_limit_RT=0.001, reject_threshold=None):
     ''' 
@@ -46,7 +46,9 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, verbose=True,
         Dictionary containing the correspondance of named response [keys] and event code [values]
     sfreq : float
         Desired sampling frequency
-    events : float
+    subj_idx : list
+        List of subject names
+    events_provided : float
         np.array with 3 columns -> [samples of the event, initial value of the channel, event code]. To use if the
         automated event detection method of MNE is not appropriate 
     verbose : bool
@@ -73,7 +75,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, verbose=True,
     -------
     epoch_data : xarray
         Returns an xarray Dataset with all the data, events, electrodes, participant. 
-        All eventual participant/electrodes naming are kept. 
+        All eventual participant/electrodes naming and epochs index are kept. 
         The choosen sampling frequnecy is stored as attribute.
     '''
     import mne
@@ -81,6 +83,9 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, verbose=True,
     epoch_data = [] 
     if isinstance(pfiles,str):#only one participant
         pfiles = [pfiles]
+    if not subj_idx:
+        subj_idx = ["S"+str(x) for x in np.arange(len(pfiles))]
+    y = 0
     for participant in pfiles:
         print(f'Processing participant {participant}')
         if '.fif' in participant:
@@ -92,13 +97,16 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, verbose=True,
         data.load_data()
         data.filter(high_pass, low_pass, fir_design='firwin', verbose=verbose)#Filtering out frequency outside range .5 and 30Hz, as study by Anderson et al.
         # Loading events (in our case one event = one trial)
-        if events is None:
+        if events_provided is None:
             events = mne.find_events(data, verbose=verbose, min_duration = 1 / data.info['sfreq'])
             if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicates offset in the trggers
                 events[:,2] = events[:,2]-events[:,1]#correction on event value
             events_values = np.concatenate([np.array([x for x in event_id.values()]), np.array([x for x in resp_id.values()])])
             events = np.array([list(x) for x in events if x[2] in events_values])#only keeps events with stim or response
-
+        else:
+            if len(np.shape(events_provided)) == 2:
+                events_provided = events_provided[np.newaxis]
+            events = events_provided[y]
         if sfreq < data.info['sfreq']:#Downsampling
             print(f'Downsampling to {sfreq} Hz')
             data, events = data.resample(sfreq, events=events)#100 Hz is the standard used for previous applications of HsMM
@@ -108,26 +116,25 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, verbose=True,
         picks = mne.pick_types(data.info, eeg=True, stim=False, eog=False, misc=False,
                            exclude='bads') 
         offset_after_resp_samples = int(offset_after_resp*tstep)
-        
         metadata, meta_events, event_id = mne.epochs.make_metadata(
             events=events, event_id= event_id,
             tmin=tmin, tmax=tmax, sfreq=data.info['sfreq'])
         epochs = mne.Epochs(data, meta_events, event_id, tmin, tmax, proj=False,
                         picks=picks, baseline=(None, 0), preload=True,
-                        verbose=verbose,detrend=1, on_missing = 'warn',
+                        verbose=verbose,detrend=1, on_missing = 'warn', event_repeated='drop',
                         metadata=metadata, reject_by_annotation=True, reject=reject_threshold)
         data_epoch = epochs.get_data()
 
         valid_epochs_idx = [x for x in np.arange(len(epochs.drop_log)) if epochs.drop_log[x] == ()]
         correct_stim_timing  = np.array([list(x) for x in events if x[2] in event_id.values()])[valid_epochs_idx,0]
         stim_events = np.array([x for x in np.arange(len(events)) if events[x,0] in correct_stim_timing])
-        
         rts=[]#reaction times
         trigger = []
         without_rt = 0
         for i in stim_events:
             if events[i+1,2] in resp_id.values():
                 rts.append(events[i+1,0] - events[i,0] )
+
             else:
                 rts.append(0)
                 without_rt += 1
@@ -136,10 +143,12 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, verbose=True,
         print(f'Applying reaction time trim to keep RTs between {lower_limit_RT} and {upper_limit_RT} seconds')
         rts[rts > sfreq*upper_limit_RT] = 0 #removes RT above x sec
         rts[rts < sfreq*lower_limit_RT] = 0 #removes RT below x sec, important as determines max bumps
+        print(f'{len(rts)} RTs kept of {len(stim_events)} clean epochs')
         triggers = epochs.metadata["event_name"].reset_index(drop=True)
         cropped_data_epoch = np.empty([len(rts[rts> 0]), len(epochs.ch_names), max(rts)+offset_after_resp_samples])
         cropped_data_epoch[:] = np.nan
         cropped_trigger = []
+        epochs_idx = []
         j = 0
         for i in np.arange(len(data_epoch)):
             if rts[i] > 0:
@@ -148,18 +157,21 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, events=None, verbose=True,
                 cropped_data_epoch[j,:,:rts[i]+offset_after_resp_samples] = \
                 (data_epoch[i,:,epochs.time_as_index(0)[0]:\
                 epochs.time_as_index(0)[0]+int(rts[i])+offset_after_resp_samples])
+                epochs_idx.append(valid_epochs_idx[j])
                 j += 1
-        #x = 0
-        #while np.isnan(cropped_data_epoch[-1]).all():#Weird bug I guess it is perhps due to too long epoch?
-        #    cropped_data_epoch = cropped_data_epoch[:-1]
-        #    x += 1
-        #if x > 0:
-        #    print(f'RTs > 0 longer than expected ({x})')
+        x = 0
+        while np.isnan(cropped_data_epoch[-1]).all():#Weird bug I guess it is perhps due to too long epoch?
+            cropped_data_epoch = cropped_data_epoch[:-1]
+            x += 1
+        if x > 0:
+            print(f'RTs > 0 longer than expected ({x})')
         print(f'{len(cropped_data_epoch)} trials were retained for participant {participant}')
         print(f'End sampling frequency is {sfreq} Hz')
-        epoch_data.append(hsmm_data_format(cropped_data_epoch, cropped_trigger, epochs.info['sfreq'], electrodes = epochs.ch_names))
-
-    epoch_data = xr.concat(epoch_data, dim="participant")
+        epoch_data.append(hsmm_data_format(cropped_data_epoch, cropped_trigger, epochs.info['sfreq'], epochs=[int(x) for x in epochs_idx], electrodes = epochs.ch_names))
+        y += 1
+        
+    epoch_data = xr.concat(epoch_data, dim = xr.DataArray(subj_idx, dims='participant'),
+                          fill_value={'event':'', 'data':np.nan})
     return epoch_data
 
 def hsmm_data_format(data, events, sfreq, participants=[], epochs=None, electrodes=None):
@@ -243,7 +255,7 @@ def zscore(data):
     '''
     return (data - data.mean()) / data.std()
 
-def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, single=False, return_weights=False):
+def transform_data(data, subjects_variable="participant", apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, single=False, return_weights=False):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hsmms. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -344,8 +356,9 @@ def transform_data(data, subjects_variable, apply_standard=True,  apply_zscore=T
             return data
     else:
         return data
+    
 
-def stack_data(data, subjects_variable='', single=False):
+def stack_data(data, subjects_variable='participant', electrode_variable='component', single=False):
     '''
     Stacks the data going from format [participant * epochs * samples * electrodes] to [samples * electrodes]
     with sample indexes starts and ends to delimitate the epochs.
@@ -366,29 +379,20 @@ def stack_data(data, subjects_variable='', single=False):
     data : xarray.Dataset
         xarray dataset [samples * electrodes]
     '''    
+    if isinstance(data, (xr.DataArray,xr.Dataset)) and 'component' not in data.dims:
+        data = data.rename_dims({'electrodes':'component'})
     
     if single:
-        durations = np.unique(data.isel(component=0).\
-           groupby('epochs').count(dim="samples").data.cumsum())
-        while durations[0] == 0:#Dirty due to repeition should be fixed
-            durations = durations[1:]
-        starts = np.insert(durations[:-1],0,0)
-        starts = xr.DataArray(starts, coords={'trial':np.arange(len(durations))})
-        ends = durations-1
-        ends = xr.DataArray(ends, coords={'trial':np.arange(len(durations))})
+        durations = data.rename({'epochs':'trial'}).isel(component=0).dropna(dim="trial", how='all').count(dim="samples").cumsum()
+        #durations.coords =  data.isel(component=0).coords
         data = data.stack(all_samples=['epochs',"samples"]).dropna(dim="all_samples")
     else:
-        durations = np.unique(data.isel(component=0).stack(trial=\
-           [subjects_variable,'epochs']).reset_index([subjects_variable,'epochs']).\
-           groupby('trial').count(dim="samples").data.cumsum())
-        while durations[0] == 0:
-            durations = durations[1:]
-        starts = np.insert(durations[:-1],0,0)
-        starts = xr.DataArray(starts, coords={'trial':np.arange(len(durations))})
-        ends = durations-1
-        ends = xr.DataArray(ends, coords={'trial':np.arange(len(durations))})
+        durations = data.isel(component=0).rename({'epochs':'trials', subjects_variable:'subjects'}).stack(trial=\
+           ['subjects','trials']).dropna(dim="trial", how='all').reset_index(['subjects','trials']).\
+           groupby('trial').count(dim="samples").cumsum().unstack()
         data = data.stack(all_samples=[subjects_variable,'epochs',"samples"]).dropna(dim="all_samples")
-    return xr.Dataset({'data':data, 'starts':starts, 'ends':ends})
+    return xr.Dataset({'data':data, 'durations':durations})
+
 
 
 def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
@@ -493,6 +497,8 @@ def save_fit(data, filename):
     '''
     Save fit
     '''
+    if 'trial_x_participant' in data:
+        data = data.unstack()#need to unstack before saving
     if '.nc' not in filename:
         filename = filename+'.nc'
     data.to_netcdf(filename)
@@ -504,4 +510,16 @@ def load_fit(filename):
     '''
     if '.nc' not in filename:
         filename = filename+'.nc'
-    return xr.open_dataset(filename)
+    data = xr.open_dataset(filename)
+    if 'trial' in data:
+        data = data.stack(trial_x_participant=["participant","trial"])
+        return data
+
+def save_eventprobs(eventprobs, filename):
+    '''
+    Saves eventprobs to filename csv file
+    '''
+    eventprobs = eventprobs.unstack()
+    eventprobs = eventprobs.transpose('participant','trial','samples','bump')
+    eventprobs.to_dataframe().to_csv(filename)
+    print(f"Saved at {filename}")

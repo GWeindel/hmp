@@ -19,7 +19,8 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
     bump_size = bump_size*time_step*magnify
     yoffset =.25*magnify
     axes = []
-
+    if len(np.shape(electrodes)) == 2:
+           electrodes = electrodes[np.newaxis]
     n_iter = np.shape(electrodes)[0]
     if n_iter == 1:
         times = [times]
