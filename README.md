@@ -86,11 +86,11 @@ path = 'simulated/'#Wehre simulated data will go, vreate that folder if you don'
 
 n_events = 30 #Number of trials to simulate
 
-sources = [['lateraloccipital-lh',1e-8, [np.random.gamma,2,30]],#One source = localization, acitvation amplitude and onset latencies
-           ['postcentral-lh', 1e-8, [np.random.gamma, 2, 50]],
-           ['posteriorcingulate-rh', 1e-8, [np.random.gamma, 2,80]],
-           ['postcentral-rh', 1e-8, [np.random.gamma, 2,110]],
-           ['postcentral-lh', 1e-10, [np.random.gamma, 2,65]]] #Equivalent to a response trigger as amplitude make it hardly visible
+sources = [['lateraloccipital-lh',5e-9, [np.random.gamma,2,30]],#One source = localization, acitvation amplitude and onset latencies
+           ['postcentral-lh', 5e-9, [np.random.gamma, 2, 50]],
+           ['posteriorcingulate-rh', 5e-9, [np.random.gamma, 2,80]],
+           ['postcentral-rh', 5e-9, [np.random.gamma, 2,110]],
+           ['postcentral-lh', 1e-20, [np.random.gamma, 2,65]]] #Equivalent to a response trigger as amplitude make it hardly visible
 
 max_trial_length = 3000 #length of a trial (ISI)
 
@@ -187,14 +187,14 @@ eeg_dat.sel(epochs=0,electrodes=['EEG 001','EEG 002','EEG 003']).plot.scatter(x=
 ```
 
     <xarray.Dataset>
-    Dimensions:      (participant: 1, epochs: 30, electrodes: 59, samples: 1397)
+    Dimensions:      (participant: 1, epochs: 30, electrodes: 59, samples: 1365)
     Coordinates:
       * epochs       (epochs) int64 0 1 2 3 4 5 6 7 8 ... 21 22 23 24 25 26 27 28 29
       * electrodes   (electrodes) <U7 'EEG 001' 'EEG 002' ... 'EEG 059' 'EEG 060'
-      * samples      (samples) int64 0 1 2 3 4 5 6 ... 1391 1392 1393 1394 1395 1396
+      * samples      (samples) int64 0 1 2 3 4 5 6 ... 1359 1360 1361 1362 1363 1364
       * participant  (participant) <U2 'S0'
     Data variables:
-        data         (participant, epochs, electrodes, samples) float64 2.34e-06 ...
+        data         (participant, epochs, electrodes, samples) float64 -1.045e-0...
         event        (participant, epochs) <U8 'stimulus' 'stimulus' ... 'stimulus'
     Attributes:
         sfreq:    600.614990234375
@@ -365,6 +365,8 @@ gen_bump_location = np.cumsum(random_source_times[:,:-1], axis=1)
 for bump in init.bump_times(selected.eventprobs, mean=False)[:,:number_of_sources-1].T:
     sns.regplot(x=gen_bump_location[:,i].T, y=bump, ax=ax[i], color=colors[i])
     ax[i].plot([np.min(bump), np.max(bump)], [np.min(bump), np.max(bump)],'--')
+    ax[i].set_ylabel(f'Estimated by-trial stage duration for stage {i+1}')
+    ax[i].set_xlabel(f'Simulated by-trial stage duration for stage {i+1}')
     i+= 1
 ```
 
@@ -374,4 +376,4 @@ for bump in init.bump_times(selected.eventprobs, mean=False)[:,:number_of_source
     
 
 
-For examples on how to use the package when the number of bumps are unkown, or to compare stage durations across conditions see the example notebooks
+For examples on how to use the package when the number of bumps are unkown, or to compare stage durations across conditions see the tutorial notebooks
