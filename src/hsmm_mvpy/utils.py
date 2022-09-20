@@ -381,17 +381,20 @@ def stack_data(data, subjects_variable='participant', electrode_variable='compon
     '''    
     if isinstance(data, (xr.DataArray,xr.Dataset)) and 'component' not in data.dims:
         data = data.rename_dims({'electrodes':'component'})
-    
-    if single:
-        durations = data.rename({'epochs':'trial'}).isel(component=0).dropna(dim="trial", how='all').count(dim="samples").cumsum()
-        #durations.coords =  data.isel(component=0).coords
-        data = data.stack(all_samples=['epochs',"samples"]).dropna(dim="all_samples")
-    else:
-        durations = data.isel(component=0).rename({'epochs':'trials', subjects_variable:'subjects'}).stack(trial=\
-           ['subjects','trials']).dropna(dim="trial", how='all').reset_index(['subjects','trials']).\
-           groupby('trial').count(dim="samples").cumsum().unstack()
-        data = data.stack(all_samples=[subjects_variable,'epochs',"samples"]).dropna(dim="all_samples")
+        print(data.participant)
+    if "participant" not in data.dims:
+        data = data.expand_dims("participant")
+    durations = data.isel(component=0).rename({'epochs':'trials', subjects_variable:'subjects'})\
+    .stack(trial_x_participant=['subjects','trials']).dropna(dim="trial_x_participant", how="all").\
+    groupby('trial_x_participant').count(dim="samples").cumsum()
+
+    #durations = data.isel(component=0).rename({'epochs':'trials', subjects_variable:'subjects'}).stack(trial=\
+    #   ['subjects','trials']).dropna(dim="trial", how='all').\
+    #   groupby('trial').count(dim="samples").cumsum().unstack()
+
+    data = data.stack(all_samples=[subjects_variable,'epochs',"samples"]).dropna(dim="all_samples")
     return xr.Dataset({'data':data, 'durations':durations})
+    #return data, durations
 
 
 
@@ -428,20 +431,16 @@ def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
     #Looping over possible number of bumps
     subjects_idx = data.participant.values
     likelihoods_loo = []
-    
     #Extracting data without left out subject
-    stacked_loo = stack_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False),\
-                           'participant')
+    stacked_loo = stack_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False))
     #Fitting the HsMM using previous estimated parameters as initial parameters
-    model_loo = hsmm(stacked_loo.data.data.T, stacked_loo.starts.data, stacked_loo.ends.data, sf=sfreq, bump_width=bump_width)
+    model_loo = hsmm(stacked_loo, sf=sfreq, bump_width=bump_width)
     fit = model_loo.fit_single(n_bumps, initial_fit.magnitudes, initial_fit.parameters, 1, False, verbose=False)
 
     #Evaluating likelihood for left out subject
     #Extracting data of left out subject
-    stacked_left_out = stack_data(data.sel(participant=subject, drop=False),\
-                           'participant',single=True)
-
-    model_left_out = hsmm(stacked_left_out.data.T, stacked_left_out.starts.data, stacked_left_out.ends.data, sf=sfreq, bump_width=bump_width)
+    stacked_left_out = stack_data(data.sel(participant=subject, drop=False))
+    model_left_out = hsmm(stacked_left_out, sf=sfreq, bump_width=bump_width)
     likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bumps,True)
     return likelihood, subject
 
@@ -497,29 +496,22 @@ def save_fit(data, filename):
     '''
     Save fit
     '''
-    if 'trial_x_participant' in data:
-        data = data.unstack()#need to unstack before saving
-    if '.nc' not in filename:
-        filename = filename+'.nc'
-    data.to_netcdf(filename)
+    data.unstack().to_netcdf(filename)
     print(f"{filename} saved")
 
 def load_fit(filename):
     '''
     Load fit
     '''
-    if '.nc' not in filename:
-        filename = filename+'.nc'
     data = xr.open_dataset(filename)
-    if 'trial' in data:
-        data = data.stack(trial_x_participant=["participant","trial"])
-        return data
+    if 'trials' in data:
+        data = data.stack(trial_x_participant=["participant","trials"]).dropna(dim="trial_x_participant", how='all')
+    return data
 
 def save_eventprobs(eventprobs, filename):
     '''
     Saves eventprobs to filename csv file
     '''
     eventprobs = eventprobs.unstack()
-    eventprobs = eventprobs.transpose('participant','trial','samples','bump')
     eventprobs.to_dataframe().to_csv(filename)
     print(f"Saved at {filename}")

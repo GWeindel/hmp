@@ -30,9 +30,13 @@ class hsmm:
         width : int
             width of bumps in milliseconds, originally 5 samples
         '''
-        self.starts = data.durations.shift(trial=1, fill_value=0).data
-        self.ends = data.durations.data-1 
+        dur_dropped_na = data.durations.dropna("trial_x_participant")
+        starts = np.roll(dur_dropped_na.data, 1)
+        starts[0] = 0
+        self.starts = starts
+        self.ends = dur_dropped_na.data-1 
         self.durations =  self.ends-self.starts+1
+        self.named_durations =  data.durations.dropna("trial_x_participant") - data.durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
         self.sf = sf
         self.tseps = 1000/self.sf
         self.n_trials = len(self.durations)  
@@ -40,7 +44,7 @@ class hsmm:
         self.cpus = cpus
         self.bump_width_samples = int(self.bump_width * (self.sf/1000))
         self.offset = self.bump_width_samples//2#offset on data linked to the choosen width how soon the first peak can be or how late the last,
-        self.coords = data.durations.coords
+        self.coords = data.durations.reset_index('trial_x_participant').coords
         data = data.data.T
         self.n_samples, self.n_dims = np.shape(data)
         self.bumps = self.calc_bumps(data)#adds bump morphology
@@ -193,7 +197,7 @@ class hsmm:
                          {'bump':np.arange(bumps_n),
                           'samples':np.arange(n_samples),
                         'trial_x_participant':  pd.MultiIndex.from_arrays([part,trial],
-                                names=('participant','trial'))})
+                                names=('participant','trials'))})
         #xreventprobs = xreventprobs.unstack('trial_x_participant')
         xreventprobs = xreventprobs.transpose('trial_x_participant','samples','bump')
         estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs))
@@ -494,10 +498,11 @@ class hsmm:
             density for a gamma with given parameters
         '''    
         
-        eventprobs = eventprobs.dropna('bump')
-        onsets = np.empty((len(eventprobs.trial),len(eventprobs.bump)+1))
+        eventprobs = eventprobs.dropna('bump', how="all")
+        eventprobs = eventprobs.dropna('trial_x_participant', how="all")
+        onsets = np.empty((len(eventprobs.trial_x_participant),len(eventprobs.bump)+1))
         i = 0
-        for trial in eventprobs.trial_x_participant.values:
+        for trial in eventprobs.trial_x_participant.dropna('trial_x_participant', how="all").values:
             onsets[i, :len(eventprobs.bump)] = np.arange(self.max_d) @ eventprobs.sel(trial_x_participant=trial).data - self.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
             onsets[i, -1] = self.ends[i] - self.starts[i]
             i += 1
@@ -510,16 +515,27 @@ class hsmm:
         if 'trial_x_participant' not in data:
             data = data.stack(trial_x_participant=['participant','epochs'])
         eventprobs = eventprobs.dropna('bump', how="all")
+        eventprobs = eventprobs.dropna('trial_x_participant', how="all")
         topologies = np.empty((len(eventprobs.trial_x_participant.data), 
                                len(eventprobs.bump.data),
                                len(data.electrodes.data)))
-        for i, trial_x_participant in enumerate(eventprobs.trial_x_participant):
-            for z, bump in enumerate(eventprobs.bump):
-                trial_samples = np.arange(self.ends[i] - self.starts[i])
+        i = 0
+        for trial_x_participant in eventprobs.trial_x_participant:
+            z = 0
+            for bump in eventprobs.bump:
+                trial_samples = np.arange(self.named_durations.sel(trial_x_participant=trial_x_participant).data)
                 topologies[i,z, :] = data.sel(trial_x_participant = trial_x_participant,
                                               samples=trial_samples).data @ \
                     eventprobs.sel(trial_x_participant = trial_x_participant,  bump=bump, samples=trial_samples)
+                z += 1
+            i += 1
         if mean:
             return np.mean(topologies, axis=0)
         else:
             return topologies
+        
+    def multiple_topologies(self, data, eventprobs, mean=True):
+        topo = np.tile(np.nan, (len(eventprobs.n_bumps), len(eventprobs.n_bumps), len(data.electrodes)))
+        for n_bumps in eventprobs.n_bumps:
+            topo[n_bumps-1, :n_bumps.values, :] = self.compute_topo(data, eventprobs.sel(n_bumps=n_bumps))
+        return topo
