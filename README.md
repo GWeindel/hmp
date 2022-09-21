@@ -54,15 +54,6 @@ First we load the libraries necessary for the demo on simulated data
 
 
 ```python
-#Development only
-import sys
-sys.path.insert(0, "/home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/src")
-%load_ext autoreload
-%autoreload 2
-```
-
-
-```python
 import numpy as np
 import matplotlib.pyplot as plt
 import xarray as xr
