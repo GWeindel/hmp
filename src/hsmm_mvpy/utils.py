@@ -239,7 +239,7 @@ def standardize(x):
     '''
     Scaling variances to mean variance of the group
     '''
-    return ((x.data / x.data.std(dim=...)*x.mean_std))
+    return ((x.data / x.data.std(dim=...))*x.mean_std)
 
 def vcov_mat(x):
     '''
