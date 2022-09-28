@@ -11,6 +11,7 @@ A recommended way of using the package is to use a conda environment (see [anaco
 
     $ conda create -n hsmm 
     $ conda activate hsmm
+    $ conda install pip #optional for windows machine
     $ pip install hsmm_mvpy
 
 Then import pyhsmm-mvpa in your favorite python IDE through:
@@ -54,15 +55,6 @@ First we load the libraries necessary for the demo on simulated data
 
 
 ```python
-#Development only
-import sys
-sys.path.insert(0, "/home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/src")
-%load_ext autoreload
-%autoreload 2
-```
-
-
-```python
 import numpy as np
 import matplotlib.pyplot as plt
 import xarray as xr
@@ -71,7 +63,6 @@ from mne import channels
 
 ## Importing 
 import hsmm_mvpy as hsmm
-from hsmm_mvpy import simulations
 ```
 
 ### Simulating data
@@ -98,11 +89,30 @@ bump_frequency = 10. #Frequency of the simulated bumps
 file = 'dataset_tutorial' #Name of the file to save
 mne_path = path+file+'_raw.fif'
 
-raw, generating_events = simulations.simulate(sources, n_events, max_trial_length, cpus, bump_frequency, file, path, overwrite=True)
+raw, generating_events = hsmm.simulations.simulate(sources, n_events, max_trial_length, cpus, bump_frequency, file, path, overwrite=True)
 ```
 
     Aligning file name to MNE's convention
     Simulating dataset_tutorial_raw.fif in simulated/
+
+
+    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
+    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
+    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
+    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
+    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
+
+
     Overwriting existing file.
     Writing /home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/simulated/dataset_tutorial_raw.fif
     Closing /home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/simulated/dataset_tutorial_raw.fif
@@ -129,12 +139,11 @@ raw.copy().pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events);
     Removing projector <Projection | PCA-v2, active : True, n_channels : 102>
     Removing projector <Projection | PCA-v3, active : True, n_channels : 102>
     Using matplotlib as 2D backend.
-    Opening raw-browser...
 
 
 
     
-![png](README_files/README_7_1.png)
+![png](README_files/README_6_1.png)
     
 
 
@@ -187,14 +196,14 @@ eeg_dat.sel(epochs=0,electrodes=['EEG 001','EEG 002','EEG 003']).plot.scatter(x=
 ```
 
     <xarray.Dataset>
-    Dimensions:      (participant: 1, epochs: 30, electrodes: 59, samples: 1269)
+    Dimensions:      (participant: 1, epochs: 30, electrodes: 59, samples: 1127)
     Coordinates:
       * epochs       (epochs) int64 0 1 2 3 4 5 6 7 8 ... 21 22 23 24 25 26 27 28 29
       * electrodes   (electrodes) <U7 'EEG 001' 'EEG 002' ... 'EEG 059' 'EEG 060'
-      * samples      (samples) int64 0 1 2 3 4 5 6 ... 1263 1264 1265 1266 1267 1268
+      * samples      (samples) int64 0 1 2 3 4 5 6 ... 1121 1122 1123 1124 1125 1126
       * participant  (participant) <U2 'S0'
     Data variables:
-        data         (participant, epochs, electrodes, samples) float64 -6.932e-0...
+        data         (participant, epochs, electrodes, samples) float64 6.874e-07...
         event        (participant, epochs) <U8 'stimulus' 'stimulus' ... 'stimulus'
     Attributes:
         sfreq:    600.614990234375
@@ -202,7 +211,7 @@ eeg_dat.sel(epochs=0,electrodes=['EEG 001','EEG 002','EEG 003']).plot.scatter(x=
 
 
     
-![png](README_files/README_13_1.png)
+![png](README_files/README_12_1.png)
     
 
 
@@ -253,7 +262,7 @@ hsmm.visu.plot_topo_timecourse(electrodes_selected, bump_times_selected, positio
 
 
     
-![png](README_files/README_22_0.png)
+![png](README_files/README_21_0.png)
     
 
 
@@ -269,7 +278,7 @@ ax.set_ylabel('your label here');
 
 
     
-![png](README_files/README_24_0.png)
+![png](README_files/README_23_0.png)
     
 
 
@@ -283,13 +292,13 @@ hsmm.visu.plot_distribution(selected.eventprobs.mean(dim=['trial_x_participant']
 
 
     
-![png](README_files/README_26_0.png)
+![png](README_files/README_25_0.png)
     
 
 
 
     
-![png](README_files/README_26_1.png)
+![png](README_files/README_25_1.png)
     
 
 
@@ -303,13 +312,13 @@ hsmm.visu.plot_distribution(selected.eventprobs.sel(trial_x_participant=('S0', 0
 
 
 
-    <AxesSubplot:xlabel='Time (in samples)', ylabel='p(event)'>
+    <AxesSubplot: xlabel='Time (in samples)', ylabel='p(event)'>
 
 
 
 
     
-![png](README_files/README_28_1.png)
+![png](README_files/README_27_1.png)
     
 
 
@@ -332,7 +341,7 @@ plt.show()
 
 
     
-![png](README_files/README_30_0.png)
+![png](README_files/README_29_0.png)
     
 
 
@@ -350,7 +359,7 @@ hsmm.visu.plot_topo_timecourse(electrodes, init.bump_times(selected.eventprobs),
 
 
     
-![png](README_files/README_32_0.png)
+![png](README_files/README_31_0.png)
     
 
 
@@ -372,7 +381,7 @@ for bump in init.bump_times(selected.eventprobs, mean=False)[:,:number_of_source
 
 
     
-![png](README_files/README_34_0.png)
+![png](README_files/README_33_0.png)
     
 
 
