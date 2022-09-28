@@ -11,7 +11,6 @@ A recommended way of using the package is to use a conda environment (see [anaco
 
     $ conda create -n hsmm 
     $ conda activate hsmm
-    $ conda install pip #optional for linux
     $ pip install hsmm_mvpy
 
 Then import pyhsmm-mvpa in your favorite python IDE through:
@@ -52,6 +51,15 @@ The following section will quickly walk you through an example usage in simulate
 First we load the libraries necessary for the demo on simulated data
 
 ### Importing libraries
+
+
+```python
+#Development only
+import sys
+sys.path.insert(0, "/home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/src")
+%load_ext autoreload
+%autoreload 2
+```
 
 
 ```python
@@ -179,14 +187,14 @@ eeg_dat.sel(epochs=0,electrodes=['EEG 001','EEG 002','EEG 003']).plot.scatter(x=
 ```
 
     <xarray.Dataset>
-    Dimensions:      (participant: 1, epochs: 30, electrodes: 59, samples: 1365)
+    Dimensions:      (participant: 1, epochs: 30, electrodes: 59, samples: 1269)
     Coordinates:
       * epochs       (epochs) int64 0 1 2 3 4 5 6 7 8 ... 21 22 23 24 25 26 27 28 29
       * electrodes   (electrodes) <U7 'EEG 001' 'EEG 002' ... 'EEG 059' 'EEG 060'
-      * samples      (samples) int64 0 1 2 3 4 5 6 ... 1359 1360 1361 1362 1363 1364
+      * samples      (samples) int64 0 1 2 3 4 5 6 ... 1263 1264 1265 1266 1267 1268
       * participant  (participant) <U2 'S0'
     Data variables:
-        data         (participant, epochs, electrodes, samples) float64 -1.045e-0...
+        data         (participant, epochs, electrodes, samples) float64 -6.932e-0...
         event        (participant, epochs) <U8 'stimulus' 'stimulus' ... 'stimulus'
     Attributes:
         sfreq:    600.614990234375
