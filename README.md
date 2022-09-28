@@ -11,6 +11,7 @@ A recommended way of using the package is to use a conda environment (see [anaco
 
     $ conda create -n hsmm 
     $ conda activate hsmm
+    $ conda install pip #optional for windows machine
     $ pip install hsmm_mvpy
 
 Then import pyhsmm-mvpa in your favorite python IDE through:
@@ -54,6 +55,15 @@ First we load the libraries necessary for the demo on simulated data
 
 
 ```python
+#Development only
+import sys
+sys.path.insert(0, "/home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/src")
+%load_ext autoreload
+%autoreload 2
+```
+
+
+```python
 import numpy as np
 import matplotlib.pyplot as plt
 import xarray as xr
@@ -62,7 +72,6 @@ from mne import channels
 
 ## Importing 
 import hsmm_mvpy as hsmm
-from hsmm_mvpy import simulations
 ```
 
 ### Simulating data
@@ -89,7 +98,7 @@ bump_frequency = 10. #Frequency of the simulated bumps
 file = 'dataset_tutorial' #Name of the file to save
 mne_path = path+file+'_raw.fif'
 
-raw, generating_events = simulations.simulate(sources, n_events, max_trial_length, cpus, bump_frequency, file, path, overwrite=True)
+raw, generating_events = hsmm.simulations.simulate(sources, n_events, max_trial_length, cpus, bump_frequency, file, path, overwrite=True)
 ```
 
     Aligning file name to MNE's convention
@@ -178,14 +187,14 @@ eeg_dat.sel(epochs=0,electrodes=['EEG 001','EEG 002','EEG 003']).plot.scatter(x=
 ```
 
     <xarray.Dataset>
-    Dimensions:      (participant: 1, epochs: 30, electrodes: 59, samples: 1365)
+    Dimensions:      (participant: 1, epochs: 30, electrodes: 59, samples: 1247)
     Coordinates:
       * epochs       (epochs) int64 0 1 2 3 4 5 6 7 8 ... 21 22 23 24 25 26 27 28 29
       * electrodes   (electrodes) <U7 'EEG 001' 'EEG 002' ... 'EEG 059' 'EEG 060'
-      * samples      (samples) int64 0 1 2 3 4 5 6 ... 1359 1360 1361 1362 1363 1364
+      * samples      (samples) int64 0 1 2 3 4 5 6 ... 1241 1242 1243 1244 1245 1246
       * participant  (participant) <U2 'S0'
     Data variables:
-        data         (participant, epochs, electrodes, samples) float64 -1.045e-0...
+        data         (participant, epochs, electrodes, samples) float64 -1.87e-06...
         event        (participant, epochs) <U8 'stimulus' 'stimulus' ... 'stimulus'
     Attributes:
         sfreq:    600.614990234375
