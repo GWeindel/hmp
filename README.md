@@ -11,6 +11,7 @@ A recommended way of using the package is to use a conda environment (see [anaco
 
     $ conda create -n hsmm 
     $ conda activate hsmm
+    $ conda install pip #optional for linux
     $ pip install hsmm_mvpy
 
 Then import pyhsmm-mvpa in your favorite python IDE through:
