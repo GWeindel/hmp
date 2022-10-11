@@ -12,10 +12,13 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
                         ylabels=[], max_time = None, vmin=None, vmax=None, title=False, ax=False, sensors=True):
     from mne.viz import plot_topomap
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    return_ax = True
     if isinstance(ax, bool):
         if not figsize:
             figzise = (12, 2)
         fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+        return_ax = False
+
     bump_size = bump_size*time_step*magnify
     yoffset =.25*magnify
     axes = []
@@ -51,7 +54,10 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
         ax.set_xlabel('Time')
     if title:
         ax.set_title(title)
-    plt.show()    
+    if return_ax:
+        return ax
+    else:
+        plt.show()    
 
 
 def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=False):

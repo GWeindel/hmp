@@ -128,8 +128,8 @@ class hsmm:
             parameters = []
             magnitudes = []
             for sp in np.arange(starting_points):
-                parameters.append(np.array([[self.shape,x] for x in np.random.uniform(0,(np.mean(self.durations)/self.shape),n_bumps+1)]))
-                magnitudes.append(np.random.normal(0, .5, (self.n_dims,n_bumps)))
+                parameters.append(self.gen_random_stages(n_bumps, np.mean(self.durations)))
+                magnitudes.append(np.zeros((self.n_dims,n_bumps)))
             with mp.Pool(processes=self.cpus) as pool:
                 estimates = pool.starmap(self.fit, 
                     zip(itertools.repeat(n_bumps), magnitudes, parameters, itertools.repeat(1)))
@@ -147,8 +147,8 @@ class hsmm:
             for sp in np.arange(starting_points):
                 if sp  > 1:
                     #For now the random starting point are uninformed, might be worth to switch to a cleverer solution
-                    parameters = np.array([[self.shape,x] for x in np.random.uniform(0,(np.mean(self.durations)/self.shape),n_bumps+1)])
-                    magnitudes = np.random.normal(0, .5, (self.n_dims,n_bumps))
+                    parameters = self.gen_random_stages(n_bumps, np.mean(self.durations))
+                    magnitudes = np.zeros((self.n_dims,n_bumps))
                 likelihood, magnitudes_, parameters_, eventprobs_ = \
                     self.fit(n_bumps, magnitudes, parameters, threshold)
                 if likelihood > likelihood_prev:
@@ -472,6 +472,32 @@ class hsmm:
         d = [gamma.pdf(t+.5,a,scale=b) for t in np.arange(max_length)]
         d = d/np.sum(d)
         return d
+    
+    def gen_random_stages(self, n_bumps, mean_rt):
+        '''
+        Returns random stage duration between 0 and mean RT by iteratively drawind sample from a 
+        uniform distribution between the last stage duration (equal to 0 for first iteration) and 1.
+        Last stage is equal to 1-previous stage duration.
+        The stages are then scaled to the mean RT
+        Parameters
+        ----------
+        n_bumps : int
+            how many bumps
+        mean_rt : float
+            scale parameter
+        Returns
+        -------
+        random_stages : ndarray
+            random partition between 0 and mean_rt
+        '''
+        random_stages = [0]
+        for stage in np.arange(n_bumps):
+            random_stages.append(np.random.uniform(random_stages[-1], 1))
+        random_stages.append(1)#last one is defined as 1 - previous
+        random_stages = np.diff(random_stages)
+        random_stages = [[self.shape, x*mean_rt] for x in random_stages]#Remove 0 duration stage
+        print(np.round(random_stages)+1)
+        return np.round(random_stages)+1
     
     def compute_max_bumps(self):
         '''
