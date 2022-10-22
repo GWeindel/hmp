@@ -39,7 +39,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
     Parameters
     ----------
     pfiles : str or list
-        list of EEG files to read
+        list of EEG files to read154,
     event_id : dict
         Dictionary containing the correspondance of named condition [keys] and event code [values]
     resp_id : ndarray
@@ -59,7 +59,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
         Time taken after stimulus onset
     offset_after_resp : float
         Time taken after onset of the response
-    low_pass : float
+    low_pass : float154,
         Value of the low pass filter
     high_pass : float
         Value of the high pass filter
@@ -174,6 +174,90 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
                           fill_value={'event':'', 'data':np.nan})
     return epoch_data
 
+def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after_resp=0):
+    '''
+    Function to parse epochs and crop them to start_time (usually stimulus onset so 0) up to the reaction time of the trial.
+    The returned object is a xarray Dataset allowing further processing using built-in methods
+
+    Importantly if you are considering some lower or upper limit on the RTs you should replace values outside of these ranges
+    by np.nan (e.g. rts[rts < 200] = np.nan) or 0
+    
+    Parameters
+    ----------
+    data: pandas.dataframe
+        pandas dataframe with columns time (in milliseconds), epoch number and one column for each electrode 
+        (column name will be taken as electrode names)
+    rts: list or 1d array
+        list of reaction times in milliseconds for each epoch 
+    epoch_index: list or 1d array
+        number of the index (important for eventual dropped trials during the prepro154,cessing
+    electrode_index: list or 1d array
+        list of name of the electrodes
+    condition: list or 1d array
+        list of condition associated with each epoch
+    sfreq: float
+        sampling frequency of the data
+    start_time: float
+        time defining the onset of a trial (default is 0 as trial usually defined from event/stimulus onset) in milliseconds
+    offset_after_resp: float
+        eventual time added after the response (e.g. if we expect later components) in milliseconds
+    '''
+    tstep = 1000/sfreq#time step
+    offset_after_resp_samples = int(offset_after_resp/tstep)
+    if not isinstance(rts, np.ndarray):
+        try:#pandas or xarray
+            rts = rts.values
+        except:
+            raise ValueError('RTs should either be a numpy array or a pandas serie')
+    if not isinstance(conditions, np.ndarray):
+        try:#pandas or xarray
+            conditions = conditions.values
+        except:
+            raise ValueError('Conditions should either be a numpy array or a pandas serie')
+
+    rts[np.isnan(rts)] = 0
+    rts = np.array([int(x) for x in rts/tstep])
+    data = data[data.time >= start_time]#remove all baseline values
+    epochs = data.epoch.unique()
+    rts = rts[epochs]
+    conditions = conditions[epochs]
+    times = data.time.unique()
+    data = data.drop(columns=['time', 'epoch'])
+    #electrode names/columns are assumed to be remaining columns affter removing time and epoch columns
+    electrode_columns = [x for x in data.columns]
+    data = data.values.flatten()
+    data = data.reshape((len(epochs), len(times),len(electrode_columns)))
+    data = np.swapaxes(data,1,2)
+
+    nan_con = np.array([i for i,x in enumerate(conditions) if isinstance(x, float) and np.isnan(x)])
+    if len(nan_con) > 0:
+        print(f'NaN present in condition array, removing associated epoch and RT ({nan_con})')
+        data = np.delete(data, nan_con, axis=0)
+        conditions = np.delete(conditions, nan_con, axis=0)
+        rts = np.delete(rts, nan_con, axis=0)
+        epochs =  np.delete(epochs, nan_con, axis=0)
+    epoch = 0
+    for rt in rts:
+        if rt == 0:
+            data[epoch,:,:] = np.nan
+            conditions[epoch] = ''
+            #rts[epoch] = None#np.nan#np.delete(rts, epoch, axis=0)
+            #epochs[epoch] = np.nan#np.delete(epochs, epoch, axis=0)
+        epoch += 1
+    cropped_conditions = []
+    epoch_idx = []
+    cropped_data_epoch = np.empty([len(epochs), len(electrode_columns), max(rts)+offset_after_resp_samples])
+    cropped_data_epoch[:] = np.nan
+    j = 0
+    for epoch in np.arange(len(data)):
+        #Crops the epochs up to RT
+        cropped_data_epoch[j,:,:rts[epoch]+offset_after_resp_samples] = \
+        (data[epoch,:,:rts[epoch]+offset_after_resp_samples])
+        j += 1
+    print(f'Totaling {len(cropped_data_epoch)} valid trials')
+    data_xr = hsmm_data_format(cropped_data_epoch, conditions, sfreq, epochs=epochs, electrodes = electrode_columns)
+    return data_xr
+
 def hsmm_data_format(data, events, sfreq, participants=[], epochs=None, electrodes=None):
     '''
     Converting 3D matrix with dimensions (participant) * trials * electrodes * sample into xarray Dataset
@@ -182,7 +266,7 @@ def hsmm_data_format(data, events, sfreq, participants=[], epochs=None, electrod
     ----------
     data : ndarray
         4/3D matrix with dimensions (participant) * trials * electrodes * sample  
-    events : float
+    events : ndarray
         np.array with 3 columns -> [samples of the event, initial value of the channel, event code]. To use if the
         automated event detection method of MNE is not appropriate 
     sfreq : float

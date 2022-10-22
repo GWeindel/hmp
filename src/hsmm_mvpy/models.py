@@ -496,7 +496,6 @@ class hsmm:
         random_stages.append(1)#last one is defined as 1 - previous
         random_stages = np.diff(random_stages)
         random_stages = [[self.shape, x*mean_rt] for x in random_stages]#Remove 0 duration stage
-        print(np.round(random_stages)+1)
         return np.round(random_stages)+1
     
     def compute_max_bumps(self):
