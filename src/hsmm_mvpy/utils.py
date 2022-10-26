@@ -11,7 +11,7 @@ import warnings
 
 warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later  
 
-def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provided=None, verbose=True,
+def read_mne_EEG(pfiles, event_id, resp_id, sfreq, to_merge_id=None, subj_idx=None, events_provided=None, verbose=True,
                  tmin=-.2, tmax=5, offset_after_resp = .1, high_pass=.5, \
                  low_pass = 30, upper_limit_RT=5, lower_limit_RT=0.001, reject_threshold=None):
     ''' 
@@ -42,10 +42,13 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
         list of EEG files to read154,
     event_id : dict
         Dictionary containing the correspondance of named condition [keys] and event code [values]
-    resp_id : ndarray
+    resp_id : dict
         Dictionary containing the correspondance of named response [keys] and event code [values]
     sfreq : float
         Desired sampling frequency
+    to_merge_id: dict
+        Dictionary containing the correspondance of named condition [keys] and event code [values] that needs to be
+        merged with the stimuli event in event_id
     subj_idx : list
         List of subject names
     events_provided : float
@@ -100,7 +103,8 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
         if events_provided is None:
             events = mne.find_events(data, verbose=verbose, min_duration = 1 / data.info['sfreq'])
             if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicates offset in the trggers
-                events[:,2] = events[:,2]-events[:,1]#correction on event value
+                print(f'Correcting event values as trigger channel has offset {np.unique(events[:,1])}')
+                events[:,2] = events[:,2]-events[:,1]#correction on event value                
             events_values = np.concatenate([np.array([x for x in event_id.values()]), np.array([x for x in resp_id.values()])])
             events = np.array([list(x) for x in events if x[2] in events_values])#only keeps events with stim or response
         else:
@@ -110,8 +114,8 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
         if sfreq < data.info['sfreq']:#Downsampling
             print(f'Downsampling to {sfreq} Hz')
             data, events = data.resample(sfreq, events=events)#100 Hz is the standard used for previous applications of HsMM
-
-
+        
+        print(f'Creating epochs based on following event ID :{np.unique(events[:,2])}')
         #Only pick eeg electrodes
         picks = mne.pick_types(data.info, eeg=True, stim=False, eog=False, misc=False,
                            exclude='bads') 
@@ -132,7 +136,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
         trigger = []
         without_rt = 0
         for i in stim_events:
-            if events[i+1,2] in resp_id.values():
+            if any(x in resp_id.values() for x in events[i:,2]) and events[i+1,2] in resp_id.values():
                 rts.append(events[i+1,0] - events[i,0] )
 
             else:
@@ -143,7 +147,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
         print(f'Applying reaction time trim to keep RTs between {lower_limit_RT} and {upper_limit_RT} seconds')
         rts[rts > sfreq*upper_limit_RT] = 0 #removes RT above x sec
         rts[rts < sfreq*lower_limit_RT] = 0 #removes RT below x sec, important as determines max bumps
-        print(f'{len(rts)} RTs kept of {len(stim_events)} clean epochs')
+        print(f'{len(rts[rts > 0])} RTs kept of {len(stim_events)} clean epochs')
         triggers = epochs.metadata["event_name"].reset_index(drop=True)
         cropped_data_epoch = np.empty([len(rts[rts> 0]), len(epochs.ch_names), max(rts)+offset_after_resp_samples])
         cropped_data_epoch[:] = np.nan
@@ -179,8 +183,11 @@ def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after
     Function to parse epochs and crop them to start_time (usually stimulus onset so 0) up to the reaction time of the trial.
     The returned object is a xarray Dataset allowing further processing using built-in methods
 
-    Importantly if you are considering some lower or upper limit on the RTs you should replace values outside of these ranges
+    Importantly 
+    1) if you are considering some lower or upper limit on the RTs you should replace values outside of these ranges
     by np.nan (e.g. rts[rts < 200] = np.nan) or 0
+    2) RTs and conditions need to be ordered in the same way as the epochs
+    
     
     Parameters
     ----------
@@ -204,6 +211,7 @@ def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after
     '''
     tstep = 1000/sfreq#time step
     offset_after_resp_samples = int(offset_after_resp/tstep)
+    epoch_size = len(data.time.unique())*tstep
     if not isinstance(rts, np.ndarray):
         try:#pandas or xarray
             rts = rts.values
@@ -214,7 +222,9 @@ def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after
             conditions = conditions.values
         except:
             raise ValueError('Conditions should either be a numpy array or a pandas serie')
-
+    if any(t > epoch_size for t in rts):
+        print('Zeroing out RTs longer than epoch size, you might want to zero out rts that are outside of the range of interest')
+        rts[rts > epoch_size] = 0
     rts[np.isnan(rts)] = 0
     rts = np.array([int(x) for x in rts/tstep])
     data = data[data.time >= start_time]#remove all baseline values

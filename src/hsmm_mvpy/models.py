@@ -498,11 +498,15 @@ class hsmm:
         random_stages = [[self.shape, x*mean_rt] for x in random_stages]#Remove 0 duration stage
         return np.round(random_stages)+1
     
-    def compute_max_bumps(self):
+    def compute_max_bumps(self, min_rt=False):
         '''
-        Compute the maximum possible number of bumps given bump width and minimum epoch size
+        Compute the maximum possible number of bumps given bump width and mean or minimum reaction time
         '''
         return int(np.min(self.durations)/self.bump_width_samples)
+        # if not min_rt:
+        #     return int(np.mean(self.durations)/self.bump_width_samples)
+        # else:
+        #     return int(np.min(self.durations)/self.bump_width_samples)
 
     def bump_times(self, eventprobs, mean=True):
         '''
