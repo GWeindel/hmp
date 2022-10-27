@@ -11,7 +11,7 @@ import warnings
 
 warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later  
 
-def read_mne_EEG(pfiles, event_id, resp_id, sfreq, to_merge_id=None, subj_idx=None, events_provided=None, verbose=True,
+def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provided=None, verbose=True,
                  tmin=-.2, tmax=5, offset_after_resp = .1, high_pass=.5, \
                  low_pass = 30, upper_limit_RT=5, lower_limit_RT=0.001, reject_threshold=None):
     ''' 
