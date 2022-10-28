@@ -538,6 +538,24 @@ def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
     likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bumps,True)
     return likelihood, subject
 
+def loocv_mp(init, unstacked_data, bests, cpus=2, verbose=True):
+    import multiprocessing
+    import itertools
+    participants = unstacked_data.participant.data
+    likelihoods_loo = []
+    loocv = []
+    for n_bumps in np.arange(1, init.max_bumps+1):
+        if verbose:
+            print(f'LOOCV for model with {n_bumps} bump(s)')
+        with multiprocessing.Pool(processes=cpus) as pool:
+            loo = pool.starmap(LOOCV, 
+                zip(itertools.repeat(unstacked_data), participants, itertools.repeat(n_bumps), 
+                    itertools.repeat(bests.sel(n_bumps=n_bumps)), itertools.repeat(init.sf)))
+        loocv.append(loo)
+
+    loocv = xr.DataArray(np.array(loocv)[:,:,0].astype(np.float64), coords={"n_bump":np.arange(1,temp_init.max_bumps+1),
+                                                           "participants":np.array(loocv)[0,:,1]}, name="loo_likelihood")
+    return loocv
 
 def reconstruct(magnitudes, PCs, eigen, means):
     '''
