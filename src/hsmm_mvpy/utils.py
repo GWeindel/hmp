@@ -549,7 +549,7 @@ def loocv_mp(init, unstacked_data, bests, cpus=2, verbose=True):
             print(f'LOOCV for model with {n_bumps} bump(s)')
         with multiprocessing.Pool(processes=cpus) as pool:
             loo = pool.starmap(LOOCV, 
-                zip(itertools.repeat(unstacked_data), participants, itertools.repeat(n_bumps), 
+                zip(itertools.repeat(unstacked_data.data), participants, itertools.repeat(n_bumps), 
                     itertools.repeat(bests.sel(n_bumps=n_bumps)), itertools.repeat(init.sf)))
         loocv.append(loo)
 
