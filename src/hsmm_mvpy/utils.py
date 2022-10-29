@@ -553,7 +553,7 @@ def loocv_mp(init, unstacked_data, bests, cpus=2, verbose=True):
                     itertools.repeat(bests.sel(n_bumps=n_bumps)), itertools.repeat(init.sf)))
         loocv.append(loo)
 
-    loocv = xr.DataArray(np.array(loocv)[:,:,0].astype(np.float64), coords={"n_bump":np.arange(1,temp_init.max_bumps+1),
+    loocv = xr.DataArray(np.array(loocv)[:,:,0].astype(np.float64), coords={"n_bump":np.arange(1,init.max_bumps+1),
                                                            "participants":np.array(loocv)[0,:,1]}, name="loo_likelihood")
     return loocv
 
@@ -627,3 +627,20 @@ def save_eventprobs(eventprobs, filename):
     eventprobs = eventprobs.unstack()
     eventprobs.to_dataframe().to_csv(filename)
     print(f"Saved at {filename}")
+
+# def download_sample_data():
+#     import urllib.request
+    
+    
+#         with requests.get(url, stream=True) as r:
+#         with open(path, 'wb') as f:
+#             shutil.copyfileobj(r.raw, f)
+#     import zipfile
+#     filehandle, _ = urllib.request.urlretrieve(url)
+
+#     zip_file_object = zipfile.ZipFile(filehandle, 'r')
+#     first_file = zip_file_object.namelist()[0]
+#     file = zip_file_object.open(first_file)
+#     content = file.read()
+
+# download(link.get("href"),'./fails_data', link.text)
