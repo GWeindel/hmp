@@ -14,3 +14,4 @@
 *perso*
 /dist
 *egg*
+!tutorials/sample_data/sample_data.nc
