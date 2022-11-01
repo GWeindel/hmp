@@ -1,0 +1,1 @@
+This example dataset is taken from the following open science framework repository [https://osf.io/pd3kf/](https://osf.io/pd3kf/) and has been collected for [this](https://www.sciencedirect.com/science/article/pii/S1053811914002249) paper and fitted using HsMM in [this](https://link.springer.com/article/10.1007/s42113-021-00105-2) paper

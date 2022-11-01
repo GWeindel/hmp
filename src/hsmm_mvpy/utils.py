@@ -423,7 +423,7 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
             ax[1].set_xlabel('Component')
             plt.tight_layout()
             plt.show()
-            n_comp = int(input(f'How many PCs (80 and 95% explained variance at component n{np.where(np.cumsum(var/np.sum(var)) >= .80)[0][0]+1} and n{np.where(np.cumsum(var/np.sum(var)) >= .95)[0][0]+1})?'))
+            n_comp = int(input(f'How many PCs (90 and 99% explained variance at component n{np.where(np.cumsum(var/np.sum(var)) >= .90)[0][0]+1} and n{np.where(np.cumsum(var/np.sum(var)) >= .99)[0][0]+1})?'))
 
         pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
 
@@ -549,7 +549,7 @@ def loocv_mp(init, unstacked_data, bests, cpus=2, verbose=True):
             print(f'LOOCV for model with {n_bumps} bump(s)')
         with multiprocessing.Pool(processes=cpus) as pool:
             loo = pool.starmap(LOOCV, 
-                zip(itertools.repeat(unstacked_data.data), participants, itertools.repeat(n_bumps), 
+                zip(itertools.repeat(unstacked_data), participants, itertools.repeat(n_bumps), 
                     itertools.repeat(bests.sel(n_bumps=n_bumps)), itertools.repeat(init.sf)))
         loocv.append(loo)
 

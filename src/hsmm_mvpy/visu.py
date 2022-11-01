@@ -62,9 +62,9 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
 
 def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=False):
     if pvals:
-        #if test == 'sign':
-        #    from statsmodels.stats.descriptivestats import sign_test 
-        if test == 't-test':
+        if test == 'sign':
+            from statsmodels.stats.descriptivestats import sign_test 
+        elif test == 't-test':
             from scipy.stats import ttest_1samp
         else:
             print('Expected  t-test argument')
