@@ -145,6 +145,10 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
             print('Expected  t-test argument')
     if isinstance(ax, bool):
         fig, ax = plt.subplots(1,2, figsize=figsize)
+        return_ax = False
+    else:
+        return_ax = True
+        
     ax[0].errorbar(x=np.arange(loocv_estimates.n_bump.max())+1,y=np.mean(loocv_estimates.data,axis=1),yerr=np.std(loocv_estimates.data,axis=1)/np.sqrt(len(loocv_estimates.participants))*1.96,marker='o')
     if indiv:
         for loo in loocv_estimates.T:
