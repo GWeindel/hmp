@@ -10,6 +10,57 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_size=50,
                         figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
                         ylabels=[], max_time = None, vmin=None, vmax=None, title=False, ax=False, sensors=True):
+    '''
+    Plotting the bump topologies at the average time of the end of the previous stage.
+    
+    Parameters
+    ----------
+    electrodes : ndarray
+        a 2D or 3D matrix of electrode activity with electrodes and bump as dimension (+ eventually a varying dimension)
+    times : ndarray
+        a 1D or 2D matrix of times with bump as dimension
+    channel_position : ndarray
+        Either a 2D array with dimension electrode and [x,y] storing electrode location in meters or an info object from
+        the mne package containning digit. points for electrode location
+    time_step : float
+        What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
+        1/sf or 1000/sf where sf is the sampling frequency of the data
+    bump_size : float
+        Display size of the bump in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
+        can provide the bump_width_sample of fitted hsmm (e.g. init.bump_width_sample)
+    figsize : list | tuple | ndarray
+        Length and heigth of the matplotlib plot
+    dpi : float
+        DPI of the  matplotlib plot
+    magnify : float
+        How much should the bumps be enlarged, useful to zoom on topologies, providing any other value than 1 will 
+        however change the displayed size of the bump
+    times_to_display : ndarray
+        Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
+    cmap : str
+        Colormap of matplotlib
+    ylabels : dict
+        dictonary with {label_name : label_values}
+    max_time : float
+        limit of the x (time) axe
+    vmin : float
+        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
+    vmax : float
+        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
+    title : str
+        title of the plot
+    ax : matplotlib.pyplot.ax
+        Matplotlib object on which to draw the plot, can be useful if you want to control specific aspects of the plots
+        outside of this function
+    sensors : bool
+        Whether to plot the sensors on the topologies
+        
+    Returns
+    -------
+    ax : matplotlib.pyplot.ax
+        if ax was specified otherwise returns the plot
+    '''
+    
     from mne.viz import plot_topomap
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
     return_ax = True
@@ -61,6 +112,30 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
 
 
 def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=False):
+    '''
+    Plotting the LOOCV results
+    
+    Parameters
+    ----------
+    loocv_estimates : ndarray or xarra.DataArray
+        results from a call to hsmm.utils.loocv()
+    pvals : bool
+        Whether to display the pvalue with the associated test
+    test : str
+        which statistical test to compute for the difference in LOOCV-likelihood (one sample t-test or sign test)
+    figsize : list | tuple | ndarray
+        Length and heigth of the matplotlib plot
+    indiv : bool
+        Whether to plot individual lines
+    ax : matplotlib.pyplot.ax
+        Matplotlib object on which to draw the plot, can be useful if you want to control specific aspects of the plots
+        outside of this function
+
+    Returns
+    -------
+    ax : matplotlib.pyplot.ax
+        if ax was specified otherwise returns the plot
+    '''
     if pvals:
         if test == 'sign':
             from statsmodels.stats.descriptivestats import sign_test 
@@ -96,20 +171,40 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     ax[1].hlines(0,0,len(np.arange(2,loocv_estimates.n_bump.max())),color='k')
     ax[1].set_ylabel('Change in likelihood')
     ax[1].set_xlabel('')
-    plt.tight_layout()
-    plt.show()
+    if return_ax:
+        return ax
+    else:
+        plt.tight_layout()
+        plt.show()
 
 def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=default_colors,
-    figsize=False, errs='ci', yoffset=0, max_time=None, times_to_display=None):
+    figsize=None, errs='ci', max_time=None, times_to_display=None):
     '''
-
+    REDUNDANT WITH plot_latencies() WILL BE DEPRECATED
+    Plots the average of stage latencies with choosen errors bars
 
     Parameters
     ----------
     times : ndarray
         2D or 3D numpy array, Either trials * bumps or conditions * trials * bumps
-        
-        
+    bump_width : float
+        Display size of the bump in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
+        can provide the bump_width_sample of fitted hsmm (e.g. init.bump_width_sample)
+    time_step : float
+        What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
+        1/sf or 1000/sf where sf is the sampling frequency of the data
+    labels : tuples | list
+        labels to draw on the y axis
+    colors : ndarray
+        array of colors for the different stages
+    figsize : list | tuple | ndarray
+        Length and heigth of the matplotlib plot
+    errs : str
+        Whether to display 95% confidence interval ('ci') or standard deviation (std)
+    times_to_display : ndarray
+        Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
+    max_time : float
+        limit of the x (time) axe
     '''
     from seaborn.algorithms import bootstrap #might be too much to ask for seaborn install?
     j = 0
@@ -117,7 +212,7 @@ def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=def
     if len(np.shape(times)) == 2:
         times = [times]
 
-    if not figsize:
+    if figsize == None:
         figsize = (8, 1*len(times)+2)
     f, axs = plt.subplots(1,1, figsize=figsize,dpi=100)
     for time in times:
@@ -157,17 +252,25 @@ def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=def
     
 
 def plot_distribution(times, colors=default_colors, xlims=False, figsize=(8, 3), survival=False):
-    f, axs = plt.subplots(1,1, figsize=figsize, dpi=100)
     '''
-
+    Plots the distribution of each stage latencies
 
     Parameters
     ----------
     times : ndarray
         2D or 3D numpy array, Either trials * bumps or conditions * trials * bumps
-        
-        
+    colors : ndarray
+        array of colors for the different stages
+    xlims : tuple | list
+        lower and upper limit of the x (time) axis
+    figsize : list | tuple | ndarray
+        Length and heigth of the matplotlib plot
+    survival : bool
+        Whether to draw density plots or survival density plots
+
     '''
+    f, axs = plt.subplots(1,1, figsize=figsize, dpi=100)
+
     if len(np.shape(times)) == 2:
         times = np.asarray([times],dtype = 'object')
     cycol = cycle(colors)
@@ -198,16 +301,34 @@ def __display_times(ax, times_to_display, yoffset, time_step, max_time, times):
     return ax
 
 def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[''], colors=default_colors, 
-                         figsize=False, yoffset=0, max_time=None, times_to_display=None, kind='bar', legend=False):
+                         figsize=False, times_to_display=None, max_time=None, kind='bar', legend=False):
     '''
-
+    Plots the average of stage latencies based on the estimated scale parameter of the gamma distributions
 
     Parameters
     ----------
     gammas : ndarray
-        2D or 3D numpy array, Either  bumps * parameters or conditions * bumps * parameters with parameters being [shape * scale]
-        
-        
+        instance of hsmm.hsmm.parameters
+    bump_width : float
+        Size of the bump in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
+        can provide the bump_width_sample of fitted hsmm (e.g. init.bump_width_sample)
+    time_step : float
+        What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
+        1/sf or 1000/sf where sf is the sampling frequency of the data
+    labels : tuples | list
+        labels to draw on the y axis
+    colors : ndarray
+        array of colors for the different stages
+    figsize : list | tuple | ndarray
+        Length and heigth of the matplotlib plot
+    times_to_display : ndarray
+        Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
+    max_time : float
+        limit of the x (time) axe
+    kind : str
+        Whether to draw a bar plot ('bar') or line connected point plot ('point')
+    legend : bool
+        Whether to draw legend handle or not
     '''
     j = 0
     
@@ -248,14 +369,30 @@ def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[''], colors=
 def plot_latencies(times, bump_width, time_step=1, labels=[], colors=default_colors,
     figsize=False, errs='ci',  max_time=None, times_to_display=None, kind='bar', legend=False):
     '''
-
+    Plots the average of stage latencies with choosen errors bars
 
     Parameters
     ----------
     times : ndarray
         2D or 3D numpy array, Either trials * bumps or conditions * trials * bumps
-        
-        
+    bump_width : float
+        Display size of the bump in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
+        can provide the bump_width_sample of fitted hsmm (e.g. init.bump_width_sample)
+    time_step : float
+        What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
+        1/sf or 1000/sf where sf is the sampling frequency of the data
+    labels : tuples | list
+        labels to draw on the y axis
+    colors : ndarray
+        array of colors for the different stages
+    figsize : list | tuple | ndarray
+        Length and heigth of the matplotlib plot
+    errs : str
+        Whether to display 95% confidence interval ('ci') or standard deviation (std)
+    times_to_display : ndarray
+        Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
+    max_time : float
+        limit of the x (time) axe
     '''
     from seaborn.algorithms import bootstrap #might be too much to ask for seaborn install?
     j = 0
