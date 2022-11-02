@@ -399,7 +399,7 @@ for bump in init.bump_times(selected.eventprobs, mean=False)[:,:number_of_source
     
 
 
-We see that, to the exception of the first stage (a weird result currently under investigation). Every other stage gets nicely recovered evn on a by-trial basis!
+We see that, to the exception of the first stage (a weird result currently under investigation), every other stage gets nicely recovered even on a by-trial basis!
 
 ### Follow-up
 
