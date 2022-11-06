@@ -242,7 +242,7 @@ class hsmm:
                 if self.estimate_parameters:
                     parameters = self.gamma_parameters(eventprobs, n_bumps)
 
-                    #Ensure constrain of gammas > bump_width, note that contrary to the matlab code this is not applied on the first stage (np.arange(1,n_bumps) 
+                    #Ensure constrain of gammas > bump_width, note that contrary to the matlab code this is not applied on the first and last stages (np.arange(1,n_bumps) 
                     for i in np.arange(1,n_bumps): #PCG: seems unefficient likely slows down process, isn't there a better way to bound the estimation??
                         if parameters[i,:].prod() < self.bump_width_samples:
                             # multiply scale and shape parameters to get 
@@ -250,6 +250,7 @@ class hsmm:
                             # It constrains that bumps are separated at 
                             # least a bump length
                             parameters[i,:] = parameters1[i,:]
+                    for i in np.arange(n_bumps+1): #PCG: seems unefficient likely slows down process, isn't there a better way to bound the estimation??
                         if i in self.parameters_to_fix:
                             parameters[i,:] = parameters1[i,:]
                 lkh, eventprobs = self.calc_EEG_50h(magnitudes, parameters, n_bumps)
@@ -525,8 +526,7 @@ class hsmm:
         -------
         d : ndarray
             density for a gamma with given parameters
-        '''    
-        
+        '''
         eventprobs = eventprobs.dropna('bump', how="all")
         eventprobs = eventprobs.dropna('trial_x_participant', how="all")
         onsets = np.empty((len(eventprobs.trial_x_participant),len(eventprobs.bump)+1))
