@@ -51,7 +51,7 @@ class hsmm:
         self.max_d = np.max(self.durations)
         self.max_bumps = self.compute_max_bumps()
         self.shape = shape
-        self.estimate_magnitudes = estimate_magnitudes 
+        self.estimate_magnitudes = estimate_magnitudes
         self.estimate_parameters = estimate_parameters
         self.parameters_to_fix = parameters_to_fix
         self.magnitudes_to_fix = magnitudes_to_fix
@@ -118,21 +118,48 @@ class hsmm:
             print(f'Estimating parameters for {n_bumps} bumps model with {starting_points-1} random starting points')
         if mp==True: #PCG: Dirty temporarilly needed for multiprocessing in the iterative backroll estimation...
             magnitudes = magnitudes.T
+
+        #Formatting parameters
         if isinstance(parameters, (xr.DataArray,xr.Dataset)):
             parameters = parameters.dropna(dim='stage').values
+        if self.estimate_parameters == False:#Don't need to manually fix pars if not estimated
+            parameters_to_fix = np.arange(n_bumps+1)
+        else:
+            parameters_to_fix = self.parameters_to_fix
+        if len(parameters_to_fix) < n_bumps+1:#If parameters not fully povided replace with
+            initial_p = parameters
+            parameters = np.tile([self.shape, math.ceil(np.mean(self.durations)/(n_bumps+1)/self.shape)], (n_bumps+1,1))
+            if len(parameters_to_fix)  > 0:
+                parameters[parameters_to_fix] = initial_p[parameters_to_fix]
+        initial_p = parameters
+            
         if isinstance(magnitudes, (xr.DataArray,xr.Dataset)):
-            magnitudes = magnitudes.dropna(dim='bump').values
-        
-        if self.cpus > 1 and starting_points > 1:
+            magnitudes = magnitudes.dropna(dim='bump').values    
+        if self.estimate_magnitudes == False:#Don't need to manually fix pars if not estimated
+            magnitudes_to_fix = np.arange(n_bumps)
+        else:
+            magnitudes_to_fix = self.magnitudes_to_fix
+        if len(magnitudes_to_fix) < n_bumps:#If mags not fully povided replace with
+            initial_m = magnitudes
+            magnitudes = np.zeros((self.n_dims,n_bumps))
+            if len(magnitudes_to_fix)  > 0:
+                magnitudes[magnitudes_to_fix] = initial_m[magnitudes_to_fix]
+        initial_m = magnitudes
+
+        if starting_points > 1:
             import multiprocessing as mp
-            parameters = []
-            magnitudes = []
+            parameters = [initial_p]
+            magnitudes = [initial_m]
             for sp in np.arange(starting_points):
-                parameters.append(self.gen_random_stages(n_bumps, np.mean(self.durations)))
-                magnitudes.append(np.zeros((self.n_dims,n_bumps)))
+                proposal_p = self.gen_random_stages(n_bumps, np.mean(self.durations))
+                proposal_m = np.zeros((self.n_dims,n_bumps))#Mags are NOT random but always 0
+                proposal_p[parameters_to_fix] = initial_p[parameters_to_fix]
+                proposal_m[magnitudes_to_fix] = initial_m[magnitudes_to_fix]
+                parameters.append(proposal_p)
+                magnitudes.append(proposal_m)
             with mp.Pool(processes=self.cpus) as pool:
                 estimates = pool.starmap(self.fit, 
-                    zip(itertools.repeat(n_bumps), magnitudes, parameters, itertools.repeat(1)))
+                    zip(itertools.repeat(n_bumps), magnitudes, parameters, itertools.repeat(1)))   
             lkhs_sp = [x[0] for x in estimates]
             mags_sp = [x[1] for x in estimates]
             pars_sp = [x[2] for x in estimates]
@@ -142,40 +169,20 @@ class hsmm:
             mags = mags_sp[max_lkhs]
             pars = pars_sp[max_lkhs]
             eventprobs = eventprobs_sp[max_lkhs]
-        elif starting_points > 1:
-            likelihood_prev = -np.inf
-            for sp in np.arange(starting_points):
-                if sp  > 1:
-                    #For now the random starting point are uninformed, might be worth to switch to a cleverer solution
-                    parameters = self.gen_random_stages(n_bumps, np.mean(self.durations))
-                    magnitudes = np.zeros((self.n_dims,n_bumps))
-                likelihood, magnitudes_, parameters_, eventprobs_ = \
-                    self.fit(n_bumps, magnitudes, parameters, threshold)
-                if likelihood > likelihood_prev:
-                    lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
-                    likelihood_prev = likelihood
-        elif np.any(parameters)== None or np.any(magnitudes)== None :
-            if np.any(parameters)== None:
-                parameters = np.tile([self.shape, math.ceil(np.mean(self.durations)/(n_bumps+1)/self.shape)], (n_bumps+1,1))
-            if np.any(magnitudes)== None:
-                magnitudes = np.zeros((self.n_dims,n_bumps))
-            initial_p = parameters
-            initial_m = magnitudes
-            lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters, threshold)
+            
         else:
-            initial_p = parameters
-            initial_m = magnitudes
             lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters, threshold)
+
         #Comparing to uninitialized gamma parameters
-        if starting_points == 1:
-            parameters = np.tile([self.shape, 50], (n_bumps+1,1))
-            magnitudes = np.zeros((self.n_dims,n_bumps))
-            likelihood, magnitudes_, parameters_, eventprobs_ = \
-                    self.fit(n_bumps, initial_m, parameters, threshold)
-            if likelihood > lkh:
-                if verbose:
-                    print('Likelihood of uninitialized parameters has been preferred over initialized model. Consider adding starting points?')
-                lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
+        # if starting_points == 1:
+        #     parameters = np.tile([self.shape, 50], (n_bumps+1,1))
+        #     magnitudes = np.zeros((self.n_dims,n_bumps))
+        #     likelihood, magnitudes_, parameters_, eventprobs_ = \
+        #             self.fit(n_bumps, initial_m, parameters, threshold)
+        #     if likelihood > lkh:
+        #         if verbose:
+        #             print('Likelihood of uninitialized parameters has been preferred over initialized model. Consider adding starting points?')
+        #         lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
 
         
         if len(pars) != self.max_bumps+1:#align all dimensions
