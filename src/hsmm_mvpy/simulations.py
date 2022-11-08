@@ -48,8 +48,19 @@ def simulate(sources, n_trials, max_trial_length, n_jobs, bump_frequency, file, 
         events = np.zeros((n_trials, 3), int)
         stim_onsets =  2000+max_trial_length * np.arange(n_trials)#2000 = offset of first stim
         events[:,0] = stim_onsets#last event 
+        events[:,2] = 1#trigger 1 = stimulus 
 
-        trigger = 1
+        #Fake source, actually stimulus onset
+        selected_label = mne.read_labels_from_annot(
+                subject, regexp=sources[0][0], subjects_dir=subjects_dir, verbose=False)[0]
+        label = mne.label.select_sources(
+                subject, selected_label, location='center', extent=10,# Extent in mm of the region.
+                subjects_dir=subjects_dir)
+        source_time_series = np.sin(2. * np.pi * 100 * np.arange(25) * tstep) * 1e-99
+        source_simulator.add_data(label, source_time_series, events)
+        source_simulator.add_data(label, source_time_series, events)
+    
+        trigger = 2
         random_source_times = []
         generating_events = events
         for source in sources:

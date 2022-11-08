@@ -15,10 +15,11 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
     
     Parameters
     ----------
-    electrodes : ndarray
-        a 2D or 3D matrix of electrode activity with electrodes and bump as dimension (+ eventually a varying dimension)
+    electrodes : ndarray | xr.Dataarray 
+        a 2D or 3D matrix of electrode activity with electrodes and bump as dimension (+ eventually a varying dimension) OR
+        the original EEG data in HsMM format
     times : ndarray
-        a 1D or 2D matrix of times with bump as dimension
+        a 1D or 2D matrix of times with bump as dimension OR directly the results from a fitted hsmm 
     channel_position : ndarray
         Either a 2D array with dimension electrode and [x,y] storing electrode location in meters or an info object from
         the mne package containning digit. points for electrode location
@@ -64,6 +65,19 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
     from mne.viz import plot_topomap
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
     return_ax = True
+    
+    if 'bump' in times:
+        import xarray as xr
+        #This is to keep backward compatibility but supplyng externally computed electrodes and times will probably be
+        # DEPRECATED
+        if 'n_bumps' in times and times.n_bumps.count().values>1:
+            electrodes = xr.dot(electrodes.stack(trial_x_participant=['participant','epochs']).data.fillna(0), \
+              times.eventprobs.fillna(0), dims=['samples']).mean('trial_x_participant').transpose('n_bumps','bump','electrodes').data
+        else:
+            electrodes = xr.dot(electrodes.stack(trial_x_participant=['participant','epochs']).data.fillna(0), \
+              times.eventprobs.fillna(0), dims=['samples']).mean('trial_x_participant').transpose('bump','electrodes').data
+        times = (xr.dot(times.eventprobs, times.eventprobs.samples, dims='samples')-bump_size/2).fillna(0).mean('trial_x_participant')
+    
     if isinstance(ax, bool):
         if not figsize:
             figzise = (12, 2)
@@ -85,16 +99,18 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
         n_bump = int(sum(np.isfinite(electrodes_[:,0])))
         electrodes_ = electrodes_[:n_bump,:]
         for bump in np.arange(n_bump):
-            axes.append(ax.inset_axes([times_iteration[bump],iteration-yoffset,
-                                       bump_size/2,yoffset*2], transform=ax.transData))
-            plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False,
-                         cmap=cmap, vmin=vmin, vmax=vmax, sensors=sensors)
+            if np.sum(electrodes_[bump,:]) != 0:
+                axes.append(ax.inset_axes([times_iteration[bump],iteration-yoffset,
+                                           bump_size/2,yoffset*2], transform=ax.transData))
+                plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False,
+                             cmap=cmap, vmin=vmin, vmax=vmax, sensors=sensors)
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])
         ax.set_ylabel(str(list(ylabels.keys())[0]))
     else:
         ax.set_yticks([])
+        ax.spines['left'].set_visible(False)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.set_ylim(0-yoffset, n_iter-1+yoffset)

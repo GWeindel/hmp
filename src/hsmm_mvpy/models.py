@@ -11,8 +11,7 @@ import math
 
 class hsmm:
     
-    def __init__(self, data, sf, cpus=1, bump_width = 50, shape=2, estimate_magnitudes=True, estimate_parameters=True,
-                parameters_to_fix = [], magnitudes_to_fix = []):
+    def __init__(self, data, sf, cpus=1, bump_width = 50, shape=2, estimate_magnitudes=True, estimate_parameters=True):
         '''
         HSMM calculates the probability of data summing over all ways of 
         placing the n bumps to break the trial into n + 1 flats.
@@ -53,8 +52,6 @@ class hsmm:
         self.shape = shape
         self.estimate_magnitudes = estimate_magnitudes
         self.estimate_parameters = estimate_parameters
-        self.parameters_to_fix = parameters_to_fix
-        self.magnitudes_to_fix = magnitudes_to_fix
     
     def calc_bumps(self,data):
         '''
@@ -97,7 +94,8 @@ class hsmm:
         bumps[-self.offset:,:] = 0 #Centering
         return bumps
 
-    def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, mp=False, verbose=True, starting_points=1):
+    def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, mp=False, verbose=True, starting_points=1,
+                  parameters_to_fix = [], magnitudes_to_fix = []):
         '''
         Fit HsMM for a single n_bumps model
 
@@ -108,44 +106,38 @@ class hsmm:
         magnitudes : ndarray
             2D ndarray components * n_bumps, initial conditions for bumps magnitudes
         parameters : list
-            list of initial conditions for Gamma distribution scale parameter
+            list of initial conditions for Gamma distribution scale parameter. If parameters are estimated, the list provided is used as starting point,
+            if parameters are fixed, parameters estimated will be the same as the one provided. When providing a list, stage need to be in the same order
+            _n_th gamma parameter is  used for the _n_th stage
         threshold : float
             threshold for the HsMM algorithm, 0 skips HsMM
 
         '''
         import pandas as pd 
         if verbose:
-            print(f'Estimating parameters for {n_bumps} bumps model with {starting_points-1} random starting points')
+            print(f'Estimating {n_bumps} bumps model with {starting_points-1} random starting points')
         if mp==True: #PCG: Dirty temporarilly needed for multiprocessing in the iterative backroll estimation...
             magnitudes = magnitudes.T
-
+        
+        if self.estimate_magnitudes == False:#Don't need to manually fix pars if not estimated
+            magnitudes_to_fix = np.arange(n_bumps+1)
+        if self.estimate_parameters == False:#Don't need to manually fix pars if not estimated
+            parameters_to_fix = np.arange(n_bumps+1)            
+            
         #Formatting parameters
         if isinstance(parameters, (xr.DataArray,xr.Dataset)):
             parameters = parameters.dropna(dim='stage').values
-        if self.estimate_parameters == False:#Don't need to manually fix pars if not estimated
-            parameters_to_fix = np.arange(n_bumps+1)
-        else:
-            parameters_to_fix = self.parameters_to_fix
-        if len(parameters_to_fix) < n_bumps+1:#If parameters not fully povided replace with
-            initial_p = parameters
-            parameters = np.tile([self.shape, math.ceil(np.mean(self.durations)/(n_bumps+1)/self.shape)], (n_bumps+1,1))
-            if len(parameters_to_fix)  > 0:
-                parameters[parameters_to_fix] = initial_p[parameters_to_fix]
-        initial_p = parameters
-            
         if isinstance(magnitudes, (xr.DataArray,xr.Dataset)):
-            magnitudes = magnitudes.dropna(dim='bump').values    
-        if self.estimate_magnitudes == False:#Don't need to manually fix pars if not estimated
-            magnitudes_to_fix = np.arange(n_bumps)
-        else:
-            magnitudes_to_fix = self.magnitudes_to_fix
-        if len(magnitudes_to_fix) < n_bumps:#If mags not fully povided replace with
+            magnitudes = magnitudes.dropna(dim='bump').values  
+        if starting_points > 0:
+            if np.any(parameters) == None:
+                parameters = np.tile([self.shape, math.ceil(np.mean(self.durations)/(n_bumps+1)/self.shape)], (n_bumps+1,1))
+            initial_p = parameters
+            
+            if np.any(magnitudes) == None:
+                magnitudes = np.zeros((self.n_dims,n_bumps))
             initial_m = magnitudes
-            magnitudes = np.zeros((self.n_dims,n_bumps))
-            if len(magnitudes_to_fix)  > 0:
-                magnitudes[magnitudes_to_fix] = initial_m[magnitudes_to_fix]
-        initial_m = magnitudes
-
+        
         if starting_points > 1:
             import multiprocessing as mp
             parameters = [initial_p]
@@ -157,9 +149,12 @@ class hsmm:
                 proposal_m[magnitudes_to_fix] = initial_m[magnitudes_to_fix]
                 parameters.append(proposal_p)
                 magnitudes.append(proposal_m)
+            # print(parameters)
+            # print(magnitudes)
             with mp.Pool(processes=self.cpus) as pool:
                 estimates = pool.starmap(self.fit, 
-                    zip(itertools.repeat(n_bumps), magnitudes, parameters, itertools.repeat(1)))   
+                    zip(itertools.repeat(n_bumps), magnitudes, parameters, itertools.repeat(1),\
+                        itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix),))   
             lkhs_sp = [x[0] for x in estimates]
             mags_sp = [x[1] for x in estimates]
             pars_sp = [x[2] for x in estimates]
@@ -170,26 +165,24 @@ class hsmm:
             pars = pars_sp[max_lkhs]
             eventprobs = eventprobs_sp[max_lkhs]
             
+        elif starting_points==1:#informed starting point
+            lkh, mags, pars, eventprobs = self.fit(n_bumps, initial_m, initial_p,\
+                                        threshold, magnitudes_to_fix, parameters_to_fix)
+
         else:
-            lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters, threshold)
-
-        #Comparing to uninitialized gamma parameters
-        # if starting_points == 1:
-        #     parameters = np.tile([self.shape, 50], (n_bumps+1,1))
-        #     magnitudes = np.zeros((self.n_dims,n_bumps))
-        #     likelihood, magnitudes_, parameters_, eventprobs_ = \
-        #             self.fit(n_bumps, initial_m, parameters, threshold)
-        #     if likelihood > lkh:
-        #         if verbose:
-        #             print('Likelihood of uninitialized parameters has been preferred over initialized model. Consider adding starting points?')
-        #         lkh, mags, pars, eventprobs = likelihood, magnitudes_, parameters_, eventprobs_
-
+            if np.any(parameters)== None:
+                parameters = np.tile([self.shape, 50], (n_bumps+1,1))
+            if np.any(magnitudes)== None:
+                magnitudes = np.zeros((self.n_dims,n_bumps))
+            lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters,\
+                                        threshold, magnitudes_to_fix, parameters_to_fix)
         
         if len(pars) != self.max_bumps+1:#align all dimensions
             pars = np.concatenate((pars, np.tile(np.nan, (self.max_bumps+1-len(pars),2))))
             mags = np.concatenate((mags, np.tile(np.nan, (np.shape(mags)[0], \
                 self.max_bumps-np.shape(mags)[1]))),axis=1)
-            eventprobs = np.concatenate((eventprobs, np.tile(np.nan, (np.shape(eventprobs)[0],np.shape(eventprobs)[1], self.max_bumps-np.shape(eventprobs)[2]))),axis=2)
+            eventprobs = np.concatenate((eventprobs, np.tile(np.nan, (np.shape(eventprobs)[0],\
+                                        np.shape(eventprobs)[1], self.max_bumps-np.shape(eventprobs)[2]))),axis=2)
         
         xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
         xrparams = xr.DataArray(pars, dims=("stage",'params'), name="parameters")
@@ -213,7 +206,7 @@ class hsmm:
             print(f"Parameters estimated for {n_bumps} bumps model")
         return estimated
         
-    def fit(self, n_bumps, magnitudes, parameters,  threshold):
+    def fit(self, n_bumps, magnitudes, parameters,  threshold, magnitudes_to_fix=[], parameters_to_fix=[]):
         '''
         Fitting function underlying single and iterative fit
         '''
@@ -235,31 +228,28 @@ class hsmm:
                 magnitudes1 = np.copy(magnitudes)
                 parameters1 = np.copy(parameters)
                 eventprobs1 = np.copy(eventprobs)
-                if self.estimate_magnitudes:
-                    for i in np.arange(n_bumps):
-                        for j in np.arange(self.n_dims):
-                            magnitudes[j,i] = np.mean(np.sum( \
-                            eventprobs[:,:,i]*means[:,:,j], axis=0))
-                            # 2) sum of all samples in a trial
-                            # 3) mean across trials of the sum of samples in a trial
-                            # repeated for each PC (j) and later for each bump (i)
-                            # magnitudes [nPCAs, nBumps]
-                        if i in self.magnitudes_to_fix:
-                            magnitudes[:,i] = magnitudes1[:,i]
-                if self.estimate_parameters:
-                    parameters = self.gamma_parameters(eventprobs, n_bumps)
+                for i in np.arange(n_bumps):
+                    for j in np.arange(self.n_dims):
+                        magnitudes[j,i] = np.mean(np.sum( \
+                        eventprobs[:,:,i]*means[:,:,j], axis=0))
+                        # 2) sum of all samples in a trial
+                        # 3) mean across trials of the sum of samples in a trial
+                        # repeated for each PC (j) and later for each bump (i)
+                        # magnitudes [nPCAs, nBumps]
+                    if i in magnitudes_to_fix:
+                        magnitudes[:,i] = magnitudes1[:,i]
+                parameters = self.gamma_parameters(eventprobs, n_bumps)
 
-                    #Ensure constrain of gammas > bump_width, note that contrary to the matlab code this is not applied on the first and last stages (np.arange(1,n_bumps) 
-                    for i in np.arange(1,n_bumps): #PCG: seems unefficient likely slows down process, isn't there a better way to bound the estimation??
-                        if parameters[i,:].prod() < self.bump_width_samples:
-                            # multiply scale and shape parameters to get 
-                            # the mean distance of the gamma-2 pdf. 
-                            # It constrains that bumps are separated at 
-                            # least a bump length
-                            parameters[i,:] = parameters1[i,:]
-                    for i in np.arange(n_bumps+1): #PCG: seems unefficient likely slows down process, isn't there a better way to bound the estimation??
-                        if i in self.parameters_to_fix:
-                            parameters[i,:] = parameters1[i,:]
+                #Ensure constrain of gammas > bump_width, note that contrary to the matlab code this is not applied on the first and last stages
+                for i in np.arange(n_bumps+1): #PCG: seems unefficient likely slows down process, isn't there a better way to bound the estimation??
+                    if i in parameters_to_fix:
+                        parameters[i,:] = parameters1[i,:]
+                    if 0 < i < n_bumps+1 and parameters[i,:].prod() < self.bump_width_samples:
+                        # multiply scale and shape parameters to get 
+                        # the mean distance of the gamma-2 pdf. 
+                        # It constrains that bumps are separated at 
+                        # least a bump length
+                        parameters[i,:] = parameters1[i,:]
                 lkh, eventprobs = self.calc_EEG_50h(magnitudes, parameters, n_bumps)
         return lkh1, magnitudes1, parameters1, eventprobs1
 
@@ -498,13 +488,13 @@ class hsmm:
         random_stages : ndarray
             random partition between 0 and mean_rt
         '''
-        random_stages = [0]
-        for stage in np.arange(n_bumps):
-            random_stages.append(np.random.uniform(random_stages[-1], 1))
-        random_stages.append(1)#last one is defined as 1 - previous
-        random_stages = np.diff(random_stages)
-        random_stages = [[self.shape, x*mean_rt] for x in random_stages]#Remove 0 duration stage
-        return np.round(random_stages)+1
+        #random_stages = [0]
+        #for stage in np.arange(n_bumps):
+        random_stages= np.array([[2,x*mean_rt/2] for x in np.random.beta(2, 2, n_bumps+1)])
+        #random_stages.append(1)#last one is defined as 1 - previous
+        #random_stages = np.diff(random_stages)
+        #random_stages = np.array([[self.shape, np.round(x*mean_rt)+1] for x in random_stages])#Remove 0 duration stage
+        return random_stages
     
     def compute_max_bumps(self, min_rt=False):
         '''
