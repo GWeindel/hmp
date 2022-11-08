@@ -62,14 +62,6 @@ First we load the libraries necessary for the demo on simulated data
 ### Importing libraries
 
 
-```python
-#Development only
-import sys
-sys.path.insert(0, "/home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/src")
-%load_ext autoreload
-%autoreload 2
-```
-
 
 ```python
 import os 
@@ -142,7 +134,7 @@ raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events, show=False
 
 
 
-    <mne_qt_browser._pg_figure.MNEQtBrowser at 0x7f6acf6aba30>
+![png](README_files/README_7_1.png)
 
 
 
