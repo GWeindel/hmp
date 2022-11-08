@@ -63,6 +63,15 @@ First we load the libraries necessary for the demo on simulated data
 
 
 ```python
+#Development only
+import sys
+sys.path.insert(0, "/home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/src")
+%load_ext autoreload
+%autoreload 2
+```
+
+
+```python
 import os 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -115,14 +124,12 @@ To recover the data we need to create the event structure based on the triggers 
 
 
 ```python
-%matplotlib inline
-
 resp_trigger = int(np.max(np.unique(generating_events[:,2])))#Resp trigger is the last source in each trial
 event_id = {'stimulus':1}
 resp_id = {'response':resp_trigger}
 events = generating_events[(generating_events[:,2] == 1) | (generating_events[:,2] == resp_trigger)]#only retain stimulus and response triggers
 
-raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events);
+raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events, show=False)
 ```
 
     Removing projector <Projection | PCA-v1, active : True, n_channels : 102>
@@ -133,87 +140,9 @@ raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events);
 
 
 
-```python
-raw
-```
 
 
-
-
-<table class="table table-hover table-striped table-sm table-responsive small">
-    <tr>
-        <th>Measurement date</th>
-
-        <td>december 03, 2002  19:01:10 GMT</td>
-
-    </tr>
-    <tr>
-        <th>Experimenter</th>
-
-        <td>Unknown</td>
-
-    </tr>
-        <th>Participant</th>
-
-        <td>Unknown</td>
-
-    </tr>
-    <tr>
-        <th>Digitized points</th>
-
-        <td>0 points</td>
-
-    </tr>
-    <tr>
-        <th>Good channels</th>
-        <td>59 EEG</td>
-    </tr>
-    <tr>
-        <th>Bad channels</th>
-        <td>None</td>
-    </tr>
-    <tr>
-        <th>EOG channels</th>
-        <td>Not available</td>
-    </tr>
-    <tr>
-        <th>ECG channels</th>
-        <td>Not available</td>
-
-    <tr>
-        <th>Sampling frequency</th>
-        <td>600.61 Hz</td>
-    </tr>
-
-
-    <tr>
-        <th>Highpass</th>
-        <td>0.10 Hz</td>
-    </tr>
-
-
-    <tr>
-        <th>Lowpass</th>
-        <td>40.00 Hz</td>
-    </tr>
-
-
-    <tr>
-        <th>Projections</th>
-        <td>Average EEG reference : on</td>
-    </tr>
-
-
-    <tr>
-        <th>Filenames</th>
-        <td>dataset_tutorial_raw.fif</td>
-    </tr>
-
-    <tr>
-        <th>Duration</th>
-        <td>00:02:54 (HH:MM:SS)</td>
-    </tr>
-</table>
+    <mne_qt_browser._pg_figure.MNEQtBrowser at 0x7f6acf6aba30>
 
 
 
@@ -223,6 +152,7 @@ To compare the by-trial duration of bumps that we will estimate later on we firs
 
 
 ```python
+%matplotlib inline
 number_of_sources = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
 random_source_times = np.zeros((int(len(generating_events)/(number_of_sources+1)), number_of_sources))
 
@@ -281,7 +211,7 @@ eeg_dat.sel(epochs=0,electrodes=['EEG 001','EEG 002','EEG 003']).plot.scatter(x=
 
 
     
-![png](README_files/README_14_1.png)
+![png](README_files/README_13_1.png)
     
 
 
@@ -304,10 +234,10 @@ We know that we generate from four sources so let's just try to recover those fo
 ```python
 init = hsmm.models.hsmm(hsmm_dat, sf=eeg_dat.sfreq, bump_width=50, cpus=cpus)#Initialization of the model
 
-selected = init.fit_single(number_of_sources-1, starting_points=25)#function to fit an instance of a 4 bumps model with 25 random starting points for the expectation maximization algorithm
+selected = init.fit_single(number_of_sources-1)#function to fit an instance of a 4 bumps model with 25 random starting points for the expectation maximization algorithm
 ```
 
-    Estimating 4 bumps model with 24 random starting points
+    Estimating 4 bumps model with 0 random starting points
     Parameters estimated for 4 bumps model
 
 
@@ -326,7 +256,7 @@ hsmm.visu.plot_topo_timecourse(eeg_dat, selected, positions,
 
 
     
-![png](README_files/README_22_0.png)
+![png](README_files/README_21_0.png)
     
 
 
@@ -344,7 +274,7 @@ ax.set_ylabel('your label here');
 
 
     
-![png](README_files/README_24_0.png)
+![png](README_files/README_23_0.png)
     
 
 
@@ -358,13 +288,13 @@ hsmm.visu.plot_distribution(selected.eventprobs.mean(dim=['trial_x_participant']
 
 
     
-![png](README_files/README_26_0.png)
+![png](README_files/README_25_0.png)
     
 
 
 
     
-![png](README_files/README_26_1.png)
+![png](README_files/README_25_1.png)
     
 
 
@@ -384,7 +314,7 @@ hsmm.visu.plot_distribution(selected.eventprobs.sel(trial_x_participant=('S0', 1
 
 
     
-![png](README_files/README_28_1.png)
+![png](README_files/README_27_1.png)
     
 
 
@@ -409,7 +339,7 @@ plt.show()
 
 
     
-![png](README_files/README_31_0.png)
+![png](README_files/README_30_0.png)
     
 
 
@@ -424,7 +354,7 @@ hsmm.visu.plot_topo_timecourse(eeg_dat, selected, positions,sensors=False,
 
 
     
-![png](README_files/README_33_0.png)
+![png](README_files/README_32_0.png)
     
 
 
@@ -448,7 +378,7 @@ for bump in init.bump_times(selected.eventprobs, mean=False)[:,:number_of_source
 
 
     
-![png](README_files/README_36_0.png)
+![png](README_files/README_35_0.png)
     
 
 
