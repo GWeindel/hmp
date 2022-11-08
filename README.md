@@ -3,7 +3,6 @@ HsMM-MVpy
 
 ![](plots/general_illustration.png)
 
-
 hsmm_mvpy is an open-source Python package to estimate Hidden Semi-Markov Models in a Multivariate Pattern Analysis (HsMM-MVPA) of electro-encephalographic (EEG) data based on the method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)), Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HsMM_MVPA_BorstAnderson_preprint.pdf)) and Weindel, van Maanen & Borst (in preparation).
 
 As a summary of the method, an HsMM-MVPA analysis parses the EEG into a number of significant cognitive event (called bumps) separated by flat period reflecting the ongoing stage initiated by a bump. Hence any reaction time can then be described by the number of bumps and stage estimated using hsmm_mvpy. The important aspect of HsMM-MVPA is that it is a whole-brain analysis (or whole scalp analysis) that estimates the onset of cognitive events on a single-trial basis. This by-trial estimations allows you then to further dig into any aspect you are interested in the EEG (or MEG) signal:
@@ -84,16 +83,16 @@ _If you're running this for the first time a 1.65 G file will be downloaded in o
 
 
 ```python
-cpus = 4 # For multiprocessing, usually a good idea to use multiple CPus as long as you have enough RAM
+cpus = 5 # For multiprocessing, usually a good idea to use multiple CPus as long as you have enough RAM
 path = os.path.join('simulated/')#Where simulated data will go, create that folder if you don't have it where you're executing the code
 
 n_events = 30 #Number of trials to simulate
 
-sources = [['lateraloccipital-lh',5e-9, [np.random.gamma,2,50]],#One source = localization, acitvation amplitude and onset latencies
-           ['postcentral-lh', 5e-9, [np.random.gamma, 2, 30]],
-           ['posteriorcingulate-rh', 5e-9, [np.random.gamma, 2,80]],
-           ['postcentral-rh', 5e-9, [np.random.gamma, 2,110]],
-           ['postcentral-lh', 1e-20, [np.random.gamma, 2,65]]] #Equivalent to a response trigger as amplitude make it hardly visible
+sources = [['superiorparietal-rh',6e-9, [np.random.gamma,2,40]],#One source = localization, acitvation amplitude and onset latencies
+           ['postcentral-lh', 5e-9, [np.random.gamma, 2, 90]],
+           ['posteriorcingulate-rh', 5e-9, [np.random.gamma, 2,50]],
+           ['postcentral-rh', 5e-9, [np.random.gamma, 2,170]],
+           ['postcentral-lh', 1e-20, [np.random.gamma, 2,25]]] #Equivalent to a response trigger as amplitude make it hardly visible
 
 max_trial_length = 3000 #length of a trial (ISI)
 
@@ -102,6 +101,7 @@ file = 'dataset_tutorial' #Name of the file to save
 mne_path = os.path.join(path+file+'_raw.fif')
 
 raw, generating_events = simulations.simulate(sources, n_events, max_trial_length, cpus, bump_frequency, file, path, overwrite=False)
+positions = np.delete(channels.layout._find_topomap_coords(raw.info, 'eeg'),52,axis=0)#inferring electrode location using MNE
 ```
 
     Aligning file name to MNE's convention
@@ -115,25 +115,106 @@ To recover the data we need to create the event structure based on the triggers 
 
 
 ```python
-resp_trigger = int(np.max(np.unique(generating_events[:,2])))#Resp trigger is the last source in each trial
-event_id = {'stimulus':0}
-resp_id = {'response':resp_trigger}
-events = generating_events[(generating_events[:,2] == 0) | (generating_events[:,2] == resp_trigger)]#only retain stimulus and response triggers
+%matplotlib inline
 
-raw.copy().pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events);
+resp_trigger = int(np.max(np.unique(generating_events[:,2])))#Resp trigger is the last source in each trial
+event_id = {'stimulus':1}
+resp_id = {'response':resp_trigger}
+events = generating_events[(generating_events[:,2] == 1) | (generating_events[:,2] == resp_trigger)]#only retain stimulus and response triggers
+
+raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events);
 ```
 
     Removing projector <Projection | PCA-v1, active : True, n_channels : 102>
     Removing projector <Projection | PCA-v2, active : True, n_channels : 102>
     Removing projector <Projection | PCA-v3, active : True, n_channels : 102>
-    Using matplotlib as 2D backend.
+    Using qt as 2D backend.
     Opening raw-browser...
 
 
 
-    
-![png](README_files/README_7_1.png)
-    
+```python
+raw
+```
+
+
+
+
+<table class="table table-hover table-striped table-sm table-responsive small">
+    <tr>
+        <th>Measurement date</th>
+
+        <td>december 03, 2002  19:01:10 GMT</td>
+
+    </tr>
+    <tr>
+        <th>Experimenter</th>
+
+        <td>Unknown</td>
+
+    </tr>
+        <th>Participant</th>
+
+        <td>Unknown</td>
+
+    </tr>
+    <tr>
+        <th>Digitized points</th>
+
+        <td>0 points</td>
+
+    </tr>
+    <tr>
+        <th>Good channels</th>
+        <td>59 EEG</td>
+    </tr>
+    <tr>
+        <th>Bad channels</th>
+        <td>None</td>
+    </tr>
+    <tr>
+        <th>EOG channels</th>
+        <td>Not available</td>
+    </tr>
+    <tr>
+        <th>ECG channels</th>
+        <td>Not available</td>
+
+    <tr>
+        <th>Sampling frequency</th>
+        <td>600.61 Hz</td>
+    </tr>
+
+
+    <tr>
+        <th>Highpass</th>
+        <td>0.10 Hz</td>
+    </tr>
+
+
+    <tr>
+        <th>Lowpass</th>
+        <td>40.00 Hz</td>
+    </tr>
+
+
+    <tr>
+        <th>Projections</th>
+        <td>Average EEG reference : on</td>
+    </tr>
+
+
+    <tr>
+        <th>Filenames</th>
+        <td>dataset_tutorial_raw.fif</td>
+    </tr>
+
+    <tr>
+        <th>Duration</th>
+        <td>00:02:54 (HH:MM:SS)</td>
+    </tr>
+</table>
+
 
 
 ### Recovering number of sources as well as actual by-trial variation
@@ -142,7 +223,6 @@ To compare the by-trial duration of bumps that we will estimate later on we firs
 
 
 ```python
-%matplotlib inline
 number_of_sources = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
 random_source_times = np.zeros((int(len(generating_events)/(number_of_sources+1)), number_of_sources))
 
@@ -168,7 +248,7 @@ eeg_dat = hsmm.utils.read_mne_EEG(mne_path, event_id, resp_id, raw.info['sfreq']
 
     Processing participant simulated/dataset_tutorial_raw.fif
     Reading 0 ... 104999  =      0.000 ...   174.819 secs...
-    Creating epochs based on following event ID :[0 5]
+    Creating epochs based on following event ID :[1 6]
     N trials without response event: 0
     Applying reaction time trim to keep RTs between 0.001 and 5 seconds
     30 RTs kept of 30 clean epochs
@@ -186,14 +266,14 @@ eeg_dat.sel(epochs=0,electrodes=['EEG 001','EEG 002','EEG 003']).plot.scatter(x=
 ```
 
     <xarray.Dataset>
-    Dimensions:      (participant: 1, epochs: 30, electrodes: 59, samples: 1387)
+    Dimensions:      (participant: 1, epochs: 30, electrodes: 59, samples: 1116)
     Coordinates:
       * epochs       (epochs) int64 0 1 2 3 4 5 6 7 8 ... 21 22 23 24 25 26 27 28 29
       * electrodes   (electrodes) <U7 'EEG 001' 'EEG 002' ... 'EEG 059' 'EEG 060'
-      * samples      (samples) int64 0 1 2 3 4 5 6 ... 1381 1382 1383 1384 1385 1386
+      * samples      (samples) int64 0 1 2 3 4 5 6 ... 1110 1111 1112 1113 1114 1115
       * participant  (participant) <U2 'S0'
     Data variables:
-        data         (participant, epochs, electrodes, samples) float64 2.053e-06...
+        data         (participant, epochs, electrodes, samples) float64 -1.045e-0...
         event        (participant, epochs) <U8 'stimulus' 'stimulus' ... 'stimulus'
     Attributes:
         sfreq:    600.614990234375
@@ -201,7 +281,7 @@ eeg_dat.sel(epochs=0,electrodes=['EEG 001','EEG 002','EEG 003']).plot.scatter(x=
 
 
     
-![png](README_files/README_13_1.png)
+![png](README_files/README_14_1.png)
     
 
 
@@ -223,42 +303,24 @@ We know that we generate from four sources so let's just try to recover those fo
 
 ```python
 init = hsmm.models.hsmm(hsmm_dat, sf=eeg_dat.sfreq, bump_width=50, cpus=cpus)#Initialization of the model
-bests = init.backward_estimation()
-selected = bests.sel(n_bumps=number_of_sources-1)
+
+selected = init.fit_single(number_of_sources-1, starting_points=25)#function to fit an instance of a 4 bumps model with 25 random starting points for the expectation maximization algorithm
 ```
 
-    Estimating all solutions for maximal number of bumps (9) with 0 random starting points
-    Estimating parameters for 9 bumps model with 0 random starting points
-    Likelihood of uninitialized parameters has been preferred over initialized model. Consider adding starting points?
-    Parameters estimated for 9 bumps model
-    Estimating all solutions for 8 number of bumps
-    Estimating all solutions for 7 number of bumps
-    Estimating all solutions for 6 number of bumps
-    Estimating all solutions for 5 number of bumps
-    Estimating all solutions for 4 number of bumps
-    Estimating all solutions for 3 number of bumps
-    Estimating all solutions for 2 number of bumps
-    Estimating all solutions for 1 number of bumps
+    Estimating 4 bumps model with 24 random starting points
+    Parameters estimated for 4 bumps model
 
 
 ### Visualizing results of the fit
 
 In the previous cell we initiated an HsMM model looking for 50ms bumps in the EEG signal and parsing the EEG data into a signal with 4 bumps and 5 gamma distributed stages with a fixed shape of 2 and a scale estimated by stage. We can now inspect the results of the fit
 
-
-```python
-bump_times_selected = init.bump_times(selected.eventprobs)#computing predicted bump times
-
-positions = np.delete(channels.layout._find_topomap_coords(raw.info, 'eeg'),52,axis=0)#inferring electrode location using MNE
-electrodes_selected = init.compute_topo(eeg_dat, selected.eventprobs)#Computing electrode activity at estimated bump location
-```
-
 We can directly take a look to the topologies and latencies of the bumps by calling ```hsmm.visu.plot_topo_timecourse```
 
 
 ```python
-hsmm.visu.plot_topo_timecourse(electrodes_selected, bump_times_selected, positions, 
-                               bump_size=init.bump_width_samples, magnify=5, figsize=(12,2),
+hsmm.visu.plot_topo_timecourse(eeg_dat, selected, positions, 
+                               bump_size=init.bump_width_samples, magnify=5, figsize=(12,2), sensors=False,
                                 time_step = 1,  times_to_display = np.mean(init.ends - init.starts))
 ```
 
@@ -310,7 +372,7 @@ As HsMM-MVPA selected those bumps onset per trial we can also look at the predic
 
 
 ```python
-hsmm.visu.plot_distribution(selected.eventprobs.sel(trial_x_participant=('S0', 0)), xlims=(0,1000))
+hsmm.visu.plot_distribution(selected.eventprobs.sel(trial_x_participant=('S0', 1)), xlims=(0,1000))
 ```
 
 
@@ -355,10 +417,7 @@ Or also overlay actual bumps onset with predicted one
 
 
 ```python
-positions = np.delete(channels.layout._find_topomap_coords(raw.info, 'eeg'),52,axis=0)#inferring electrode location
-electrodes = init.compute_topo(eeg_dat, selected.eventprobs)#Computing electrode activity at bump location
-
-hsmm.visu.plot_topo_timecourse(electrodes, init.bump_times(selected.eventprobs), positions,#inferring electrode location, 
+hsmm.visu.plot_topo_timecourse(eeg_dat, selected, positions,sensors=False,
         bump_size=init.bump_width_samples, time_step = 1, magnify=4, figsize=(13,2), title='Actual vs estimated bump onsets',
         times_to_display = np.mean(np.cumsum(random_source_times,axis=1),axis=0))
 ```
@@ -393,7 +452,7 @@ for bump in init.bump_times(selected.eventprobs, mean=False)[:,:number_of_source
     
 
 
-We see that, to the exception of the first stage (a weird result currently under investigation), every other stage gets nicely recovered even on a by-trial basis!
+We see that, to the exception of the first stage, every other stage gets nicely recovered even on a by-trial basis!
 
 ### Follow-up
 
