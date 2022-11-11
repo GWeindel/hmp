@@ -7,7 +7,7 @@ import xarray as xr
 import multiprocessing as mp
 import itertools
 import math
-
+from warnings import warn
 
 class hsmm:
     
@@ -95,7 +95,7 @@ class hsmm:
         return bumps
 
     def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, mp=False, verbose=True, starting_points=1,
-                  parameters_to_fix = [], magnitudes_to_fix = []):
+                  parameters_to_fix = [], magnitudes_to_fix = [], use_grid_search=False, iter_limit=1e3):
         '''
         Fit HsMM for a single n_bumps model
 
@@ -170,12 +170,32 @@ class hsmm:
                                         threshold, magnitudes_to_fix, parameters_to_fix)
 
         else:
-            if np.any(parameters)== None:
-                parameters = np.tile([self.shape, 50], (n_bumps+1,1))
-            if np.any(magnitudes)== None:
-                magnitudes = np.zeros((self.n_dims,n_bumps))
-            lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters,\
-                                        threshold, magnitudes_to_fix, parameters_to_fix)
+            if use_grid_search:
+                import multiprocessing as mp
+                parameters = self.grid_search(n_bumps, iter_limit)
+                print(f'Fitting {len(parameters)} models based on all possibilities from grid search')
+                magnitudes = np.zeros((len(parameters), self.n_dims,n_bumps))
+                with mp.Pool(processes=self.cpus) as pool:
+                    estimates = pool.starmap(self.fit, 
+                        zip(itertools.repeat(n_bumps), magnitudes, parameters, itertools.repeat(1),\
+                            itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix),))   
+                lkhs_sp = [x[0] for x in estimates]
+                mags_sp = [x[1] for x in estimates]
+                pars_sp = [x[2] for x in estimates]
+                eventprobs_sp = [x[3] for x in estimates]
+                max_lkhs = np.where(lkhs_sp == np.max(lkhs_sp))[0][0]
+                lkh = lkhs_sp[max_lkhs]
+                mags = mags_sp[max_lkhs]
+                pars = pars_sp[max_lkhs]
+                eventprobs = eventprobs_sp[max_lkhs]
+
+            else:#uninitialized    
+                if np.any(parameters)== None:
+                    parameters = np.tile([self.shape, 50], (n_bumps+1,1))
+                if np.any(magnitudes)== None:
+                    magnitudes = np.zeros((self.n_dims,n_bumps))
+                lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters,\
+                                            threshold, magnitudes_to_fix, parameters_to_fix)
         
         if len(pars) != self.max_bumps+1:#align all dimensions
             pars = np.concatenate((pars, np.tile(np.nan, (self.max_bumps+1-len(pars),2))))
@@ -394,7 +414,7 @@ class hsmm:
         params[-1,1] = params[-1,1] - .5 /self.shape
         return params
 
-    def backward_estimation(self,max_fit=None, max_starting_points=1):
+    def backward_estimation(self,max_fit=None, max_starting_points=1, max_use_grid_search=False):
         '''
         First read or estimate max_bump solution then estimate max_bump - 1 solution by 
         iteratively removing one of the bump and pick the one with the highest 
@@ -410,8 +430,11 @@ class hsmm:
         
         '''
         if not max_fit:
-            print(f'Estimating all solutions for maximal number of bumps ({self.max_bumps}) with {max_starting_points-1} random starting points')
-            bump_loo_results = [self.fit_single(self.max_bumps, starting_points=max_starting_points)]
+            if max_use_grid_search:
+                max_starting_points = 0
+            if max_starting_points >0:
+                print(f'Estimating all solutions for maximal number of bumps ({self.max_bumps}) with {max_starting_points-1} random starting points')
+            bump_loo_results = [self.fit_single(self.max_bumps, starting_points=max_starting_points, use_grid_search=max_use_grid_search)]
         else:
             bump_loo_results = [max_fit]
         i = 0
@@ -524,6 +547,7 @@ class hsmm:
         d : ndarray
             density for a gamma with given parameters
         '''
+        warn('This method is deprecated and will be removed in future version, use onset_times() instead', DeprecationWarning, stacklevel=2)
         eventprobs = eventprobs.dropna('bump', how="all")
         eventprobs = eventprobs.dropna('trial_x_participant', how="all")
         onsets = np.empty((len(eventprobs.trial_x_participant),len(eventprobs.bump)+1))
@@ -536,8 +560,49 @@ class hsmm:
             return np.mean(onsets, axis=0)
         else:
             return onsets
+        
+    def onset_times(self, estimates, duration=False, fill_value=None, mean=False):
+        '''
+        Compute the likeliest onset times for each bump
+
+        Parameters
+        ----------
+        estimates :
+            Estimated instance of an hsmm model
+        init : 
+            Initialized HsMM object  
+        duration : bool
+            Whether to compute onset times (False) or stage duration (True)
+        fill_value : float | ndarray
+            What value to fill for the first onset/duration
+
+        Returns
+        -------
+        times : xr.DataArray
+            Bump onset or stage duration with bump and trial_x_participant dimensions
+        '''
+
+        eventprobs = estimates.eventprobs
+        if duration: fill_value=0
+        if fill_value != None:
+            eventprobs = eventprobs.shift(bump=1, fill_value=0)
+        eventprobs = eventprobs.dropna('bump')
+        times = xr.dot(eventprobs, eventprobs.samples, dims='samples')
+        times = times.rename({'bump':'stage'})
+        #adding stim onset
+        rts = self.ends-self.starts
+        rts =  xr.DataArray([rts], dims=(["stage",'trial_x_participant']))
+        times = xr.concat([times, rts], dim='stage')
+        times = times.assign_coords({'stage':np.arange(times.stage.max()+2,)})
+        if duration:
+            times = times.diff(dim='stage')
+        if mean:
+            times = times.mean('trial_x_participant')
+        return times
+   
     
     def compute_topo(self, data, eventprobs, mean=True):
+        
         if 'trial_x_participant' not in data:
             data = data.stack(trial_x_participant=['participant','epochs'])
         eventprobs = eventprobs.dropna('bump', how="all")
@@ -565,3 +630,43 @@ class hsmm:
         for n_bumps in eventprobs.n_bumps:
             topo[n_bumps-1, :n_bumps.values, :] = self.compute_topo(data, eventprobs.sel(n_bumps=n_bumps))
         return topo
+    
+    def grid_search(self, n_bump, iter_limit=1e3):
+        '''
+        This function decomposes the mean RT into a grid with points separated by the size of a bump. It then generates all possible combination
+        of bump placements within this grid. It is faster than using random points (both should converge) but depending on the mean RT and the number 
+        of bumps to look for, the number of combination can be really large. 
+        
+        Parameters
+        ----------
+        n_bump : int
+            how many bump to look for
+        iter_limit : int
+            How much is too much
+
+        Returns
+        -------
+        parameters : ndarray
+            3D array with numper of possibilities * n_bumps * 2 (gamma parameters)
+        '''
+        from itertools import combinations_with_replacement, permutations
+        bump_width = self.bump_width_samples
+        mean_rt = int(bump_width*(self.durations.mean()//bump_width))
+        grid = (np.arange((mean_rt/bump_width)-1)+1)*bump_width
+        grid = grid[grid < mean_rt - ((n_bump-2)*bump_width)]#remove impossible latencies based on n_bumps, fastens a bit the following
+        comb = list(combinations_with_replacement(grid, n_bump))#A bit bruteforce
+        comb = np.array(list(filter(lambda x: np.sum(x) == mean_rt, comb)))#only retain solution where sum = mean_rt
+        new_comb = []
+        for c in comb:
+            new_comb.append(np.unique(np.array(list(permutations(c))), axis=0))
+        comb = np.vstack(new_comb)
+        if len(comb) > iter_limit:
+            raise ValueError(f'number of possible combinations exceed the limit of {iter_limit} (counting {len(comb)} combinations). \
+Random starting points might be a better option for this dataset or increase iter_limit')
+        parameters = np.zeros((n_bump,len(comb),2))
+        for idx, y in enumerate(comb):
+            parameters[:, idx, :] = [[self.shape, x/self.shape] for x in y]
+        return parameters
+        
+    
+    

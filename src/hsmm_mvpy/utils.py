@@ -61,7 +61,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
     tmax : float
         Time taken after stimulus onset
     offset_after_resp : float
-        Time taken after onset of the response
+        Time taken after onset of the response in seconds
     low_pass : float
         Value of the low pass filter
     high_pass : float
@@ -641,6 +641,39 @@ def save_eventprobs(eventprobs, filename):
     eventprobs.to_dataframe().to_csv(filename)
     print(f"Saved at {filename}")
 
+def event_times(data, times, electrode, stage):
+    '''
+    Event times parses the single trial EEG signal of a given electrode in a given stage, from bump onset to the next one. If requesting the last
+    stage it is defined as the onset of the last bump until the response of the participants.
+
+    Parameters
+    ----------
+    data : xr.Dataset
+        HsMM EEG data (untransformed but with trial and participant stacked)
+    times : xr.DataArray
+        Onset times as computed using onset_times()
+    electrode : str
+        Electrode to pick for the parsing of the signal
+    stage : float | ndarray
+        Which stage to parse the signal into
+
+    Returns
+    -------
+    brp_data : ndarray
+        Matrix with trial_x_participant * samples with sample dimension given by the maximum stage duration
+    '''
+
+    brp_data = np.tile(np.nan, (len(data.trial_x_participant), int(round(max(times.sel(stage=stage+1).data- times.sel(stage=stage).data)))+1))
+    i=0
+    for trial, trial_dat in data.groupby('trial_x_participant'):
+        trial_time = slice(times.sel(stage=stage, trial_x_participant=trial), \
+                                                 times.sel(stage=stage+1, trial_x_participant=trial))
+        trial_elec = trial_dat.sel(electrodes = electrode, samples=trial_time).squeeze()
+        brp_data[i, :len(trial_elec.samples)] = trial_elec
+        i += 1
+
+    return brp_data    
+    
 # def download_sample_data():
 #     import urllib.request
     
