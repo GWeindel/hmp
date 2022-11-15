@@ -409,25 +409,19 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         data = data.groupby(subjects_variable).map(standardize)
     if method == 'pca':
         #if isinstance(data, (xr.Dataset, xr.DataArray)):
-        #    data = data.data
-        var_cov_matrices = []
         # Computing cov matrices by trial and take the average of those
-        if not single:
-            for i,trial_dat in data.stack(trial=("participant", "epochs")).groupby('trial'):
-                var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
-            var_cov_matrix = np.mean(var_cov_matrices,axis=0)
-        else:
-            for i,trial_dat in data.groupby('epochs'):
-                var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
-            var_cov_matrix = np.mean(var_cov_matrices,axis=0)    
-
+        #var_cov_matrix = data.data.stack(trial=("participant", "epochs")).groupby('trial').map(vcov_mat).to_numpy().mean()
+        var_cov_matrices = []
+        for i,trial_dat in data.data.stack(trial=("participant", "epochs")).groupby('trial'):
+            var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
+        var_cov_matrix = np.mean(var_cov_matrices,axis=0)
         # Performing spatial PCA on the average var-cov matrix
         if n_comp == None:
             import matplotlib.pyplot as plt
             n_comp = np.shape(var_cov_matrix)[0]-1
             fig, ax = plt.subplots(1,2, figsize=(.2*n_comp, 4))
             pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
-            pca_data = pca.fit_transform(var_cov_matrix)
+            pca_data = pca.fit_transform(var_cov_matrix.T)
             var = pca.transform(var_cov_matrix)
             var = np.var(var, axis=0)
             ax[0].plot(np.arange(pca.n_components)+1, var/np.sum(var),'.-')
@@ -449,7 +443,7 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
                      component=("component", np.arange(n_comp)))
         pca_data = xr.DataArray(pca_data, dims=("electrodes","component"), coords=coords)
         means = data.groupby('electrodes').mean(...)
-        data = data @ pca_data
+        data = data.data @ pca_data
         if apply_zscore and not single:
             data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
         elif apply_zscore and single :

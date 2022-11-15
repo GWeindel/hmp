@@ -89,9 +89,9 @@ class hsmm:
             bumps[:,j] = temp @ template
             # for each PC we calculate its correlation with bump temp(data samples * 5) *  
             # template(sine wave bump in samples - 5*1)
-        bumps[self.offset:,1:] = bumps[:-self.offset,1:]#Centering
-        #bumps[:self.offset,:] = 0 #Centering
-        #bumps[-self.offset:,:] = 0 #Centering
+        bumps[self.offset:,:] = bumps[:-self.offset,:]#Centering
+        bumps[:self.offset,:] = 0 #Centering
+        bumps[-self.offset:,:] = 0 #Centering
         return bumps
 
     def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, mp=False, verbose=True, starting_points=1,
@@ -296,10 +296,10 @@ class hsmm:
             # Following assigns gain per trial to variable probs 
             # in direct and reverse order
             probs[:self.ends[i] - self.starts[i]+1,i,:] = \
-                gains[self.starts[i] : self.ends[i]+1,:] 
+                gains[self.starts[i]: self.ends[i]+1,:] 
             for j in np.arange(n_bumps): # PCG: for-loop IMPROVE
-                probs_b[:self.ends[i]- self.starts[i]+1,i,j] = \
-                np.flipud(gains[self.starts[i] : self.ends[i]+1,\
+                probs_b[:self.ends[i]- self.starts[i]+1 ,i,j] = \
+                np.flipud(gains[self.starts[i]: self.ends[i]+1,\
                 n_bumps-j-1])
                 # assign reversed gains array per trial
 
@@ -381,8 +381,8 @@ class hsmm:
         # 1) mean accross trials of eventprobs -> mP[max_l, nbump]
         # 2) global expected location of each bump
         # concatenate horizontaly to last column the length of each trial
-        averagepos = averagepos - (np.hstack(np.asarray([\
-                np.append(np.arange(0,n_bumps*width,width),n_bumps*width)],dtype='object')))
+        averagepos = averagepos - (self.offset+np.hstack(np.asarray([\
+                np.append(np.arange(0,n_bumps*width,width),n_bumps*width-self.offset)],dtype='object')))
         # correction for time locations with number of bumps and size in samples
         flats = averagepos - np.hstack((0,averagepos[:-1]))
         params = np.zeros((n_bumps+1,2))
@@ -578,6 +578,7 @@ class hsmm:
         times = xr.concat([times, rts], dim='stage')
         if duration:
             times = times.diff(dim='stage')
+            times.loc[:,1] = times.loc[:,1]-self.bump_width_samples/2
         if mean:
             times = times.mean('trial_x_participant')
         return times
