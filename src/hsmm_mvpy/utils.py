@@ -408,6 +408,8 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         data = data.assign(mean_std=mean_std.data)
         data = data.groupby(subjects_variable).map(standardize)
     if method == 'pca':
+        #if isinstance(data, (xr.Dataset, xr.DataArray)):
+        #    data = data.data
         var_cov_matrices = []
         # Computing cov matrices by trial and take the average of those
         if not single:

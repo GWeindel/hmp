@@ -71,10 +71,10 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
         #This is to keep backward compatibility but supplyng externally computed electrodes and times will probably be
         # DEPRECATED
         if 'n_bumps' in times and times.n_bumps.count().values>1:
-            electrodes = xr.dot(electrodes.stack(trial_x_participant=['participant','epochs']).data.fillna(0), \
+            electrodes = xr.dot(electrodes.rename({'epochs':'trials'}).stack(trial_x_participant=['participant','trials']).data.fillna(0), \
               times.eventprobs.fillna(0), dims=['samples']).mean('trial_x_participant').transpose('n_bumps','bump','electrodes').data
         else:
-            electrodes = xr.dot(electrodes.stack(trial_x_participant=['participant','epochs']).data.fillna(0), \
+            electrodes = xr.dot(electrodes.rename({'epochs':'trials'}).stack(trial_x_participant=['participant','trials']).data.fillna(0), \
               times.eventprobs.fillna(0), dims=['samples']).mean('trial_x_participant').transpose('bump','electrodes').data
         times = (xr.dot(times.eventprobs, times.eventprobs.samples, dims='samples')-bump_size/2).fillna(0).mean('trial_x_participant')
     
@@ -121,6 +121,8 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
         ax.set_xlabel('Time')
     if title:
         ax.set_title(title)
+    if np.any(max_time) == None and np.any(times_to_display) == None:
+        ax.set_xlim(0, times.max()+times.max()/10)
     if return_ax:
         return ax
     else:

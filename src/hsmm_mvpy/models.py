@@ -123,7 +123,7 @@ class hsmm:
             magnitudes_to_fix = np.arange(n_bumps+1)
         if self.estimate_parameters == False:#Don't need to manually fix pars if not estimated
             parameters_to_fix = np.arange(n_bumps+1)            
-            
+        if use_grid_search: starting_points=0
         #Formatting parameters
         if isinstance(parameters, (xr.DataArray,xr.Dataset)):
             parameters = parameters.dropna(dim='stage').values
@@ -172,8 +172,7 @@ class hsmm:
         else:
             if use_grid_search:
                 import multiprocessing as mp
-                parameters = self.grid_search(n_bumps, iter_limit)
-                print(f'Fitting {len(parameters)} models based on all possibilities from grid search')
+                parameters = self.grid_search(n_bumps+1, iter_limit)
                 magnitudes = np.zeros((len(parameters), self.n_dims,n_bumps))
                 with mp.Pool(processes=self.cpus) as pool:
                     estimates = pool.starmap(self.fit, 
@@ -414,7 +413,7 @@ class hsmm:
         params[-1,1] = params[-1,1] - .5 /self.shape
         return params
 
-    def backward_estimation(self,max_fit=None, max_starting_points=1, max_use_grid_search=False):
+    def backward_estimation(self,max_fit=None, max_starting_points=1, max_use_grid_search=False, max_iter=1e2):
         '''
         First read or estimate max_bump solution then estimate max_bump - 1 solution by 
         iteratively removing one of the bump and pick the one with the highest 
@@ -433,8 +432,8 @@ class hsmm:
             if max_use_grid_search:
                 max_starting_points = 0
             if max_starting_points >0:
-                print(f'Estimating all solutions for maximal number of bumps ({self.max_bumps}) with {max_starting_points-1} random starting points')
-            bump_loo_results = [self.fit_single(self.max_bumps, starting_points=max_starting_points, use_grid_search=max_use_grid_search)]
+                print(f'Estimating all solutions for maximal number of bumps ({self.max_bumps}) with 1 pre-defined starting point and {max_starting_points-1} random starting points')
+            bump_loo_results = [self.fit_single(self.max_bumps, starting_points=max_starting_points, use_grid_search=max_use_grid_search, verbose=False, iter_limit=max_iter)]
         else:
             bump_loo_results = [max_fit]
         i = 0
@@ -631,15 +630,17 @@ class hsmm:
             topo[n_bumps-1, :n_bumps.values, :] = self.compute_topo(data, eventprobs.sel(n_bumps=n_bumps))
         return topo
     
-    def grid_search(self, n_bump, iter_limit=1e3):
+    def grid_search(self, n_stages, iter_limit=1e3):
         '''
-        This function decomposes the mean RT into a grid with points separated by the size of a bump. It then generates all possible combination
-        of bump placements within this grid. It is faster than using random points (both should converge) but depending on the mean RT and the number 
+        This function decomposes the mean RT into a grid with points. Ideal case is to have a grid with one sample = one search point but the number
+        of possibilities badly scales with the length of the RT and the number of stages. Therefore the iter_limit is used to select an optimal number
+        of points in the grid with a given spacing. After having defined the grid, the function then generates all possible combination of 
+        bump placements within this grid. It is faster than using random points (both should converge) but depending on the mean RT and the number 
         of bumps to look for, the number of combination can be really large. 
         
         Parameters
         ----------
-        n_bump : int
+        n_stages : int
             how many bump to look for
         iter_limit : int
             How much is too much
@@ -647,26 +648,62 @@ class hsmm:
         Returns
         -------
         parameters : ndarray
-            3D array with numper of possibilities * n_bumps * 2 (gamma parameters)
+            3D array with numper of possibilities * n_stages * 2 (gamma parameters)
         '''
-        from itertools import combinations_with_replacement, permutations
-        bump_width = self.bump_width_samples
-        mean_rt = int(bump_width*(self.durations.mean()//bump_width))
-        grid = (np.arange((mean_rt/bump_width)-1)+1)*bump_width
-        grid = grid[grid < mean_rt - ((n_bump-2)*bump_width)]#remove impossible latencies based on n_bumps, fastens a bit the following
-        comb = list(combinations_with_replacement(grid, n_bump))#A bit bruteforce
-        comb = np.array(list(filter(lambda x: np.sum(x) == mean_rt, comb)))#only retain solution where sum = mean_rt
+        from itertools import combinations_with_replacement, permutations  
+        from math import comb as binomcoeff
+        import more_itertools as mit
+
+        mean_rt = self.durations.mean()
+        bumps_width = self.bump_width_samples
+        n_points = int(mean_rt - bumps_width*(n_stages-1))
+        check_n_posibilities = binomcoeff(n_points-1, n_stages-1)
+#         if check_n_posibilities > iter_limit:
+#             raise ValueError(f'number of possible combinations exceed the limit of {iter_limit} (counting {check_n_posibilities} combinations). \
+# Random starting points might be a better option for this dataset or increase iter_limit')
+        while binomcoeff(n_points-1, n_stages-1) > iter_limit:
+            n_points = n_points-1
+        spacing = mean_rt//n_points
+        mean_rt = spacing*n_points
+        grid = (np.arange(n_points)+1)*spacing
+        grid = grid[grid < mean_rt - ((n_stages-2)*spacing)]
+        comb = np.array([x for x in combinations_with_replacement(grid, n_stages) if np.sum(x) == mean_rt])#A bit bruteforce
+    #list(combinations_with_replacement(grid, n_stages))#A bit bruteforce
+        #n!/(n-r)!
         new_comb = []
         for c in comb:
-            new_comb.append(np.unique(np.array(list(permutations(c))), axis=0))
+            new_comb.append(np.array(list(mit.distinct_permutations(c))))
         comb = np.vstack(new_comb)
-        if len(comb) > iter_limit:
-            raise ValueError(f'number of possible combinations exceed the limit of {iter_limit} (counting {len(comb)} combinations). \
-Random starting points might be a better option for this dataset or increase iter_limit')
-        parameters = np.zeros((n_bump,len(comb),2))
+
+        parameters = np.zeros((len(comb),n_stages,2))
         for idx, y in enumerate(comb):
-            parameters[:, idx, :] = [[self.shape, x/self.shape] for x in y]
+            parameters[idx, :, :] = [[self.shape, x/self.shape] for x in y]
+        print(f'Fitting {len(parameters)} models based on all possibilities from grid search with a spacing of {int(spacing)} samples and {int(n_points)} points')
         return parameters
-        
     
     
+# import matplotlib.pyplot as plt 
+# from itertools import combinations_with_replacement, permutations  
+# import more_itertools as mit
+# import numpy as np
+# result = []
+# for stage in np.arange(10)+2:
+#     mean_rt = 150
+#     n_stages = stage
+#     n_points =150#int((stage-1)*((mean_rt)/(stage-1)**4))-stage
+#     print(f'Stage {stage} points:{n_points}')
+#     spacing = mean_rt//n_points
+#     mean_rt = spacing*n_points
+#     grid = (np.arange(n_points)+1)*spacing
+#     grid = grid[grid < mean_rt - ((n_stages-2)*spacing)]
+#     comb = np.array([x for x in combinations_with_replacement(grid, n_stages) if np.sum(x) == mean_rt])#A bit bruteforce
+# #list(combinations_with_replacement(grid, n_stages))#A bit bruteforce
+#     #comb = np.array(list(filter(lambda x: np.sum(x) == mean_rt, comb)))#only retain solution where sum = mean_rt
+#     #n!/(n-r)!
+#     new_comb = []
+#     for c in comb:
+#         new_comb.append(np.array(list(mit.distinct_permutations(c))))
+#     comb = np.vstack(new_comb)
+#     print(len(comb))
+#     result.append(len(comb))
+
