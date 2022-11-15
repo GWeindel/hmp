@@ -89,9 +89,9 @@ class hsmm:
             bumps[:,j] = temp @ template
             # for each PC we calculate its correlation with bump temp(data samples * 5) *  
             # template(sine wave bump in samples - 5*1)
-        bumps[self.offset:,:] = bumps[:-self.offset,:]#Centering
-        bumps[:self.offset,:] = 0 #Centering
-        bumps[-self.offset:,:] = 0 #Centering
+        bumps[self.offset:,1:] = bumps[:-self.offset,1:]#Centering
+        #bumps[:self.offset,:] = 0 #Centering
+        #bumps[-self.offset:,:] = 0 #Centering
         return bumps
 
     def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, mp=False, verbose=True, starting_points=1,
@@ -295,11 +295,11 @@ class hsmm:
         for i in np.arange(self.n_trials):
             # Following assigns gain per trial to variable probs 
             # in direct and reverse order
-            probs[self.offset:self.ends[i] - self.starts[i]+1 - self.offset,i,:] = \
-                gains[self.starts[i]+ self.offset : self.ends[i] - self.offset+1,:] 
+            probs[:self.ends[i] - self.starts[i]+1,i,:] = \
+                gains[self.starts[i] : self.ends[i]+1,:] 
             for j in np.arange(n_bumps): # PCG: for-loop IMPROVE
-                probs_b[self.offset:self.ends[i]- self.starts[i]+1 - self.offset,i,j] = \
-                np.flipud(gains[self.starts[i]+ self.offset : self.ends[i]- self.offset+1,\
+                probs_b[:self.ends[i]- self.starts[i]+1,i,j] = \
+                np.flipud(gains[self.starts[i] : self.ends[i]+1,\
                 n_bumps-j-1])
                 # assign reversed gains array per trial
 
@@ -314,10 +314,10 @@ class hsmm:
         # eq1 in Appendix, first definition of likelihood
         # For each trial (given a length of max duration) compute gamma pdf * gains
         # Start with first bump as first stage only one gamma and no bumps
-        forward[self.offset:self.max_d,:,0] = np.tile(LP[:self.max_d-self.offset,0][np.newaxis].T,\
-            (1,self.n_trials))*probs[self.offset:self.max_d,:,0]
+        forward[:self.max_d,:,0] = np.tile(LP[:self.max_d,0][np.newaxis].T,\
+            (1,self.n_trials))*probs[:self.max_d,:,0]
 
-        forward_b[self.offset:self.max_d,:,0] = np.tile(BLP[:self.max_d-self.offset,0][np.newaxis].T,\
+        forward_b[:self.max_d,:,0] = np.tile(BLP[:self.max_d,0][np.newaxis].T,\
                     (1,self.n_trials)) # reversed Gamma pdf
 
         for i in np.arange(1,n_bumps):#continue with other bumps
@@ -340,7 +340,7 @@ class hsmm:
         for j in np.arange(self.n_trials): # TODO : IMPROVE
             for i in np.arange(n_bumps):
                 backward[:self.durations[j],j,i] = np.flipud(forward_b[:self.durations[j],j,i])
-        backward[:self.offset,:,:] = 0
+        #backward[:self.offset,:,:] = 0
         temp = forward * backward # [max_d,n_trials,n_bumps] .* [max_d,n_trials,n_bumps];
         likelihood = np.sum(np.log(temp[:,:,0].sum(axis=0)))# why 0 index? shouldn't it also be for all dim??
         # sum(log(sum of 'temp' by columns, samples in a trial)) 
@@ -381,8 +381,8 @@ class hsmm:
         # 1) mean accross trials of eventprobs -> mP[max_l, nbump]
         # 2) global expected location of each bump
         # concatenate horizontaly to last column the length of each trial
-        averagepos = averagepos - (self.offset+np.hstack(np.asarray([\
-                np.append(np.arange(0,n_bumps*width,width),n_bumps*width-self.offset)],dtype='object')))
+        averagepos = averagepos - (np.hstack(np.asarray([\
+                np.append(np.arange(0,n_bumps*width,width),n_bumps*width)],dtype='object')))
         # correction for time locations with number of bumps and size in samples
         flats = averagepos - np.hstack((0,averagepos[:-1]))
         params = np.zeros((n_bumps+1,2))
@@ -390,10 +390,10 @@ class hsmm:
         params[:,1] = flats.T / self.shape
         # correct flats between bumps for the fact that the gamma is 
         # calculated at midpoint
-        #params[:,1] = params[:,1] - .5 /shape
+        #params[:,1] = params[:,1] - .5 /self.shape
         # first flat is bounded on left while last flat may go 
         # beyond on right
-        params[0,1] = params[0,1] + .5 /self.shape
+        params[0,1] = params[0,1] - .5 /self.shape
         params[-1,1] = params[-1,1] - .5 /self.shape
         return params
 
@@ -542,7 +542,7 @@ class hsmm:
         else:
             return onsets
         
-    def onset_times(self, estimates, duration=False, fill_value=None, mean=False):
+    def compute_times(self, estimates, duration=False, fill_value=None, mean=False):
         '''
         Compute the likeliest onset times for each bump
 
@@ -566,15 +566,16 @@ class hsmm:
         eventprobs = estimates.eventprobs
         if duration: fill_value=0
         if fill_value != None:
-            eventprobs = eventprobs.shift(bump=1, fill_value=0)
+            eventprobs = eventprobs.shift(bump=1, fill_value=fill_value)
         eventprobs = eventprobs.dropna('bump')
         times = xr.dot(eventprobs, eventprobs.samples, dims='samples')
         times = times.rename({'bump':'stage'})
+        times = times - self.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
         #adding stim onset
         rts = self.ends-self.starts
-        rts =  xr.DataArray([rts], dims=(["stage",'trial_x_participant']))
+        rts =  xr.DataArray([rts], dims=(["stage",'trial_x_participant']), coords={'stage':[times.stage.max().values+1],
+                                                                                   'trial_x_participant':times.trial_x_participant})
         times = xr.concat([times, rts], dim='stage')
-        times = times.assign_coords({'stage':np.arange(times.stage.max()+2,)})
         if duration:
             times = times.diff(dim='stage')
         if mean:
