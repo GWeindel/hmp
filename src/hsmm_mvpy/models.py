@@ -95,7 +95,7 @@ class hsmm:
         return bumps
 
     def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, mp=False, verbose=True, starting_points=1,
-                  parameters_to_fix = [], magnitudes_to_fix = [], use_grid_search=False, iter_limit=1e3):
+                  parameters_to_fix = [], magnitudes_to_fix = [], method='random'):
         '''
         Fit HsMM for a single n_bumps model
 
@@ -123,13 +123,12 @@ class hsmm:
             magnitudes_to_fix = np.arange(n_bumps+1)
         if self.estimate_parameters == False:#Don't need to manually fix pars if not estimated
             parameters_to_fix = np.arange(n_bumps+1)            
-        if use_grid_search: starting_points=0
         #Formatting parameters
         if isinstance(parameters, (xr.DataArray,xr.Dataset)):
             parameters = parameters.dropna(dim='stage').values
         if isinstance(magnitudes, (xr.DataArray,xr.Dataset)):
             magnitudes = magnitudes.dropna(dim='bump').values  
-        if starting_points > 0:
+        if starting_points > 0:#Initialize with equally spaced option
             if np.any(parameters) == None:
                 parameters = np.tile([self.shape, math.ceil(np.mean(self.durations)/(n_bumps+1)/self.shape)], (n_bumps+1,1))
             initial_p = parameters
@@ -142,15 +141,19 @@ class hsmm:
             import multiprocessing as mp
             parameters = [initial_p]
             magnitudes = [initial_m]
-            for sp in np.arange(starting_points):
-                proposal_p = self.gen_random_stages(n_bumps, np.mean(self.durations))
-                proposal_m = np.zeros((self.n_dims,n_bumps))#Mags are NOT random but always 0
-                proposal_p[parameters_to_fix] = initial_p[parameters_to_fix]
-                proposal_m[magnitudes_to_fix] = initial_m[magnitudes_to_fix]
-                parameters.append(proposal_p)
-                magnitudes.append(proposal_m)
-            # print(parameters)
-            # print(magnitudes)
+            if method == 'random':
+                for sp in np.arange(starting_points):
+                    proposal_p = self.gen_random_stages(n_bumps, np.mean(self.durations))
+                    proposal_m = np.zeros((self.n_dims,n_bumps))#Mags are NOT random but always 0
+                    proposal_p[parameters_to_fix] = initial_p[parameters_to_fix]
+                    proposal_m[magnitudes_to_fix] = initial_m[magnitudes_to_fix]
+                    parameters.append(proposal_p)
+                    magnitudes.append(proposal_m)
+            elif method == 'grid':
+                parameters = self.grid_search(n_bumps+1, starting_points)
+                magnitudes = np.zeros((len(parameters), self.n_dims,n_bumps))
+            else:
+                raise ValueError('Unknown starting point method requested, use "random" or "grid"')
             with mp.Pool(processes=self.cpus) as pool:
                 estimates = pool.starmap(self.fit, 
                     zip(itertools.repeat(n_bumps), magnitudes, parameters, itertools.repeat(1),\
@@ -169,32 +172,13 @@ class hsmm:
             lkh, mags, pars, eventprobs = self.fit(n_bumps, initial_m, initial_p,\
                                         threshold, magnitudes_to_fix, parameters_to_fix)
 
-        else:
-            if use_grid_search:
-                import multiprocessing as mp
-                parameters = self.grid_search(n_bumps+1, iter_limit)
-                magnitudes = np.zeros((len(parameters), self.n_dims,n_bumps))
-                with mp.Pool(processes=self.cpus) as pool:
-                    estimates = pool.starmap(self.fit, 
-                        zip(itertools.repeat(n_bumps), magnitudes, parameters, itertools.repeat(1),\
-                            itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix),))   
-                lkhs_sp = [x[0] for x in estimates]
-                mags_sp = [x[1] for x in estimates]
-                pars_sp = [x[2] for x in estimates]
-                eventprobs_sp = [x[3] for x in estimates]
-                max_lkhs = np.where(lkhs_sp == np.max(lkhs_sp))[0][0]
-                lkh = lkhs_sp[max_lkhs]
-                mags = mags_sp[max_lkhs]
-                pars = pars_sp[max_lkhs]
-                eventprobs = eventprobs_sp[max_lkhs]
-
-            else:#uninitialized    
-                if np.any(parameters)== None:
-                    parameters = np.tile([self.shape, 50], (n_bumps+1,1))
-                if np.any(magnitudes)== None:
-                    magnitudes = np.zeros((self.n_dims,n_bumps))
-                lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters,\
-                                            threshold, magnitudes_to_fix, parameters_to_fix)
+        else:#uninitialized    
+            if np.any(parameters)== None:
+                parameters = np.tile([self.shape, self.durations.mean()/2], (n_bumps+1,1))
+            if np.any(magnitudes)== None:
+                magnitudes = np.zeros((self.n_dims,n_bumps))
+            lkh, mags, pars, eventprobs = self.fit(n_bumps, magnitudes, parameters,\
+                                        threshold, magnitudes_to_fix, parameters_to_fix)
         
         if len(pars) != self.max_bumps+1:#align all dimensions
             pars = np.concatenate((pars, np.tile(np.nan, (self.max_bumps+1-len(pars),2))))
@@ -413,7 +397,7 @@ class hsmm:
         params[-1,1] = params[-1,1] - .5 /self.shape
         return params
 
-    def backward_estimation(self,max_fit=None, max_starting_points=1, max_use_grid_search=False, max_iter=1e2):
+    def backward_estimation(self,max_fit=None, max_starting_points=1, method="random"):
         '''
         First read or estimate max_bump solution then estimate max_bump - 1 solution by 
         iteratively removing one of the bump and pick the one with the highest 
@@ -429,11 +413,9 @@ class hsmm:
         
         '''
         if not max_fit:
-            if max_use_grid_search:
-                max_starting_points = 0
             if max_starting_points >0:
-                print(f'Estimating all solutions for maximal number of bumps ({self.max_bumps}) with 1 pre-defined starting point and {max_starting_points-1} random starting points')
-            bump_loo_results = [self.fit_single(self.max_bumps, starting_points=max_starting_points, use_grid_search=max_use_grid_search, verbose=False, iter_limit=max_iter)]
+                print(f'Estimating all solutions for maximal number of bumps ({self.max_bumps}) with 1 pre-defined starting point and {max_starting_points-1} {method} starting points')
+            bump_loo_results = [self.fit_single(self.max_bumps, starting_points=max_starting_points, method=method, verbose=False)]
         else:
             bump_loo_results = [max_fit]
         i = 0
@@ -518,11 +500,11 @@ class hsmm:
         #random_stages = np.array([[self.shape, np.round(x*mean_rt)+1] for x in random_stages])#Remove 0 duration stage
         return random_stages
     
-    def compute_max_bumps(self, min_rt=False):
+    def compute_max_bumps(self):
         '''
         Compute the maximum possible number of bumps given bump width and mean or minimum reaction time
         '''
-        return int(np.min(self.durations)/self.bump_width_samples)
+        return int(np.round(np.min(self.durations)/self.bump_width_samples))
         # if not min_rt:
         #     return int(np.mean(self.durations)/self.bump_width_samples)
         # else:
@@ -601,7 +583,10 @@ class hsmm:
    
     
     def compute_topo(self, data, eventprobs, mean=True):
-        
+        '''
+        DEPRECATED
+        '''
+        warn('This method is deprecated and will be removed in future version, use onset_times() instead', DeprecationWarning, stacklevel=2)
         if 'trial_x_participant' not in data:
             data = data.stack(trial_x_participant=['participant','epochs'])
         eventprobs = eventprobs.dropna('bump', how="all")
@@ -625,6 +610,10 @@ class hsmm:
             return topologies
         
     def multiple_topologies(self, data, eventprobs, mean=True):
+        '''
+        DEPRECATED
+        '''
+        warn('This method is deprecated and will be removed in future version, use onset_times() instead', DeprecationWarning, stacklevel=2)        
         topo = np.tile(np.nan, (len(eventprobs.n_bumps), len(eventprobs.n_bumps), len(data.electrodes)))
         for n_bumps in eventprobs.n_bumps:
             topo[n_bumps-1, :n_bumps.values, :] = self.compute_topo(data, eventprobs.sel(n_bumps=n_bumps))
@@ -658,9 +647,6 @@ class hsmm:
         bumps_width = self.bump_width_samples
         n_points = int(mean_rt - bumps_width*(n_stages-1))
         check_n_posibilities = binomcoeff(n_points-1, n_stages-1)
-#         if check_n_posibilities > iter_limit:
-#             raise ValueError(f'number of possible combinations exceed the limit of {iter_limit} (counting {check_n_posibilities} combinations). \
-# Random starting points might be a better option for this dataset or increase iter_limit')
         while binomcoeff(n_points-1, n_stages-1) > iter_limit:
             n_points = n_points-1
         spacing = mean_rt//n_points
@@ -668,8 +654,6 @@ class hsmm:
         grid = (np.arange(n_points)+1)*spacing
         grid = grid[grid < mean_rt - ((n_stages-2)*spacing)]
         comb = np.array([x for x in combinations_with_replacement(grid, n_stages) if np.sum(x) == mean_rt])#A bit bruteforce
-    #list(combinations_with_replacement(grid, n_stages))#A bit bruteforce
-        #n!/(n-r)!
         new_comb = []
         for c in comb:
             new_comb.append(np.array(list(mit.distinct_permutations(c))))
@@ -682,28 +666,3 @@ class hsmm:
         return parameters
     
     
-# import matplotlib.pyplot as plt 
-# from itertools import combinations_with_replacement, permutations  
-# import more_itertools as mit
-# import numpy as np
-# result = []
-# for stage in np.arange(10)+2:
-#     mean_rt = 150
-#     n_stages = stage
-#     n_points =150#int((stage-1)*((mean_rt)/(stage-1)**4))-stage
-#     print(f'Stage {stage} points:{n_points}')
-#     spacing = mean_rt//n_points
-#     mean_rt = spacing*n_points
-#     grid = (np.arange(n_points)+1)*spacing
-#     grid = grid[grid < mean_rt - ((n_stages-2)*spacing)]
-#     comb = np.array([x for x in combinations_with_replacement(grid, n_stages) if np.sum(x) == mean_rt])#A bit bruteforce
-# #list(combinations_with_replacement(grid, n_stages))#A bit bruteforce
-#     #comb = np.array(list(filter(lambda x: np.sum(x) == mean_rt, comb)))#only retain solution where sum = mean_rt
-#     #n!/(n-r)!
-#     new_comb = []
-#     for c in comb:
-#         new_comb.append(np.array(list(mit.distinct_permutations(c))))
-#     comb = np.vstack(new_comb)
-#     print(len(comb))
-#     result.append(len(comb))
-
