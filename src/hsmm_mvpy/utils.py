@@ -412,7 +412,9 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         # Computing cov matrices by trial and take the average of those
         #var_cov_matrix = data.data.stack(trial=("participant", "epochs")).groupby('trial').map(vcov_mat).to_numpy().mean()
         var_cov_matrices = []
-        for i,trial_dat in data.data.stack(trial=("participant", "epochs")).groupby('trial'):
+        if isinstance(data, xr.Dataset):
+            data = data.data
+        for i,trial_dat in data.stack(trial=("participant", "epochs")).groupby('trial'):
             var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
         var_cov_matrix = np.mean(var_cov_matrices,axis=0)
         # Performing spatial PCA on the average var-cov matrix
@@ -443,7 +445,7 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
                      component=("component", np.arange(n_comp)))
         pca_data = xr.DataArray(pca_data, dims=("electrodes","component"), coords=coords)
         means = data.groupby('electrodes').mean(...)
-        data = data.data @ pca_data
+        data = data @ pca_data
         if apply_zscore and not single:
             data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
         elif apply_zscore and single :
@@ -487,16 +489,8 @@ def stack_data(data, subjects_variable='participant', electrode_variable='compon
         print(data.participant)
     if "participant" not in data.dims:
         data = data.expand_dims("participant")
-    durations = data.isel(component=0).rename({'epochs':'trials', subjects_variable:'subjects'})\
-    .stack(trial_x_participant=['subjects','trials']).dropna(dim="trial_x_participant", how="all").\
-    groupby('trial_x_participant').count(dim="samples").cumsum()
-
-    #durations = data.isel(component=0).rename({'epochs':'trials', subjects_variable:'subjects'}).stack(trial=\
-    #   ['subjects','trials']).dropna(dim="trial", how='all').\
-    #   groupby('trial').count(dim="samples").cumsum().unstack()
-
-    data = data.stack(all_samples=[subjects_variable,'epochs',"samples"]).dropna(dim="all_samples")
-    return xr.Dataset({'data':data, 'durations':durations})
+    data = data.stack(all_samples=['participant','epochs',"samples"]).dropna(dim="all_samples")
+    return data #xr.Dataset({'data':data, 'durations':durations})
     #return data, durations
 
 
@@ -659,17 +653,22 @@ def event_times(data, times, electrode, stage):
         Matrix with trial_x_participant * samples with sample dimension given by the maximum stage duration
     '''
 
-    brp_data = np.tile(np.nan, (len(data.trial_x_participant), int(round(max(times.sel(stage=stage+1).data- times.sel(stage=stage).data)))+1))
+    brp_data = np.tile(np.nan, (len(data.trial_x_participant), int(round(max(times.sel(bump=stage+1).data- times.sel(bump=stage).data)))+1))
     i=0
     for trial, trial_dat in data.groupby('trial_x_participant'):
-        trial_time = slice(times.sel(stage=stage, trial_x_participant=trial), \
-                                                 times.sel(stage=stage+1, trial_x_participant=trial))
+        trial_time = slice(times.sel(bump=stage, trial_x_participant=trial), \
+                                                 times.sel(bump=stage+1, trial_x_participant=trial))
         trial_elec = trial_dat.sel(electrodes = electrode, samples=trial_time).squeeze()
-        brp_data[i, :len(trial_elec.samples)] = trial_elec
+        try:
+            brp_data[i, :len(trial_elec)] = trial_elec
+        except:
+            brp_data[i, :1] = trial_elec
+            
         i += 1
 
     return brp_data    
     
+
 # def download_sample_data():
 #     import urllib.request
     

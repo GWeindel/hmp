@@ -29,13 +29,16 @@ class hsmm:
         width : int
             width of bumps in milliseconds, originally 5 samples
         '''
-        dur_dropped_na = data.durations.dropna("trial_x_participant")
+        durations = data.unstack().sel(component=0).swap_dims({'epochs':'trials'})\
+            .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
+            how="all").groupby('trial_x_participant').count(dim="samples").cumsum().squeeze()
+        dur_dropped_na = durations.dropna("trial_x_participant")
         starts = np.roll(dur_dropped_na.data, 1)
         starts[0] = 0
         self.starts = starts
         self.ends = dur_dropped_na.data-1 
         self.durations =  self.ends-self.starts+1
-        self.named_durations =  data.durations.dropna("trial_x_participant") - data.durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
+        self.named_durations =  durations.dropna("trial_x_participant") - durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
         self.sf = sf
         self.tseps = 1000/self.sf
         self.n_trials = len(self.durations)  
@@ -43,7 +46,7 @@ class hsmm:
         self.cpus = cpus
         self.bump_width_samples = int(self.bump_width * (self.sf/1000))
         self.offset = self.bump_width_samples//2#offset on data linked to the choosen width how soon the first peak can be or how late the last,
-        self.coords = data.durations.reset_index('trial_x_participant').coords
+        self.coords = durations.reset_index('trial_x_participant').coords
         data = data.data.T
         self.n_samples, self.n_dims = np.shape(data)
         self.bumps = self.calc_bumps(data)#adds bump morphology
@@ -192,7 +195,7 @@ class hsmm:
         xrmags = xr.DataArray(mags, dims=("component","bump"), name="magnitudes")
         #xreventprobs = xr.DataArray(eventprobs, dims=("samples",'trialxPart','bump'), name="eventprobs")
         #xreventprobs = xreventprobs.trialxPart.set_index(self.coords.values)
-        part, trial = self.coords['subjects'].values, self.coords['trials'].values
+        part, trial = self.coords['participant'].values, self.coords['trials'].values
 
         n_samples, n_participant_x_trials, bumps_n = np.shape(eventprobs)
         xreventprobs = xr.Dataset({'eventprobs': (('bump', 'trial_x_participant','samples'), 
@@ -340,7 +343,7 @@ class hsmm:
         for j in np.arange(self.n_trials): # TODO : IMPROVE
             for i in np.arange(n_bumps):
                 backward[:self.durations[j],j,i] = np.flipud(forward_b[:self.durations[j],j,i])
-        #backward[:self.offset,:,:] = 0
+        backward[:self.offset,:,:] = 0
         temp = forward * backward # [max_d,n_trials,n_bumps] .* [max_d,n_trials,n_bumps];
         likelihood = np.sum(np.log(temp[:,:,0].sum(axis=0)))# why 0 index? shouldn't it also be for all dim??
         # sum(log(sum of 'temp' by columns, samples in a trial)) 
@@ -542,7 +545,7 @@ class hsmm:
         else:
             return onsets
         
-    def compute_times(self, estimates, duration=False, fill_value=None, mean=False):
+    def compute_times(self, estimates, duration=False, fill_value=None, mean=False, cumulative=False, add_rt=False):
         '''
         Compute the likeliest onset times for each bump
 
@@ -564,21 +567,26 @@ class hsmm:
         '''
 
         eventprobs = estimates.eventprobs
-        if duration: fill_value=0
-        if fill_value != None:
-            eventprobs = eventprobs.shift(bump=1, fill_value=fill_value)
         eventprobs = eventprobs.dropna('bump')
-        times = xr.dot(eventprobs, eventprobs.samples, dims='samples')
-        times = times.rename({'bump':'stage'})
-        times = times - self.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
-        #adding stim onset
-        rts = self.ends-self.starts
-        rts =  xr.DataArray([rts], dims=(["stage",'trial_x_participant']), coords={'stage':[times.stage.max().values+1],
-                                                                                   'trial_x_participant':times.trial_x_participant})
-        times = xr.concat([times, rts], dim='stage')
+        times = xr.dot(eventprobs, eventprobs.samples, dims='samples')#Most likely bump location
+        times[:] = times - self.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
+        if duration: fill_value=0
+        if fill_value != None:            #times = times.shift(bump=1, fill_value=fill_value)
+            added = xr.DataArray(np.repeat(fill_value,len(times.trial_x_participant))[np.newaxis,:],
+                                 coords={'bump':[0], 
+                                         'trial_x_participant':times.trial_x_participant})
+            times = times.assign_coords(bump=times.bump+1)
+            times = times.combine_first(added)
+        if add_rt:             
+            rts = self.named_durations
+            rts = rts.assign_coords(bump=int(times.bump.max().values+1))
+            rts = rts.expand_dims(dim="bump")
+            times = xr.concat([times, rts], dim='bump')
         if duration:
-            times = times.diff(dim='stage')
-            times.loc[:,1] = times.loc[:,1]-self.bump_width_samples/2
+            #adding reaction time and treating it as the last bump
+            times = times.rename({'bump':'stage'})
+            if not cumulative:
+                times = times.diff(dim='stage')
         if mean:
             times = times.mean('trial_x_participant')
         return times
@@ -666,5 +674,4 @@ class hsmm:
             parameters[idx, :, :] = [[self.shape, x/self.shape] for x in y]
         print(f'Fitting {len(parameters)} models based on all possibilities from grid search with a spacing of {int(spacing)} samples and {int(n_points)} points')
         return parameters
-    
     
