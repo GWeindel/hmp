@@ -7,9 +7,10 @@ import numpy as np
 from itertools import cycle
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold']
 
-def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_size=50, 
+def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_step=1, 
                         figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
-                        ylabels=[], max_time = None, vmin=None, vmax=None, title=False, ax=False, sensors=True):
+                        ylabels=[], max_time = None, vmin=None, vmax=None, title=False, ax=False, 
+                        sensors=True, skip_electrodes_computation=False):
     '''
     Plotting the bump topologies at the average time of the end of the previous stage.
     
@@ -18,17 +19,16 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
     electrodes : ndarray | xr.Dataarray 
         a 2D or 3D matrix of electrode activity with electrodes and bump as dimension (+ eventually a varying dimension) OR
         the original EEG data in HsMM format
-    times : ndarray
+    estimated : ndarray
         a 1D or 2D matrix of times with bump as dimension OR directly the results from a fitted hsmm 
     channel_position : ndarray
         Either a 2D array with dimension electrode and [x,y] storing electrode location in meters or an info object from
         the mne package containning digit. points for electrode location
+    init : float
+        initialized HsMM object
     time_step : float
         What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
         1/sf or 1000/sf where sf is the sampling frequency of the data
-    bump_size : float
-        Display size of the bump in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
-        can provide the bump_width_sample of fitted hsmm (e.g. init.bump_width_sample)
     figsize : list | tuple | ndarray
         Length and heigth of the matplotlib plot
     dpi : float
@@ -66,31 +66,30 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
     return_ax = True
     
-    if 'bump' in times:
+    if 'bump' in estimated:
         import xarray as xr
         #This is to keep backward compatibility but supplyng externally computed electrodes and times will probably be
         # DEPRECATED
-        if 'condition' in times or list(times.dims)[0] == 'n_bumps':
-            extra_dim = list(times.dims)[0]#assumes first dim is new
-            electrodes = xr.dot(electrodes.rename({'epochs':'trials'}).stack(trial_x_participant=['participant','trials']).data.fillna(0), \
-              times.eventprobs.fillna(0), dims=['samples']).mean('trial_x_participant').transpose(extra_dim,'bump','electrodes').data
-        else:
-            electrodes = xr.dot(electrodes.rename({'epochs':'trials'}).stack(trial_x_participant=['participant','trials']).data.fillna(0), \
-              times.eventprobs.fillna(0), dims=['samples']).mean('trial_x_participant').transpose('bump','electrodes').data
-        times = (xr.dot(times.eventprobs, times.eventprobs.samples, dims='samples')).fillna(0).mean('trial_x_participant')-bump_size/2
-    
+        if 'condition' in estimated or list(estimated.dims)[0] == 'n_bumps' and not skip_electrodes_computation:
+            extra_dim = list(estimated.dims)[0]#assumes first dim is new
+            electrodes = init.compute_topologies(electrodes, estimated, extra_dim).data
+        elif not skip_electrodes_computation:
+            electrodes = init.compute_topologies(electrodes, estimated).data
+        electrodes[electrodes == 0] = np.nan
+        times = init.compute_times(init, estimated, mean=True).data
+    else:#assumes times already computed
+        times = estimated
+    if len(np.shape(electrodes)) == 2:
+        electrodes = electrodes[np.newaxis]
+    n_iter = np.shape(electrodes)[0]
     if isinstance(ax, bool):
-        if not figsize:
-            figzise = (12, 2)
+        if figsize == None:
+            figsize = (12, 2*n_iter/2)
         fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
         return_ax = False
-
-    bump_size = bump_size*time_step*magnify
+    bump_size = init.bump_width_samples*time_step*magnify
     yoffset =.25*magnify
     axes = []
-    if len(np.shape(electrodes)) == 2:
-           electrodes = electrodes[np.newaxis]
-    n_iter = np.shape(electrodes)[0]
     if n_iter == 1:
         times = [times]
     times = np.array(times, dtype=object)
@@ -102,9 +101,9 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
         for bump in np.arange(n_bump):
             if np.sum(electrodes_[bump,:]) != 0:
                 axes.append(ax.inset_axes([times_iteration[bump],iteration-yoffset,
-                                           bump_size/2,yoffset*2], transform=ax.transData))
+                                           (bump_size),yoffset*2], transform=ax.transData))
                 plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False,
-                             cmap=cmap, vmin=vmin, vmax=vmax, sensors=sensors)
+                             cmap=cmap, vlim=(vmin, vmax), sensors=sensors)
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])
@@ -124,8 +123,9 @@ def plot_topo_timecourse(electrodes, times, channel_position, time_step=1, bump_
         if title:
             ax.set_title(title)
         if np.any(max_time) == None and np.any(times_to_display) == None:
-            ax.set_xlim(0, times.max()+times.max()/10)
+            ax.set_xlim(0, np.nanmax(times)+np.nanmax(times)/10)
     if return_ax:
+        ax.set_ylim(0-yoffset, n_iter-1+yoffset)
         return ax
     else:
         plt.show()    
@@ -162,7 +162,7 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
         elif test == 't-test':
             from scipy.stats import ttest_1samp
         else:
-            print('Expected  t-test argument')
+            raise ValueError('Expected sign or t-test argument to test parameter')
     if isinstance(ax, bool):
         fig, ax = plt.subplots(1,2, figsize=figsize)
         return_ax = False
@@ -189,7 +189,7 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
             elif test == 't-test':
                 pvalues.append((ttest_1samp(diffs[-1], 0, alternative='greater')))
             mean = np.mean(loocv_estimates.sel(n_bump=n_bump).data)
-            ax[0].text(x=n_bump-.5, y=mean+mean/10, s=str(np.sum(diff_bin[-1]))+'/'+str(len(diffs[-1]))+':'+str(np.around(pvalues[-1][-1],2)))
+            ax[0].text(x=n_bump-.5, y=mean+mean/10, s=str(np.sum(diff_bin[-1]))+'/'+str(len(diffs[-1]))+':'+str(np.around(pvalues[-1][-1],3)))
     ax[1].plot(diffs,'.-', alpha=.3)
     ax[1].set_xticks(ticks=np.arange(0,loocv_estimates.n_bump.max()-1), labels=labels)
     ax[1].hlines(0,0,len(np.arange(2,loocv_estimates.n_bump.max())),color='k')
@@ -315,10 +315,10 @@ def __display_times(ax, times_to_display, yoffset, time_step, max_time, times):
     times = np.asarray(times,dtype=object)
     if isinstance(times_to_display, (np.ndarray, np.generic)):
         if isinstance(times_to_display, np.ndarray):
-            ax.vlines(times_to_display*time_step, yoffset-.5, yoffset+1-.5, ls='--')
+            ax.vlines(times_to_display*time_step, yoffset-1.1, yoffset+1.1, ls='--')
             ax.set_xlim(-1*time_step, max(times_to_display)*time_step+((max(times_to_display)*time_step)/15))
         else:
-            ax.vlines(times_to_display*time_step, yoffset-.5, yoffset+1-.5, ls='--')
+            ax.vlines(times_to_display*time_step, yoffset-1.1, yoffset+1.1, ls='--')
             ax.set_xlim(-1*time_step, times_to_display*time_step+(times_to_display*time_step)/15)
     if max_time:
         ax.set_xlim(-1*time_step, max_time)

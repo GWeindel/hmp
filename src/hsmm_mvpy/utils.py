@@ -12,7 +12,7 @@ import warnings
 warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later  
 
 def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provided=None, verbose=True,
-                 tmin=-.2, tmax=5, offset_after_resp = .1, high_pass=.5, pick_channels = None, baseline=(None, 0),\
+                 tmin=-.2, tmax=5, offset_after_resp = .1, high_pass=.5, pick_channels = 'eeg', baseline=(None, 0),\
                  low_pass = 30, upper_limit_RT=5, lower_limit_RT=0.001, reject_threshold=None):
     ''' 
     Reads EEG data format (.fif or .bdf) using MNE's integrated function .
@@ -67,7 +67,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
     high_pass : float
         Value of the high pass filter
     pick_channels: list 
-        Channel names to keep
+        'eeg' (default) to keep only EEG channels or  list of channel names to keep
     baseline : tuple
         Time values to compute the baseline and substract to epoch data (usually some time before stimulus onset)
     upper_limit_RT : float
@@ -103,13 +103,17 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
             raise ValueError(f'Unknown EEG file format for participant {participant}')
         data.load_data()
         data.filter(high_pass, low_pass, fir_design='firwin', verbose=verbose)#Filtering out frequency outside range .5 and 30Hz, as study by Anderson et al.
-        if pick_channels is not None:
+
+        if isinstance(pick_channels, list):
                try:
                     data = data.pick_channels(pick_channels)
                except:
                     raise ValueError('incorrect electrode pick specified')
-               if 'EMG_L' in pick_channels:#TODO ugly workaround, creating epochs fails when passing non EEG/MEG channels declared as such
-                   data.set_channel_types({'EMG_L':'eeg','EMG_R':'eeg'})
+        elif pick_channels == 'eeg':
+                data = data.pick_types(meg=False, eeg=True, stim=False, eog=False, misc=False, exclude='bads') 
+        else:
+             raise ValueError('incorrect electrode pick specified')
+
         # Loading events (in our case one event = one trial)
         if events_provided is None:
             events = mne.find_events(data, verbose=verbose, min_duration = 1 / data.info['sfreq'])
@@ -127,17 +131,13 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
             data, events = data.resample(sfreq, events=events)#100 Hz is the standard used for previous applications of HsMM
         
         print(f'Creating epochs based on following event ID :{np.unique(events[:,2])}')
-        #Only pick eeg electrodes
-        if pick_channels == None:
-            pick_channels = mne.pick_types(data.info, eeg=True, stim=False, eog=False, misc=False,
-                           exclude='bads') 
             
         offset_after_resp_samples = int(offset_after_resp*tstep)
         metadata, meta_events, event_id = mne.epochs.make_metadata(
             events=events, event_id= event_id,
             tmin=tmin, tmax=tmax, sfreq=data.info['sfreq'])
         epochs = mne.Epochs(data, meta_events, event_id, tmin, tmax, proj=False,
-                        picks=pick_channels, baseline=baseline, preload=True,
+                        baseline=baseline, preload=True,
                         verbose=verbose,detrend=1, on_missing = 'warn', event_repeated='drop',
                         metadata=metadata, reject_by_annotation=True, reject=reject_threshold)
         data_epoch = epochs.get_data()
@@ -533,7 +533,6 @@ def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
     #Fitting the HsMM using previous estimated parameters as initial parameters
     model_loo = hsmm(stacked_loo, sf=sfreq, bump_width=bump_width)
     fit = model_loo.fit_single(n_bumps, initial_fit.magnitudes, initial_fit.parameters, 1, False, verbose=False)
-
     #Evaluating likelihood for left out subject
     #Extracting data of left out subject
     stacked_left_out = stack_data(data.sel(participant=subject, drop=False))

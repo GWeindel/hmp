@@ -9,6 +9,7 @@ import itertools
 import math
 from warnings import warn
 
+
 class hsmm:
     
     def __init__(self, data, sf, cpus=1, bump_width = 50, shape=2, estimate_magnitudes=True, estimate_parameters=True):
@@ -29,6 +30,7 @@ class hsmm:
         width : int
             width of bumps in milliseconds, originally 5 samples
         '''
+        
         durations = data.unstack().sel(component=0).swap_dims({'epochs':'trials'})\
             .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
             how="all").groupby('trial_x_participant').count(dim="samples").cumsum().squeeze()
@@ -41,15 +43,14 @@ class hsmm:
         self.named_durations =  durations.dropna("trial_x_participant") - durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
         self.sf = sf
         self.tseps = 1000/self.sf
-        self.n_trials = len(self.durations)  
+        self.n_trials = len(self.durations)
         self.bump_width = bump_width
         self.cpus = cpus
         self.bump_width_samples = int(self.bump_width * (self.sf/1000))
         self.offset = self.bump_width_samples//2#offset on data linked to the choosen width how soon the first peak can be or how late the last,
         self.coords = durations.reset_index('trial_x_participant').coords
-        data = data.data.T
-        self.n_samples, self.n_dims = np.shape(data)
-        self.bumps = self.calc_bumps(data)#adds bump morphology
+        self.n_samples, self.n_dims = np.shape(data.data.T)
+        self.bumps = self.calc_bumps(data.data.T)#adds bump morphology
         self.max_d = np.max(self.durations)
         self.max_bumps = self.compute_max_bumps()
         self.shape = shape
@@ -61,12 +62,10 @@ class hsmm:
         This function puts on each sample the correlation of that sample and the previous
         five samples with a Bump morphology on time domain.  Will be used fot the likelihood 
         of the EEG data given that the bumps are centered at each time point
-
         Parameters
         ----------
         data : ndarray
             2D ndarray with n_samples * components
-
         Returns
         -------
         bumbs : ndarray
@@ -101,7 +100,6 @@ class hsmm:
                   parameters_to_fix = [], magnitudes_to_fix = [], method='random'):
         '''
         Fit HsMM for a single n_bumps model
-
         Parameters
         ----------
         n_bumps : int
@@ -114,7 +112,6 @@ class hsmm:
             _n_th gamma parameter is  used for the _n_th stage
         threshold : float
             threshold for the HsMM algorithm, 0 skips HsMM
-
         '''
         import pandas as pd 
         if verbose:
@@ -211,7 +208,7 @@ class hsmm:
         if verbose:
             print(f"Parameters estimated for {n_bumps} bumps model")
         return estimated
-        
+    
     def fit(self, n_bumps, magnitudes, parameters,  threshold, magnitudes_to_fix=[], parameters_to_fix=[]):
         '''
         Fitting function underlying single and iterative fit
@@ -263,7 +260,6 @@ class hsmm:
     def calc_EEG_50h(self, magnitudes, parameters, n_bumps, lkh_only=False):
         '''
         Defines the likelihood function to be maximized as described in Anderson, Zhang, Borst and Walsh, 2016
-
         Returns
         -------
         likelihood : float
@@ -298,11 +294,11 @@ class hsmm:
         for i in np.arange(self.n_trials):
             # Following assigns gain per trial to variable probs 
             # in direct and reverse order
-            probs[:self.ends[i] - self.starts[i]+1,i,:] = \
-                gains[self.starts[i]: self.ends[i]+1,:] 
+            probs[self.offset:self.ends[i] - self.starts[i]+1 - self.offset,i,:] = \
+                gains[self.starts[i]+ self.offset : self.ends[i] - self.offset+1,:] 
             for j in np.arange(n_bumps): # PCG: for-loop IMPROVE
-                probs_b[:self.ends[i]- self.starts[i]+1 ,i,j] = \
-                np.flipud(gains[self.starts[i]: self.ends[i]+1,\
+                probs_b[self.offset:self.ends[i]- self.starts[i]+1 - self.offset,i,j] = \
+                np.flipud(gains[self.starts[i]+ self.offset : self.ends[i]- self.offset+1,\
                 n_bumps-j-1])
                 # assign reversed gains array per trial
 
@@ -317,10 +313,10 @@ class hsmm:
         # eq1 in Appendix, first definition of likelihood
         # For each trial (given a length of max duration) compute gamma pdf * gains
         # Start with first bump as first stage only one gamma and no bumps
-        forward[:self.max_d,:,0] = np.tile(LP[:self.max_d,0][np.newaxis].T,\
-            (1,self.n_trials))*probs[:self.max_d,:,0]
+        forward[self.offset:self.max_d,:,0] = np.tile(LP[:self.max_d-self.offset,0][np.newaxis].T,\
+            (1,self.n_trials))*probs[self.offset:self.max_d,:,0]
 
-        forward_b[:self.max_d,:,0] = np.tile(BLP[:self.max_d,0][np.newaxis].T,\
+        forward_b[self.offset:self.max_d,:,0] = np.tile(BLP[:self.max_d-self.offset,0][np.newaxis].T,\
                     (1,self.n_trials)) # reversed Gamma pdf
 
         for i in np.arange(1,n_bumps):#continue with other bumps
@@ -353,13 +349,12 @@ class hsmm:
             return likelihood
         else:
             return [likelihood, eventprobs]
-
+        
     def gamma_parameters(self, eventprobs, n_bumps):
         '''
         Given that the shape is fixed the calculation of the maximum likelihood
         scales becomes simple.  One just calculates the means expected lengths 
         of the flats and divides by the shape
-
         Parameters
         ----------
         eventprobs : ndarray
@@ -370,7 +365,6 @@ class hsmm:
             2D ndarray components * nBumps, initial conditions for bumps magnitudes
         shape : float
             shape parameter for the gamma, defaults to 2  
-
         Returns
         -------
         params : ndarray
@@ -393,13 +387,13 @@ class hsmm:
         params[:,1] = flats.T / self.shape
         # correct flats between bumps for the fact that the gamma is 
         # calculated at midpoint
-        #params[:,1] = params[:,1] - .5 /self.shape
+        #params[:,1] = params[:,1] - .5 /shape
         # first flat is bounded on left while last flat may go 
         # beyond on right
-        params[0,1] = params[0,1] - .5 /self.shape
+        params[0,1] = params[0,1] + .5 /self.shape
         params[-1,1] = params[-1,1] - .5 /self.shape
         return params
-
+    
     def backward_estimation(self,max_fit=None, max_starting_points=1, method="random"):
         '''
         First read or estimate max_bump solution then estimate max_bump - 1 solution by 
@@ -452,13 +446,11 @@ class hsmm:
         #bests = bests.squeeze('iteration')
         return bests
 
-    
     @staticmethod
     def gamma_EEG(a, b, max_length):
         '''
         Returns PDF of gamma dist with shape = a and scale = b, 
         on a range from 0 to max_length 
-
         Parameters
         ----------
         a : float
@@ -467,7 +459,6 @@ class hsmm:
             scale parameter
         max_length : int
             maximum length of the trials        
-
         Returns
         -------
         d : ndarray
@@ -477,7 +468,7 @@ class hsmm:
         d = [gamma.pdf(t+.5,a,scale=b) for t in np.arange(max_length)]
         d = d/np.sum(d)
         return d
-    
+        
     def gen_random_stages(self, n_bumps, mean_rt):
         '''
         Returns random stage duration between 0 and mean RT by iteratively drawind sample from a 
@@ -507,7 +498,7 @@ class hsmm:
         '''
         Compute the maximum possible number of bumps given bump width and mean or minimum reaction time
         '''
-        return int(np.round(np.min(self.durations)/self.bump_width_samples))
+        return int(np.min(self.durations)/self.bump_width_samples)
         # if not min_rt:
         #     return int(np.mean(self.durations)/self.bump_width_samples)
         # else:
@@ -544,7 +535,8 @@ class hsmm:
             return np.mean(onsets, axis=0)
         else:
             return onsets
-        
+    
+    @staticmethod        
     def compute_times(self, estimates, duration=False, fill_value=None, mean=False, cumulative=False, add_rt=False):
         '''
         Compute the likeliest onset times for each bump
@@ -567,10 +559,9 @@ class hsmm:
         '''
 
         eventprobs = estimates.eventprobs
-        eventprobs = eventprobs.dropna('bump')
         times = xr.dot(eventprobs, eventprobs.samples, dims='samples')#Most likely bump location
-        times[:] = times - self.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
-        if duration: fill_value=0
+        times = times - self.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
+        #if duration: fill_value=0
         if fill_value != None:            #times = times.shift(bump=1, fill_value=fill_value)
             added = xr.DataArray(np.repeat(fill_value,len(times.trial_x_participant))[np.newaxis,:],
                                  coords={'bump':[0], 
@@ -591,6 +582,18 @@ class hsmm:
             times = times.mean('trial_x_participant')
         return times
    
+    @staticmethod
+    def compute_topologies(electrodes, estimated, extra_dim=False):
+        if extra_dim:
+            return xr.dot(electrodes.rename({'epochs':'trials'}).\
+                      stack(trial_x_participant=['participant','trials']).data.fillna(0), \
+                      estimated.eventprobs.fillna(0), dims=['samples']).mean('trial_x_participant').\
+                      transpose(extra_dim,'bump','electrodes')
+        else:
+            return xr.dot(electrodes.rename({'epochs':'trials'}).\
+                      stack(trial_x_participant=['participant','trials']).data.fillna(0), \
+                      estimated.eventprobs.fillna(0), dims=['samples']).mean('trial_x_participant').\
+                      transpose('bump','electrodes')
     
     def compute_topo(self, data, eventprobs, mean=True):
         '''
@@ -672,6 +675,11 @@ class hsmm:
         parameters = np.zeros((len(comb),n_stages,2))
         for idx, y in enumerate(comb):
             parameters[idx, :, :] = [[self.shape, x/self.shape] for x in y]
-        print(f'Fitting {len(parameters)} models based on all possibilities from grid search with a spacing of {int(spacing)} samples and {int(n_points)} points')
+        print(f'Fitting {len(parameters)} models based on all possibilities from grid search with a spacing of {int(spacing)} samples and {int(n_points)} points and durations of {grid}')
+        # for i in comb:
+        #     print('|')
+        #     for bump in i:
+        #         print(int(bump)*'.')
+        #     print('|\n')
         return parameters
     

@@ -8,18 +8,23 @@ import numpy as np
 import mne
 from mne.datasets import sample
     
-def simulate(sources, n_trials, max_trial_length, n_jobs, bump_frequency, file, path, overwrite=False):  
+def simulate(sources, n_trials, max_trial_length, n_jobs, bump_frequency, file, path='./', overwrite=False):  
     if 'raw.fif' not in file:
         file = file + '_raw.fif'
         print("Aligning file name to MNE's convention")
     if file in os.listdir(path) and not overwrite:
-        raw = mne.io.read_raw_fif(path+file, verbose=False)
+        if path == './':
+            raw = mne.io.read_raw_fif(file, verbose=False)
+        else: raw = mne.io.read_raw_fif(path+file, verbose=False)
         generating_events = np.load(path+file.split('.fif')[0]+'_generating_events.npy')
         print(f'Loading {file} no new simulation performed')
         return raw, generating_events
     else:
+        if path == None:
+            file = file
+            path = '.'
+        else: file = path+file
         print(f'Simulating {file} in {path}')
-        file = path+file
         # Following code and comments largely comes from MNE examples (e.g. https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html)
         # For this example, we will be using the information of the sample subject.
         # This will download the data if it not already on your machine. We also set
