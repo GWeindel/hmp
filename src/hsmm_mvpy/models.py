@@ -8,6 +8,7 @@ import multiprocessing as mp
 import itertools
 import math
 from warnings import warn
+from scipy.stats import gamma as sp_gamma
 
 
 class hsmm:
@@ -350,6 +351,29 @@ class hsmm:
         else:
             return [likelihood, eventprobs]
         
+    @staticmethod
+    def gamma_EEG(a, b, max_length):
+        '''
+        Returns PDF of gamma dist with shape = a and scale = b, 
+        on a range from 0 to max_length 
+        Parameters
+        ----------
+        a : float
+            shape parameter
+        b : float
+            scale parameter
+        max_length : int
+            maximum length of the trials        
+        Returns
+        -------
+        d : ndarray
+            density for a gamma with given parameters
+        '''
+        from scipy.stats import gamma
+        d = [gamma.pdf(t+.5,a,scale=b) for t in np.arange(max_length)]
+        d = d/np.sum(d)
+        return d
+    
     def gamma_parameters(self, eventprobs, n_bumps):
         '''
         Given that the shape is fixed the calculation of the maximum likelihood
@@ -446,28 +470,6 @@ class hsmm:
         #bests = bests.squeeze('iteration')
         return bests
 
-    @staticmethod
-    def gamma_EEG(a, b, max_length):
-        '''
-        Returns PDF of gamma dist with shape = a and scale = b, 
-        on a range from 0 to max_length 
-        Parameters
-        ----------
-        a : float
-            shape parameter
-        b : float
-            scale parameter
-        max_length : int
-            maximum length of the trials        
-        Returns
-        -------
-        d : ndarray
-            density for a gamma with given parameters
-        '''
-        from scipy.stats import gamma
-        d = [gamma.pdf(t+.5,a,scale=b) for t in np.arange(max_length)]
-        d = d/np.sum(d)
-        return d
         
     def gen_random_stages(self, n_bumps, mean_rt):
         '''
