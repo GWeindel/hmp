@@ -7,6 +7,7 @@ import xarray as xr
 import multiprocessing as mp
 import itertools
 import math
+import time#Just for speed testing
 from warnings import warn
 from scipy.stats import gamma as sp_gamma
 
@@ -223,7 +224,7 @@ class hsmm:
             eventprobs1 = np.copy(eventprobs)
         else : 
             means = np.zeros((self.max_d, self.n_trials, self.n_dims))
-            for i in np.arange(self.n_trials):
+            for i in range(self.n_trials):
                 means[:self.durations[i],i,:] = self.bumps[self.starts[i]:self.ends[i]+1,:]
                 # arrange bumps dimensions by trials [max_d*trial*PCs]
             while (lkh - lkh1) > threshold:
@@ -232,8 +233,8 @@ class hsmm:
                 magnitudes1 = np.copy(magnitudes)
                 parameters1 = np.copy(parameters)
                 eventprobs1 = np.copy(eventprobs)
-                for i in np.arange(n_bumps):
-                    for j in np.arange(self.n_dims):
+                for i in range(n_bumps):
+                    for j in range(self.n_dims):
                         magnitudes[j,i] = np.mean(np.sum( \
                         eventprobs[:,:,i]*means[:,:,j], axis=0))
                         # 2) sum of all samples in a trial
@@ -245,7 +246,7 @@ class hsmm:
                 parameters = self.gamma_parameters(eventprobs, n_bumps)
 
                 #Ensure constrain of gammas > bump_width, note that contrary to the matlab code this is not applied on the first and last stages
-                for i in np.arange(n_bumps+1): #PCG: seems unefficient likely slows down process, isn't there a better way to bound the estimation??
+                for i in range(n_bumps+1): #PCG: seems unefficient likely slows down process, isn't there a better way to bound the estimation??
                     if i in parameters_to_fix:
                         parameters[i,:] = parameters1[i,:]
                     if 0 < i < n_bumps+1 and parameters[i,:].prod() < self.bump_width_samples:
@@ -268,19 +269,13 @@ class hsmm:
         eventprobs : ndarray
             [samples(max_d)*n_trials*n_bumps] = [max_d*trials*nBumps]
         '''
-        if isinstance(parameters, (xr.DataArray,xr.Dataset)):
-            parameters = parameters.dropna(dim='stage').values
-        if isinstance(magnitudes, (xr.DataArray,xr.Dataset)):
-            magnitudes = magnitudes.dropna(dim='bump').values
         gains = np.zeros((self.n_samples, n_bumps))
-
-        for i in np.arange(self.n_dims):
+        for i in range(self.n_dims):
             # computes the gains, i.e. how much the bumps reduce the variance at 
             # the location where they are placed for all samples, see Appendix Anderson,Zhang, 
             # Borst and Walsh, 2016, last equation, right hand side parenthesis 
             # (S^2 -(S -B)^2) (Sb- B2/2). And sum over all PCA
-            gains = gains + self.bumps[:,i][np.newaxis].T * magnitudes[i,:] - \
-                    np.tile((magnitudes[i,:]**2),(self.n_samples,1))/2 
+            gains += self.bumps[:,i][np.newaxis].T * magnitudes[i,:] - (magnitudes[i,:]**2)/2
             # bump*magnitudes-> gives [n_samples*nBumps] It scales bumps prob. by the
             # global magnitudes of the bumps topology 'magnitudes' of each bump. 
             # tile append vertically the (estimated bump-magnitudes)^2 of one PC 
@@ -292,19 +287,16 @@ class hsmm:
         gains = np.exp(gains)
         probs = np.zeros([self.max_d,self.n_trials,n_bumps]) # prob per trial
         probs_b = np.zeros([self.max_d,self.n_trials,n_bumps])
-        for i in np.arange(self.n_trials):
+        for i in range(self.n_trials):
             # Following assigns gain per trial to variable probs 
             # in direct and reverse order
             probs[self.offset:self.ends[i] - self.starts[i]+1 - self.offset,i,:] = \
                 gains[self.starts[i]+ self.offset : self.ends[i] - self.offset+1,:] 
-            for j in np.arange(n_bumps): # PCG: for-loop IMPROVE
-                probs_b[self.offset:self.ends[i]- self.starts[i]+1 - self.offset,i,j] = \
-                np.flipud(gains[self.starts[i]+ self.offset : self.ends[i]- self.offset+1,\
-                n_bumps-j-1])
+            probs_b[self.offset:self.ends[i]- self.starts[i]+1 - self.offset,i,:] = \
+            gains[self.starts[i]+ self.offset : self.ends[i]- self.offset+1,:][::-1,::-1]
                 # assign reversed gains array per trial
-
         LP = np.zeros([self.max_d, n_bumps + 1]) # Gamma pdf for each stage parameters
-        for j in np.arange(n_bumps + 1):
+        for j in range(n_bumps + 1):
             LP[:,j] = self.gamma_EEG(parameters[j,0], parameters[j,1], self.max_d)
             # Compute Gamma pdf from 0 to max_d with parameters
         BLP = LP[:,::-1] # States reversed gamma pdf
@@ -314,32 +306,26 @@ class hsmm:
         # eq1 in Appendix, first definition of likelihood
         # For each trial (given a length of max duration) compute gamma pdf * gains
         # Start with first bump as first stage only one gamma and no bumps
-        forward[self.offset:self.max_d,:,0] = np.tile(LP[:self.max_d-self.offset,0][np.newaxis].T,\
-            (1,self.n_trials))*probs[self.offset:self.max_d,:,0]
+        forward[self.offset:self.max_d,:,0] = np.broadcast_to(np.expand_dims(LP[:self.max_d-self.offset,0],axis=1),(self.max_d-self.offset, self.n_trials))*probs[self.offset:self.max_d,:,0]
 
-        forward_b[self.offset:self.max_d,:,0] = np.tile(BLP[:self.max_d-self.offset,0][np.newaxis].T,\
-                    (1,self.n_trials)) # reversed Gamma pdf
+        forward_b[self.offset:self.max_d,:,0] = np.broadcast_to(np.expand_dims(BLP[:self.max_d-self.offset,0],axis=1),(self.max_d-self.offset, self.n_trials)) # reversed Gamma pdf
 
-        for i in np.arange(1,n_bumps):#continue with other bumps
-            next_ = np.concatenate((np.zeros(self.bump_width_samples), LP[:self.max_d - \
-                    self.bump_width_samples, i]), axis=0)
-            # next_ bump width samples followed by gamma pdf (one state)
-            next_b = np.concatenate((np.zeros(self.bump_width_samples), BLP[:self.max_d - \
-                    self.bump_width_samples, i]), axis=0)
+        for i in range(1,n_bumps):#continue with other bumps
+            next_ = np.zeros(self.max_d)
+            next_b = np.zeros(self.max_d)
+            next_[self.bump_width_samples:] = LP[:self.max_d - self.bump_width_samples, i]
+            next_b[self.bump_width_samples:] = BLP[:self.max_d - self.bump_width_samples, i]
             # next_b same with reversed gamma
             add_b = forward_b[:,:,i-1] * probs_b[:,:,i-1]
             for j in np.arange(self.n_trials):
-                temp = np.convolve(forward[:,j,i-1],next_)
+                forward[:,j,i] = np.convolve(forward[:,j,i-1],next_, mode='full')[:self.max_d]
                 # convolution between gamma * gains at previous states and state i
-                forward[:,j,i] = temp[:self.max_d]
-                temp = np.convolve(add_b[:,j],next_b)
+                forward_b[:,j,i] = np.convolve(add_b[:,j],next_b, mode='full')[:self.max_d]
                 # same but backwards
-                forward_b[:,j,i] = temp[:self.max_d]
-            forward[:,:,i] = forward[:,:,i] * probs[:,:,i]
+            forward[:,:,i] *= probs[:,:,i]
         forward_b = forward_b[:,:,::-1] # undoes inversion
-        for j in np.arange(self.n_trials): # TODO : IMPROVE
-            for i in np.arange(n_bumps):
-                backward[:self.durations[j],j,i] = np.flipud(forward_b[:self.durations[j],j,i])
+        for j in range(self.n_trials): # TODO : IMPROVE
+            backward[:self.durations[j],j,:] =  forward_b[:self.durations[j],j,:][::-1, :]
         backward[:self.offset,:,:] = 0
         temp = forward * backward # [max_d,n_trials,n_bumps] .* [max_d,n_trials,n_bumps];
         likelihood = np.sum(np.log(temp[:,:,0].sum(axis=0)))# why 0 index? shouldn't it also be for all dim??
@@ -369,8 +355,7 @@ class hsmm:
         d : ndarray
             density for a gamma with given parameters
         '''
-        from scipy.stats import gamma
-        d = [gamma.pdf(t+.5,a,scale=b) for t in np.arange(max_length)]
+        d = [sp_gamma.pdf(t+.5,a,scale=b) for t in np.arange(max_length)]
         d = d/np.sum(d)
         return d
     
