@@ -101,8 +101,21 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
             data = mne.io.read_raw_bdf(participant, preload=False, verbose=verbose)
         else:
             raise ValueError(f'Unknown EEG file format for participant {participant}')
-        data.load_data()
-        data.filter(high_pass, low_pass, fir_design='firwin', verbose=verbose)#Filtering out frequency outside range .5 and 30Hz, as study by Anderson et al.
+        # Loading events (in our case one event = one trial)
+        if events_provided is None:
+            try:
+                events = mne.find_events(data, verbose=verbose, min_duration = 1 / data.info['sfreq'])
+            except:
+                events = mne.events_from_annotations(data, verbose=verbose)
+            if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicates offset in the trggers
+                print(f'Correcting event values as trigger channel has offset {np.unique(events[:,1])}')
+                events[:,2] = events[:,2]-events[:,1]#correction on event value                
+            events_values = np.concatenate([np.array([x for x in event_id.values()]), np.array([x for x in resp_id.values()])])
+            events = np.array([list(x) for x in events if x[2] in events_values])#only keeps events with stim or response
+        else:
+            if len(np.shape(events_provided)) == 2:
+                events_provided = events_provided[np.newaxis]
+            events = events_provided[y]
 
         if isinstance(pick_channels, list):
                try:
@@ -113,19 +126,11 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
                 data = data.pick_types(meg=False, eeg=True, stim=False, eog=False, misc=False, exclude='bads') 
         else:
              raise ValueError('incorrect electrode pick specified')
+    
 
-        # Loading events (in our case one event = one trial)
-        if events_provided is None:
-            events = mne.find_events(data, verbose=verbose, min_duration = 1 / data.info['sfreq'])
-            if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicates offset in the trggers
-                print(f'Correcting event values as trigger channel has offset {np.unique(events[:,1])}')
-                events[:,2] = events[:,2]-events[:,1]#correction on event value                
-            events_values = np.concatenate([np.array([x for x in event_id.values()]), np.array([x for x in resp_id.values()])])
-            events = np.array([list(x) for x in events if x[2] in events_values])#only keeps events with stim or response
-        else:
-            if len(np.shape(events_provided)) == 2:
-                events_provided = events_provided[np.newaxis]
-            events = events_provided[y]
+        data.load_data()
+        data.filter(high_pass, low_pass, fir_design='firwin', verbose=verbose)#Filtering out frequency outside range .5 and 30Hz, as study by Anderson et al.
+
         if sfreq < data.info['sfreq']:#Downsampling
             print(f'Downsampling to {sfreq} Hz')
             data, events = data.resample(sfreq, events=events)#100 Hz is the standard used for previous applications of HsMM
@@ -532,7 +537,7 @@ def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
     stacked_loo = stack_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False))
     #Fitting the HsMM using previous estimated parameters as initial parameters
     model_loo = hsmm(stacked_loo, sf=sfreq, bump_width=bump_width)
-    fit = model_loo.fit_single(n_bumps, initial_fit.magnitudes, initial_fit.parameters, 1, False, verbose=False)
+    fit = model_loo.fit_single(n_bumps, initial_fit.magnitudes, initial_fit.parameters, 1, verbose=False)
     #Evaluating likelihood for left out subject
     #Extracting data of left out subject
     stacked_left_out = stack_data(data.sel(participant=subject, drop=False))

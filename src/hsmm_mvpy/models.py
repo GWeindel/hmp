@@ -98,7 +98,7 @@ class hsmm:
         bumps[-self.offset:,:] = 0 #Centering
         return bumps
 
-    def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, mp=False, verbose=True, starting_points=1,
+    def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, verbose=True, starting_points=1,
                   parameters_to_fix = [], magnitudes_to_fix = [], method='random'):
         '''
         Fit HsMM for a single n_bumps model
@@ -118,8 +118,6 @@ class hsmm:
         import pandas as pd 
         if verbose:
             print(f'Estimating {n_bumps} bumps model with {starting_points-1} random starting points')
-        if mp==True: #PCG: Dirty temporarilly needed for multiprocessing in the iterative backroll estimation...
-            magnitudes = magnitudes.T
         
         if self.estimate_magnitudes == False:#Don't need to manually fix pars if not estimated
             magnitudes_to_fix = np.arange(n_bumps+1)
@@ -434,7 +432,7 @@ class hsmm:
             flats = temp_best.parameters.values
             bumps_temp,flats_temp = [],[]
             for bump in np.arange(n_bumps+1):#creating all possible solutions
-                bumps_temp.append(temp_best.magnitudes.sel(bump = np.array(list(set(n_bumps_list) - set([bump])))).values.T)
+                bumps_temp.append(temp_best.magnitudes.sel(bump = np.array(list(set(n_bumps_list) - set([bump])))).values)
                 flat = bump + 1 #one more flat than bumps
                 temp = np.copy(flats[:,1])
                 temp[flat-1] = temp[flat-1] + temp[flat]
@@ -444,9 +442,11 @@ class hsmm:
                 with mp.Pool(processes=self.cpus) as pool:
                     bump_loo_likelihood_temp = pool.starmap(self.fit_single, 
                         zip(itertools.repeat(n_bumps), bumps_temp, flats_temp,
-                            itertools.repeat(1),itertools.repeat(True),itertools.repeat(False)))
+                            itertools.repeat(1),itertools.repeat(False)))
             else:
-                raise ValueError('For loop not yet written use cpus >1')
+                bump_loo_likelihood_temp = []
+                for bump_tmp, flat_tmp in zip(bumps_temp,flats_temp):
+                    bump_loo_likelihood_temp.append(self.fit_single(n_bumps, bump_tmp, flat_tmp, 1, False))
             models = xr.concat(bump_loo_likelihood_temp, dim="iteration")
             bump_loo_results.append(models.sel(iteration=[np.where(models.likelihoods == models.likelihoods.max())[0][0]]).squeeze('iteration'))
             i+=1
@@ -475,7 +475,7 @@ class hsmm:
         '''
         #random_stages = [0]
         #for stage in np.arange(n_bumps):
-        random_stages= np.array([[2,x*mean_rt/2] for x in np.random.beta(2, 2, n_bumps+1)])
+        random_stages= np.array([[self.shape,x*mean_rt/self.shape] for x in np.random.beta(2, 2, n_bumps+1)])
         #random_stages.append(1)#last one is defined as 1 - previous
         #random_stages = np.diff(random_stages)
         #random_stages = np.array([[self.shape, np.round(x*mean_rt)+1] for x in random_stages])#Remove 0 duration stage
@@ -509,7 +509,7 @@ class hsmm:
         d : ndarray
             density for a gamma with given parameters
         '''
-        warn('This method is deprecated and will be removed in future version, use onset_times() instead', DeprecationWarning, stacklevel=2)
+        warn('This method is deprecated and will be removed in future version, use compute_times() instead', DeprecationWarning, stacklevel=2)
         eventprobs = eventprobs.dropna('bump', how="all")
         eventprobs = eventprobs.dropna('trial_x_participant', how="all")
         onsets = np.empty((len(eventprobs.trial_x_participant),len(eventprobs.bump)+1))
@@ -524,7 +524,7 @@ class hsmm:
             return onsets
     
     @staticmethod        
-    def compute_times(self, estimates, duration=False, fill_value=None, mean=False, cumulative=False, add_rt=False):
+    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, cumulative=False, add_rt=False):
         '''
         Compute the likeliest onset times for each bump
 
@@ -547,7 +547,7 @@ class hsmm:
 
         eventprobs = estimates.eventprobs
         times = xr.dot(eventprobs, eventprobs.samples, dims='samples')#Most likely bump location
-        times = times - self.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
+        times = times - init.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
         #if duration: fill_value=0
         if fill_value != None:            #times = times.shift(bump=1, fill_value=fill_value)
             added = xr.DataArray(np.repeat(fill_value,len(times.trial_x_participant))[np.newaxis,:],
@@ -556,7 +556,7 @@ class hsmm:
             times = times.assign_coords(bump=times.bump+1)
             times = times.combine_first(added)
         if add_rt:             
-            rts = self.named_durations
+            rts = init.named_durations
             rts = rts.assign_coords(bump=int(times.bump.max().values+1))
             rts = rts.expand_dims(dim="bump")
             times = xr.concat([times, rts], dim='bump')
