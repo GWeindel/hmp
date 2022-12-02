@@ -84,7 +84,7 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
     n_iter = np.shape(electrodes)[0]
     if isinstance(ax, bool):
         if figsize == None:
-            figsize = (12, 2*n_iter/2)
+            figsize = (12, 1*n_iter)
         fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
         return_ax = False
     bump_size = init.bump_width_samples*time_step*magnify
@@ -131,7 +131,7 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
         plt.show()    
 
 
-def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=False):
+def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=False, mean=False):
     '''
     Plotting the LOOCV results
     
@@ -168,15 +168,21 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
         return_ax = False
     else:
         return_ax = True
-        
-    ax[0].errorbar(x=np.arange(loocv_estimates.n_bump.max())+1,y=np.mean(loocv_estimates.data,axis=1),yerr=np.std(loocv_estimates.data,axis=1)/np.sqrt(len(loocv_estimates.participants))*1.96,marker='o')
+    loocv_estimates = loocv_estimates.dropna('n_bump', how='all')
+    if mean:
+        alpha = .2#for the indiv plot
+        means = np.nanmean(loocv_estimates.data,axis=1)
+        ax[0].errorbar(x=np.arange(len(means))+1, y=means, \
+                 yerr= np.nanstd(loocv_estimates.data,axis=1)/np.sqrt(len(loocv_estimates.participants))*1.96, marker='o', color='k')
+    else:
+        alpha=1
     if indiv:
         for loo in loocv_estimates.T:
-            ax[0].plot(np.arange(loocv_estimates.n_bump.max())+1,loo, alpha=.2)
+            ax[0].plot(np.arange(loocv_estimates.n_bump.max())+1,loo, alpha=alpha)
     ax[0].set_ylabel('LOOCV Loglikelihood')
     ax[0].set_xlabel('Number of bumps')
     ax[0].set_xticks(ticks=np.arange(1,loocv_estimates.n_bump.max()+1))
-
+    total_sub = len(loocv_estimates.participants)
     diffs, diff_bin, labels = [],[],[]
     for n_bump in np.arange(2,loocv_estimates.n_bump.max()+1):
         diffs.append(loocv_estimates.sel(n_bump=n_bump).data - loocv_estimates.sel(n_bump=n_bump-1).data)
@@ -185,11 +191,13 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
         if pvals:
             pvalues = []
             if test == 'sign':
-                pvalues.append((sign_test(diffs[-1])))
+                diff_tmp = np.array(diffs)
+                diff_tmp[np.isnan(diff_tmp)] = -np.inf 
+                pvalues.append((sign_test(diff_tmp[-1])))
             elif test == 't-test':
                 pvalues.append((ttest_1samp(diffs[-1], 0, alternative='greater')))
-            mean = np.mean(loocv_estimates.sel(n_bump=n_bump).data)
-            ax[0].text(x=n_bump-.5, y=mean+mean/10, s=str(np.sum(diff_bin[-1]))+'/'+str(len(diffs[-1]))+':'+str(np.around(pvalues[-1][-1],3)))
+            mean = np.nanmean(loocv_estimates.sel(n_bump=n_bump).data)
+            ax[0].text(x=n_bump-.5, y=mean+mean/10, s=str(int(np.nansum(diff_bin[-1])))+'/'+str(len(diffs[-1]))+':'+str(np.around(pvalues[-1][-1],3)))
     ax[1].plot(diffs,'.-', alpha=.3)
     ax[1].set_xticks(ticks=np.arange(0,loocv_estimates.n_bump.max()-1), labels=labels)
     ax[1].hlines(0,0,len(np.arange(2,loocv_estimates.n_bump.max())),color='k')
@@ -249,7 +257,7 @@ def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=def
             plt.barh(j+.02*stage, np.mean(time[:,stage]), color='w', edgecolor=colors[stage])
             if errs == 'ci':
                 errorbars = np.transpose([np.nanpercentile(bootstrap(time[:,stage]), q=[2.5,97.5])])
-                errorbars = np.abs(errorbars-np.mean(time[:,stage]))
+                errorbars = np.abs(errorbars-np.mean(time[:,stage].values))
             elif errs == 'std':
                 errorbars = np.std(time[:,stage])
             else:

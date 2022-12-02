@@ -8,8 +8,10 @@ import xarray as xr
 import multiprocessing as mp
 import itertools
 import warnings
+from warnings import warn, filterwarnings
 
-warnings.filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later  
+
+filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later  
 
 def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provided=None, verbose=True,
                  tmin=-.2, tmax=5, offset_after_resp = .1, high_pass=.5, pick_channels = 'eeg', baseline=(None, 0),\
@@ -502,6 +504,7 @@ def stack_data(data, subjects_variable='participant', electrode_variable='compon
 
 def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
     '''
+    DEPRECATED
     Performs Leave-one-out cross validation, removes one participant from data, estimate n_bumps HsMM parameters, 
     compute the likelihood of the data from the left out participant with the estimated parameters. The model is fit
     using initial fit as starting points for magnitudes and parameters
@@ -509,13 +512,13 @@ def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
     
     Parameters
     ----------
-    data : xarray
+    data : xarray.Dataset
         xarray data from transform_data() 
     subject : str
         name of the subject to remove
     n_bumps : int 
         How many bumps in the model
-    initial_fit : xarray
+    initial_fit : xarray.Dataset
         Fit of the model with the same number of bumps and all participants
     sfreq : float
         Sampling frequency of the data
@@ -528,7 +531,8 @@ def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
         likelihood computed for the left-out participant
     subject : str
         name of the subject to remove
-    '''    
+    '''
+    warn('This method is deprecated and will be removed in future version, use loocv() instead', DeprecationWarning, stacklevel=2) 
     from hsmm_mvpy.models import hsmm
     #Looping over possible number of bumps
     subjects_idx = data.participant.values
@@ -536,31 +540,141 @@ def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
     #Extracting data without left out subject
     stacked_loo = stack_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False))
     #Fitting the HsMM using previous estimated parameters as initial parameters
-    model_loo = hsmm(stacked_loo, sf=sfreq, bump_width=bump_width)
-    fit = model_loo.fit_single(n_bumps, initial_fit.magnitudes, initial_fit.parameters, 1, verbose=False)
+    model_loo = hsmm(stacked_loo, sfreq=sfreq, bump_width=bump_width)
+    fit = model_loo.fit_single(n_bumps, initial_fit.magnitudes.dropna('bump').values, initial_fit.parameters, 1, verbose=False)
     #Evaluating likelihood for left out subject
     #Extracting data of left out subject
     stacked_left_out = stack_data(data.sel(participant=subject, drop=False))
-    model_left_out = hsmm(stacked_left_out, sf=sfreq, bump_width=bump_width)
-    likelihood = model_left_out.calc_EEG_50h(fit.magnitudes, fit.parameters, n_bumps,True)
+    model_left_out = hsmm(stacked_left_out, sfreq=sfreq, bump_width=bump_width)
+    likelihood = model_left_out.calc_EEG_50h(fit.magnitudes.dropna('bump').values, fit.parameters, n_bumps,True)
     return likelihood, subject
 
-def loocv_mp(init, unstacked_data, bests, cpus=2, verbose=True):
+def loocv_estimation(data, subject, sfreq, bump_width):
+    '''
+    Performs Leave-one-out cross validation, removes one participant from data, estimate n_bumps HsMM parameters, 
+    compute the likelihood of the data from the left out participant with the estimated parameters. The model is fit
+    using initial fit as starting points for magnitudes and parameters
+    
+    
+    Parameters
+    ----------
+    data : xarray
+        xarray data from transform_data() 
+    subject : str
+        name of the subject to remove
+    sfreq : float
+        Sampling frequency of the data
+    bump_width : float
+        length of the bumps in milliseconds
+    
+    Returns
+    -------
+    likelihood : float
+        likelihood computed for the left-out participant
+    subject : str
+        name of the subject to remove
+    '''    
+    print(f'Leaving out participant #{subject}')
+    from hsmm_mvpy.models import hsmm
+    #Looping over possible number of bumps
+    subjects_idx = data.participant.values
+    likelihoods_loo = []
+    #Extracting data without left out subject
+    stacked_loo = stack_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False))
+    #Fitting the HsMM using previous estimated parameters as initial parameters
+    model_loo = hsmm(stacked_loo, sfreq=sfreq, bump_width=bump_width, cpus=1)
+    parameters, likelihoods = model_loo.sliding_bump(verbose=False)
+    estimates = model_loo.backward_estimation(likelihoods=likelihoods, parameters=parameters)
+    #Evaluating likelihood for left out subject
+    #Extracting data of left out subject
+    stacked_left_out = stack_data(data.sel(participant=subject, drop=False))
+    model_left_out = hsmm(stacked_left_out, sfreq=sfreq, bump_width=bump_width, cpus=1)
+    n_bumps = int(estimates.dropna('n_bumps',how='all').n_bumps.max())
+    for n_bump in range(1,n_bumps+1):
+        likelihoods_loo.append( model_left_out.calc_EEG_50h(estimates.sel(n_bumps=n_bump).magnitudes.dropna('bump').values, estimates.sel(n_bumps=n_bump).parameters.dropna('stage').values, n_bump, True))
+    return likelihoods_loo, subject
+
+def loocv(unstacked_data,sfreq, max_bump, cpus=1, bump_width=50):
+    '''
+    Performs Leave-one-out cross validation, removes one participant from data, estimate n_bumps HsMM parameters, 
+    compute the likelihood of the data from the left out participant with the estimated parameters. The model is fit
+    using initial fit as starting points for magnitudes and parameters
+    
+    
+    Parameters
+    ----------
+    data : xarray.Dataset
+        xarray data from transform_data() 
+    initial_fit : xarray.Dataset
+        Fit of the model with the same number of bumps and all participants
+    sfreq : float
+        Sampling frequency of the data
+    bump_width : float
+        length of the bumps in milliseconds
+    
+    Returns
+    -------
+    loocv
+    '''
+    #Looping over possible number of bumps
+    participants = unstacked_data.participant.data
+    likelihoods_loo = []
+    loocv = []
+    if cpus>1:
+        import multiprocessing
+        with multiprocessing.Pool(processes=cpus) as pool:
+            loo = pool.starmap(loocv_estimation, 
+                zip(itertools.repeat(unstacked_data), participants, itertools.repeat(sfreq), itertools.repeat(bump_width)))
+        loocv.append(loo)
+    else:
+        loo = []
+        for participant in participants:
+            loo.append(loocv_estimation(unstacked_data, participant,sfreq, bump_width))
+        loocv.append(loo)
+    loocv_arr = np.tile(np.nan, (max_bump, len(participants)))
+    par_arr = np.repeat(np.nan, len(participants))
+    for idx, values in enumerate(loocv[0]):
+        par_arr[idx] = np.array(values[-1])
+        values = np.array(values[:-1][0])
+        loocv_arr[:len(values), idx] = values 
+    loocv = xr.DataArray(loocv_arr, coords={"n_bump":np.arange(1,max_bump+1),
+                                                           "participants":par_arr}, name="loo_likelihood")
+    return loocv
+
+
+def loocv_mp(init, unstacked_data, bests, func=LOOCV, cpus=2, verbose=True):
+    '''
+    DEPRECATED multiprocessing wrapper for LOOCV()
+    
+    Parameters
+    ----------
+    init : hsmm.model
+        initialized hsmm model
+    data : xarray.Dataset
+        xarray data from transform_data() , can also be a subset, e.g. based on conditions
+    bests : xarray.Dataset
+        Fit from all possible n bump solution
+    
+    Returns
+    -------
+    loocv
+    '''
+    warn('This method is deprecated and will be removed in future version, use loocv() instead', DeprecationWarning, stacklevel=2) 
     import multiprocessing
     import itertools
     participants = unstacked_data.participant.data
     likelihoods_loo = []
     loocv = []
-    for n_bumps in np.arange(1, init.max_bumps+1):
+    for n_bumps in bests.n_bumps.values:
         if verbose:
             print(f'LOOCV for model with {n_bumps} bump(s)')
         with multiprocessing.Pool(processes=cpus) as pool:
-            loo = pool.starmap(LOOCV, 
+            loo = pool.starmap(func, 
                 zip(itertools.repeat(unstacked_data), participants, itertools.repeat(n_bumps), 
-                    itertools.repeat(bests.sel(n_bumps=n_bumps)), itertools.repeat(init.sf)))
+                    itertools.repeat(bests.sel(n_bumps=n_bumps)), itertools.repeat(init.sfreq)))
         loocv.append(loo)
 
-    loocv = xr.DataArray(np.array(loocv)[:,:,0].astype(np.float64), coords={"n_bump":np.arange(1,init.max_bumps+1),
+    loocv = xr.DataArray(np.array(loocv)[:,:,0].astype(np.float64), coords={"n_bump":np.arange(1,bests.n_bumps.max().values+1),
                                                            "participants":np.array(loocv)[0,:,1]}, name="loo_likelihood")
     return loocv
 
