@@ -476,8 +476,8 @@ class hsmm:
                     bump_loo_likelihood_temp = []
                     for bump_tmp, flat_tmp in zip(bumps_temp,flats_temp):
                         bump_loo_likelihood_temp.append(self.fit_single(n_bumps, bump_tmp, flat_tmp, 1, False))
-                models = xr.concat(bump_loo_likelihood_temp, dim="iteration")
-                bump_loo_results.append(models.sel(iteration=[np.where(models.likelihoods == models.likelihoods.max())[0][0]]).squeeze('iteration'))
+                    models = xr.concat(bump_loo_likelihood_temp, dim="iteration")
+                    bump_loo_results.append(models.sel(iteration=[np.where(models.likelihoods == models.likelihoods.max())[0][0]]).squeeze('iteration'))
             bests = xr.concat(bump_loo_results, dim="n_bumps")
             bests = bests.assign_coords({"n_bumps": np.arange(self.max_bumps,0,-1)})
         #bests = bests.squeeze('iteration')
