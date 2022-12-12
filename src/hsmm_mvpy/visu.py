@@ -100,7 +100,7 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
         electrodes_ = electrodes_[:n_bump,:]
         for bump in np.arange(n_bump):
             if np.sum(electrodes_[bump,:]) != 0:
-                axes.append(ax.inset_axes([times_iteration[bump],iteration-yoffset,
+                axes.append(ax.inset_axes([times_iteration[bump]-init.offset*magnify,iteration-yoffset,
                                            (bump_size),yoffset*2], transform=ax.transData))
                 plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False,
                              cmap=cmap, vlim=(vmin, vmax), sensors=sensors)
@@ -197,7 +197,7 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
             elif test == 't-test':
                 pvalues.append((ttest_1samp(diffs[-1], 0, alternative='greater')))
             mean = np.nanmean(loocv_estimates.sel(n_bump=n_bump).data)
-            ax[0].text(x=n_bump-.5, y=mean+mean/10, s=str(int(np.nansum(diff_bin[-1])))+'/'+str(len(diffs[-1]))+':'+str(np.around(pvalues[-1][-1],3)))
+            ax[1].text(x=n_bump-2, y=0, s=str(int(np.nansum(diff_bin[-1])))+'/'+str(len(diffs[-1]))+':'+str(np.around(pvalues[-1][-1],3)))
     ax[1].plot(diffs,'.-', alpha=.3)
     ax[1].set_xticks(ticks=np.arange(0,loocv_estimates.n_bump.max()-1), labels=labels)
     ax[1].hlines(0,0,len(np.arange(2,loocv_estimates.n_bump.max())),color='k')
