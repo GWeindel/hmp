@@ -72,9 +72,9 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
         # DEPRECATED
         if 'condition' in estimated or list(estimated.dims)[0] == 'n_bumps' and not skip_electrodes_computation:
             extra_dim = list(estimated.dims)[0]#assumes first dim is new
-            electrodes = init.compute_topologies(electrodes, estimated, extra_dim).data
+            electrodes = init.compute_topologies(electrodes, estimated, init.bump_width_samples, extra_dim).data
         elif not skip_electrodes_computation:
-            electrodes = init.compute_topologies(electrodes, estimated).data
+            electrodes = init.compute_topologies(electrodes, estimated, init.bump_width_samples).data
         electrodes[electrodes == 0] = np.nan
         times = init.compute_times(init, estimated, mean=True).data
     else:#assumes times already computed
@@ -100,7 +100,7 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
         electrodes_ = electrodes_[:n_bump,:]
         for bump in np.arange(n_bump):
             if np.sum(electrodes_[bump,:]) != 0:
-                axes.append(ax.inset_axes([times_iteration[bump]-init.offset*magnify,iteration-yoffset,
+                axes.append(ax.inset_axes([times_iteration[bump],iteration-yoffset,
                                            (bump_size),yoffset*2], transform=ax.transData))
                 plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False,
                              cmap=cmap, vlim=(vmin, vmax), sensors=sensors)
