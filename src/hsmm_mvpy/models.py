@@ -43,14 +43,14 @@ class hsmm:
         starts[0] = 0
         self.starts = starts
         self.ends = dur_dropped_na.data-1 
-        self.durations =  self.ends-self.starts+1
+        self.durations =  dur_dropped_na
         self.named_durations =  durations.dropna("trial_x_participant") - durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
         self.sfreq = sfreq
         self.steps = 1000/self.sfreq
         self.n_trials = len(self.durations)
         self.bump_width = bump_width
         self.cpus = cpus
-        self.bump_width_samples = int(self.bump_width * (self.sfreq/1000))
+        self.bump_width_samples = int(self.bump_width / self.steps)
         self.coords = durations.reset_index('trial_x_participant').coords
         self.n_samples, self.n_dims = np.shape(data.data.T)
         self.bumps = self.calc_bumps(data.data.T)#adds bump morphology
@@ -95,6 +95,7 @@ class hsmm:
             bumps[:,j] = temp @ template
             # for each PC we calculate its correlation with bump temp(data samples * 5) *  
             # template(sine wave bump in samples - 5*1)
+        bumps[-self.bump_width_samples:,:] = 0
         return bumps
 
     def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, verbose=True, starting_points=1,
@@ -191,8 +192,6 @@ class hsmm:
         xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
         xrparams = xr.DataArray(pars, dims=("stage",'params'), name="parameters")
         xrmags = xr.DataArray(mags, dims=("component","bump"), name="magnitudes")
-        #xreventprobs = xr.DataArray(eventprobs, dims=("samples",'trialxPart','bump'), name="eventprobs")
-        #xreventprobs = xreventprobs.trialxPart.set_index(self.coords.values)
         part, trial = self.coords['participant'].values, self.coords['trials'].values
 
         n_samples, n_participant_x_trials, bumps_n = np.shape(eventprobs)
@@ -202,7 +201,6 @@ class hsmm:
                           'samples':np.arange(n_samples),
                         'trial_x_participant':  pd.MultiIndex.from_arrays([part,trial],
                                 names=('participant','trials'))})
-        #xreventprobs = xreventprobs.unstack('trial_x_participant')
         xreventprobs = xreventprobs.transpose('trial_x_participant','samples','bump')
         estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs))
 
@@ -212,10 +210,11 @@ class hsmm:
     
     def fit(self, n_bumps, magnitudes, parameters,  threshold, magnitudes_to_fix=[], parameters_to_fix=[]):
         '''
-        Fitting function underlying single and iterativhsmm.visu.plot_topo_timecourse(eeg_dat, selected, positions, init, magnify=2, sensors=False, figsize=(13,1), title='Actual vs estimated bump onsets',
-
-        times_to_display = np.mean(np.cumsum(random_source_times,axis=1),axis=0))e fit
+        Fitting function underlying single and iterative fit
         '''
+        initial_parameters =  np.copy(parameters)
+        initial_magnitudes = np.copy(magnitudes)
+
         lkh1 = -np.inf#initialize likelihood     
         lkh, eventprobs = self.calc_EEG_50h(magnitudes, parameters, n_bumps)
         if threshold == 0:
@@ -243,18 +242,19 @@ class hsmm:
                         # repeated for each PC (j) and later for each bump (i)
                         # magnitudes [nPCAs, nBumps]
                     if i in magnitudes_to_fix:
-                        magnitudes[:,i] = magnitudes1[:,i]
+                        magnitudes[:,i] = initial_magnitudes[:,i]
                 parameters = self.gamma_parameters(eventprobs, n_bumps)
-                #Ensure constrain of gammas > bump_width, note that contrary to the matlab code this is not applied on the first and last stages
-                for i in range(n_bumps+1): #PCG: seems unefficient likely slows down process, isn't there a better way to bound the estimation??
+                for i in range(n_bumps+1): #unefficient, slows down process, attempt to integrate to EM failed
                     if i in parameters_to_fix:
-                        parameters[i,:] = parameters1[i,:]
+                        parameters[i,:] = initial_parameters[i,:]
+                #Ensure constrain of gammas > bump_width, note that contrary to the matlab code this is not applied on the first and last stages
                     if 0 < i < n_bumps+1 and parameters[i,:].prod() < self.min_stage_duration:
                         # multiply scale and shape parameters to get 
-                        # the mean distance of the gamma-2 pdf. 
-                        # It constrains that bumps are separated at 
-                        # least a bump length
-                        parameters[i,:] = parameters1[i,:]
+                        # the mean distance of the gamma pdf, if lower than defined boundary
+                        # replace with initial and add a sample
+                        #lkh1 = -np.inf
+                        #initial_parameters[i,-1] =  initial_parameters[i,-1]+1/self.shape
+                        parameters[i,-1] = self.min_stage_duration
                 lkh, eventprobs = self.calc_EEG_50h(magnitudes, parameters, n_bumps)
         return lkh1, magnitudes1, parameters1, eventprobs1
 
@@ -361,7 +361,7 @@ class hsmm:
         d : ndarray
             density for a gamma with given parameters, normalized to 1
         '''
-        d = [sp_gamma.pdf(t-.5,a,scale=b) for t in np.arange(max_length)+1]
+        d = [sp_gamma.pdf(t+.5,a,scale=b) for t in np.arange(max_length)]
         d = d/np.sum(d)
         return d
     
@@ -390,11 +390,9 @@ class hsmm:
         flats = np.diff(averagepos, prepend=0)
         params = np.zeros((n_bumps+1,2))
         params[:,0] = self.shape
-        params[:,1] = flats / self.shape
-        # correct flats between bumps for the fact that the gamma is 
-        # calculated at midpoint
-        params[0,1] = params[0,1] + .5 / self.shape
-        params[1:,1] = params[1:,1] - .5 / self.shape
+        params[:,1] = flats / params[:,0]
+        params[:-1,1] = params[:-1,1] + .5 / self.shape
+        params[-1:,1] = params[-1:,1] - .5 / self.shape
         return params
     
     def backward_estimation(self, max_fit=None, max_starting_points=1, method="random", likelihoods=[], parameters=[]):
@@ -415,38 +413,36 @@ class hsmm:
         if len(likelihoods) > 0:
             n_bumps_max = len(likelihoods)
             likelihoods = likelihoods[np.isfinite(likelihoods)].copy()
-            parameters = parameters[np.isfinite(parameters[:,0]),:].copy()
+            parameters = np.array(parameters[np.isfinite(parameters[:,0]),:].copy())
             n_bumps = len(likelihoods)
             pars_n_bumps = []
             mags_n_bumps = []
             for n_bump in range(1, n_bumps+1):
                 bump_loc = np.sort(np.argsort(likelihoods)[::-1][:n_bump])#sort the index of highest likelihood bumps
-                print(bump_loc)
                 bump_pars = np.tile(float(self.shape), (n_bump+1,2))
                 bump_pars[-1,1] = parameters[-1,1] - parameters[bump_loc[-1],1]
                 bump_pars[0,:] = parameters[bump_loc[0],:]
-                ## TO remove
                 for idx in range(1,len(bump_loc)):
-                    bump_pars[idx,1] = parameters[bump_loc[idx],1]-parameters[bump_loc[idx-1],1]
+                    bump_pars[idx,1] = parameters[bump_loc[idx],1]- parameters[bump_loc[idx-1],1]
 
                 pars_n_bumps.append(bump_pars)
                 mags_n_bumps.append(np.zeros((self.n_dims,n_bump)))
-            print(pars_n_bumps)
             if self.cpus > 1:
                 with mp.Pool(processes=self.cpus) as pool:
                     bump_loo_results = pool.starmap(self.fit_single, 
                         zip(np.arange(1,n_bumps+1), mags_n_bumps, pars_n_bumps,
-                            itertools.repeat(1),itertools.repeat(False)))
+                            itertools.repeat(1),itertools.repeat(False), itertools.repeat(1)))
             else:
                 bump_loo_results = []
                 for bump_tmp, flat_tmp in zip(mags_n_bumps,pars_n_bumps):
                     n_bump =len(bump_loo_results)+1
-                    bump_loo_results.append(self.fit_single(n_bump, bump_tmp, flat_tmp, 1, False))
+                    bump_loo_results.append(self.fit_single(n_bump, bump_tmp, flat_tmp, 1, 
+                            False, 1))
             bests = xr.concat(bump_loo_results, dim="n_bumps")
             bests = bests.assign_coords({"n_bumps": np.arange(1,n_bumps+1)})
         else: 
             if not max_fit:
-                if max_starting_points >0:
+                if max_starting_points>0:
                     print(f'Estimating all solutions for maximal number of bumps ({self.max_bumps}) with 1 pre-defined starting point and {max_starting_points-1} {method} starting points')
                 bump_loo_results = [self.fit_single(self.max_bumps, starting_points=max_starting_points, method=method, verbose=False)]
             else:
@@ -478,6 +474,7 @@ class hsmm:
                         bump_loo_likelihood_temp.append(self.fit_single(n_bumps, bump_tmp, flat_tmp, 1, False))
                 models = xr.concat(bump_loo_likelihood_temp, dim="iteration")
                 bump_loo_results.append(models.sel(iteration=[np.where(models.likelihoods == models.likelihoods.max())[0][0]]).squeeze('iteration'))
+                i += 1
             bests = xr.concat(bump_loo_results, dim="n_bumps")
             bests = bests.assign_coords({"n_bumps": np.arange(self.max_bumps,0,-1)})
         #bests = bests.squeeze('iteration')
@@ -673,7 +670,7 @@ class hsmm:
         spacing = mean_rt//n_points#1 if no points removed in the previous step
         grid = (np.arange(n_points)+1)*spacing
         mean_rt = spacing*n_points
-        #grid = grid[grid < mean_rt - ((n_stages-2)*spacing)]#In case of >2 stages avoid impossible durations, just to speed up
+        grid = grid[grid < mean_rt - ((n_stages-2)*spacing)]#In case of >2 stages avoid impossible durations, just to speed up
         comb = np.array([x for x in combinations_with_replacement(grid, n_stages) if np.sum(x) == mean_rt])#A bit bruteforce
         new_comb = []
         for c in comb:
