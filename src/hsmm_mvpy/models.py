@@ -43,7 +43,7 @@ class hsmm:
         starts[0] = 0
         self.starts = starts
         self.ends = dur_dropped_na.data-1 
-        self.durations =  dur_dropped_na
+        self.durations =  self.ends - self.starts +1
         self.named_durations =  durations.dropna("trial_x_participant") - durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
         self.sfreq = sfreq
         self.steps = 1000/self.sfreq
@@ -333,10 +333,22 @@ class hsmm:
             for i in np.arange(n_bumps):
                 backward[:self.durations[j],j,i] = np.flipud(forward_b[:self.durations[j],j,i])
         #backward[:self.offset,:,:] = 0
-        temp = forward * backward # [max_d,n_trials,n_bumps] .* [max_d,n_trials,n_bumps];
-        likelihood = np.sum(np.log(temp[:,:,0].sum(axis=0)))# why 0 index? shouldn't it also be for all dim??
-        # sum(log(sum of 'temp' by columns, samples in a trial)) 
-        eventprobs = temp / np.tile(temp.sum(axis=0), [self.max_d, 1, 1])
+        eventprobs = forward * backward # [max_d,n_trials,n_bumps] .* [max_d,n_trials,n_bumps];
+        #likelihood = np.sum(np.log(eventprobs.sum(axis=(0,2))))# why 0 index? shouldn't it also be for all dim??
+        likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))
+        #Normalize first
+        # eventprobs[:,:, 0] = eventprobs[:,:, 0]/eventprobs[:,:, 0].sum(axis=0)
+
+        # for bump in range(1,n_bumps):#Remove p previous bump from current p
+        #     eventprobs[:,:, bump] = eventprobs[:,:, bump]/eventprobs[:,:, bump].sum(axis=0)
+        #     eventprobs[:,:, bump] -= eventprobs[:,:, bump-1]
+        #     eventprobs[eventprobs < 0] = 0
+        #     eventprobs[:,:, bump] = eventprobs[:,:, bump]/eventprobs[:,:, bump].sum(axis=0)#renormalize
+        # import matplotlib.pyplot as plt
+        # for bump in range(n_bumps):
+        #     plt.plot(eventprobs[:,:, bump].mean(axis=1))
+        #     plt.show()
+        eventprobs = eventprobs / np.tile(eventprobs.sum(axis=0), [self.max_d, 1, 1])
         #normalization [-1, 1] divide each trial and state by the sum of the n points in a trial
         if lkh_only:
             return likelihood

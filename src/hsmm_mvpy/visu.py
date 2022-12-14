@@ -99,11 +99,11 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
         n_bump = int(sum(np.isfinite(electrodes_[:,0])))
         electrodes_ = electrodes_[:n_bump,:]
         for bump in np.arange(n_bump):
-            if np.sum(electrodes_[bump,:]) != 0:
-                axes.append(ax.inset_axes([times_iteration[bump],iteration-yoffset,
-                                           (bump_size),yoffset*2], transform=ax.transData))
-                plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False,
-                             cmap=cmap, vlim=(vmin, vmax), sensors=sensors)
+            # if np.sum(electrodes_[bump,:]) != 0:
+            axes.append(ax.inset_axes([times_iteration[bump],iteration-yoffset,
+                                       (bump_size),yoffset*2], transform=ax.transData))
+            plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False,
+                         cmap=cmap, vlim=(vmin, vmax), sensors=sensors)
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])
