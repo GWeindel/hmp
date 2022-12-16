@@ -24,17 +24,21 @@ class hsmm:
         ----------
         data : ndarray
             2D ndarray with n_samples * components 
-        starts : ndarray
-            1D array with start of each trial
-        ends : ndarray
-            1D array with end of each trial
         sfreq : int
             Sampling frequency of the signal (initially 100)
-        width : int
+        bump_width : int
             width of bumps in milliseconds, originally 5 samples
+        min_stage_duration : float
+            Minimum stage duration. Note that this parameter doesn't apply to first and last stage
         '''
+        self.sfreq = sfreq
+        self.steps = 1000/self.sfreq
+        self.bump_width = bump_width
+        self.bump_width_samples = int(self.bump_width / self.steps)
         if min_stage_duration == None:
-            min_stage_duration = bump_width
+            min_stage_duration = self.bump_width
+        self.min_stage_duration = min_stage_duration/self.steps
+
         durations = data.unstack().sel(component=0).swap_dims({'epochs':'trials'})\
             .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
             how="all").groupby('trial_x_participant').count(dim="samples").cumsum().squeeze()
@@ -45,26 +49,21 @@ class hsmm:
         self.ends = dur_dropped_na.data-1 
         self.durations =  self.ends - self.starts +1
         self.named_durations =  durations.dropna("trial_x_participant") - durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
-        self.sfreq = sfreq
-        self.steps = 1000/self.sfreq
         self.n_trials = len(self.durations)
-        self.bump_width = bump_width
         self.cpus = cpus
-        self.bump_width_samples = int(self.bump_width / self.steps)
         self.coords = durations.reset_index('trial_x_participant').coords
         self.n_samples, self.n_dims = np.shape(data.data.T)
         self.bumps = self.calc_bumps(data.data.T)#adds bump morphology
-        self.max_d = np.max(self.durations)
+        self.max_d = self.durations.max()
         self.max_bumps = self.compute_max_bumps()
         self.shape = shape
         self.estimate_magnitudes = estimate_magnitudes
         self.estimate_parameters = estimate_parameters
-        self.min_stage_duration = min_stage_duration/self.steps
     
     def calc_bumps(self,data):
         '''
-        This function puts on each sample the correlation of that sample and the previous
-        five samples with a Bump morphology on time domain.  Will be used fot the likelihood 
+        This function puts on each sample the correlation of that sample and the next 
+        x samples (depends on sampling frequency and bump size) with a half sine on time domain.  Will be used fot the likelihood 
         of the EEG data given that the bumps are centered at each time point
         Parameters
         ----------
@@ -76,12 +75,10 @@ class hsmm:
             a 2D ndarray with samples * PC components where cell values have
             been correlated with bump morphology
         '''
-        bump_idx = np.arange(0,self.bump_width_samples)*self.steps+self.steps/2
+        bump_idx = np.arange(self.bump_width_samples)*self.steps+self.steps/2
         bump_frequency = 1000/(self.bump_width*2)#gives bump frequency given that bumps are defined as half-sines
-        template = np.sin(2*np.pi*np.linspace(0,1,1000)*bump_frequency)[[int(x) for x in bump_idx]]#bump morph based on a half sine with given bump width and sampling frequency #previously np.array([0.3090, 0.8090, 1.0000, 0.8090, 0.3090]) 
-        
+        template = np.sin(2*np.pi*np.linspace(0,1,1000)*bump_frequency)[[int(x) for x in bump_idx]]#bump morph based on a half sine with given bump width and sampling frequency #previously np.array([0.3090, 0.8090, 1.0000, 0.8090, 0.3090])         
         template = template/np.sum(template**2)#Weight normalized to sum(P) = 1.294
-        
         bumps = np.zeros(data.shape)
 
         for j in np.arange(self.n_dims):#For each PC
@@ -89,12 +86,11 @@ class hsmm:
             temp[:,0] = data[:,j]#first col = samples of PC
             for i in np.arange(1,self.bump_width_samples):
                 temp[:,i] = np.concatenate((temp[1:, i-1], [0]), axis=0)
-                # puts the component in a [n_samples X length(bump)] matrix shifted.
+                # puts the component in a [n_samples X bump_width_samples] matrix shifted.
                 # each column is a copy of the first one but shifted one sample
                 # upwards
             bumps[:,j] = temp @ template
-            # for each PC we calculate its correlation with bump temp(data samples * 5) *  
-            # template(sine wave bump in samples - 5*1)
+            # for each PC we calculate its correlation with half-sine defined above
         bumps[-self.bump_width_samples:,:] = 0
         return bumps
 
@@ -122,7 +118,7 @@ class hsmm:
             print(f'Estimating {n_bumps} bumps model with {starting_points} starting point(s)')
         
         if self.estimate_magnitudes == False:#Don't need to manually fix pars if not estimated
-            magnitudes_to_fix = np.arange(n_bumps+1)
+            magnitudes_to_fix = np.arange(n_bumps)
         if self.estimate_parameters == False:#Don't need to manually fix pars if not estimated
             parameters_to_fix = np.arange(n_bumps+1)            
         #Formatting parameters
@@ -130,6 +126,10 @@ class hsmm:
             parameters = parameters.dropna(dim='stage').values
         if isinstance(magnitudes, (xr.DataArray,xr.Dataset)):
             magnitudes = magnitudes.dropna(dim='bump').values  
+        if isinstance(magnitudes, np.ndarray):
+            magnitudes = magnitudes.copy()
+        if isinstance(parameters, np.ndarray):
+            parameters = parameters.copy()            
         if starting_points > 0:#Initialize with equally spaced option
             if np.any(parameters) == None:
                 parameters = np.tile([self.shape, math.ceil(np.mean(self.durations)/(n_bumps+1)/self.shape)], (n_bumps+1,1))
@@ -254,7 +254,7 @@ class hsmm:
                         # replace with initial and add a sample
                         #lkh1 = -np.inf
                         #initial_parameters[i,-1] =  initial_parameters[i,-1]+1/self.shape
-                        parameters[i,-1] = self.min_stage_duration
+                        parameters[i,1] = self.min_stage_duration
                 lkh, eventprobs = self.calc_EEG_50h(magnitudes, parameters, n_bumps)
         return lkh1, magnitudes1, parameters1, eventprobs1
 
@@ -303,7 +303,6 @@ class hsmm:
             # Compute Gamma pdf from 0 to max_d with parameters
         BLP = LP[:,::-1] # States reversed gamma pdf
         forward = np.zeros((self.max_d, self.n_trials, n_bumps))
-        forward_b = np.zeros((self.max_d, self.n_trials, n_bumps))
         backward = np.zeros((self.max_d, self.n_trials, n_bumps))
         # eq1 in Appendix, first definition of likelihood
         # For each trial (given a length of max duration) compute gamma pdf * gains
@@ -311,7 +310,7 @@ class hsmm:
         forward[:self.max_d,:,0] = np.tile(LP[:self.max_d,0][np.newaxis].T,\
             (1,self.n_trials))*probs[:self.max_d,:,0]
 
-        forward_b[:self.max_d,:,0] = np.tile(BLP[:self.max_d,0][np.newaxis].T,\
+        backward[:self.max_d,:,0] = np.tile(BLP[:self.max_d,0][np.newaxis].T,\
                     (1,self.n_trials)) # reversed Gamma pdf
 
         for i in np.arange(1,n_bumps):#continue with other bumps
@@ -319,35 +318,21 @@ class hsmm:
             # next_ bump width samples followed by gamma pdf (one state)
             next_b = BLP[:self.max_d, i]
             # next_b same with reversed gamma
-            add_b = forward_b[:,:,i-1] * probs_b[:,:,i-1]
+            add_b = backward[:,:,i-1] * probs_b[:,:,i-1]
             for j in np.arange(self.n_trials):
                 temp = np.convolve(forward[:,j,i-1],next_)
                 # convolution between gamma * gains at previous states and state i
                 forward[:,j,i] = temp[:self.max_d]
                 temp = np.convolve(add_b[:,j],next_b)
                 # same but backwards
-                forward_b[:,j,i] = temp[:self.max_d]
+                backward[:,j,i] = temp[:self.max_d]
             forward[:,:,i] = forward[:,:,i] * probs[:,:,i]
-        forward_b = forward_b[:,:,::-1] # undoes inversion
+        backward = backward[:,:,::-1] # undoes inversion
         for j in np.arange(self.n_trials): # TODO : IMPROVE
             for i in np.arange(n_bumps):
-                backward[:self.durations[j],j,i] = np.flipud(forward_b[:self.durations[j],j,i])
-        #backward[:self.offset,:,:] = 0
+                backward[:self.durations[j],j,i] = np.flipud(backward[:self.durations[j],j,i])
         eventprobs = forward * backward # [max_d,n_trials,n_bumps] .* [max_d,n_trials,n_bumps];
-        #likelihood = np.sum(np.log(eventprobs.sum(axis=(0,2))))# why 0 index? shouldn't it also be for all dim??
-        likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))
-        #Normalize first
-        # eventprobs[:,:, 0] = eventprobs[:,:, 0]/eventprobs[:,:, 0].sum(axis=0)
-
-        # for bump in range(1,n_bumps):#Remove p previous bump from current p
-        #     eventprobs[:,:, bump] = eventprobs[:,:, bump]/eventprobs[:,:, bump].sum(axis=0)
-        #     eventprobs[:,:, bump] -= eventprobs[:,:, bump-1]
-        #     eventprobs[eventprobs < 0] = 0
-        #     eventprobs[:,:, bump] = eventprobs[:,:, bump]/eventprobs[:,:, bump].sum(axis=0)#renormalize
-        # import matplotlib.pyplot as plt
-        # for bump in range(n_bumps):
-        #     plt.plot(eventprobs[:,:, bump].mean(axis=1))
-        #     plt.show()
+        likelihood = np.sum(np.log(eventprobs.sum(axis=(0,2))))
         eventprobs = eventprobs / np.tile(eventprobs.sum(axis=0), [self.max_d, 1, 1])
         #normalization [-1, 1] divide each trial and state by the sum of the n points in a trial
         if lkh_only:
@@ -373,7 +358,7 @@ class hsmm:
         d : ndarray
             density for a gamma with given parameters, normalized to 1
         '''
-        d = [sp_gamma.pdf(t+.5,a,scale=b) for t in np.arange(max_length)]
+        d = [sp_gamma.pdf(t,a,scale=b) for t in np.arange(max_length)]
         d = d/np.sum(d)
         return d
     
@@ -396,18 +381,56 @@ class hsmm:
         params : ndarray
             shape and scale for the gamma distributions
         '''
-
-        averagepos = np.concatenate([np.arange(self.max_d)@\
-            np.mean(eventprobs, axis=1), [self.durations.mean()]])
-        flats = np.diff(averagepos, prepend=0)
+        averagepos = np.concatenate([((np.arange(self.max_d))@\
+            np.mean(eventprobs, axis=1)), [self.durations.mean()-.5]])
+        # print(averagepos)
+        averagepos[-2] += .5*(n_bumps)
         params = np.zeros((n_bumps+1,2))
         params[:,0] = self.shape
-        params[:,1] = flats / params[:,0]
-        params[:-1,1] = params[:-1,1] + .5 / self.shape
-        params[-1:,1] = params[-1:,1] - .5 / self.shape
+        params[:,1] = np.diff(averagepos, prepend=-.5)/ self.shape
+        # params[0,1] -= n_bumps/self.shape
+        # params[-1,1] += n_bumps/self.shape
+    
+        # params[:-1,-1] -= np.arange(n_bumps)/self.shape
+        # print(np.cumsum(params[:,1]))
         return params
     
-    def backward_estimation(self, max_fit=None, max_starting_points=1, method="random", likelihoods=[], parameters=[]):
+    def iterative_fit(self, likelihoods=[], parameters=[], magnitudes=[]):
+        n_bumps_max = len(likelihoods)
+        likelihoods = likelihoods[np.isfinite(likelihoods)].copy()
+        parameters = np.array(parameters[np.isfinite(parameters[:,0]),:].copy())
+        magnitudes = magnitudes.copy()
+        n_bumps = len(likelihoods)
+        pars_n_bumps = []
+        mags_n_bumps = []
+        for n_bump in range(1, n_bumps+1):
+            temp_par = parameters.copy()
+            bump_loc = np.sort(np.argsort(likelihoods)[::-1][:n_bump])#sort the index of highest likelihood bumps
+            bump_mags = magnitudes[:,bump_loc].copy()
+            bump_pars = np.tile(float(self.shape), (n_bump+1,2))
+            # bump_pars[-1,1] = temp_par[-1,1] - temp_par[bump_loc[-1],1]
+            # bump_pars[0,:] = temp_par[bump_loc[0],:]
+            # for idx in np.arange(1,len(bump_loc)):
+            #     bump_pars[idx,1] = temp_par[bump_loc[idx],1] - bump_pars[idx-1,1] - idx/self.shape
+            bump_pars[0,:] 
+            pars_n_bumps.append(bump_pars)
+            mags_n_bumps.append(bump_mags)
+        if self.cpus > 1:
+            with mp.Pool(processes=self.cpus) as pool:
+                bump_loo_results = pool.starmap(self.fit_single, 
+                    zip(np.arange(1,n_bumps+1), mags_n_bumps, pars_n_bumps,
+                        itertools.repeat(1),itertools.repeat(False), itertools.repeat(1)))
+        else:
+            bump_loo_results = []
+            for bump_tmp, flat_tmp in zip(mags_n_bumps,pars_n_bumps):
+                n_bump =len(bump_loo_results)+1
+                bump_loo_results.append(self.fit_single(n_bump, bump_tmp, flat_tmp, 1, 
+                        False, 1))
+        bests = xr.concat(bump_loo_results, dim="n_bumps")
+        bests = bests.assign_coords({"n_bumps": np.arange(1,n_bumps+1)})
+        return bests
+    
+    def backward_estimation(self, max_fit=None, max_starting_points=1, method="random"):
         '''
         First read or estimate max_bump solution then estimate max_bump - 1 solution by 
         iteratively removing one of the bump and pick the one with the highest 
@@ -422,74 +445,43 @@ class hsmm:
             how many random starting points iteration to try for the model estimating the maximal number of bumps
         
         '''
-        if len(likelihoods) > 0:
-            n_bumps_max = len(likelihoods)
-            likelihoods = likelihoods[np.isfinite(likelihoods)].copy()
-            parameters = np.array(parameters[np.isfinite(parameters[:,0]),:].copy())
-            n_bumps = len(likelihoods)
-            pars_n_bumps = []
-            mags_n_bumps = []
-            for n_bump in range(1, n_bumps+1):
-                bump_loc = np.sort(np.argsort(likelihoods)[::-1][:n_bump])#sort the index of highest likelihood bumps
-                bump_pars = np.tile(float(self.shape), (n_bump+1,2))
-                bump_pars[-1,1] = parameters[-1,1] - parameters[bump_loc[-1],1]
-                bump_pars[0,:] = parameters[bump_loc[0],:]
-                for idx in range(1,len(bump_loc)):
-                    bump_pars[idx,1] = parameters[bump_loc[idx],1]- parameters[bump_loc[idx-1],1]
 
-                pars_n_bumps.append(bump_pars)
-                mags_n_bumps.append(np.zeros((self.n_dims,n_bump)))
+        if not max_fit:
+            if max_starting_points>0:
+                print(f'Estimating all solutions for maximal number of bumps ({self.max_bumps}) with 1 pre-defined starting point and {max_starting_points-1} {method} starting points')
+            bump_loo_results = [self.fit_single(self.max_bumps, starting_points=max_starting_points, method=method, verbose=False)]
+        else:
+            bump_loo_results = [max_fit]
+        i = 0
+        for n_bumps in np.arange(self.max_bumps-1,0,-1):
+            print(f'Estimating all solutions for {n_bumps} number of bumps')
+            temp_best = bump_loo_results[i]#previous bump solution
+            temp_best = temp_best.dropna('bump')
+            temp_best = temp_best.dropna('stage')
+            n_bumps_list = np.arange(n_bumps+1)#all bumps from previous solution
+            flats = temp_best.parameters.values
+            bumps_temp,flats_temp = [],[]
+            for bump in np.arange(n_bumps+1):#creating all possible solutions
+                bumps_temp.append(temp_best.magnitudes.sel(bump = np.array(list(set(n_bumps_list) - set([bump])))).values)
+                flat = bump + 1 #one more flat than bumps
+                temp = np.copy(flats[:,1])
+                temp[flat-1] = temp[flat-1] + temp[flat]
+                temp = np.delete(temp, flat)
+                flats_temp.append(np.reshape(np.concatenate([np.repeat(self.shape, len(temp)), temp]), (2, len(temp))).T)
             if self.cpus > 1:
                 with mp.Pool(processes=self.cpus) as pool:
-                    bump_loo_results = pool.starmap(self.fit_single, 
-                        zip(np.arange(1,n_bumps+1), mags_n_bumps, pars_n_bumps,
-                            itertools.repeat(1),itertools.repeat(False), itertools.repeat(1)))
+                    bump_loo_likelihood_temp = pool.starmap(self.fit_single, 
+                        zip(itertools.repeat(n_bumps), bumps_temp, flats_temp,
+                            itertools.repeat(1),itertools.repeat(False)))
             else:
-                bump_loo_results = []
-                for bump_tmp, flat_tmp in zip(mags_n_bumps,pars_n_bumps):
-                    n_bump =len(bump_loo_results)+1
-                    bump_loo_results.append(self.fit_single(n_bump, bump_tmp, flat_tmp, 1, 
-                            False, 1))
-            bests = xr.concat(bump_loo_results, dim="n_bumps")
-            bests = bests.assign_coords({"n_bumps": np.arange(1,n_bumps+1)})
-        else: 
-            if not max_fit:
-                if max_starting_points>0:
-                    print(f'Estimating all solutions for maximal number of bumps ({self.max_bumps}) with 1 pre-defined starting point and {max_starting_points-1} {method} starting points')
-                bump_loo_results = [self.fit_single(self.max_bumps, starting_points=max_starting_points, method=method, verbose=False)]
-            else:
-                bump_loo_results = [max_fit]
-            i = 0
-            for n_bumps in np.arange(self.max_bumps-1,0,-1):
-                print(f'Estimating all solutions for {n_bumps} number of bumps')
-                temp_best = bump_loo_results[i]#previous bump solution
-                temp_best = temp_best.dropna('bump')
-                temp_best = temp_best.dropna('stage')
-                n_bumps_list = np.arange(n_bumps+1)#all bumps from previous solution
-                flats = temp_best.parameters.values
-                bumps_temp,flats_temp = [],[]
-                for bump in np.arange(n_bumps+1):#creating all possible solutions
-                    bumps_temp.append(temp_best.magnitudes.sel(bump = np.array(list(set(n_bumps_list) - set([bump])))).values)
-                    flat = bump + 1 #one more flat than bumps
-                    temp = np.copy(flats[:,1])
-                    temp[flat-1] = temp[flat-1] + temp[flat]
-                    temp = np.delete(temp, flat)
-                    flats_temp.append(np.reshape(np.concatenate([np.repeat(self.shape, len(temp)), temp]), (2, len(temp))).T)
-                if self.cpus > 1:
-                    with mp.Pool(processes=self.cpus) as pool:
-                        bump_loo_likelihood_temp = pool.starmap(self.fit_single, 
-                            zip(itertools.repeat(n_bumps), bumps_temp, flats_temp,
-                                itertools.repeat(1),itertools.repeat(False)))
-                else:
-                    bump_loo_likelihood_temp = []
-                    for bump_tmp, flat_tmp in zip(bumps_temp,flats_temp):
-                        bump_loo_likelihood_temp.append(self.fit_single(n_bumps, bump_tmp, flat_tmp, 1, False))
-                models = xr.concat(bump_loo_likelihood_temp, dim="iteration")
-                bump_loo_results.append(models.sel(iteration=[np.where(models.likelihoods == models.likelihoods.max())[0][0]]).squeeze('iteration'))
-                i += 1
-            bests = xr.concat(bump_loo_results, dim="n_bumps")
-            bests = bests.assign_coords({"n_bumps": np.arange(self.max_bumps,0,-1)})
-        #bests = bests.squeeze('iteration')
+                bump_loo_likelihood_temp = []
+                for bump_tmp, flat_tmp in zip(bumps_temp,flats_temp):
+                    bump_loo_likelihood_temp.append(self.fit_single(n_bumps, bump_tmp, flat_tmp, 1, False))
+            models = xr.concat(bump_loo_likelihood_temp, dim="iteration")
+            bump_loo_results.append(models.sel(iteration=[np.where(models.likelihoods == models.likelihoods.max())[0][0]]).squeeze('iteration'))
+            i += 1
+        bests = xr.concat(bump_loo_results, dim="n_bumps")
+        bests = bests.assign_coords({"n_bumps": np.arange(self.max_bumps,0,-1)})
         return bests
     
     def compute_max_bumps(self):
@@ -497,10 +489,6 @@ class hsmm:
         Compute the maximum possible number of bumps given bump width and mean or minimum reaction time
         '''
         return int(np.min(self.durations)/self.bump_width_samples)
-        # if not min_rt:
-        #     return int(np.mean(self.durations)/self.bump_width_samples)
-        # else:
-        #     return int(np.min(self.durations)/self.bump_width_samples)
 
     def bump_times(self, eventprobs, mean=True):
         '''
@@ -526,7 +514,7 @@ class hsmm:
         onsets = np.empty((len(eventprobs.trial_x_participant),len(eventprobs.bump)+1))
         i = 0
         for trial in eventprobs.trial_x_participant.dropna('trial_x_participant', how="all").values:
-            onsets[i, :len(eventprobs.bump)] = np.arange(self.max_d) @ eventprobs.sel(trial_x_participant=trial).data - self.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
+            onsets[i, :len(eventprobs.bump)] = np.arange(self.max_d) @ eventprobs.sel(trial_x_participant=trial).data #- self.bump_width_samples/2#Correcting for centerning, thus times represents bump onset
             onsets[i, -1] = self.ends[i] - self.starts[i]
             i += 1
         if mean:
@@ -557,10 +545,9 @@ class hsmm:
         '''
 
         eventprobs = estimates.eventprobs
-        times = xr.dot(eventprobs, eventprobs.samples, dims='samples')#Most likely bump location
+        times = xr.dot(eventprobs, eventprobs.samples-.5, dims='samples')#Most likely bump location
         n = len(times[0,:].values[np.isfinite(times[0,:].values)])
-        #if duration: fill_value=0
-        if fill_value != None:            #times = times.shift(bump=1, fill_value=fill_value)
+        if fill_value != None:            
             added = xr.DataArray(np.repeat(fill_value,len(times.trial_x_participant))[np.newaxis,:],
                                  coords={'bump':[0], 
                                          'trial_x_participant':times.trial_x_participant})
@@ -582,7 +569,7 @@ class hsmm:
    
     @staticmethod
     def compute_topologies(electrodes, estimated, bump_width_samples, extra_dim=False):
-        shifted_times = estimated.eventprobs.shift(samples=bump_width_samples//2, fill_value=0).copy()#Shifts to compute electrode topology at the peak of the bump
+        shifted_times = estimated.eventprobs.shift(samples=bump_width_samples//2+1, fill_value=0).copy()#Shifts to compute electrode topology at the peak of the bump
         if extra_dim:
             return xr.dot(electrodes.rename({'epochs':'trials'}).\
                       stack(trial_x_participant=['participant','trials']).data.fillna(0), \
@@ -680,7 +667,7 @@ class hsmm:
         while binomcoeff(n_points-1, n_stages-1) > iter_limit:
             n_points = n_points-1
         spacing = mean_rt//n_points#1 if no points removed in the previous step
-        grid = (np.arange(n_points)+1)*spacing
+        grid = (np.arange(1, n_points))*spacing#bump cannot be at sample 0
         mean_rt = spacing*n_points
         grid = grid[grid < mean_rt - ((n_stages-2)*spacing)]#In case of >2 stages avoid impossible durations, just to speed up
         comb = np.array([x for x in combinations_with_replacement(grid, n_stages) if np.sum(x) == mean_rt])#A bit bruteforce
@@ -688,7 +675,6 @@ class hsmm:
         for c in comb:
             new_comb.append(np.array(list(mit.distinct_permutations(c))))
         comb = np.vstack(new_comb)
-        comb = comb[comb[:,-1] >= self.bump_width_samples]#last samples cannot contain a bump as last stage would be <= 0
         parameters = np.zeros((len(comb),n_stages,2))
         for idx, y in enumerate(comb):
             parameters[idx, :, :] = [[self.shape, x/self.shape] for x in y]
@@ -721,9 +707,11 @@ class hsmm:
             for pars, mags in zip(parameters, magnitudes):
                 estimates.append(self.fit(1, mags, pars, 1))
         lkhs_sp = np.array([x[0] for x in estimates])
+        mags_sp = np.array([x[1] for x in estimates])
         pars_sp = np.array([x[2] for x in estimates])
         eventprobs_sp = [x[3] for x in estimates]
         lkhs_sp_sorting = lkhs_sp.copy()
+        mags_sp_sorting = mags_sp.copy()
         pars_sp_sorting = pars_sp.copy()
         group_color = np.empty(len(lkhs_sp),dtype=str)
         cycol = cycle(colors)
@@ -756,8 +744,10 @@ class hsmm:
         pars[:len(max_lkhs), :] = pars_sp[max_lkhs, 0, :]
         order = np.argsort(pars[:len(max_lkhs),1])#sorted index based on first stage duration
         pars[:len(max_lkhs), :] = pars[order, :]
+        mags = mags_sp[max_lkhs][order]
         max_lkhs = np.array(max_lkhs)[order]
         pars[len(max_lkhs),:] = np.array([self.shape, mean_rt/self.shape])#last stage defined as rt
         lkhs = np.repeat(np.nan, n_bumps)
         lkhs[:len(max_lkhs)] = lkhs_sp[max_lkhs]
-        return pars, lkhs
+        # print(pars_sp)
+        return pars, mags[:,:,0].T, lkhs

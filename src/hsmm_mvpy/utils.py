@@ -583,8 +583,8 @@ def loocv_estimation(data, subject, sfreq, bump_width):
     stacked_loo = stack_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False))
     #Fitting the HsMM using previous estimated parameters as initial parameters
     model_loo = hsmm(stacked_loo, sfreq=sfreq, bump_width=bump_width, cpus=1)
-    parameters, likelihoods = model_loo.sliding_bump(verbose=False)
-    estimates = model_loo.backward_estimation(likelihoods=likelihoods, parameters=parameters)
+    parameters, magnitudes, likelihoods = model_loo.sliding_bump(verbose=False)
+    estimates = model_loo.iterative_fit(likelihoods=likelihoods, parameters=parameters, magnitudes=magnitudes)
     #Evaluating likelihood for left out subject
     #Extracting data of left out subject
     stacked_left_out = stack_data(data.sel(participant=subject, drop=False))
