@@ -104,7 +104,6 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
                                        (bump_size),yoffset*2], transform=ax.transData))
             plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False,
                          cmap=cmap, vlim=(vmin, vmax), sensors=sensors)
-            print(times_iteration[bump])
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])

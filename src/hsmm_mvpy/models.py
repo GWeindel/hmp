@@ -91,7 +91,8 @@ class hsmm:
                 # upwards
             bumps[:,j] = temp @ template
             # for each PC we calculate its correlation with half-sine defined above
-        bumps[-self.bump_width_samples:,:] = 0
+        for trial in range(self.n_trials):#avoids confusion of gains between trials
+            bumps[self.ends[trial]-self.bump_width_samples:self.ends[trial]+1, :] = 0
         return bumps
 
     def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, verbose=True, starting_points=1,
@@ -382,17 +383,10 @@ class hsmm:
             shape and scale for the gamma distributions
         '''
         averagepos = np.concatenate([((np.arange(self.max_d))@\
-            np.mean(eventprobs, axis=1)), [self.durations.mean()-.5]])
-        # print(averagepos)
-        averagepos[-2] += .5*(n_bumps)
+            np.mean(eventprobs, axis=1)), [self.durations.mean()-1]])
         params = np.zeros((n_bumps+1,2))
         params[:,0] = self.shape
-        params[:,1] = np.diff(averagepos, prepend=-.5)/ self.shape
-        # params[0,1] -= n_bumps/self.shape
-        # params[-1,1] += n_bumps/self.shape
-    
-        # params[:-1,-1] -= np.arange(n_bumps)/self.shape
-        # print(np.cumsum(params[:,1]))
+        params[:,1] = np.diff(averagepos, prepend=0)/ self.shape
         return params
     
     def iterative_fit(self, likelihoods=[], parameters=[], magnitudes=[]):
@@ -408,18 +402,20 @@ class hsmm:
             bump_loc = np.sort(np.argsort(likelihoods)[::-1][:n_bump])#sort the index of highest likelihood bumps
             bump_mags = magnitudes[:,bump_loc].copy()
             bump_pars = np.tile(float(self.shape), (n_bump+1,2))
-            # bump_pars[-1,1] = temp_par[-1,1] - temp_par[bump_loc[-1],1]
-            # bump_pars[0,:] = temp_par[bump_loc[0],:]
+            bump_pars[-1,1] = temp_par[-1,1]+.25*(n_bumps_max-n_bumps)
+            bump_pars[:-1,:] = temp_par[bump_loc,:]
+            bump_pars[:,1] = 999
+            # bump_pars[-2,1] += n_bump
             # for idx in np.arange(1,len(bump_loc)):
-            #     bump_pars[idx,1] = temp_par[bump_loc[idx],1] - bump_pars[idx-1,1] - idx/self.shape
-            bump_pars[0,:] 
+            #     bump_pars[idx,1] = temp_par[bump_loc[idx],1] - bump_pars[idx-1,1] -.5*idx
+            print(bump_pars)
             pars_n_bumps.append(bump_pars)
             mags_n_bumps.append(bump_mags)
         if self.cpus > 1:
             with mp.Pool(processes=self.cpus) as pool:
                 bump_loo_results = pool.starmap(self.fit_single, 
                     zip(np.arange(1,n_bumps+1), mags_n_bumps, pars_n_bumps,
-                        itertools.repeat(1),itertools.repeat(False), itertools.repeat(1)))
+                        itertools.repeat(0),itertools.repeat(False), itertools.repeat(1)))
         else:
             bump_loo_results = []
             for bump_tmp, flat_tmp in zip(mags_n_bumps,pars_n_bumps):
@@ -635,7 +631,7 @@ class hsmm:
         random_stages : ndarray
             random partition between 0 and mean_rt
         '''
-        random_stages= np.array([[self.shape,x*mean_rt/self.shape] for x in np.random.beta(2, 2, n_bumps+1)])
+        random_stages = np.array([[self.shape,x*mean_rt/self.shape] for x in np.random.beta(2, 2, n_bumps+1)])
         return random_stages
     
     def grid_search(self, n_stages, iter_limit=np.inf, verbose=True):
@@ -661,7 +657,7 @@ class hsmm:
         from itertools import combinations_with_replacement, permutations  
         from math import comb as binomcoeff
         import more_itertools as mit
-        mean_rt = int(self.durations.mean())
+        mean_rt = int(self.durations.mean())#-self.bump_width_samples
         n_points = mean_rt
         check_n_posibilities = binomcoeff(n_points-1, n_stages-1)
         while binomcoeff(n_points-1, n_stages-1) > iter_limit:
@@ -684,7 +680,7 @@ class hsmm:
             print(f'Fitting {len(parameters)} models using grid search')
         return parameters
     
-    def sliding_bump(self, n_bumps=None, colors=default_colors, figsize=(12,3), verbose=True):
+    def sliding_bump(self, n_bumps=None, colors=default_colors, figsize=(12,3), verbose=True, estimate_parameters=False):
         '''
         This method outputs the likelihood and estimated parameters of a 1 bump model with each sample, from 0 to the mean 
         epoch duration. The parameters and likelihoods that are returned are 
@@ -697,15 +693,22 @@ class hsmm:
         if n_bumps == None:
             n_bumps = self.max_bumps
         parameters = self.grid_search(2, verbose=verbose)#Looking for all possibilities with one bump
+        # parameters = parameters[parameters[:,1,1] >= self.bump_width_samples]#No need to test for those given calc_bumps
         magnitudes = np.zeros((len(parameters), self.n_dims,1))
+        if estimate_parameters:
+            parameters_to_fix = []
+        else:
+            parameters_to_fix = [0,1]
+
         if self.cpus >1:
             with mp.Pool(processes=self.cpus) as pool:
                 estimates = pool.starmap(self.fit, 
-                    zip(itertools.repeat(1), magnitudes, parameters, itertools.repeat(1)))  
+                    zip(itertools.repeat(1), magnitudes, parameters, itertools.repeat(1),
+                       itertools.repeat([]), itertools.repeat(parameters_to_fix)))  
         else:
             estimates = []
             for pars, mags in zip(parameters, magnitudes):
-                estimates.append(self.fit(1, mags, pars, 1))
+                estimates.append(self.fit(1, mags, pars, 1, [], parameters_to_fix))
         lkhs_sp = np.array([x[0] for x in estimates])
         mags_sp = np.array([x[1] for x in estimates])
         pars_sp = np.array([x[2] for x in estimates])
