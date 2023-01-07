@@ -92,7 +92,7 @@ class hsmm:
             bumps[:,j] = temp @ template
             # for each PC we calculate its correlation with half-sine defined above
         for trial in range(self.n_trials):#avoids confusion of gains between trials
-            bumps[self.ends[trial]-self.bump_width_samples:self.ends[trial]+1, :] = 0
+            bumps[self.ends[trial]-self.bump_width_samples+2:self.ends[trial]+1, :] = 0
         return bumps
 
     def fit_single(self, n_bumps, magnitudes=None, parameters=None, threshold=1, verbose=True, starting_points=1,
@@ -133,7 +133,7 @@ class hsmm:
             parameters = parameters.copy()            
         if starting_points > 0:#Initialize with equally spaced option
             if np.any(parameters) == None:
-                parameters = np.tile([self.shape, math.ceil(np.mean(self.durations)/(n_bumps+1)/self.shape)], (n_bumps+1,1))
+                parameters = np.tile([self.shape, np.mean(self.durations)/(n_bumps+1)/self.shape], (n_bumps+1,1))
             initial_p = parameters
             
             if np.any(magnitudes) == None:
@@ -228,6 +228,8 @@ class hsmm:
             for i in range(self.n_trials):
                 means[:self.durations[i],i,:] = self.bumps[self.starts[i]:self.ends[i]+1,:]
                 # arrange bumps dimensions by trials [max_d*trial*PCs]
+            print(parameters)
+            iteration = 0
             while (lkh - lkh1) > threshold:
                 #As long as new run gives better likelihood, go on  
                 lkh1 = np.copy(lkh)
@@ -245,6 +247,7 @@ class hsmm:
                     if i in magnitudes_to_fix:
                         magnitudes[:,i] = initial_magnitudes[:,i]
                 parameters = self.gamma_parameters(eventprobs, n_bumps)
+                print(parameters)
                 for i in range(n_bumps+1): #unefficient, slows down process, attempt to integrate to EM failed
                     if i in parameters_to_fix:
                         parameters[i,:] = initial_parameters[i,:]
@@ -257,6 +260,15 @@ class hsmm:
                         #initial_parameters[i,-1] =  initial_parameters[i,-1]+1/self.shape
                         parameters[i,1] = self.min_stage_duration
                 lkh, eventprobs = self.calc_EEG_50h(magnitudes, parameters, n_bumps)
+                iteration += 1
+                # if (lkh - lkh1) < threshold and iteration == 2:
+                #     lkh = lkh+1e-99
+                #     initial_parameters[:,1] =  initial_parameters[:,1]+1/self.shape
+                #     parameters = initial_parameters
+                #     iteration = 0
+            print(iteration)
+            print(parameters.sum(axis=0))
+            print(lkh)
         return lkh1, magnitudes1, parameters1, eventprobs1
 
 
@@ -308,16 +320,16 @@ class hsmm:
         # eq1 in Appendix, first definition of likelihood
         # For each trial (given a length of max duration) compute gamma pdf * gains
         # Start with first bump as first stage only one gamma and no bumps
-        forward[:self.max_d,:,0] = np.tile(LP[:self.max_d,0][np.newaxis].T,\
-            (1,self.n_trials))*probs[:self.max_d,:,0]
+        forward[:,:,0] = np.tile(LP[:,0][np.newaxis].T,\
+            (1,self.n_trials))*probs[:,:,0]
 
-        backward[:self.max_d,:,0] = np.tile(BLP[:self.max_d,0][np.newaxis].T,\
+        backward[:,:,0] = np.tile(BLP[:,0][np.newaxis].T,\
                     (1,self.n_trials)) # reversed Gamma pdf
 
         for i in np.arange(1,n_bumps):#continue with other bumps
-            next_ = LP[:self.max_d, i]
+            next_ = LP[:, i]
             # next_ bump width samples followed by gamma pdf (one state)
-            next_b = BLP[:self.max_d, i]
+            next_b = BLP[:, i]
             # next_b same with reversed gamma
             add_b = backward[:,:,i-1] * probs_b[:,:,i-1]
             for j in np.arange(self.n_trials):
@@ -386,7 +398,7 @@ class hsmm:
             np.mean(eventprobs, axis=1)), [self.durations.mean()-1]])
         params = np.zeros((n_bumps+1,2))
         params[:,0] = self.shape
-        params[:,1] = np.diff(averagepos, prepend=0)/ self.shape
+        params[:,1] = (np.diff(averagepos, prepend=0)+1/(n_bumps+1))/ self.shape
         return params
     
     def iterative_fit(self, likelihoods=[], parameters=[], magnitudes=[]):
@@ -657,13 +669,13 @@ class hsmm:
         from itertools import combinations_with_replacement, permutations  
         from math import comb as binomcoeff
         import more_itertools as mit
-        mean_rt = int(self.durations.mean())#-self.bump_width_samples
-        n_points = mean_rt
+        mean_rt = self.durations.mean()
+        n_points = int(mean_rt)
         check_n_posibilities = binomcoeff(n_points-1, n_stages-1)
         while binomcoeff(n_points-1, n_stages-1) > iter_limit:
             n_points = n_points-1
-        spacing = mean_rt//n_points#1 if no points removed in the previous step
-        grid = (np.arange(1, n_points))*spacing#bump cannot be at sample 0
+        spacing = mean_rt/n_points#1 if no points removed in the previous step
+        grid = (np.arange(0, n_points))*spacing#bump cannot be at sample 0
         mean_rt = spacing*n_points
         grid = grid[grid < mean_rt - ((n_stages-2)*spacing)]#In case of >2 stages avoid impossible durations, just to speed up
         comb = np.array([x for x in combinations_with_replacement(grid, n_stages) if np.sum(x) == mean_rt])#A bit bruteforce
@@ -680,7 +692,7 @@ class hsmm:
             print(f'Fitting {len(parameters)} models using grid search')
         return parameters
     
-    def sliding_bump(self, n_bumps=None, colors=default_colors, figsize=(12,3), verbose=True, estimate_parameters=False):
+    def sliding_bump(self, n_bumps=None, colors=default_colors, figsize=(12,3), verbose=True, estimate_parameters=False, method='maxima'):
         '''
         This method outputs the likelihood and estimated parameters of a 1 bump model with each sample, from 0 to the mean 
         epoch duration. The parameters and likelihoods that are returned are 
@@ -693,13 +705,57 @@ class hsmm:
         if n_bumps == None:
             n_bumps = self.max_bumps
         parameters = self.grid_search(2, verbose=verbose)#Looking for all possibilities with one bump
-        # parameters = parameters[parameters[:,1,1] >= self.bump_width_samples]#No need to test for those given calc_bumps
-        magnitudes = np.zeros((len(parameters), self.n_dims,1))
-        if estimate_parameters:
-            parameters_to_fix = []
-        else:
-            parameters_to_fix = [0,1]
+        parameters = parameters[parameters[:,1,1] >= self.bump_width_samples]#No need to test for those given calc_bumps
+        lkhs_init, _, pars_init, _ = self.estimate_simgle_bump(np.zeros((len(parameters), self.n_dims,1)),\
+            parameters, [0,1])
+        if verbose: 
+            _, ax = plt.subplots(figsize=figsize, dpi=300)
+            sort_idx = np.argsort(pars_init[:,0,1])
+            ax.plot(pars_init[sort_idx,0,1]*self.shape, lkhs_init[sort_idx], '.-', color='k')
 
+        if method == 'maxima':
+            lkhs_sp, mags_sp, pars_sp, eventprobs_sp = self.estimate_simgle_bump(np.zeros((len(parameters), self.n_dims,1)), \
+                                                                                 parameters, [])
+            lkhs_sp_sorting = lkhs_sp.copy()
+            mags_sp_sorting = mags_sp.copy()
+            pars_sp_sorting = pars_sp.copy()
+            group_color = np.empty(len(lkhs_sp),dtype=str)
+            cycol = cycle(colors)
+            colors = [next(cycol) for x in range(n_bumps)]
+            max_lkhs = []
+            for bump in range(n_bumps):
+                if not np.isnan(lkhs_sp_sorting).all():#Avoids problem if n_bumps > actual bumps
+                    max_lkh = np.where(lkhs_sp_sorting == np.nanmax(lkhs_sp_sorting))[0][0]
+                    max_lkhs.append(max_lkh)
+                    gamma_max = pars_sp[max_lkh,0,1] 
+                    neighbors = np.where(abs(pars_sp[:,0,1]-gamma_max) <= (self.bump_width_samples/2)/self.shape)[0]
+                    group = np.concatenate([[max_lkh], neighbors])
+                    if verbose:
+                        ax.plot(np.array(pars_sp)[group,0,1]*self.shape, lkhs_sp_sorting[group], '.', color=colors[bump])
+                    lkhs_sp_sorting[group] = np.nan
+                    pars_sp_sorting[group, :, :] = np.nan
+            if np.isnan(lkhs_sp_sorting).all() and init_n_bumps != None and verbose:
+                print(f'The number of requested bumps exceeds the number of convergence points found in the parameter space, bumps {bump} to {n_bumps} were not found') 
+
+            if not np.isnan(lkhs_sp_sorting).all() and verbose:#plot remaining points if all where not handled before
+                ax.plot(pars_sp_sorting[:,0,1]*self.shape, lkhs_sp_sorting, '.', color='gray', label='Not attributed')
+                ax.legend()
+            if verbose: 
+                ax.set_xlabel('sample #')
+                ax.set_ylabel('Loglikelihood')
+                plt.show()
+        pars = np.tile(np.nan, (n_bumps+1, 2))
+        pars[:len(max_lkhs), :] = pars_sp[max_lkhs, 0, :]
+        order = np.argsort(pars[:len(max_lkhs),1])#sorted index based on first stage duration
+        pars[:len(max_lkhs), :] = pars[order, :]
+        mags = mags_sp[max_lkhs][order]
+        max_lkhs = np.array(max_lkhs)[order]
+        pars[len(max_lkhs),:] = np.array([self.shape, mean_rt/self.shape])#last stage defined as rt
+        lkhs = np.repeat(np.nan, n_bumps)
+        lkhs[:len(max_lkhs)] = lkhs_sp[max_lkhs]
+        return pars, mags[:,:,0].T, lkhs
+
+    def estimate_simgle_bump(self, magnitudes, parameters, parameters_to_fix):
         if self.cpus >1:
             with mp.Pool(processes=self.cpus) as pool:
                 estimates = pool.starmap(self.fit, 
@@ -713,44 +769,4 @@ class hsmm:
         mags_sp = np.array([x[1] for x in estimates])
         pars_sp = np.array([x[2] for x in estimates])
         eventprobs_sp = [x[3] for x in estimates]
-        lkhs_sp_sorting = lkhs_sp.copy()
-        mags_sp_sorting = mags_sp.copy()
-        pars_sp_sorting = pars_sp.copy()
-        group_color = np.empty(len(lkhs_sp),dtype=str)
-        cycol = cycle(colors)
-        colors = [next(cycol) for x in range(n_bumps)]
-        max_lkhs = []
-        if verbose:
-            _, ax = plt.subplots(figsize=figsize)
-        for bump in range(n_bumps):
-            if not np.isnan(lkhs_sp_sorting).all():#Avoids problem if n_bumps > actual bumps
-                max_lkh = np.where(lkhs_sp_sorting == np.nanmax(lkhs_sp_sorting))[0][0]
-                max_lkhs.append(max_lkh)
-                gamma_max = pars_sp[max_lkh,0,1] 
-                neighbors = np.where(abs(pars_sp[:,0,1]-gamma_max) <= (self.bump_width_samples/2)/self.shape)[0]
-                group = np.concatenate([[max_lkh], neighbors])
-                if verbose:
-                    plt.plot(np.array(pars_sp)[group,0,1]*self.shape, lkhs_sp_sorting[group], 'o', color=colors[bump])
-                lkhs_sp_sorting[group] = np.nan
-                pars_sp_sorting[group, :, :] = np.nan
-        if np.isnan(lkhs_sp_sorting).all() and init_n_bumps != None and verbose:
-            print(f'The number of requested bumps exceeds the number of convergence points found in the parameter space, bumps {bump} to {n_bumps} were not found') 
-
-        if not np.isnan(lkhs_sp_sorting).all() and verbose:#plot remaining points if all where not handled before
-            plt.plot(pars_sp_sorting[:,0,1]*self.shape, lkhs_sp_sorting, 'o', color='gray', label='Not attributed')
-            plt.legend()
-        if verbose: 
-            plt.xlabel('sample #')
-            plt.ylabel('Loglikelihood')
-            plt.show()
-        pars = np.tile(np.nan, (n_bumps+1, 2))
-        pars[:len(max_lkhs), :] = pars_sp[max_lkhs, 0, :]
-        order = np.argsort(pars[:len(max_lkhs),1])#sorted index based on first stage duration
-        pars[:len(max_lkhs), :] = pars[order, :]
-        mags = mags_sp[max_lkhs][order]
-        max_lkhs = np.array(max_lkhs)[order]
-        pars[len(max_lkhs),:] = np.array([self.shape, mean_rt/self.shape])#last stage defined as rt
-        lkhs = np.repeat(np.nan, n_bumps)
-        lkhs[:len(max_lkhs)] = lkhs_sp[max_lkhs]
-        # print(pars_sp)
-        return pars, mags[:,:,0].T, lkhs
+        return lkhs_sp, mags_sp, pars_sp, eventprobs_sp
