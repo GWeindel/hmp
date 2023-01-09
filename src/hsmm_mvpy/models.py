@@ -224,7 +224,7 @@ class hsmm:
         else : 
             means = np.zeros((self.max_d, self.n_trials, self.n_dims))
             for i in range(self.n_trials):
-                means[:self.durations[i]-self.bump_width_samples,i,:] = self.bumps[self.starts[i]:self.ends[i]+1-self.bump_width_samples,:]
+                means[:self.durations[i]-self.bump_width_samples+1,i,:] = self.bumps[self.starts[i]:self.ends[i]+1-self.bump_width_samples+1,:]
                 # Expectations while excluding samples where we cannot fit a bump morphology
             iteration = 0
             while (lkh - lkh1) > threshold:
