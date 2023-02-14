@@ -8,14 +8,13 @@ import numpy as np
 import mne
 from mne.datasets import sample
 
-def available_source():
+def available_sources():
     '''
     list available sources for sample subject in MNE
     '''
     data_path = sample.data_path()
     subjects_dir = op.join(data_path, 'subjects')
-    subject = 'sample'
-    labels = mne.read_labels_from_annot(subject, subjects_dir=subjects_dir)
+    labels = mne.read_labels_from_annot('sample', subjects_dir=subjects_dir)
     named_labels = []
     for label in range(len(labels)):
         named_labels.append(labels[label].name)
@@ -24,12 +23,20 @@ def available_source():
 def simulation_sfreq():
     data_path = sample.data_path()
     subjects_dir = op.join(data_path, 'subjects')
-    subject = 'sample'
-    # First, we get an info structure from the test subject.
-    evoked_fname = op.join(data_path, 'MEG', subject, 'sample_audvis-ave.fif')
+    evoked_fname = op.join(data_path, 'MEG', 'sample', 'sample_audvis-ave.fif')
     info = mne.io.read_info(evoked_fname, verbose=False)
     return info['sfreq']
-    
+
+def simulation_positions():
+    from mne import channels
+    data_path = sample.data_path()
+    subjects_dir = op.join(data_path, 'subjects')
+    subject = 'sample'
+    evoked_fname = op.join(data_path, 'MEG', subject, 'sample_audvis-ave.fif')
+    info = mne.io.read_info(evoked_fname, verbose=False)
+    positions = np.delete(channels.layout._find_topomap_coords(info, 'eeg'),52,axis=0)#inferring electrode location using MNE    
+    return positions
+
 def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=False, verbose=False): 
     '''
     Simulates EEG n_trials using MNE's tools based on the specified sources
@@ -42,9 +49,7 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
         - the name of the source (see the output of available_source())
         - the duration of the bump (in frequency, usually 10Hz)
         - the amplitude or strength of the signal from the source, expressed in volt (e.g. 1e-8 V)
-        - the duration of the preceding stage as a list with a numpy rangom generator
-            and two parameters (e.g. [np.random.gamma, shape, scale]). The durations are
-            expected to be in milliseconds
+        - the duration of the preceding stage as a scipy.stats distribution (e.g. scipy.stats.gamma(a, scale))
     n_trials: int
         Number of trials
     n_jobs: int
@@ -97,12 +102,17 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
     files = []
     for subj in range(n_subj):
         #Build simulator
+        files_subj = []
         source_simulator = mne.simulation.SourceSimulator(src, tstep=tstep, first_samp=0, \
                     duration=(2+1*n_trials+3)*max_trial_length*tstep)
-        subj_file = file + f'_{subj}_raw.fif'
+        if n_subj == 1: subj_file = file + f'_raw.fif'
+        else: subj_file = file + f'_{subj}_raw.fif'
         if subj_file in os.listdir(path) and not overwrite:
+            subj_file = path+subj_file
             print(f'{subj_file} exists no new simulation performed')
-            files.append(subj_file)
+            files_subj.append(subj_file)
+            files_subj.append(subj_file.split('.fif')[0]+'_generating_events.npy')
+            files.append(files_subj)
         else:
             subj_file = path+subj_file
             print(f'Simulating {subj_file}')
@@ -139,7 +149,7 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
                 source_time_series = np.sin(2. * np.pi * source[1] * np.arange(0,1000) * tstep)[:bump_duration]  * source[2]
                 #adding source event
                 events = events.copy()
-                rand_i = source[-1].rvs(size=n_trials)/(tstep*1000)
+                rand_i = np.round(source[-1].rvs(size=n_trials)/(tstep*1000),decimals=0)
                 random_source_times.append(rand_i) #varying event 
                 events[:, 0] = events[:,0] + random_source_times[-1] # Events sample.
                 events[:, 2] = trigger  # All events have the sample id.
@@ -157,9 +167,11 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
             mne.simulation.add_noise(raw, cov, iir_filter=[0.2, -0.2, 0.04], verbose=verbose)
 
             raw.save(subj_file, overwrite=True)
+            files_subj.append(subj_file)
             np.save(subj_file.split('.fif')[0]+'_generating_events.npy', generating_events)
+            files_subj.append(subj_file.split('.fif')[0]+'_generating_events.npy')
+            files.append(files_subj)
             print(f'{subj_file} simulated')
-            files.append(subj_file)
     if n_subj == 1:
         return files[0]
     else:

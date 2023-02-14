@@ -65,7 +65,8 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
     from mne.viz import plot_topomap
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
     return_ax = True
-    
+    if times_to_display is None:
+        times_to_display = init.mean_rt*time_step
     if 'bump' in estimated:
         import xarray as xr
         #This is to keep backward compatibility but supplyng externally computed electrodes and times will probably be
@@ -473,3 +474,4 @@ def plot_latencies(times, bump_width, time_step=1, labels=[], colors=default_col
     if legend:
         axs.legend()
     return axs
+
