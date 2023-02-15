@@ -18,7 +18,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 class hsmm:
     
-    def __init__(self, data, sfreq, cpus=1, bump_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, min_stage_duration=None, max_bumps=20, correct_bias=True):
+    def __init__(self, data, sfreq, cpus=1, bump_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, min_stage_duration=None, max_bumps=20, correct_bias=True, precision_bias=40):
         '''
         HSMM calculates the probability of data summing over all ways of 
         placing the n bumps to break the trial into n + 1 flats.
@@ -40,7 +40,7 @@ class hsmm:
         self.bump_width = bump_width
         self.bump_width_samples = int(self.bump_width / self.steps)
         if min_stage_duration == None:
-            print(f'Setting minimum stage duration parameter to half-bump width ({self.bump_width/2} ms) as min_stage_duration is unspecified')
+            # print(f'Setting minimum stage duration parameter to half-bump width ({self.bump_width/2} ms) as min_stage_duration is unspecified')
             self.min_stage_duration = self.bump_width_samples/2
         else:
             self.min_stage_duration = min_stage_duration/self.steps
@@ -69,7 +69,7 @@ class hsmm:
         self.estimate_parameters = estimate_parameters
         self.bias_correction = None
         if correct_bias:
-            self.bias_correction = self.optim_bias()
+            self.bias_correction, self.correction_fit = self.optim_bias(precision=precision_bias)
 
     def calc_bumps(self,data):
         '''
@@ -124,7 +124,10 @@ class hsmm:
         '''
         import pandas as pd 
         if verbose:
-            print(f'Estimating {n_bumps} bumps model with {starting_points} starting point(s)')
+            if parameters is None:
+                print(f'Estimating {n_bumps} bumps model with {starting_points} starting point(s)')
+            else:
+                print(f'Estimating {n_bumps} bumps model')
         if n_bumps is None and parameters is not None:
             n_bumps = len(parameters)-1
         if self.estimate_magnitudes == False:#Don't need to manually fix mags if not estimated
@@ -193,7 +196,6 @@ class hsmm:
             lkh, mags, pars, eventprobs = self.EM(n_bumps, magnitudes, parameters,\
                                         threshold, magnitudes_to_fix, parameters_to_fix)
         n_bumps = len(pars)-1
-        print(np.shape(mags))
         if n_bumps != self.max_bumps+1:#align all dimensions
             pars = np.concatenate((pars, np.tile(np.nan, (self.max_bumps+1-len(pars),2))))
             mags = np.concatenate((mags, np.tile(np.nan, (self.max_bumps-np.shape(mags)[0], \
@@ -715,33 +717,7 @@ class hsmm:
                     plt.plot(pars_init[:,0,1]*self.shape, np.gradient(lkhs_init), '-', color='k')
                     plt.hlines(0, 0, mean_rt)
                     plt.show()
-        
-        elif method=='transition':
-            #Compute difference in magnitudes 
-            diff_mags = np.abs(np.diff(mags_init, axis=0, prepend=0)).sum(axis=(1,2))
-            threshold = np.std(diff_mags)*2
-            transition = np.where(diff_mags > threshold)[0]
-            mags = mags_init[:, :, :][transition]
-            n_bumps = len(transition)
-            cycol = cycle(colors)
-            colors = [next(cycol) for x in range(n_bumps)]
-            pars = np.tile(np.nan, (n_bumps+1, 2))
-            pars[:n_bumps, :] = pars_init[:, 0, :][transition, :]
-            pars[n_bumps,:] = np.array([self.shape, mean_rt/self.shape])#last stage defined as rt
-            lkhs = lkhs_init[transition]
-            if verbose:
-                for bump in range(n_bumps):
-                    ax.plot(np.array(pars)[bump,1]*self.shape, lkhs[bump], 'o', color=colors[bump])
-            pars = np.tile(np.nan, (n_bumps+1, 2))
-            bump = 0
-            for mag in mags:
-                lkhs_mag, mags_mag, pars_mag, _ = \
-                    self.estimate_single_bump(np.tile(mag, (len(parameters), 1, 1)), parameters, [0,1], [0], 1)
-                ax.plot(pars_mag[:,0,1]*self.shape, lkhs_mag, '--', color=colors[bump])
-                pars[bump,:] = pars_mag[np.where(lkhs_mag == np.nanmax(lkhs_mag))[0][0],0,:]
-                bump += 1
-            pars[n_bumps,:] = np.array([self.shape, mean_rt/self.shape])#last stage defined as rt
-    
+            
         elif method == 'estimation':
             lkhs_sp, mags_sp, pars_sp, eventprobs_sp = \
                 self.estimate_single_bump(np.zeros((len(parameters),1,self.n_dims), dtype=np.float64), \
@@ -806,7 +782,7 @@ class hsmm:
         eventprobs_sp = np.array([x[3] for x in estimates])
         return lkhs_sp, mags_sp, pars_sp, eventprobs_sp
     
-    def fit(self, step=1, verbose=True):
+    def fit(self, step=1, verbose=True, figsize=(12,3),):
         '''
         '''
         n_points = self.mean_rt//step
@@ -840,7 +816,11 @@ class hsmm:
         pars = pars[-1, :n_bumps+1, :]
         pars[-1, :] = np.concatenate([[self.shape], [self.mean_rt/self.shape-np.sum(pars[:-1, 1])]])
         if verbose:
-            plt.plot(np.linspace(step, self.mean_rt, int(self.mean_rt/step)-1), lkh)
+            _, ax = plt.subplots(figsize=figsize, dpi=300)
+            ax.plot(np.linspace(step, self.mean_rt, int(self.mean_rt/step)-1), lkh, '-', color='k')
+            ax.set_ylabel('Log-likelihood')
+            ax.set_xlabel('Sample number')
+            plt.show()
         fit = self.fit_single(len(pars)-1, parameters=pars, magnitudes=mags)
         return fit
     
@@ -884,10 +864,13 @@ class hsmm:
     
     def optim_bias(self, precision=40, verbose=False):
         from scipy.optimize import minimize
+        print('Accounting for bias in the likelihood, this might take a while')
         parameters = self.grid_search(2, verbose=False, n_points=int(precision))
         magnitudes = np.zeros((len(parameters),1, self.n_dims), dtype=np.float64)
         result = minimize(self.correction_result, x0=[1], args=(parameters,magnitudes))
+        success = result['success']
+        print(f'Done, the fit has exit with success status :{success}')
         if verbose:
             print(result)
             self.correction_result_plot(result['x'], parameters,magnitudes)
-        return result['x']
+        return result['x'], result
