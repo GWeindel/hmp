@@ -4,6 +4,7 @@
 
 import numpy as np
 import scipy.stats as stats
+from scipy.linalg import eigh, norm
 import xarray as xr
 import multiprocessing as mp
 import itertools
@@ -402,7 +403,7 @@ def stack_data(data, subjects_variable='participant', electrode_variable='compon
     return data #xr.Dataset({'data':data, 'durations':durations})
     #return data, durations
 
-def transform_data(data, subjects_variable="participant", apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, return_weights=False):
+def transform_data(data, subjects_variable="participant", apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, return_weights=False, mcca_n_comp=None, reg=True, r=0):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hsmms. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -492,6 +493,99 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         return data, pca_data, pca.explained_variance_, means
     else:
         return data
+    
+    elif method == 'mcca':
+        if isinstance(data, xr.Dataset):
+            data = data.data
+
+        participants = data.coords["participant"].values
+        weights_pca, X_pca, mu, sigma = [],[],[],[]
+        n_subjects = len(participants)
+        n_samples = len(data.coords['samples'].values)
+        n_sensors = n_comp
+
+        # Calculate subject specific PCA
+        for i, part in enumerate(participants):
+            data = data.sel(participant=part).copy()
+            var_cov_matrix = vcov_mat(trial_dat)
+            tmpscore = np.squeeze(var_cov_matrix)
+            pca = PCA(n_components=n_comp, svd_solver='full')
+            score = pca.fit_transform(tmpscore)
+            weights_pca.append(pca.components_.T)
+            mu.append(pca.mean_)
+            sigma.append(np.sqrt(pca.explained_variance_))
+            score /= sigma[i]
+            X_pca[i] = score
+        
+        # Calculate inter-subject MCCA 
+        KK = n_comp
+        K = mcca_n_comp
+        temp = np.zeros((KK*n_subjects,n_samples))
+
+        temp = np.zeros((KK * n_subjects, n_samples))
+        for i in range(n_subjects):
+            temp[i * KK:(i + 1) * KK, :] = X_pca[i].T
+
+        R = np.cov(temp)
+        S = np.zeros_like(R)
+        for i in range(1, KK * n_subjects + 1):
+            tmp = np.ceil(i / KK).astype(int)
+            S[(tmp - 1) * KK:tmp * KK, i - 1] = R[(tmp - 1) * KK:tmp * KK, i - 1]
+
+        # Regularization
+        if reg:
+            temp = np.zeros((KK * n_subjects, n_sensors))
+            for i in range(n_subjects):
+                temp[i * KK:(i + 1) * KK, :] = weights_pca[i].T
+            R2 = np.cov(temp)
+            S2 = np.zeros_like(R2)
+            for i in range(1, KK * n_subjects + 1):
+                tmp = np.ceil(i / KK).astype(int)
+                S2[(tmp - 1) * KK:tmp * KK, i - 1] = R2[(tmp - 1) * KK:tmp * KK, i - 1]
+            R = R + r * R2
+            S = S + r * S2
+
+        _, tempW = eigh((R - S), S, eigvals=(KK * n_subjects - K, KK * n_subjects - 1))
+        tempW = np.flip(tempW, axis=1)
+        weights_mcca = np.zeros((n_subjects, KK, K))
+        for i in range(n_subjects):
+            W_subject = tempW[i * KK:(i + 1) * KK, :]
+            weights_mcca[i] = W_subject / norm(W_subject, ord=2, keepdims=True)
+
+        # Transform subject specific PCA data to MCCA space
+        mcca_space = X_pca @ weights_mcca
+
+        mcca_explained_var = [[explained_var(mcca_participant)] for mcca_participant in mcca_space]
+        means = data.groupby('electrodes').mean(...)
+
+        # PCA data (of weights)
+        coords = dict(electrodes=("electrodes", data.coords["electrodes"].values),
+                     component=("component", np.arange(n_comp)))
+        pca_data = xr.DataArray(weights_pca, dims=("electrodes","component"), coords=coords)
+
+        # MCCA data (of weights)
+        coords = dict(electrodes=("electrodes", data.coords["electrodes"].values),
+                     component=("component", np.arange(n_comp)))
+        mcca_data = xr.DataArray(weights_mcca, dims=("electrodes","component"), coords=coords)
+        
+        # Rebuild Xarray for new transformed data
+        coords = dict(
+            participant=(subjects_variable, data.coords[subjects_variable].values),
+            epochs=("epochs", data.coords["epochs"].values),
+            samples=("samples", data.coords["samples"].values),
+            component=("component", np.arange(mcca_n_comp)))
+
+        new_data = xr.DataArray(mcca_space, dims=(subjects_variable, "epochs", "samples", "component"), coords=coords)
+
+        if apply_zscore:
+            new_data = data.stack(trial=[subjects_variable, 'epochs', 'component']).gropuby('trial').map(zscore).unstack()
+
+        if return_weights:
+            return new_data, means, pca_data, mcca_data, pca.explained_variance_, mcca_explained_var
+
+        else:
+            return new_data
+
     
 
 def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
