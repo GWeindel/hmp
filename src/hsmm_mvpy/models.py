@@ -18,7 +18,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 class hsmm:
     
-    def __init__(self, data, sfreq, cpus=1, bump_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, min_stage_duration=None, max_bumps=20, correct_bias=True, precision_bias=40):
+    def __init__(self, data, sfreq, cpus=1, bump_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, min_stage_duration=None, max_bumps=20, correct_bias=True, precision_bias=40, precomputed_bias=None):
         '''
         HSMM calculates the probability of data summing over all ways of 
         placing the n bumps to break the trial into n + 1 flats.
@@ -69,7 +69,10 @@ class hsmm:
         self.estimate_parameters = estimate_parameters
         self.bias_correction = None
         if correct_bias:
-            self.bias_correction, self.correction_fit = self.optim_bias(precision=precision_bias)
+            if precomputed_bias is None:
+                self.bias_correction, self.correction_fit = self.optim_bias(precision=precision_bias)
+            else:
+                self.bias_correction = precomputed_bias
 
     def calc_bumps(self,data):
         '''
@@ -88,10 +91,11 @@ class hsmm:
         '''
         bump_idx = np.arange(self.bump_width_samples)*self.steps+self.steps/2
         bump_frequency = 1000/(self.bump_width*2)#gives bump frequency given that bumps are defined as half-sines
-        template = np.sin(2*np.pi*np.linspace(0,1,1000)*bump_frequency)[[int(x) for x in bump_idx]]#bump morph based on a half sine with given bump width and sampling frequency
+        template = np.sin(2*np.pi*np.linspace(0,1-0.001,1000)*bump_frequency)[[int(x) for x in bump_idx]]#bump morph based on a half sine with given bump width and sampling frequency
+        print(template)
         template = template/np.sum(template**2)#Weight normalized
         bumps = np.zeros(data.shape, dtype=np.float64)
-
+        print(template)
         for j in np.arange(self.n_dims):#For each PC
             temp = np.zeros((self.n_samples,self.bump_width_samples))
             temp[:,0] = data[:,j]#first col = samples of PC
@@ -173,7 +177,7 @@ class hsmm:
             with mp.Pool(processes=self.cpus) as pool:
                 estimates = pool.starmap(self.EM, 
                     zip(itertools.repeat(n_bumps), magnitudes, parameters, itertools.repeat(1),\
-                        itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix),))   
+                    itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix),))   
             lkhs_sp = [x[0] for x in estimates]
             mags_sp = [x[1] for x in estimates]
             pars_sp = [x[2] for x in estimates]
@@ -285,7 +289,8 @@ class hsmm:
             #     initial_magnitudes =  np.delete(initial_magnitudes, null_stages, axis=0)
             #     n_bumps -= len(null_stages)
             #     lkh_prev = -np.inf#Likelihood is biased when 0 length stages present
-            lkh, eventprobs = self.logprob(magnitudes, parameters, n_bumps,bias_correction=bias_correction)
+            lkh, eventprobs = self.logprob(magnitudes, parameters, n_bumps, \
+                                           bias_correction=bias_correction)
         if baseline_correction:
             lkh_prev -= initial_lkh
         return lkh_prev, magnitudes_prev, parameters_prev, eventprobs_prev
@@ -327,7 +332,6 @@ class hsmm:
             
         LP = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pdf for each stage parameters
 
-            
         for stage in range(n_stages):
             LP[:,stage] = self.gamma_EEG(parameters[stage,0], parameters[stage,1])
             LP[:,stage] = LP[:,stage]*bias_correction[int(np.round(((parameters[stage,1])*1000)))]
@@ -651,6 +655,7 @@ class hsmm:
         duration = end_time-start_time
         n_points = duration//step
         duration = step*(n_points)#rounding up
+        # if step
         check_n_posibilities = binomcoeff(n_points-1, n_stages-1)
         while binomcoeff(n_points-1, n_stages-1) > iter_limit:
             n_points = n_points-1
@@ -862,7 +867,7 @@ class hsmm:
         plt.show()
         return np.sum(corrected_c**2)
     
-    def optim_bias(self, precision=40, verbose=False):
+    def optim_bias(self, precision=40, verbose=True):
         from scipy.optimize import minimize
         print('Accounting for bias in the likelihood, this might take a while')
         parameters = self.grid_search(2, verbose=False, n_points=int(precision))
