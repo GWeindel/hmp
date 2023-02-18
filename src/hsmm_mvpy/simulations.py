@@ -147,10 +147,14 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
                 # activate
                 bump_duration = int(((1/source[1])/2)*info['sfreq'])
                 source_time_series = np.sin(2. * np.pi * source[1] * np.arange(0,1000) * tstep)[:bump_duration]  * source[2]
+                
                 #adding source event
                 events = events.copy()
                 rand_i = np.round(source[-1].rvs(size=n_trials)/(tstep*1000),decimals=0)
-                random_source_times.append(rand_i) #varying event 
+                if source[0] == sources_subj[-1][0]:#ensures last event is not shorter than one bump width
+                    offset = bump_duration
+                else: offset = 0
+                random_source_times.append(rand_i+offset) #varying event 
                 events[:, 0] = events[:,0] + random_source_times[-1] # Events sample.
                 events[:, 2] = trigger  # All events have the sample id.
                 trigger += 1

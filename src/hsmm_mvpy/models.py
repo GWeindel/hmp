@@ -38,7 +38,7 @@ class hsmm:
         self.steps = 1000/self.sfreq
         self.shape = float(shape)
         self.bump_width = bump_width
-        self.bump_width_samples = int(self.bump_width / self.steps)
+        self.bump_width_samples = int(np.round(self.bump_width / self.steps))
         if min_stage_duration == None:
             # print(f'Setting minimum stage duration parameter to half-bump width ({self.bump_width/2} ms) as min_stage_duration is unspecified')
             self.min_stage_duration = self.bump_width_samples/2
@@ -90,12 +90,12 @@ class hsmm:
             been correlated with bump morphology
         '''
         bump_idx = np.arange(self.bump_width_samples)*self.steps+self.steps/2
+        print(bump_idx)
         bump_frequency = 1000/(self.bump_width*2)#gives bump frequency given that bumps are defined as half-sines
-        template = np.sin(2*np.pi*np.linspace(0,1-0.001,1000)*bump_frequency)[[int(x) for x in bump_idx]]#bump morph based on a half sine with given bump width and sampling frequency
-        print(template)
+        template = np.sin(2*np.pi*np.linspace(0,1,1001)*bump_frequency)[[int(np.round(x)) for x in bump_idx]]#bump morph based on a half sine with given bump width and sampling frequency
+
         template = template/np.sum(template**2)#Weight normalized
         bumps = np.zeros(data.shape, dtype=np.float64)
-        print(template)
         for j in np.arange(self.n_dims):#For each PC
             temp = np.zeros((self.n_samples,self.bump_width_samples))
             temp[:,0] = data[:,j]#first col = samples of PC
@@ -106,7 +106,7 @@ class hsmm:
             bumps[:,j] = temp @ template 
             # for each PC we calculate its correlation with half-sine defined above
         for trial in range(self.n_trials):#avoids confusion of gains between trials
-            bumps[self.ends[trial]-self.bump_width_samples:self.ends[trial]+1, :] = 0
+            bumps[self.ends[trial]-self.bump_width_samples-2:self.ends[trial]+1, :] = 0
         return bumps
 
     def fit_single(self, n_bumps=None, magnitudes=None, parameters=None, threshold=1, verbose=True,
@@ -767,7 +767,7 @@ class hsmm:
             pars, mags, lkhs = pars_init, mags_init, lkhs_init
         return pars, mags[:, 0, :], lkhs
 
-    def estimate_single_bump(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, threshold, bias_correction=True, baseline_correction=False):
+    def estimate_single_bump(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, threshold, bias_correction=[1], baseline_correction=False):
         if self.cpus >1:
             if np.shape(magnitudes) == 2:
                 magnitudes = np.tile(magnitudes, (len(parameters), 1, 1))
