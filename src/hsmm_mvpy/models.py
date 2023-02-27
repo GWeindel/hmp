@@ -18,7 +18,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 class hsmm:
     
-    def __init__(self, data, sfreq, cpus=1, bump_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, min_stage_duration=None, max_bumps=20, correct_bias=True, precision_bias=40, precomputed_bias=None):
+    def __init__(self, data, eeg_data=None, sfreq=None, offset=0, cpus=1, bump_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, min_stage_duration=None, max_bumps=20, correct_bias=True, precision_bias=40, precomputed_bias=None):
         '''
         HSMM calculates the probability of data summing over all ways of 
         placing the n bumps to break the trial into n + 1 flats.
@@ -34,6 +34,10 @@ class hsmm:
         min_stage_duration : float
             Minimum stage duration in milliseconds. Note that this parameter doesn't apply to first and last stage
         '''
+        if sfreq is None:
+            sfreq = eeg_data.sfreq
+        if offset is None:
+            offset = eeg_data.offset
         self.sfreq = sfreq
         self.steps = 1000/self.sfreq
         self.shape = float(shape)
@@ -52,7 +56,7 @@ class hsmm:
         starts = np.roll(dur_dropped_na.data, 1)
         starts[0] = 0
         self.starts = starts
-        self.ends = dur_dropped_na.data-1 
+        self.ends = dur_dropped_na.data-1 -offset
         self.durations =  self.ends-self.starts+1
         self.named_durations =  durations.dropna("trial_x_participant") - durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
         self.mean_rt = self.durations.mean()
@@ -90,10 +94,8 @@ class hsmm:
             been correlated with bump morphology
         '''
         bump_idx = np.arange(self.bump_width_samples)*self.steps+self.steps/2
-        print(bump_idx)
         bump_frequency = 1000/(self.bump_width*2)#gives bump frequency given that bumps are defined as half-sines
-        template = np.sin(2*np.pi*np.linspace(0,1,1001)*bump_frequency)[[int(np.round(x)) for x in bump_idx]]#bump morph based on a half sine with given bump width and sampling frequency
-
+        template = np.sin(2*np.pi*bump_idx/1000*bump_frequency)#bump morph based on a half sine with given bump width and sampling frequency
         template = template/np.sum(template**2)#Weight normalized
         bumps = np.zeros(data.shape, dtype=np.float64)
         for j in np.arange(self.n_dims):#For each PC
@@ -105,8 +107,9 @@ class hsmm:
                 # each column is a copy of the first one but shifted one sample upwards
             bumps[:,j] = temp @ template 
             # for each PC we calculate its correlation with half-sine defined above
-        for trial in range(self.n_trials):#avoids confusion of gains between trials
-            bumps[self.ends[trial]-self.bump_width_samples-2:self.ends[trial]+1, :] = 0
+        # for trial in range(self.n_trials):#avoids confusion of gains between trials 
+        #TEMP : now replaced by adding an offset after response by default
+        #     bumps[self.ends[trial]-self.bump_width_samples-2:self.ends[trial]+1, :] = 0
         return bumps
 
     def fit_single(self, n_bumps=None, magnitudes=None, parameters=None, threshold=1, verbose=True,
@@ -314,9 +317,9 @@ class hsmm:
             # Borst and Walsh, 2016, last equation, right hand side parenthesis 
             # (S^2 -(S -B)^2) (Sb- B2/2) for each bump and sum over all PCA
             for trial in range(self.n_trials):
-                trial_index = range(self.starts[trial],self.ends[trial])
+                trial_index = range(self.starts[trial],self.ends[trial]+1)
                 gains[trial_index] += self.bumps[trial_index,i][np.newaxis].T \
-                    * magnitudes[:,i] - (magnitudes[:,i]**2)/2
+                    * magnitudes[:,i] -  (magnitudes[:,i]**2)/2
             # bump*magnitudes-> gives [n_samples*nBumps] It scales bumps prob. by the
             # global magnitudes of the bumps topology. 
         gains = np.exp(gains)

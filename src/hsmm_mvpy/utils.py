@@ -13,8 +13,8 @@ from warnings import warn, filterwarnings
 
 filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later  
 
-def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provided=None, verbose=True,
-                 tmin=-.2, tmax=5, offset_after_resp = .1, high_pass=.5, pick_channels = 'eeg', baseline=(None, 0),\
+def read_mne_EEG(pfiles, event_id, resp_id, sfreq=None, subj_idx=None, events_provided=None, verbose=True,
+                 tmin=-.2, tmax=5, offset_after_resp = 0.1, high_pass=.5, pick_channels = 'eeg', baseline=(None, 0),\
                  low_pass = 30, upper_limit_RT=5, lower_limit_RT=0.001, reject_threshold=None):
     ''' 
     Reads EEG data format (.fif or .bdf) using MNE's integrated function .
@@ -104,6 +104,8 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
         else:
             raise ValueError(f'Unknown EEG file format for participant {participant}')
         # Loading events (in our case one event = one trial)
+        if sfreq is None: 
+            sfreq = data.info['sfreq']
         if events_provided is None:
             try:
                 events = mne.find_events(data, verbose=verbose, min_duration = 1 / data.info['sfreq'])
@@ -139,7 +141,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
         
         print(f'Creating epochs based on following event ID :{np.unique(events[:,2])}')
             
-        offset_after_resp_samples = int(offset_after_resp*tstep)
+        offset_after_resp_samples = int(offset_after_resp/tstep)
         metadata, meta_events, event_id = mne.epochs.make_metadata(
             events=events, event_id= event_id,
             tmin=tmin, tmax=tmax, sfreq=data.info['sfreq'])
@@ -191,14 +193,14 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq, subj_idx=None, events_provide
             print(f'RTs > 0 longer than expected ({x})')
         print(f'{len(cropped_data_epoch)} trials were retained for participant {participant}')
         print(f'End sampling frequency is {sfreq} Hz')
-        epoch_data.append(hsmm_data_format(cropped_data_epoch, cropped_trigger, epochs.info['sfreq'], epochs=[int(x) for x in epochs_idx], electrodes = epochs.ch_names))
+        epoch_data.append(hsmm_data_format(cropped_data_epoch, cropped_trigger, epochs.info['sfreq'], offset_after_resp_samples, epochs=[int(x) for x in epochs_idx], electrodes = epochs.ch_names))
         y += 1
         
     epoch_data = xr.concat(epoch_data, dim = xr.DataArray(subj_idx, dims='participant'),
                           fill_value={'event':'', 'data':np.nan})
     return epoch_data
 
-def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after_resp=0):
+def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after_resp=0.1):
     '''
     Function to parse epochs and crop them to start_time (usually stimulus onset so 0) up to the reaction time of the trial.
     The returned object is a xarray Dataset allowing further processing using built-in methods
@@ -285,10 +287,10 @@ def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after
         (data[epoch,:,:rts[epoch]+offset_after_resp_samples])
         j += 1
     print(f'Totaling {len(cropped_data_epoch)} valid trials')
-    data_xr = hsmm_data_format(cropped_data_epoch, conditions, sfreq, epochs=epochs, electrodes = electrode_columns)
+    data_xr = hsmm_data_format(cropped_data_epoch, conditions, sfreq, offset_after_resp_samples, epochs=epochs, electrodes = electrode_columns)
     return data_xr
 
-def hsmm_data_format(data, events, sfreq, participants=[], epochs=None, electrodes=None):
+def hsmm_data_format(data, events, sfreq, offset, participants=[], epochs=None, electrodes=None):
     '''
     Converting 3D matrix with dimensions (participant) * trials * electrodes * sample into xarray Dataset
     
@@ -331,7 +333,7 @@ def hsmm_data_format(data, events, sfreq, participants=[], epochs=None, electrod
                     "electrodes":  electrodes,
                     "samples": np.arange(n_samples)
                 },
-                attrs={'sfreq':sfreq}
+                attrs={'sfreq':sfreq,'offset':offset}
                 )
     else:
         data = xr.Dataset(
@@ -345,7 +347,7 @@ def hsmm_data_format(data, events, sfreq, participants=[], epochs=None, electrod
                     "electrodes":  electrodes,
                     "samples": np.arange(n_samples)
                 },
-                attrs={'sfreq':sfreq}
+                attrs={'sfreq':sfreq,'offset':offset}
                 )
     return data
 
@@ -408,13 +410,13 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
     means : xarray.DataArray
         means of the electrodes before PCA/zscore
     '''
-    from sklearn.decomposition import PCA
     #var = data.var(...)
     if apply_standard and not single:
         mean_std = data.groupby(subjects_variable).std(dim=...).data.mean()
         data = data.assign(mean_std=mean_std.data)
         data = data.groupby(subjects_variable).map(standardize)
     if method == 'pca':
+        from sklearn.decomposition import PCA
         #if isinstance(data, (xr.Dataset, xr.DataArray)):
         # Computing cov matrices by trial and take the average of those
         #var_cov_matrix = data.data.stack(trial=("participant", "epochs")).groupby('trial').map(vcov_mat).to_numpy().mean()
@@ -466,6 +468,14 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
             return data, pca_data, pca.explained_variance_, means
         else:
             return data
+    elif method is None:
+        data = data.rename({'electrodes':'component'})
+        data['component'] = np.arange(len(data.component ))
+        if apply_zscore and not single:
+            data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
+        elif apply_zscore and single :
+            data = data.stack(trial=['epochs','component']).groupby('trial').map(zscore).unstack()
+        return data
     else:
         return data
     
