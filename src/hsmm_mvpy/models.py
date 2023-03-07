@@ -10,7 +10,7 @@ import math
 import time#Just for speed testing
 from warnings import warn
 from scipy.stats import gamma as sp_gamma
-from scipy.stats import invgamma as sp_invgamma
+from scipy.signal import fftconvolve
 import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold', 'brown']
@@ -356,7 +356,7 @@ class hsmm:
                 temp = np.convolve(forward[:,trial,bump-1], LP[:,bump])
                 # convolution between gamma * gains at previous bump and bump
                 forward[:,trial,bump] = temp[:self.max_d]
-                temp = np.convolve(add_b[:,trial], BLP[:, bump])
+                temp = fftconvolve(add_b[:,trial], BLP[:, bump])
                 # same but backwards
                 backward[:,trial,bump] = temp[:self.max_d]
             forward[:,:,bump] = forward[:,:,bump]*probs[:,:,bump]
