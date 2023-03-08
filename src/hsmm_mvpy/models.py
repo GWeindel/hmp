@@ -10,7 +10,6 @@ import math
 import time#Just for speed testing
 from warnings import warn
 from scipy.stats import gamma as sp_gamma
-from scipy.signal import fftconvolve
 import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold', 'brown']
@@ -71,6 +70,11 @@ class hsmm:
         else: self.max_bumps = max_bumps
         self.estimate_magnitudes = estimate_magnitudes
         self.estimate_parameters = estimate_parameters
+        if self.max_d > 500:#FFT conv from scipy faster in this case
+            from scipy.signal import fftconvolve
+            self.convolution = fftconvolve
+        else:
+            self.convolution = np.convolve
         self.bias_correction = None
         if correct_bias:
             if precomputed_bias is None:
@@ -353,10 +357,10 @@ class hsmm:
         for bump in np.arange(1,n_bumps):#continue with other bumps
             add_b = backward[:,:,bump-1]*probs_b[:,:,bump-1]
             for trial in np.arange(self.n_trials):
-                temp = np.convolve(forward[:,trial,bump-1], LP[:,bump])
+                temp = self.convolution(forward[:,trial,bump-1], LP[:,bump])
                 # convolution between gamma * gains at previous bump and bump
                 forward[:,trial,bump] = temp[:self.max_d]
-                temp = fftconvolve(add_b[:,trial], BLP[:, bump])
+                temp = self.convolution(add_b[:,trial], BLP[:, bump])
                 # same but backwards
                 backward[:,trial,bump] = temp[:self.max_d]
             forward[:,:,bump] = forward[:,:,bump]*probs[:,:,bump]
