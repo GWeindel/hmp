@@ -254,7 +254,7 @@ class hsmm:
             
         initial_parameters =  np.copy(parameters)
         initial_magnitudes = np.copy(magnitudes)
-        lkh, eventprobs = self.logprob(magnitudes, parameters, n_bumps, bias_correction=bias_correction)
+        lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_bumps, bias_correction=bias_correction)
         initial_lkh = lkh
         if threshold == 0:
             lkh_prev = initial_lkh
@@ -296,15 +296,14 @@ class hsmm:
             #     initial_magnitudes =  np.delete(initial_magnitudes, null_stages, axis=0)
             #     n_bumps -= len(null_stages)
             #     lkh_prev = -np.inf#Likelihood is biased when 0 length stages present
-            lkh, eventprobs = self.logprob(magnitudes, parameters, n_bumps, \
+            lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_bumps, \
                                            bias_correction=bias_correction)
         if baseline_correction:
             lkh_prev -= initial_lkh
         return lkh_prev, magnitudes_prev, parameters_prev, eventprobs_prev
 
-    def logprob(self, magnitudes, parameters, n_bumps, lkh_only=False, bias_correction=None):
+    def estim_probs(self, magnitudes, parameters, n_bumps, lkh_only=False, bias_correction=None):
         '''
-        Defines the log probabilities to be maximized as described in Anderson, Zhang, Borst and Walsh, 2016
         
         Returns
         -------
@@ -328,45 +327,43 @@ class hsmm:
             # global magnitudes of the bumps topology. 
         gains = np.exp(gains)
         probs = np.zeros([self.max_d,self.n_trials,n_bumps], dtype=np.float64) # prob per trial
-        probs_b = np.zeros([self.max_d,self.n_trials,n_bumps], dtype=np.float64)
+        probs_b = np.zeros([self.max_d,self.n_trials,n_bumps], dtype=np.float64)# Sample and state reversed
         for trial in np.arange(self.n_trials):
             # Following assigns gain per trial to variable probs 
-            # in direct and reverse order
             probs[:self.durations[trial],trial,:] = \
                 gains[self.starts[trial]:self.ends[trial]+1,:] 
+            # Same but samples and bumps are reversed, this allows to compute
+            # fwd and bwd in the same way in the following steps
             probs_b[:self.durations[trial],trial,:] = \
                 gains[self.starts[trial]:self.ends[trial]+1,:][::-1,::-1]
-            
-        LP = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pdf for each stage parameters
 
+        pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage parameters
         for stage in range(n_stages):
-            LP[:,stage] = self.gamma_EEG(parameters[stage,0], parameters[stage,1])
-            LP[:,stage] = LP[:,stage]*bias_correction[int(np.round(((parameters[stage,1])*1000)))]
-
-        BLP = LP[:,::-1] # States reversed gamma pdf
+            pmf[:,stage] = self.gamma_EEG(parameters[stage,0], parameters[stage,1])
+            # pmf[:,stage] = pmf[:,stage]*bias_correction[int(np.round(((parameters[stage,1])*1000)))]
+        pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
         forward = np.zeros((self.max_d, self.n_trials, n_bumps), dtype=np.float64)
         backward = np.zeros((self.max_d, self.n_trials, n_bumps), dtype=np.float64)
-        # eq1 in Appendix, first definition of likelihood
-        # For each trial compute gamma pdf * gains
-        # Start with first bump to loop across others after
-        forward[:,:,0] = np.tile(LP[:,0][np.newaxis].T,\
-            (1,self.n_trials))*probs[:,:,0]
-        backward[:,:,0] = np.tile(BLP[:,0][np.newaxis].T,\
-                    (1,self.n_trials)) # reversed Gamma pdf
+        # Computing forward and backward helper variable
+        #  when stage = 0:
+        forward[:,:,0] = np.tile(pmf[:,0][np.newaxis].T,\
+            (1,self.n_trials))*probs[:,:,0] #first stage transition is p(B) * p(d)
+        backward[:,:,0] = np.tile(pmf_b[:,0][np.newaxis].T,\
+                    (1,self.n_trials)) #Reversed gamma (i.e. last stage) without probs
 
-        for bump in np.arange(1,n_bumps):#continue with other bumps
-            add_b = backward[:,:,bump-1]*probs_b[:,:,bump-1]
+        for bump in np.arange(1,n_bumps):#Following stage transitions integrate previous transitions
+            add_b = backward[:,:,bump-1]*probs_b[:,:,bump-1]#Next stage in back
             for trial in np.arange(self.n_trials):
-                temp = self.convolution(forward[:,trial,bump-1], LP[:,bump])
                 # convolution between gamma * gains at previous bump and bump
-                forward[:,trial,bump] = temp[:self.max_d]
-                temp = self.convolution(add_b[:,trial], BLP[:, bump])
+                forward[:,trial,bump] = self.convolution(forward[:,trial,bump-1], pmf[:,bump])[:self.max_d]
                 # same but backwards
-                backward[:,trial,bump] = temp[:self.max_d]
+                backward[:,trial,bump] = self.convolution(add_b[:,trial], pmf_b[:, bump])[:self.max_d]
             forward[:,:,bump] = forward[:,:,bump]*probs[:,:,bump]
-        for trial in np.arange(self.n_trials):#Undoes inversion
+        #re-arranging backward to the expected variable
+        backward = backward[:,:,::-1]#undoes stage inversion
+        for trial in np.arange(self.n_trials):#Undoes sample inversion
             backward[:self.durations[trial],trial,:] = \
-                backward[:self.durations[trial],trial,:][::-1,::-1]
+                backward[:self.durations[trial],trial,:][::-1]
         eventprobs = forward * backward
         likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
         eventprobs = eventprobs / np.tile(eventprobs.sum(axis=0), [self.max_d, 1, 1])
@@ -378,7 +375,7 @@ class hsmm:
 
     def gamma_EEG(self, a, scale):
         '''
-        Returns PDF of gamma dist with shape = a and scale, on a range from 0 to max_length 
+        Returns PMF of gamma dist with shape = a and scale, on a range from 0 to max_length 
         
         Parameters
         ----------
@@ -388,12 +385,12 @@ class hsmm:
             scale parameter      
         Returns
         -------
-        d : ndarray
-            density for a gamma with given parameters, normalized to 1
+        p : ndarray
+            probabilties for a gamma with given parameters, normalized to 1
         '''
-        d = sp_gamma.pdf(np.arange(self.max_d),a,scale=scale)
-        d = d/np.sum(d)#pdf is independent of stage length, otherwise longer are likelier
-        return d
+        p = sp_gamma.cdf(np.arange(self.max_d)+1, a, scale=scale)#+1 as first stage starts at 0
+        p = np.diff(p, prepend=0)#going to pmf
+        return p
     
     def gamma_parameters(self, eventprobs, n_bumps):
         '''
@@ -680,7 +677,7 @@ class hsmm:
             parameters[idx, :, :] = [[self.shape, x/self.shape] for x in y]
         if verbose:
             if check_n_posibilities > iter_limit:
-                print(f'Initial number of possibilities is {check_n_posibilities}. Given a number of max iteration = {iter_limit}: fitting {len(parameters)} models based on all possibilities from grid search with a spacing of {int(step)} samples and {int(n_points)} points and durations of {grid}')
+                print(f'Initial number of possibilities is {check_n_posibilities}. Given a number of max iteration = {iter_limit}: fitting {len(parameters)} models based on all possibilities from grid search with a spacing of {int(step)} samples and {n_points} points and durations of {grid}')
             else:
                 print(f'Fitting {len(parameters)} models using grid search')
         return parameters[np.argsort(parameters[:,0,1]),:,:]
@@ -794,47 +791,98 @@ class hsmm:
         eventprobs_sp = np.array([x[3] for x in estimates])
         return lkhs_sp, mags_sp, pars_sp, eventprobs_sp
     
-    def fit(self, step=1, verbose=True, figsize=(12,3),):
+    def fit(self, step=1, verbose=True, figsize=(12,3), end=None):
         '''
         '''
-        n_points = self.mean_rt//step
-        lkh = np.repeat(-np.inf, int(n_points)-1)
-        pars, mags = np.zeros((int(n_points)-1,int(n_points),2)), \
-                np.zeros((int(n_points)-1, int(n_points), self.n_dims))
-        n_bumps_list = np.zeros(int(n_points))
-        n_bumps, iteration = 0, 0
+        if end is None:
+            end = self.mean_rt
+        n_points = int(end//step)
+        lkh = np.repeat(-np.inf, n_points-1)
+        pars, mags = np.zeros((n_points-1,n_points,2)), \
+                np.zeros((n_points-1, n_points-1, self.n_dims))
+        n_bumps_list = np.zeros(n_points)
+        n_bumps, i, bump_i = 0, 0, 0
         mags_to_fix = []
-        bump_iteration = 0
-        pbar = tqdm(total = int(n_points)+1)
-        while iteration < n_points-2:
-            if n_bumps_list[iteration] > n_bumps_list[iteration-1] or iteration == 0:
-                pars[iteration:,n_bumps:n_bumps+2,:] = self.grid_search(2, verbose=False, start_time=(iteration)*step, step=step)
-            lkh[iteration], mags[iteration,:n_bumps+1,:], pars[iteration,:n_bumps+2,:], _ = \
-                self.EM(n_bumps+1,  mags[iteration,:n_bumps+1,:], pars[iteration,:n_bumps+2,:],\
-                1, mags_to_fix, [np.arange(n_bumps+2)])
-            if lkh[iteration] < lkh[iteration-1] and iteration > bump_iteration+2 and lkh[iteration-1]>lkh[iteration-2]:
-                iteration -=1
+        pbar = tqdm(total = n_points-1)
+        while i < n_points-1:
+            if n_bumps_list[i] > n_bumps_list[i-1] or i == 0:
+                pars[i:,n_bumps:n_bumps+2,:] = self.grid_search(2, verbose=False, start_time=(i)*step, step=step)
+            lkh[i], mags[i,:n_bumps+1,:], pars[i,:n_bumps+2,:], _ = \
+                self.EM(n_bumps+1,  mags[i,:n_bumps+1,:], pars[i,:n_bumps+2,:],\
+                    1, mags_to_fix, [np.arange(n_bumps+2)])
+            if i > bump_i+2 and lkh[i-2] < lkh[i-1] > lkh[i]:
+                i -=1
                 mags_to_fix.append(n_bumps)
-                mags[:,n_bumps,:] = mags[iteration,n_bumps,:]
-                pars[:,n_bumps,:] = pars[iteration,n_bumps,:]
-                bump_iteration = iteration
+                mags[:,n_bumps,:] = mags[i,n_bumps,:]
+                pars[:,n_bumps,:] = pars[i,n_bumps,:]
+                bump_i = i
                 n_bumps += 1
+                pbar.update(-1)
                 if verbose:
-                    print(f'one bump found at time {iteration*step}, fitting {n_bumps+1} bumps model')
-            iteration += 1
+                    print(f'one bump found around time {i*step} (step {i}), fitting {n_bumps+1} bumps model')
             pbar.update(1)
-            n_bumps_list[iteration] = n_bumps
+            i += 1
+            n_bumps_list[i] = n_bumps
         mags = mags[-1, :n_bumps, :]
         pars = pars[-1, :n_bumps+1, :]
         pars[-1, :] = np.concatenate([[self.shape], [self.mean_rt/self.shape-np.sum(pars[:-1, 1])]])
         if verbose:
             _, ax = plt.subplots(figsize=figsize, dpi=300)
-            ax.plot(np.linspace(step, self.mean_rt, int(self.mean_rt/step)-1), lkh, '-', color='k')
+            ax.plot(np.linspace(step, end, int(end/step)-1), lkh, '-', color='k')
             ax.set_ylabel('Log-likelihood')
             ax.set_xlabel('Sample number')
             plt.show()
         fit = self.fit_single(len(pars)-1, parameters=pars, magnitudes=mags)
-        return fit
+        return lkh
+    
+    def bwd_fit(self, step=1, verbose=True, figsize=(12,3), end=None):
+        '''
+        '''
+        if end is None:
+            end = self.mean_rt
+        n_points = int(end//step)
+        lkh = np.repeat(-np.inf, n_points-1)
+        pars, mags = np.zeros((n_points-1,n_points-1,2)), \
+                np.zeros((n_points-1, n_points-1, self.n_dims))
+        n_bumps_list = np.zeros(n_points)
+        n_bumps, i, bump_i = 0, 0, 0
+        mags_to_fix = []
+        pbar = tqdm(total = n_points-1)
+        pbar.set_description('BWD')
+        while i < n_points-1:
+            index = range(-n_bumps-2,0)
+            if n_bumps_list[i] > n_bumps_list[i-1] or i == 0:
+                pars[i:,index[:2],:] = self.grid_search(2, verbose=False, start_time=i*step, step=step)[:,::-1,:]#Reversing parameters = bwd
+                mags_to_fix = range(n_bumps+1)[1:]
+            # print(pars[i,:,1])
+            # print(mags_to_fix)
+            lkh[i], mags[i,index[1:],:], pars[i,index,:], _ = \
+                self.EM(n_bumps+1,  mags[i,index[1:],:], pars[i,index,:],\
+                    1, mags_to_fix, [np.arange(n_bumps+2)])
+            # print((lkh[i], mags[i,index[1:],:], pars[i,index,:]))
+            if i > bump_i+2 and lkh[i-2] < lkh[i-1] > lkh[i]:
+                i -=1
+                mags[:,index[1:],:] = mags[i,index[1:],:]
+                pars[:,index,:] = pars[i,index,:]
+                bump_i = i
+                n_bumps += 1
+                pbar.update(-1)
+                if verbose:
+                    print(f'one bump found around time {i*step} (step {i}), fitting {n_bumps+1} bumps model')
+            pbar.update(1)
+            i += 1
+            n_bumps_list[i] = n_bumps
+        mags = mags[-1, :n_bumps, :]
+        pars = pars[-1, :n_bumps+1, :]
+        pars[-1, :] = np.concatenate([[self.shape], [self.mean_rt/self.shape-np.sum(pars[:-1, 1])]])
+        if verbose:
+            _, ax = plt.subplots(figsize=figsize, dpi=300)
+            ax.plot(np.linspace(step, end, int(end/step)-1), lkh, '-', color='k')
+            ax.set_ylabel('Log-likelihood')
+            ax.set_xlabel('Sample number')
+            plt.show()
+        # fit = self.fit_single(len(pars)-1, parameters=pars, magnitudes=mags)
+        return lkh
     
     def bump_gain_plot(self, lkh, pars, mags, colors=default_colors, figsize=(12,3)):
         
