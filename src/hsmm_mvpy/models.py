@@ -17,7 +17,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 class hsmm:
     
-    def __init__(self, data, eeg_data=None, sfreq=None, offset=0, cpus=1, bump_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, min_stage_duration=None, max_bumps=20, correct_bias=True, precision_bias=40, precomputed_bias=None):
+    def __init__(self, data, eeg_data=None, sfreq=None, offset=0, cpus=1, bump_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, min_stage_duration=None, max_bumps=20):
         '''
         HSMM calculates the probability of data summing over all ways of 
         placing the n bumps to break the trial into n + 1 flats.
@@ -75,12 +75,6 @@ class hsmm:
             self.convolution = fftconvolve
         else:
             self.convolution = np.convolve
-        self.bias_correction = None
-        if correct_bias:
-            if precomputed_bias is None:
-                self.bias_correction, self.correction_fit = self.optim_bias(precision=precision_bias)
-            else:
-                self.bias_correction = precomputed_bias
 
     def calc_bumps(self,data):
         '''
@@ -101,6 +95,7 @@ class hsmm:
         bump_frequency = 1000/(self.bump_width*2)#gives bump frequency given that bumps are defined as half-sines
         template = np.sin(2*np.pi*bump_idx/1000*bump_frequency)#bump morph based on a half sine with given bump width and sampling frequency
         template = template/np.sum(template**2)#Weight normalized
+        self.template = template
         bumps = np.zeros(data.shape, dtype=np.float64)
         for j in np.arange(self.n_dims):#For each PC
             temp = np.zeros((self.n_samples,self.bump_width_samples))
@@ -232,29 +227,13 @@ class hsmm:
             print(f"Parameters estimated for {n_bumps} bumps model")
         return estimated
     
-    def EM(self, n_bumps, magnitudes, parameters,  threshold, magnitudes_to_fix=None, parameters_to_fix=None, bias_correction=None, baseline_correction=False):
+    def EM(self, n_bumps, magnitudes, parameters,  threshold, magnitudes_to_fix=None, parameters_to_fix=None, baseline_correction=False):
         '''
         Expectation maximization function underlying fit
-        '''
-        if self.bias_correction is None:
-            if bias_correction is None:#baseline routine
-                bias_correction = np.ones(int(np.round(self.mean_rt*1000)))
-            else:#Optimization routine
-                decomposed_pdf = -sp_gamma.pdf(np.arange(0, self.mean_rt*1000), self.shape, 
-                    scale=self.mean_rt/self.shape/(n_bumps+1)*1000)*bias_correction[0]*1000
-                bias_correction = 1+ decomposed_pdf-np.min(decomposed_pdf)
-        else:#after init routine
-            if bias_correction ==0:#baseline routine, testing purposes
-                bias_correction = np.ones(int(np.round(self.mean_rt*1000)))
-            else:
-                bias_correction = self.bias_correction
-                decomposed_pdf = -sp_gamma.pdf(np.arange(0, self.mean_rt*1000), self.shape, 
-                    scale=self.mean_rt/self.shape/(n_bumps+1)*1000)*bias_correction[0]*1000
-                bias_correction = 1+ decomposed_pdf-np.min(decomposed_pdf)
-            
+        ''' 
         initial_parameters =  np.copy(parameters)
         initial_magnitudes = np.copy(magnitudes)
-        lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_bumps, bias_correction=bias_correction)
+        lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_bumps)
         initial_lkh = lkh
         if threshold == 0:
             lkh_prev = initial_lkh
@@ -296,13 +275,12 @@ class hsmm:
             #     initial_magnitudes =  np.delete(initial_magnitudes, null_stages, axis=0)
             #     n_bumps -= len(null_stages)
             #     lkh_prev = -np.inf#Likelihood is biased when 0 length stages present
-            lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_bumps, \
-                                           bias_correction=bias_correction)
+            lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_bumps)
         if baseline_correction:
             lkh_prev -= initial_lkh
         return lkh_prev, magnitudes_prev, parameters_prev, eventprobs_prev
 
-    def estim_probs(self, magnitudes, parameters, n_bumps, lkh_only=False, bias_correction=None):
+    def estim_probs(self, magnitudes, parameters, n_bumps, lkh_only=False):
         '''
         
         Returns
@@ -340,7 +318,6 @@ class hsmm:
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage parameters
         for stage in range(n_stages):
             pmf[:,stage] = self.gamma_EEG(parameters[stage,0], parameters[stage,1])
-            # pmf[:,stage] = pmf[:,stage]*bias_correction[int(np.round(((parameters[stage,1])*1000)))]
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
         forward = np.zeros((self.max_d, self.n_trials, n_bumps), dtype=np.float64)
         backward = np.zeros((self.max_d, self.n_trials, n_bumps), dtype=np.float64)
@@ -771,7 +748,7 @@ class hsmm:
             pars, mags, lkhs = pars_init, mags_init, lkhs_init
         return pars, mags[:, 0, :], lkhs
 
-    def estimate_single_bump(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, threshold, bias_correction=[1], baseline_correction=False):
+    def estimate_single_bump(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, threshold, baseline_correction=False):
         if self.cpus >1:
             if np.shape(magnitudes) == 2:
                 magnitudes = np.tile(magnitudes, (len(parameters), 1, 1))
@@ -779,12 +756,12 @@ class hsmm:
                 estimates = pool.starmap(self.EM, 
                     zip(itertools.repeat(1), magnitudes, parameters, 
                         itertools.repeat(threshold), itertools.repeat(magnitudes_to_fix), 
-                        itertools.repeat(parameters_to_fix), itertools.repeat(bias_correction),
+                        itertools.repeat(parameters_to_fix),
                         itertools.repeat(baseline_correction)))
         else:
             estimates = []
             for pars, mags in zip(parameters, magnitudes):
-                estimates.append(self.EM(1, mags, pars, threshold, magnitudes_to_fix, parameters_to_fix, bias_correction, baseline_correction))
+                estimates.append(self.EM(1, mags, pars, threshold, magnitudes_to_fix, parameters_to_fix, baseline_correction))
         lkhs_sp = np.array([x[0] for x in estimates])
         mags_sp = np.array([x[1] for x in estimates])
         pars_sp = np.array([x[2] for x in estimates])
@@ -833,7 +810,7 @@ class hsmm:
             ax.set_xlabel('Sample number')
             plt.show()
         fit = self.fit_single(len(pars)-1, parameters=pars, magnitudes=mags)
-        return lkh
+        return fit, lkh
     
     def bwd_fit(self, step=1, verbose=True, figsize=(12,3), end=None):
         '''
@@ -858,7 +835,7 @@ class hsmm:
             # print(mags_to_fix)
             lkh[i], mags[i,index[1:],:], pars[i,index,:], _ = \
                 self.EM(n_bumps+1,  mags[i,index[1:],:], pars[i,index,:],\
-                    1, mags_to_fix, [np.arange(n_bumps+2)])
+                    1, [], [np.arange(n_bumps+2)])
             # print((lkh[i], mags[i,index[1:],:], pars[i,index,:]))
             if i > bump_i+2 and lkh[i-2] < lkh[i-1] > lkh[i]:
                 i -=1
@@ -902,35 +879,3 @@ class hsmm:
                 iteration += 1
             ax.plot(parameters[:,0,1], bump_lkh, color=colors[bump])
         plt.show()
-        
-    def correction_result(self, corr_pars, parameters, magnitudes):
-        '''
-        '''
-        corrected,_,_,_ = self.estimate_single_bump(magnitudes, parameters, [0,1], [], 0, 
-                                                    bias_correction=corr_pars)
-        corrected_c = (corrected - np.mean(corrected))
-        return np.sum(corrected_c**2)
-        
-    def correction_result_plot(self, corr_pars, parameters, magnitudes):
-        
-        baseline,_,_,_ = self.estimate_single_bump(magnitudes, parameters, [0,1], [], 0, bias_correction=None)
-        baseline_c = (baseline - np.mean(baseline))
-        corrected,_,_,_ = self.estimate_single_bump(magnitudes, parameters, [0,1], [], 0, bias_correction=corr_pars)
-        corrected_c = (corrected - np.mean(corrected))
-        plt.plot(parameters[:,0,1]*self.shape, baseline_c, '.', color='k')
-        plt.plot(parameters[:,0,1]*self.shape, corrected_c, '.', color='r')
-        plt.show()
-        return np.sum(corrected_c**2)
-    
-    def optim_bias(self, precision=40, verbose=True):
-        from scipy.optimize import minimize
-        print('Accounting for bias in the likelihood, this might take a while')
-        parameters = self.grid_search(2, verbose=False, n_points=int(precision))
-        magnitudes = np.zeros((len(parameters),1, self.n_dims), dtype=np.float64)
-        result = minimize(self.correction_result, x0=[1], args=(parameters,magnitudes))
-        success = result['success']
-        print(f'Done, the fit has exit with success status :{success}')
-        if verbose:
-            print(result)
-            self.correction_result_plot(result['x'], parameters,magnitudes)
-        return result['x'], result
