@@ -79,8 +79,8 @@ class hsmm:
     def cross_correlation(self,data):
         '''
         This function puts on each sample the correlation of that sample and the next 
-        x samples (depends on sampling frequency and bump size) with a half sine on time domain.  Will be used fot the likelihood 
-        of the EEG data given that the bumps are centered at each time point
+        x samples (depends on sampling frequency and bump size) with a half sine on time domain.
+        
         Parameters
         ----------
         data : ndarray
@@ -97,7 +97,6 @@ class hsmm:
         template = np.sin(2*np.pi*bump_idx/1000*bump_frequency)#bump morph based on a half sine with given bump width and sampling frequency
         template = template/np.sum(template**2)#Weight normalized
         self.template = template
-        bumps = np.zeros(data.shape, dtype=np.float64)
         bumps = fftconvolve(data, np.tile(template, (self.n_dims,1)).T, mode='full', axes=0)[len(template)-1:data.shape[0]+len(template)+1,:]
         return bumps
 
