@@ -58,12 +58,12 @@ class hsmm:
         self.ends = dur_dropped_na.data-1 -offset
         self.durations =  self.ends-self.starts+1
         self.named_durations =  durations.dropna("trial_x_participant") - durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
-        self.mean_rt = self.durations.mean()
+        self.mean_d = self.durations.mean()
         self.n_trials = len(self.durations)
         self.cpus = cpus
         self.coords = durations.reset_index('trial_x_participant').coords
         self.n_samples, self.n_dims = np.shape(data.data.T)
-        self.bumps = self.calc_bumps(data.data.T)#adds bump morphology
+        self.bumps = self.cross_correlation(data.data.T)#adds bump morphology
         self.max_d = self.durations.max()
         if max_bumps == 'auto':
             self.max_bumps = self.compute_max_bumps()
@@ -76,7 +76,7 @@ class hsmm:
         else:
             self.convolution = np.convolve
 
-    def calc_bumps(self,data):
+    def cross_correlation(self,data):
         '''
         This function puts on each sample the correlation of that sample and the next 
         x samples (depends on sampling frequency and bump size) with a half sine on time domain.  Will be used fot the likelihood 
@@ -91,24 +91,14 @@ class hsmm:
             a 2D ndarray with samples * PC components where cell values have
             been correlated with bump morphology
         '''
+        from scipy.signal import fftconvolve
         bump_idx = np.arange(self.bump_width_samples)*self.steps+self.steps/2
         bump_frequency = 1000/(self.bump_width*2)#gives bump frequency given that bumps are defined as half-sines
         template = np.sin(2*np.pi*bump_idx/1000*bump_frequency)#bump morph based on a half sine with given bump width and sampling frequency
         template = template/np.sum(template**2)#Weight normalized
         self.template = template
         bumps = np.zeros(data.shape, dtype=np.float64)
-        for j in np.arange(self.n_dims):#For each PC
-            temp = np.zeros((self.n_samples,self.bump_width_samples))
-            temp[:,0] = data[:,j]#first col = samples of PC
-            for i in np.arange(1,self.bump_width_samples):
-                temp[:,i] = np.concatenate((temp[1:, i-1], [0]), axis=0)
-                # puts the component in a [n_samples X bump_width_samples] matrix shifted.
-                # each column is a copy of the first one but shifted one sample upwards
-            bumps[:,j] = temp @ template 
-            # for each PC we calculate its correlation with half-sine defined above
-        # for trial in range(self.n_trials):#avoids confusion of gains between trials 
-        #TEMP : now replaced by adding an offset after response by default
-        #     bumps[self.ends[trial]-self.bump_width_samples-2:self.ends[trial]+1, :] = 0
+        bumps = fftconvolve(data, np.tile(template, (self.n_dims,1)).T, mode='full', axes=0)[len(template)-1:data.shape[0]+len(template)+1,:]
         return bumps
 
     def fit_single(self, n_bumps=None, magnitudes=None, parameters=None, threshold=1, verbose=True,
@@ -196,7 +186,7 @@ class hsmm:
 
         else:#uninitialized    
             if np.any(parameters)== None:
-                parameters = np.tile([self.shape, (self.mean_rt)/self.shape], (n_bumps+1,1))
+                parameters = np.tile([self.shape, (self.mean_d)/self.shape], (n_bumps+1,1))
             if np.any(magnitudes)== None:
                 magnitudes = np.zeros((n_bumps, self.n_dims), dtype=np.float64)
             lkh, mags, pars, eventprobs = self.EM(n_bumps, magnitudes, parameters,\
@@ -392,7 +382,7 @@ class hsmm:
         params = np.zeros((n_bumps+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:-1,1] = np.diff(averagepos, prepend=0)
-        params[-1,1] = (self.mean_rt - averagepos[-1])
+        params[-1,1] = (self.mean_d - averagepos[-1])
         params[:,1] = params[:,1]/params[:,0]
         return params
     
@@ -587,7 +577,7 @@ class hsmm:
                       shifted_times.fillna(0), dims=['samples']).mean('trial_x_participant').\
                       transpose('bump','electrodes')
     
-    def gen_random_stages(self, n_bumps, mean_rt):
+    def gen_random_stages(self, n_bumps, mean_d):
         '''
         Returns random stage duration between 0 and mean RT by iteratively drawind sample from a 
         uniform distribution between the last stage duration (equal to 0 for first iteration) and 1.
@@ -597,14 +587,14 @@ class hsmm:
         ----------
         n_bumps : int
             how many bumps
-        mean_rt : float
+        mean_d : float
             scale parameter
         Returns
         -------
         random_stages : ndarray
-            random partition between 0 and mean_rt
+            random partition between 0 and mean_d
         '''
-        random_stages = np.array([[self.shape,x*mean_rt/self.shape] for x in np.random.beta(2, 2, n_bumps+1)])
+        random_stages = np.array([[self.shape,x*mean_d/self.shape] for x in np.random.beta(2, 2, n_bumps+1)])
         return random_stages
     
     def grid_search(self, n_stages, n_points=None, verbose=True, start_time=0, end_time=None, iter_limit=1e3, step=1):
@@ -632,7 +622,7 @@ class hsmm:
         import more_itertools as mit
         start_time = int(start_time)
         if end_time is None:
-            end_time = int(self.mean_rt)
+            end_time = int(self.mean_d)
         duration = end_time-start_time
         n_points = duration//step
         duration = step*(n_points)#rounding up
@@ -668,7 +658,7 @@ class hsmm:
         
         from itertools import cycle
         
-        mean_rt = self.mean_rt
+        mean_d = self.mean_d
         init_n_bumps = n_bumps
         if n_bumps == None:
             n_bumps = self.max_bumps
@@ -688,7 +678,7 @@ class hsmm:
             colors = [next(cycol) for x in range(n_bumps)]
             pars = np.zeros((len(bump_idx)+1, 2), dtype=np.float64)
             pars[:len(bump_idx), :] = pars_init[:, 0, :][bump_idx, :]
-            pars[len(bump_idx),:] = np.array([self.shape, mean_rt/self.shape])#last stage defined as rt
+            pars[len(bump_idx),:] = np.array([self.shape, mean_d/self.shape])#last stage defined as rt
             mags = mags_init[:, :, :][bump_idx]
             lkhs = lkhs_init[bump_idx]
             if verbose:
@@ -701,7 +691,7 @@ class hsmm:
                 if plot_deriv:
                     _, ax = plt.subplots(figsize=figsize, dpi=300)
                     plt.plot(pars_init[:,0,1]*self.shape, np.gradient(lkhs_init), '-', color='k')
-                    plt.hlines(0, 0, mean_rt)
+                    plt.hlines(0, 0, mean_d)
                     plt.show()
             
         elif method == 'estimation':
@@ -741,7 +731,7 @@ class hsmm:
             pars[:len(max_lkhs), :] = pars[order, :]
             mags = mags_sp[max_lkhs][order]
             max_lkhs = np.array(max_lkhs)[order]
-            pars[len(max_lkhs),:] = np.array([self.shape, mean_rt/self.shape])#last stage defined as rt
+            pars[len(max_lkhs),:] = np.array([self.shape, mean_d/self.shape])#last stage defined as rt
             lkhs = np.repeat(np.nan, n_bumps)
             lkhs[:len(max_lkhs)] = lkhs_sp[max_lkhs]
         else:
@@ -772,7 +762,7 @@ class hsmm:
         '''
         '''
         if end is None:
-            end = self.mean_rt
+            end = self.mean_d
         n_points = int(end//step)
         lkh = np.repeat(-np.inf, n_points-1)
         pars, mags = np.zeros((n_points-1,n_points,2)), \
@@ -802,7 +792,7 @@ class hsmm:
             n_bumps_list[i] = n_bumps
         mags = mags[-1, :n_bumps, :]
         pars = pars[-1, :n_bumps+1, :]
-        pars[-1, :] = np.concatenate([[self.shape], [self.mean_rt/self.shape-np.sum(pars[:-1, 1])]])
+        pars[-1, :] = np.concatenate([[self.shape], [self.mean_d/self.shape-np.sum(pars[:-1, 1])]])
         if verbose:
             _, ax = plt.subplots(figsize=figsize, dpi=300)
             ax.plot(np.linspace(step, end, int(end/step)-1), lkh, '-', color='k')
@@ -816,7 +806,7 @@ class hsmm:
         '''
         '''
         if end is None:
-            end = self.mean_rt
+            end = self.mean_d
         n_points = int(end//step)
         lkh = np.repeat(-np.inf, n_points-1)
         pars, mags = np.zeros((n_points-1,n_points-1,2)), \
@@ -851,7 +841,7 @@ class hsmm:
             n_bumps_list[i] = n_bumps
         mags = mags[-1, :n_bumps, :]
         pars = pars[-1, :n_bumps+1, :]
-        pars[-1, :] = np.concatenate([[self.shape], [self.mean_rt/self.shape-np.sum(pars[:-1, 1])]])
+        pars[-1, :] = np.concatenate([[self.shape], [self.mean_d/self.shape-np.sum(pars[:-1, 1])]])
         if verbose:
             _, ax = plt.subplots(figsize=figsize, dpi=300)
             ax.plot(np.linspace(step, end, int(end/step)-1), lkh, '-', color='k')
