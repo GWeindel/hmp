@@ -153,6 +153,8 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
                 rand_i = np.round(source[-1].rvs(size=n_trials)/(tstep*1000),decimals=0)
                 # if source[0] == sources_subj[-1][0]:#ensures last bump is visible
                 #     rand_i[rand_i < bump_duration] += bump_duration-rand_i[rand_i < bump_duration]
+                if source[0] == sources_subj[-1][0]:#ensures last bump is visible
+                    rand_i += bump_duration
                 random_source_times.append(rand_i) #varying event 
                 events[:, 0] = events[:,0] + random_source_times[-1] # Events sample.
                 events[:, 2] = trigger  # All events have the sample id.

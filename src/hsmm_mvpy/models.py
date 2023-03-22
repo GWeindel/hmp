@@ -17,7 +17,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 class hsmm:
     
-    def __init__(self, data, eeg_data=None, sfreq=None, offset=0, cpus=1, bump_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, min_stage_duration=None, max_bumps=20):
+    def __init__(self, data, eeg_data=None, sfreq=None, offset=0, cpus=1, bump_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, min_stage_duration=None, max_bumps=20, template=None):
         '''
         HSMM calculates the probability of data summing over all ways of 
         placing the n bumps to break the trial into n + 1 flats.
@@ -63,6 +63,9 @@ class hsmm:
         self.cpus = cpus
         self.coords = durations.reset_index('trial_x_participant').coords
         self.n_samples, self.n_dims = np.shape(data.data.T)
+        if template is None:
+            self.template = self.bump_shape()
+        else: self.template = template
         self.bumps = self.cross_correlation(data.data.T)#adds bump morphology
         self.max_d = self.durations.max()
         if max_bumps == 'auto':
@@ -75,7 +78,14 @@ class hsmm:
             self.convolution = fftconvolve
         else:
             self.convolution = np.convolve
-
+    
+    def bump_shape(self):
+        bump_idx = np.arange(self.bump_width_samples)*self.steps+self.steps/2
+        bump_frequency = 1000/(self.bump_width*2)#gives bump frequency given that bumps are defined as half-sines
+        template = np.sin(2*np.pi*bump_idx/1000*bump_frequency)#bump morph based on a half sine with given bump width and sampling frequency
+        template = template/np.sum(template**2)#Weight normalized
+        return template
+            
     def cross_correlation(self,data):
         '''
         This function puts on each sample the correlation of that sample and the next 
@@ -92,12 +102,7 @@ class hsmm:
             been correlated with bump morphology
         '''
         from scipy.signal import fftconvolve
-        bump_idx = np.arange(self.bump_width_samples)*self.steps+self.steps/2
-        bump_frequency = 1000/(self.bump_width*2)#gives bump frequency given that bumps are defined as half-sines
-        template = np.sin(2*np.pi*bump_idx/1000*bump_frequency)#bump morph based on a half sine with given bump width and sampling frequency
-        template = template/np.sum(template**2)#Weight normalized
-        self.template = template
-        bumps = fftconvolve(data, np.tile(template, (self.n_dims,1)).T, mode='full', axes=0)[len(template)-1:data.shape[0]+len(template)+1,:]
+        bumps = fftconvolve(data, np.tile(self.template, (self.n_dims,1)).T, mode='full', axes=0)[len(self.template)-1:data.shape[0]+len(self.template)+1,:]
         return bumps
 
     def fit_single(self, n_bumps=None, magnitudes=None, parameters=None, threshold=1, verbose=True,
@@ -307,7 +312,10 @@ class hsmm:
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage parameters
         for stage in range(n_stages):
             pmf[:,stage] = self.gamma_EEG(parameters[stage,0], parameters[stage,1])
-        pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
+        pmf = np.roll(pmf, shift=1, axis=0)
+        pmf_b = pmf[:,::-1].copy() # Stage reversed gamma pmf, same order as prob_b
+        pmf[0,:] = 0
+
         forward = np.zeros((self.max_d, self.n_trials, n_bumps), dtype=np.float64)
         backward = np.zeros((self.max_d, self.n_trials, n_bumps), dtype=np.float64)
         # Computing forward and backward helper variable
@@ -354,7 +362,7 @@ class hsmm:
         p : ndarray
             probabilties for a gamma with given parameters, normalized to 1
         '''
-        p = sp_gamma.cdf(np.arange(self.max_d)+1, a, scale=scale)#+1 as first stage starts at 0
+        p = sp_gamma.cdf(np.arange(self.max_d)+1, a, scale=scale)#+1 as these are durations
         p = np.diff(p, prepend=0)#going to pmf
         return p
     

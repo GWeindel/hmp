@@ -66,7 +66,7 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
     return_ax = True
     if times_to_display is None:
-        times_to_display = init.mean_rt*time_step
+        times_to_display = init.mean_d*time_step
     if 'bump' in estimated:
         import xarray as xr
         #This is to keep backward compatibility but supplyng externally computed electrodes and times will probably be
@@ -387,7 +387,7 @@ def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[''], colors=
         j += 1
     #plt.xticks(np.arange(len(labels)),labels)
     #plt.xlim(0-1,j)
-    #__display_times(axs, mean_rt, np.arange(np.shape(gammas)[0]), time_step, max_time, gammas)
+    #__display_times(axs, mean_d, np.arange(np.shape(gammas)[0]), time_step, max_time, gammas)
     axs.set_ylabel('Stages durations (Gamma)')
     axs.set_xlabel('Stage number')
     # Hide the right and top spines
