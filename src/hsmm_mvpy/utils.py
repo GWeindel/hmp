@@ -498,31 +498,32 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         if isinstance(data, xr.Dataset):
             data = data.data
 
-        participants = data.coords["participant"].values
+        subjects = data.coords["participant"].values
         weights_pca, X_pca, mu, sigma = [],[],[],[]
-        n_subjects = len(participants)
+        n_subjects = len(subjects)
         n_samples = len(data.coords['samples'].values)
-        n_sensors = n_comp
+        n_sensors = len(data.coords['electrodes'].values)
+        X_pca = np.zeros((n_subjects,n_samples,n_comp))
+        weights_pca = np.zeros((n_subjects,n_sensors,n_comp))
 
         # Calculate subject specific PCA
-        for i, part in enumerate(participants):
-            data = data.sel(participant=part).copy()
-            var_cov_matrix = vcov_mat(trial_dat)
-            tmpscore = np.squeeze(var_cov_matrix)
+        for i, subj in enumerate(subjects):
+            subj_dat = data.sel(participant=subj).mean(dim=['epochs']).dropna(dim="samples").T
+            tmpscore = np.squeeze(subj_dat)
             pca = PCA(n_components=n_comp, svd_solver='full')
             score = pca.fit_transform(tmpscore)
-            weights_pca.append(pca.components_.T)
+            weights_pca[i]=pca.components_.T
             mu.append(pca.mean_)
             sigma.append(np.sqrt(pca.explained_variance_))
             score /= sigma[i]
-            X_pca[i] = score
+            # print(score)
+            X_pca[i,:score.shape[0],:]=score
         
+     
         # Calculate inter-subject MCCA 
         KK = n_comp
         K = mcca_n_comp
-        temp = np.zeros((KK*n_subjects,n_samples))
-
-        temp = np.zeros((KK * n_subjects, n_samples))
+        temp = np.zeros((KK*n_subjects, n_samples))
         for i in range(n_subjects):
             temp[i * KK:(i + 1) * KK, :] = X_pca[i].T
 
@@ -559,26 +560,28 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         means = data.groupby('electrodes').mean(...)
 
         # PCA data (of weights)
-        coords = dict(electrodes=("electrodes", data.coords["electrodes"].values),
-                     component=("component", np.arange(n_comp)))
-        pca_data = xr.DataArray(weights_pca, dims=("electrodes","component"), coords=coords)
+        coords = dict(  participant=("participant", data.coords["participant"].values),
+                        electrodes=("electrodes", data.coords["electrodes"].values),
+                        component=("component", np.arange(n_comp)))
+        pca_data = xr.DataArray(weights_pca, dims=("participant", "electrodes","component"), coords=coords)
 
         # MCCA data (of weights)
-        coords = dict(electrodes=("electrodes", data.coords["electrodes"].values),
-                     component=("component", np.arange(n_comp)))
-        mcca_data = xr.DataArray(weights_mcca, dims=("electrodes","component"), coords=coords)
+        coords = dict(  participant=("participant", data.coords["participant"].values),
+                        pca_component=("pca", np.arange(n_comp)),
+                        mcca_component=("mcca", np.arange(mcca_n_comp)))
+        
+        mcca_data = xr.DataArray(weights_mcca, dims=("participant", "pca","mcca"), coords=coords)
         
         # Rebuild Xarray for new transformed data
         coords = dict(
             participant=(subjects_variable, data.coords[subjects_variable].values),
-            epochs=("epochs", data.coords["epochs"].values),
             samples=("samples", data.coords["samples"].values),
             component=("component", np.arange(mcca_n_comp)))
 
-        new_data = xr.DataArray(mcca_space, dims=(subjects_variable, "epochs", "samples", "component"), coords=coords)
+        new_data = xr.DataArray(mcca_space, dims=("participant", "samples", "component"), coords=coords)
 
-        if apply_zscore:
-            new_data = data.stack(trial=[subjects_variable, 'epochs', 'component']).gropuby('trial').map(zscore).unstack()
+        # if apply_zscore:
+        #     new_data = data.stack(trial=["participant", 'component']).gropuby('trial').map(zscore).unstack()
 
         if return_weights:
             return new_data, means, pca_data, mcca_data, pca.explained_variance_, mcca_explained_var
