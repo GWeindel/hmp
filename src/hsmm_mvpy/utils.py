@@ -495,97 +495,81 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         return data
     
     elif method == 'mcca':
+        from sklearn.decomposition import PCA
         if isinstance(data, xr.Dataset):
             data = data.data
 
         subjects = data.coords["participant"].values
-        weights_pca, X_pca, mu, sigma = [],[],[],[]
+        weights_pca, pca_data, new_data = [],[],[]
         n_subjects = len(subjects)
-        n_samples = len(data.coords['samples'].values)
+        # n_samples = len(data.coords['samples'].values)
         n_sensors = len(data.coords['electrodes'].values)
-        X_pca = np.zeros((n_subjects,n_samples,n_comp))
-        weights_pca = np.zeros((n_subjects,n_sensors,n_comp))
 
-        # Calculate subject specific PCA
+        # Calculate subject specific PCA data
         for i, subj in enumerate(subjects):
-            subj_dat = data.sel(participant=subj).mean(dim=['epochs']).dropna(dim="samples").T
-            tmpscore = np.squeeze(subj_dat)
+            subj_dat = data.sel(participant=subj)
+            var_cov_matrix = np.mean([vcov_mat(trial_dat) for _,trial_dat in subj_dat.groupby("epochs")], axis=0)
+            # tmpscore = np.squeeze(subj_dat)
             pca = PCA(n_components=n_comp, svd_solver='full')
-            score = pca.fit_transform(tmpscore)
-            weights_pca[i]=pca.components_.T
-            mu.append(pca.mean_)
-            sigma.append(np.sqrt(pca.explained_variance_))
-            score /= sigma[i]
-            # print(score)
-            X_pca[i,:score.shape[0],:]=score
-        
-     
-        # Calculate inter-subject MCCA 
-        KK = n_comp
+            pca_ = pca.fit_transform(var_cov_matrix)/pca.explained_variance_
+            weights_pca.append(pca.components_.T)
+            pca_data.append(pca_)
+
+        # Calculate MCCA weights based on PCA data
+        KK = n_comp 
         K = mcca_n_comp
-        temp = np.zeros((KK*n_subjects, n_samples))
+
+        # Combine subject's pca data in one matrix
+        temp=np.zeros((KK*n_subjects, n_sensors))
         for i in range(n_subjects):
-            temp[i * KK:(i + 1) * KK, :] = X_pca[i].T
+            temp[i*KK : (i+1)*KK, :] = pca_data[i].T
 
-        R = np.cov(temp)
-        S = np.zeros_like(R)
-        for i in range(1, KK * n_subjects + 1):
-            tmp = np.ceil(i / KK).astype(int)
-            S[(tmp - 1) * KK:tmp * KK, i - 1] = R[(tmp - 1) * KK:tmp * KK, i - 1]
-
-        # Regularization
-        if reg:
-            temp = np.zeros((KK * n_subjects, n_sensors))
-            for i in range(n_subjects):
-                temp[i * KK:(i + 1) * KK, :] = weights_pca[i].T
-            R2 = np.cov(temp)
-            S2 = np.zeros_like(R2)
-            for i in range(1, KK * n_subjects + 1):
-                tmp = np.ceil(i / KK).astype(int)
-                S2[(tmp - 1) * KK:tmp * KK, i - 1] = R2[(tmp - 1) * KK:tmp * KK, i - 1]
-            R = R + r * R2
-            S = S + r * S2
-
-        _, tempW = eigh((R - S), S, eigvals=(KK * n_subjects - K, KK * n_subjects - 1))
+        # All cross-covariances
+        R = np.cov(temp)  
+        # Diagonal matrix containing auto-correlations                  
+        S = np.zeros_like(R)                
+        for i in range(1, KK*n_subjects+1):
+            tmp = np.ceil(i/KK).astype(int)
+            S[(tmp-1)*KK : tmp*KK, i-1] = R[(tmp-1)*KK : tmp*KK, i-1]
+        
+        # Solve generalized eigenvalue problem
+        _, tempW = eigh((R-S), S, subset_by_index=(KK*n_subjects-K, KK*n_subjects-1))
         tempW = np.flip(tempW, axis=1)
-        weights_mcca = np.zeros((n_subjects, KK, K))
+
+        # Reshape weights into eigenvectors for indivdual subjects and normalize
+        mcca_data = np.zeros((n_subjects, KK, K))
         for i in range(n_subjects):
-            W_subject = tempW[i * KK:(i + 1) * KK, :]
-            weights_mcca[i] = W_subject / norm(W_subject, ord=2, keepdims=True)
+            W_subject = tempW[i*KK : (i+1)*KK, :]
+            mcca_data[i] = W_subject / norm(W_subject, ord=2, keepdims=True)
 
-        # Transform subject specific PCA data to MCCA space
-        mcca_space = X_pca @ weights_mcca
+        coords = dict(  participant=("participant", data.coords["participant"].values),
+                        pca=("pca", np.arange(n_comp)),
+                        mcca=("mcca", np.arange(mcca_n_comp)))
+        
+        mcca_data = xr.DataArray(mcca_data, dims=("participant","pca","mcca"), coords=coords)
 
-        mcca_explained_var = [[explained_var(mcca_participant)] for mcca_participant in mcca_space]
-        means = data.groupby('electrodes').mean(...)
-
-        # PCA data (of weights)
         coords = dict(  participant=("participant", data.coords["participant"].values),
                         electrodes=("electrodes", data.coords["electrodes"].values),
-                        component=("component", np.arange(n_comp)))
-        pca_data = xr.DataArray(weights_pca, dims=("participant", "electrodes","component"), coords=coords)
+                        pca=("pca", np.arange(n_comp)))
+        
+        pca_data = xr.DataArray(pca_data, dims=("participant","electrodes","pca"), coords=coords)
 
-        # MCCA data (of weights)
+        # Transform data to PCA space, then to MCCA space
+        for i,subj in enumerate(data.coords["participant"].values):
+            new_data.append(data.sel(participant=subj)@pca_data.sel(participant=subj)@mcca_data.sel(participant=subj))
+
         coords = dict(  participant=("participant", data.coords["participant"].values),
-                        pca_component=("pca", np.arange(n_comp)),
-                        mcca_component=("mcca", np.arange(mcca_n_comp)))
-        
-        mcca_data = xr.DataArray(weights_mcca, dims=("participant", "pca","mcca"), coords=coords)
-        
-        # Rebuild Xarray for new transformed data
-        coords = dict(
-            participant=(subjects_variable, data.coords[subjects_variable].values),
-            samples=("samples", data.coords["samples"].values),
-            component=("component", np.arange(mcca_n_comp)))
+                        epochs=("epochs", data.coords["epochs"].values),
+                        component=("component", np.arange(10)),
+                        samples=("samples", data.coords["samples"].values))
+        new_data = xr.DataArray(new_data, dims=("participant","epochs","samples", "component"), coords=coords)
 
-        new_data = xr.DataArray(mcca_space, dims=("participant", "samples", "component"), coords=coords)
+        means = data.groupby("electrodes").mean(...)
 
-        # if apply_zscore:
-        #     new_data = data.stack(trial=["participant", 'component']).gropuby('trial').map(zscore).unstack()
-
+        if apply_zscore:
+            new_data = new_data.stack(trial=["participant", "epochs", "component"]).groupby("trial").map(zscore).unstack()
         if return_weights:
-            return new_data, means, pca_data, mcca_data, pca.explained_variance_, mcca_explained_var
-
+            return new_data, pca_data, pca.explained_variance_, means, mcca_data
         else:
             return new_data
 
