@@ -371,7 +371,36 @@ def zscore(data):
     '''
     return (data - data.mean()) / data.std()
 
-def transform_data(data, subjects_variable="participant", apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, single=False, return_weights=False):
+def stack_data(data, subjects_variable='participant', electrode_variable='component'):
+    '''
+    Stacks the data going from format [participant * epochs * samples * electrodes] to [samples * electrodes]
+    with sample indexes starts and ends to delimitate the epochs.
+    
+    
+    Parameters
+    ----------
+    data : xarray
+        unstacked xarray data from transform_data() or anyother source yielding an xarray with dimensions 
+        [participant * epochs * samples * electrodes] 
+    subjects_variable : str
+        name of the dimension for subjects ID
+
+    Returns
+    -------
+    data : xarray.Dataset
+        xarray dataset [samples * electrodes]
+    '''    
+    if isinstance(data, (xr.DataArray,xr.Dataset)) and 'component' not in data.dims:
+        data = data.rename_dims({'electrodes':'component'})
+        print(data.participant)
+    if "participant" not in data.dims:
+        data = data.expand_dims("participant")
+    data = data.stack(all_samples=['participant','epochs',"samples"]).dropna(dim="all_samples")
+    return data #xr.Dataset({'data':data, 'durations':durations})
+    #return data, durations
+
+
+def transform_data(data, subjects_variable="participant", apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, return_weights=False, stack=True):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hsmms. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -396,9 +425,7 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
     n_comp : int
         How many components to select from the PC space, if None plots the scree plot and a prompt requires user
         to specify how many PCs should be retained
-    single : bool 
-        Whether participant is unique (True) or a group of participant (False)
-
+        
     Returns
     -------
     data : xarray.Dataset
@@ -411,7 +438,7 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         means of the electrodes before PCA/zscore
     '''
     #var = data.var(...)
-    if apply_standard and not single:
+    if apply_standard:
         mean_std = data.groupby(subjects_variable).std(dim=...).data.mean()
         data = data.assign(mean_std=mean_std.data)
         data = data.groupby(subjects_variable).map(standardize)
@@ -455,15 +482,10 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         pca_data = xr.DataArray(pca_data, dims=("electrodes","component"), coords=coords)
         means = data.groupby('electrodes').mean(...)
         data = data @ pca_data
-        if apply_zscore and not single:
+        if apply_zscore:
             data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
-        elif apply_zscore and single :
-            data = data.stack(trial=['epochs','component']).groupby('trial').map(zscore).unstack()
-            for comp in data.component:
-                if data.sel(component=comp).std() > 0:#corner case in  (some) simulations
-                    data.sel(component=comp).groupby('epochs').map(zscore).unstack()
-                else:
-                    data.sel(component=comp)+ 1e-10
+        if stack:
+            data = stack_data(data)
         if return_weights:
             return data, pca_data, pca.explained_variance_, means
         else:
@@ -471,44 +493,13 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
     elif method is None:
         data = data.rename({'electrodes':'component'})
         data['component'] = np.arange(len(data.component ))
-        if apply_zscore and not single:
+        if apply_zscore:
             data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
-        elif apply_zscore and single :
-            data = data.stack(trial=['epochs','component']).groupby('trial').map(zscore).unstack()
         return data
     else:
         return data
     
 
-def stack_data(data, subjects_variable='participant', electrode_variable='component', single=False):
-    '''
-    Stacks the data going from format [participant * epochs * samples * electrodes] to [samples * electrodes]
-    with sample indexes starts and ends to delimitate the epochs.
-    
-    
-    Parameters
-    ----------
-    data : xarray
-        unstacked xarray data from transform_data() or anyother source yielding an xarray with dimensions 
-        [participant * epochs * samples * electrodes] 
-    subjects_variable : str
-        name of the dimension for subjects ID
-    single : bool 
-        Whether participant is unique (True) or a group of participant (False)
-    
-    Returns
-    -------
-    data : xarray.Dataset
-        xarray dataset [samples * electrodes]
-    '''    
-    if isinstance(data, (xr.DataArray,xr.Dataset)) and 'component' not in data.dims:
-        data = data.rename_dims({'electrodes':'component'})
-        print(data.participant)
-    if "participant" not in data.dims:
-        data = data.expand_dims("participant")
-    data = data.stack(all_samples=['participant','epochs',"samples"]).dropna(dim="all_samples")
-    return data #xr.Dataset({'data':data, 'durations':durations})
-    #return data, durations
 
 
 
@@ -796,20 +787,3 @@ def event_times(data, times, electrode, stage):
 
     return brp_data    
     
-
-# def download_sample_data():
-#     import urllib.request
-    
-    
-#         with requests.get(url, stream=True) as r:
-#         with open(path, 'wb') as f:
-#             shutil.copyfileobj(r.raw, f)
-#     import zipfile
-#     filehandle, _ = urllib.request.urlretrieve(url)
-
-#     zip_file_object = zipfile.ZipFile(filehandle, 'r')
-#     first_file = zip_file_object.namelist()[0]
-#     file = zip_file_object.open(first_file)
-#     content = file.read()
-
-# download(link.get("href"),'./fails_data', link.text)
