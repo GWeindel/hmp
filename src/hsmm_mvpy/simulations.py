@@ -150,7 +150,7 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
                 
                 #adding source event
                 events = events.copy()
-                rand_i = np.round(source[-1].rvs(size=n_trials)/(tstep*1000),decimals=0)
+                rand_i = np.round(source[-1].rvs(size=n_trials)/(tstep*1000),decimals=0)+1
                 # if source[0] == sources_subj[-1][0]:#ensures last bump is visible
                 #     rand_i[rand_i < bump_duration] += bump_duration-rand_i[rand_i < bump_duration]
                 if source[0] == sources_subj[-1][0]:#ensures last bump is visible
