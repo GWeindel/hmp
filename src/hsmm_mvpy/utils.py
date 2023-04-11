@@ -371,7 +371,8 @@ def zscore(data):
     '''
     return (data - data.mean()) / data.std()
 
-def stack_data(data, subjects_variable='participant', electrode_variable='component'):
+
+def stack_data(data, subjects_variable='participant', electrode_variable='component', single=False):
     '''
     Stacks the data going from format [participant * epochs * samples * electrodes] to [samples * electrodes]
     with sample indexes starts and ends to delimitate the epochs.
@@ -384,7 +385,9 @@ def stack_data(data, subjects_variable='participant', electrode_variable='compon
         [participant * epochs * samples * electrodes] 
     subjects_variable : str
         name of the dimension for subjects ID
-
+    single : bool 
+        Whether participant is unique (True) or a group of participant (False)
+    
     Returns
     -------
     data : xarray.Dataset
@@ -399,8 +402,7 @@ def stack_data(data, subjects_variable='participant', electrode_variable='compon
     return data #xr.Dataset({'data':data, 'durations':durations})
     #return data, durations
 
-
-def transform_data(data, subjects_variable="participant", apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, return_weights=False, stack=True):
+def transform_data(data, subjects_variable="participant", apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, return_weights=False):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hsmms. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -425,7 +427,7 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
     n_comp : int
         How many components to select from the PC space, if None plots the scree plot and a prompt requires user
         to specify how many PCs should be retained
-        
+
     Returns
     -------
     data : xarray.Dataset
@@ -482,20 +484,16 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         pca_data = xr.DataArray(pca_data, dims=("electrodes","component"), coords=coords)
         means = data.groupby('electrodes').mean(...)
         data = data @ pca_data
-        if apply_zscore:
-            data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
-        if stack:
-            data = stack_data(data)
-        if return_weights:
-            return data, pca_data, pca.explained_variance_, means
-        else:
-            return data
+
     elif method is None:
         data = data.rename({'electrodes':'component'})
         data['component'] = np.arange(len(data.component ))
-        if apply_zscore:
-            data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
-        return data
+    if apply_zscore:
+        data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
+    if stack_data:
+        data = stack_data(data)
+    if return_weights:
+        return data, pca_data, pca.explained_variance_, means
     else:
         return data
     
