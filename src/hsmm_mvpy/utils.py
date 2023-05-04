@@ -502,7 +502,7 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         subjects = data.coords["participant"].values
         weights_pca, pca_data, new_data = [],[],[]
         n_subjects = len(subjects)
-        # n_samples = len(data.coords['samples'].values)
+        n_samples = len(data.coords['samples'].values)
         n_sensors = len(data.coords['electrodes'].values)
 
         # Calculate subject specific PCA data
@@ -532,11 +532,25 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
             tmp = np.ceil(i/KK).astype(int)
             S[(tmp-1)*KK : tmp*KK, i-1] = R[(tmp-1)*KK : tmp*KK, i-1]
         
+        # Regularization
+        if reg:
+            temp = np.zeros((KK*n_subjects, n_samples))
+            for i in range(n_subjects):
+                temp[i*KK : (i+1)*KK, :] = weights_pca[i].T
+            R2 = np.cov(temp)
+            S2 = np.zeros_like(R2)
+            for i in range(1, KK*n_subjects+1):
+                tmp = np.ceil(i/KK).astype(int)
+                S2[(tmp-1)*KK : tmp*KK, i-1] = R2[(tmp-1)*KK : tmp*KK, i-1]
+            R = R + reg_term * R2
+            S = S + reg_term * S2
+
+
         # Solve generalized eigenvalue problem
         _, tempW = eigh((R-S), S, subset_by_index=(KK*n_subjects-K, KK*n_subjects-1))
         tempW = np.flip(tempW, axis=1)
 
-        # Reshape weights into eigenvectors for indivdual subjects and normalize
+        # Reshape MCCA weights into eigenvectors for indivdual subjects and normalize
         mcca_data = np.zeros((n_subjects, KK, K))
         for i in range(n_subjects):
             W_subject = tempW[i*KK : (i+1)*KK, :]
@@ -560,7 +574,7 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
 
         coords = dict(  participant=("participant", data.coords["participant"].values),
                         epochs=("epochs", data.coords["epochs"].values),
-                        component=("component", np.arange(10)),
+                        component=("component", np.arange(mcca_n_comp)),
                         samples=("samples", data.coords["samples"].values))
         new_data = xr.DataArray(new_data, dims=("participant","epochs","samples", "component"), coords=coords)
 
