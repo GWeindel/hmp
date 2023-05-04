@@ -481,18 +481,6 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         pca_data = xr.DataArray(pca_data, dims=("electrodes","component"), coords=coords)
         means = data.groupby('electrodes').mean(...)
         data = data @ pca_data
-
-    elif method is None:
-        data = data.rename({'electrodes':'component'})
-        data['component'] = np.arange(len(data.component ))
-    if apply_zscore:
-        data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
-    if stack_data:
-        data = stack_data(data)
-    if return_weights:
-        return data, pca_data, pca.explained_variance_, means
-    else:
-        return data
     
     elif method == 'mcca':
         from sklearn.decomposition import PCA
@@ -542,8 +530,8 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
             for i in range(1, KK*n_subjects+1):
                 tmp = np.ceil(i/KK).astype(int)
                 S2[(tmp-1)*KK : tmp*KK, i-1] = R2[(tmp-1)*KK : tmp*KK, i-1]
-            R = R + reg_term * R2
-            S = S + reg_term * S2
+            R = R + r * R2
+            S = S + r * S2
 
 
         # Solve generalized eigenvalue problem
@@ -556,38 +544,42 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
             W_subject = tempW[i*KK : (i+1)*KK, :]
             mcca_data[i] = W_subject / norm(W_subject, ord=2, keepdims=True)
 
+        # Rebuild MCCA and PCA components as xarray 
         coords = dict(  participant=("participant", data.coords["participant"].values),
                         pca=("pca", np.arange(n_comp)),
                         mcca=("mcca", np.arange(mcca_n_comp)))
-        
         mcca_data = xr.DataArray(mcca_data, dims=("participant","pca","mcca"), coords=coords)
 
         coords = dict(  participant=("participant", data.coords["participant"].values),
                         electrodes=("electrodes", data.coords["electrodes"].values),
                         pca=("pca", np.arange(n_comp)))
-        
         pca_data = xr.DataArray(pca_data, dims=("participant","electrodes","pca"), coords=coords)
 
         # Transform data to PCA space, then to MCCA space
         for i,subj in enumerate(data.coords["participant"].values):
             new_data.append(data.sel(participant=subj)@pca_data.sel(participant=subj)@mcca_data.sel(participant=subj))
 
+        # Rebuild the data in MCCA space as xarray
         coords = dict(  participant=("participant", data.coords["participant"].values),
                         epochs=("epochs", data.coords["epochs"].values),
                         component=("component", np.arange(mcca_n_comp)),
                         samples=("samples", data.coords["samples"].values))
         new_data = xr.DataArray(new_data, dims=("participant","epochs","samples", "component"), coords=coords)
-
         means = data.groupby("electrodes").mean(...)
 
-        if apply_zscore:
-            new_data = new_data.stack(trial=["participant", "epochs", "component"]).groupby("trial").map(zscore).unstack()
-        if return_weights:
-            return new_data, pca_data, pca.explained_variance_, means, mcca_data
-        else:
-            return new_data
-
-    
+    elif method is None:
+        data = data.rename({'electrodes':'component'})
+        data['component'] = np.arange(len(data.component ))
+    if apply_zscore:
+        data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
+    if stack_data:
+        data = stack_data(data)
+    if return_weights:
+        if method == 'mcca':
+            return new_data,  mcca_data, pca_data, pca.explained_variance_, means
+        return data, pca_data, pca.explained_variance_, means
+    else:
+        return data
 
 def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
     '''
