@@ -424,11 +424,16 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
     apply_zscore : bool 
         Whether to apply z-scoring
     method : str
-        Method to apply, for now limited to 'pca'
+        Method to apply, for now limited to 'pca' and 'mcca'
     n_comp : int
         How many components to select from the PC space, if None plots the scree plot and a prompt requires user
         to specify how many PCs should be retained
-
+    mcca_n_comp : int
+        How many components to select from the MCCA space (default None)
+    reg : bool
+        Whether to apply regularization to MCCA (default False)
+    r : int
+        Regularization strenght (default 0)
     Returns
     -------
     data : xarray.Dataset
@@ -439,6 +444,12 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         explained variance for each component
     means : xarray.DataArray
         means of the electrodes before PCA/zscore
+    
+    new_data : xarray.Dataset
+        xarray dataset [n_samples * mcca_n_comp] data expressed in the MCC space, ready for hsMM fit
+    mcca_data: xarray.Dataset
+        loadings of the MCCA
+
     '''
     if apply_standard:
         mean_std = data.groupby(subjects_variable).std(dim=...).data.mean()
@@ -576,7 +587,7 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         data = stack_data(data)
     if return_weights:
         if method == 'mcca':
-            return new_data,  mcca_data, pca_data, pca.explained_variance_, means
+            return new_data, mcca_data, pca_data, pca.explained_variance_, means
         return data, pca_data, pca.explained_variance_, means
     else:
         return data
