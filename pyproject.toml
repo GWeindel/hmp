@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hsmm_mvpy"
-version = "0.0.8-beta"
+version = "0.1.0-alpha"
 authors = [
   { name="Gabriel Weindel", email="gabriel.weindel@gmail.com" },
   { name="Leendert van Maanen", email="e@mail.com" },
@@ -20,13 +20,14 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies=["mne >=1.0.0",
-"numpy >=1.20",
-"xarray >=2022.3.0, <2022.6.0",
+"numpy",
+"xarray",
 "sklearn",
 "seaborn",
 "scipy",
-"netcdf4"]
+"netcdf4",
+"xskillscore"]
 
 [project.urls]
-"Homepage" = "https://github.com/GWeindel/hsmm_mvpy"
-"Bug Tracker" = "https://github.com/GWeindel/hsmm_mvpy/issues"
+"Homepage" = "https://github.com/GWeindel/hmp"
+"Bug Tracker" = "https://github.com/GWeindel/hmp/issues"

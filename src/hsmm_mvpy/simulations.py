@@ -37,6 +37,17 @@ def simulation_positions():
     positions = np.delete(channels.layout._find_topomap_coords(info, 'eeg'),52,axis=0)#inferring electrode location using MNE    
     return positions
 
+def bump_shape(bump_width, bump_width_samples, steps):
+    '''
+    Computes the template of a half-sine (bump) with given frequency f and sampling frequency
+    '''
+    bump_idx = np.arange(bump_width_samples)*steps+steps/2
+    bump_frequency = 1000/(bump_width*2)#gives bump frequency given that bumps are defined as half-sines
+    template = np.sin(2*np.pi*bump_idx/1000*bump_frequency)#bump morph based on a half sine with given bump width and sampling frequency
+    template = template/np.sum(template**2)#Weight normalized
+    return template
+
+
 def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=False, verbose=False): 
     '''
     Simulates EEG n_trials using MNE's tools based on the specified sources
@@ -146,15 +157,10 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
                 # Define the time course of the activity for each source of the region to
                 # activate
                 bump_duration = int(((1/source[1])/2)*info['sfreq'])
-                source_time_series = np.sin(2. * np.pi * source[1] * np.arange(0,1000) * tstep)[:bump_duration]  * source[2]
-                
+                source_time_series = bump_shape(((1000/source[1])/2),bump_duration,1000/info['sfreq'])* source[2]
                 #adding source event
                 events = events.copy()
-                rand_i = np.round(source[-1].rvs(size=n_trials)/(tstep*1000),decimals=0)+1
-                # if source[0] == sources_subj[-1][0]:#ensures last bump is visible
-                #     rand_i[rand_i < bump_duration] += bump_duration-rand_i[rand_i < bump_duration]
-                if source[0] == sources_subj[-1][0]:#ensures last bump is visible
-                    rand_i += bump_duration
+                rand_i = np.round(source[-1].rvs(size=n_trials)/(tstep*1000),decimals=0)+1#+1 as bump is next sample after stage
                 random_source_times.append(rand_i) #varying event 
                 events[:, 0] = events[:,0] + random_source_times[-1] # Events sample.
                 events[:, 2] = trigger  # All events have the sample id.
@@ -168,9 +174,9 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
             # Project the source time series to sensor space and add some noise. The source
             # simulator can be given directly to the simulate_raw function.
             raw = mne.simulation.simulate_raw(info, source_simulator, forward=fwd, n_jobs=n_jobs,verbose=verbose)
+            raw = raw.pick_types(meg=False, eeg=True, stim=True)
             cov = mne.make_ad_hoc_cov(raw.info, verbose=verbose)
             mne.simulation.add_noise(raw, cov, iir_filter=[0.2, -0.2, 0.04], verbose=verbose)
-
             raw.save(subj_file, overwrite=True)
             files_subj.append(subj_file)
             np.save(subj_file.split('.fif')[0]+'_generating_events.npy', generating_events)

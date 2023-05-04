@@ -290,7 +290,7 @@ def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after
     data_xr = hsmm_data_format(cropped_data_epoch, conditions, sfreq, offset_after_resp_samples, epochs=epochs, electrodes = electrode_columns)
     return data_xr
 
-def hsmm_data_format(data, events, sfreq, offset, participants=[], epochs=None, electrodes=None):
+def hsmm_data_format(data, events, sfreq, offset=0, participants=[], epochs=None, electrodes=None):
     '''
     Converting 3D matrix with dimensions (participant) * trials * electrodes * sample into xarray Dataset
     
@@ -439,16 +439,12 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
     means : xarray.DataArray
         means of the electrodes before PCA/zscore
     '''
-    #var = data.var(...)
     if apply_standard:
         mean_std = data.groupby(subjects_variable).std(dim=...).data.mean()
         data = data.assign(mean_std=mean_std.data)
         data = data.groupby(subjects_variable).map(standardize)
     if method == 'pca':
         from sklearn.decomposition import PCA
-        #if isinstance(data, (xr.Dataset, xr.DataArray)):
-        # Computing cov matrices by trial and take the average of those
-        #var_cov_matrix = data.data.stack(trial=("participant", "epochs")).groupby('trial').map(vcov_mat).to_numpy().mean()
         var_cov_matrices = []
         if isinstance(data, xr.Dataset):
             data = data.data
@@ -498,12 +494,8 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         return data
     
 
-
-
-
 def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
     '''
-    DEPRECATED
     Performs Leave-one-out cross validation, removes one participant from data, estimate n_bumps HsMM parameters, 
     compute the likelihood of the data from the left out participant with the estimated parameters. The model is fit
     using initial fit as starting points for magnitudes and parameters
@@ -531,7 +523,7 @@ def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
     subject : str
         name of the subject to remove
     '''
-    warn('This method is deprecated and will be removed in future version, use loocv() instead', DeprecationWarning, stacklevel=2) 
+    # warn('This method is deprecated and will be removed in future version, use loocv() instead', DeprecationWarning, stacklevel=2) 
     from hsmm_mvpy.models import hsmm
     #Looping over possible number of bumps
     subjects_idx = data.participant.values
@@ -545,7 +537,7 @@ def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
     #Extracting data of left out subject
     stacked_left_out = stack_data(data.sel(participant=subject, drop=False))
     model_left_out = hsmm(stacked_left_out, sfreq=sfreq, bump_width=bump_width)
-    likelihood = model_left_out.calc_EEG_50h(fit.magnitudes.dropna('bump').values, fit.parameters, n_bumps,True)
+    likelihood = model_left_out.estim_probs(fit.magnitudes.dropna('bump').values, fit.parameters, n_bumps,True)
     return likelihood, subject
 
 def loocv_estimation(data, subject, sfreq, bump_width):
@@ -593,7 +585,7 @@ def loocv_estimation(data, subject, sfreq, bump_width):
         likelihoods_loo.append( model_left_out.calc_EEG_50h(estimates.sel(n_bumps=n_bump).magnitudes.dropna('bump').values, estimates.sel(n_bumps=n_bump).parameters.dropna('stage').values, n_bump, True))
     return likelihoods_loo, subject
 
-def loocv(unstacked_data,sfreq, max_bump, cpus=1, bump_width=50):
+def loocv(stacked_data,sfreq, max_bump, cpus=1, bump_width=50):
     '''
     Performs Leave-one-out cross validation, removes one participant from data, estimate n_bumps HsMM parameters, 
     compute the likelihood of the data from the left out participant with the estimated parameters. The model is fit
@@ -615,6 +607,7 @@ def loocv(unstacked_data,sfreq, max_bump, cpus=1, bump_width=50):
     -------
     loocv
     '''
+    unstacked_data = stacked_data.unstack()
     #Looping over possible number of bumps
     participants = unstacked_data.participant.data
     likelihoods_loo = []
@@ -641,9 +634,9 @@ def loocv(unstacked_data,sfreq, max_bump, cpus=1, bump_width=50):
     return loocv
 
 
-def loocv_mp(init, unstacked_data, bests, func=LOOCV, cpus=2, verbose=True):
+def loocv_mp(init, stacked_data, bests, func=LOOCV, cpus=2, verbose=True):
     '''
-    DEPRECATED multiprocessing wrapper for LOOCV()
+    multiprocessing wrapper for LOOCV()
     
     Parameters
     ----------
@@ -658,7 +651,8 @@ def loocv_mp(init, unstacked_data, bests, func=LOOCV, cpus=2, verbose=True):
     -------
     loocv
     '''
-    warn('This method is deprecated and will be removed in future version, use loocv() instead', DeprecationWarning, stacklevel=2) 
+    # warn('This method is deprecated and will be removed in future version, use loocv() instead', DeprecationWarning, stacklevel=2) 
+    unstacked_data = stacked_data.unstack()
     import multiprocessing
     import itertools
     participants = unstacked_data.participant.data
@@ -785,3 +779,43 @@ def event_times(data, times, electrode, stage):
 
     return brp_data    
     
+def condition_selection(hsmm_data, eeg_data, condition_string):
+    unstacked = hsmm_data.unstack().where(eeg_data.event.str.contains(condition_string),drop=True)
+    stacked = stack_data(unstacked)
+    return stacked
+
+    
+def participant_selection(hsmm_data, eeg_data, participant):
+    unstacked = hsmm_data.unstack().sel(participant = participant)
+    stacked = stack_data(unstacked)
+    return stacked
+
+def bootstrapping(init, hsmm_data, general_run, positions, eeg_data, iterations, threshold=1, verbose=True, plots=True, cpus=1):
+    from hsmm_mvpy.models import hsmm
+    from hsmm_mvpy.visu import plot_topo_timecourse
+    import xskillscore as xs
+    fitted_mags = general_run.magnitudes.values[np.unique(np.where(np.isfinite(general_run.magnitudes))[0]),:]#remove NAs
+    mags_boot_mat = np.tile(np.nan, (iterations, init.compute_max_bumps(), init.n_dims))
+    pars_boot_mat = np.tile(np.nan, (iterations, init.compute_max_bumps()+1, 2))
+
+    for i in range(iterations):
+        bootstapped = xs.resample_iterations(hsmm_data.unstack(), iterations=1, dim='epochs')
+        hsmm_data_boot = stack_data(bootstapped.squeeze())
+        init_boot = hsmm(hsmm_data_boot, sfreq=eeg_data.sfreq, bump_width=50, cpus=15)
+        estimates_boot = init_boot.fit(verbose=verbose, threshold=1)
+        mags_boot_mat[i, :len(estimates_boot.magnitudes),:] = estimates_boot.magnitudes
+        pars_boot_mat[i, :len(estimates_boot.parameters),:] = estimates_boot.parameters
+        if plots:
+            plot_topo_timecourse(eeg_data, estimates_boot, positions, init_boot)
+
+    all_pars_aligned = np.tile(np.nan, (iterations, np.max([len(x) for x in pars_boot_mat]), 2))
+    all_mags_aligned = np.tile(np.nan, (iterations, np.max([len(x) for x in mags_boot_mat]), init.n_dims))
+    for iteration, _i in enumerate(zip(pars_boot_mat, mags_boot_mat)):
+        all_pars_aligned[iteration, :len(_i[0]), :] = _i[0]
+        all_mags_aligned[iteration, :len(_i[1]), :] = _i[1]
+
+    booted = xr.Dataset({'parameters': (('iteration', 'stage','parameter'), 
+                                 all_pars_aligned),
+                        'magnitudes': (('iteration', 'bump','component'), 
+                                 all_mags_aligned)})
+    return booted

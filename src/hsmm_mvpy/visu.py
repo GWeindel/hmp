@@ -7,10 +7,10 @@ import numpy as np
 from itertools import cycle
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold']
 
-def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_step=1, 
+def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_step=1, ydim=None,
                         figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
                         ylabels=[], max_time = None, vmin=None, vmax=None, title=False, ax=False, 
-                        sensors=True, skip_electrodes_computation=False):
+                        sensors=False, skip_electrodes_computation=False):
     '''
     Plotting the bump topologies at the average time of the end of the previous stage.
     
@@ -68,12 +68,13 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
     if times_to_display is None:
         times_to_display = init.mean_d*time_step
     if 'bump' in estimated:
-        import xarray as xr
         #This is to keep backward compatibility but supplyng externally computed electrodes and times will probably be
         # DEPRECATED
-        if 'condition' in estimated or list(estimated.dims)[0] == 'n_bumps' and not skip_electrodes_computation:
-            extra_dim = list(estimated.dims)[0]#assumes first dim is new
-            electrodes = init.compute_topologies(electrodes, estimated, init.bump_width_samples, extra_dim).data
+        if ydim is None and 'n_bumps' in estimated.dims:
+            if estimated.n_bumps.count() > 1:
+                ydim = 'n_bumps'
+        if ydim is not None and not skip_electrodes_computation:
+            electrodes = init.compute_topologies(electrodes, estimated, init.bump_width_samples, ydim).data
         elif not skip_electrodes_computation:
             electrodes = init.compute_topologies(electrodes, estimated, init.bump_width_samples).data
         electrodes[electrodes == 0] = np.nan
@@ -475,3 +476,14 @@ def plot_latencies(times, bump_width, time_step=1, labels=[], colors=default_col
         axs.legend()
     return axs
 
+def plot_iterations(iterations, eeg_data, init, positions, dims):
+    from hsmm_mvpy.models import hsmm
+    for iteration in iterations.iteration[:-1]:
+        selected = init.fit_single(iterations.sel(iteration=iteration)[dims[0]].dropna(dim='bump').bump[-1].values+1,\
+            magnitudes = iterations.sel(iteration=iteration)[dims[0]].dropna(dim='bump'),\
+            parameters = iterations.sel(iteration=iteration)[dims[1]].dropna(dim='stage'),\
+            threshold=0, verbose=False)
+
+        #Visualizing
+        plot_topo_timecourse(eeg_data, selected, positions,  init, magnify=1, sensors=False)
+    
