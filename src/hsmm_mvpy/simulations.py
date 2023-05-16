@@ -137,9 +137,7 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
             #Fake source, actually stimulus onset
             selected_label = mne.read_labels_from_annot(
                     subject, regexp=sources_subj[0][0], subjects_dir=subjects_dir, verbose=verbose)[0]
-            label = mne.label.select_sources(
-                    subject, selected_label, location='center', extent=10,# Extent in mm of the region.
-                    subjects_dir=subjects_dir)
+            label = mne.label.select_sources(subject, selected_label, subjects_dir=subjects_dir)
             source_time_series = np.array([1e-99])#stim trigger
             source_simulator.add_data(label, source_time_series, events)
             source_simulator.add_data(label, source_time_series, events)
@@ -150,9 +148,8 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
             for source in sources_subj:
                 selected_label = mne.read_labels_from_annot(
                     subject, regexp=source[0], subjects_dir=subjects_dir, verbose=verbose)[0]
-                label = mne.label.select_sources(
-                    subject, selected_label, location='center', extent=10,# Extent in mm of the region.
-                    subjects_dir=subjects_dir)
+                label = mne.label.select_sources(subject, selected_label, subjects_dir=subjects_dir, location='random', extent=1)
+                #last two parameters ensure sources that are different enough
 
                 # Define the time course of the activity for each source of the region to
                 # activate
