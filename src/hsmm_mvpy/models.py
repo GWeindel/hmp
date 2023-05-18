@@ -258,10 +258,10 @@ class hsmm:
         '''
         Expectation maximization function underlying fit
         ''' 
-        null_stages = np.where(parameters[:,1]*self.shape<(self.min_duration/self.shape))[0]
+        null_stages = np.where(parameters[:,1]<0)[0]
         wrong_shape = np.where(parameters[:,0]!=self.shape)[0]
         if len(null_stages)>0:
-            raise ValueError(f'Wrong scale parameter input, provided scale parameter(s) {null_stages} should be higher than minimum duration of {self.min_duration} but have value {parameters[null_stages,:].prod(axis=1)}')
+            raise ValueError(f'Wrong scale parameter input, provided scale parameter(s) {null_stages} should be positive but have value {parameters[null_stages,:].prod(axis=1)}')
         if len(wrong_shape)>0:
             raise ValueError(f'Wrong shape parameter input, provided parameter(s) {wrong_shape} shape is {parameters[wrong_shape,0]} but expected  expected {self.shape}')
         initial_parameters =  np.copy(parameters)
@@ -343,8 +343,10 @@ class hsmm:
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage parameters
         for stage in range(n_stages):
-            if stage < n_stages-1:
+            if n_stages-1 > stage > 0:
                 location = self.min_duration
+            elif stage == 0:
+                location = 1
             else:
                 location = 0
             pmf[:,stage] = self.gamma_EEG(parameters[stage,0], parameters[stage,1], location)
@@ -368,8 +370,6 @@ class hsmm:
                     # same but backwards
                     backward[:,trial,bump] = self.convolution(add_b[:,trial], pmf_b[:, bump])[:self.max_d]
                 forward[:,:,bump] = forward[:,:,bump]*probs[:,:,bump]
-                # print(forward[:self.min_duration+10, 0, 0])
-                # print(backward[:self.min_duration+10, -1, -1])
             #re-arranging backward to the expected variable
             backward = backward[:,:,::-1]#undoes stage inversion
             for trial in np.arange(self.n_trials):#Undoes sample inversion
@@ -412,13 +412,8 @@ class hsmm:
         p : ndarray
             probabilties for a gamma with given parameters, normalized to 1
         '''
-        # print(location)
-        p = sp_gamma.cdf(np.arange(self.max_d), a, scale=scale, loc=location)
-        # print(p[:self.min_duration+1])
+        p = sp_gamma.cdf(np.arange(self.max_d)-location, a, scale=scale)
         p = np.diff(p, prepend=0)#going to pmf
-        # p = np.concatenate([np.zeros(location),np.diff(p,prepend=0)[location-2:]])
-        # p = 
-        # print(p[:self.min_duration+1])#going to pmf
         return p
     
     def gamma_parameters(self, eventprobs, n_bumps):
@@ -441,12 +436,14 @@ class hsmm:
         params : ndarray
             shape and scale for the gamma distributions
         '''
-        averagepos = np.arange(self.max_d)@eventprobs.mean(axis=1)
+        averagepos = np.arange(1,self.max_d+1)@eventprobs.mean(axis=1)+self.min_duration
+        #Scale parameter for stages after a bump (excluding first one) need to be corrected for the\
+        #location parameter, i.e. the minimum stage duration declared
         params = np.zeros((n_bumps+1,2), dtype=np.float64)
         params[:,0] = self.shape
-        params[:-1,1] = np.diff(averagepos, prepend=0)
-        params[-1,1] = self.mean_d-averagepos[-1]
-        # params[:,1] += self.min_duration
+        params[:-1,1] = np.diff(averagepos, prepend=self.min_duration+1)#accounts for location
+        # params[:-1,1] -= 1
+        params[-1,1] = self.mean_d-averagepos[-1]+self.min_duration-1
         params[:,1] = params[:,1]/params[:,0]
         return params
     
@@ -891,95 +888,62 @@ class hsmm:
         '''
         '''
         if end is None:
-            end = int(self.mean_d)
+            end = self.mean_d
         if threshold is None:
             threshold = stdev/np.sqrt(self.n_trials)*self.n_dims
             print(threshold)
-        # else:
-        #     print(f'Using {threshold} as threshold for event separation') 
         n_points = int(end//step)
         end = step*(n_points)#Rounding up to step size  
-        lkh = np.repeat(-np.inf, n_points+1)
-        pars, mags = np.zeros((n_points-1,2)),np.zeros((n_points-1, self.n_dims))
-        new_pars, new_mags = pars.copy(), mags.copy()
+        lkh = -np.inf
+        pars = np.zeros((n_points-1,2))
+        pars[:,0] = self.shape
+        mags = np.zeros((n_points-1, self.n_dims))
         pbar = tqdm(total = end)
-        n_bumps, i, j, time = 1,0,0,0
+        n_bumps, i, j, time = 0,0,1,0
+        pars_prop = pars[:n_bumps+2]
         #Adding an initial bump as threshold might miss the difference with 0
-        pars[:n_bumps] = np.array([self.shape, (self.min_duration)/self.shape])
         if trace:
             all_pars, all_mags, all_mags_prop, all_pars_prop, all_diffs = [],[],[],[],[]
-        previous_bump = np.zeros(self.n_dims)
-        while time < end-self.min_duration*2:
-            prev_time = time
-            if j == 0:
-                # print(pars[:n_bumps])
-                # print(mags[:n_bumps])
-                # print((np.round(pars[:n_bumps].prod(axis=1).sum())))
-                next_pars = self.grid_search(2, verbose=False, start_time=\
-                    (np.round(pars[:n_bumps].prod(axis=1).sum())), step=step, end_time=end)#next steps in parameter space
-                next_mags = np.zeros(self.n_dims)#reinitialisze mags
-            if j < len(next_pars):
-                pars_prop = np.concatenate([pars[:n_bumps], next_pars[j]])
-                mags_prop = np.concatenate([mags[:n_bumps], [next_mags]])
-                # print(mags_prop)
-                # print(pars_prop[:n_bumps+2].prod(axis=1).cumsum())
-                # print(pars_prop)
-
-                # next_pars[j, 1, 1] = end/self.shape-np.sum(pars_prop[:n_bumps+1, 1])
-                lkh[i], new_mags[:n_bumps+1], new_pars[:n_bumps+2], _ = \
-                    self.EM(n_bumps+1, mags_prop, pars_prop, 1, [], [])
-                # print(new_pars[:n_bumps+2].prod(axis=1).cumsum())
-                
-                diffs = mags[n_bumps-1]  -  new_mags[n_bumps]
-                if trace:
-                    all_mags_prop.append(mags_prop.copy())
-                    all_pars_prop.append(pars_prop.copy())
-                    all_mags.append(new_mags[:n_bumps+1].copy())
-                    all_pars.append(new_pars[:n_bumps+2].copy())
-                    all_diffs.append(diffs)
-                # print(diffs)
-                if np.any(np.abs(diffs)  > threshold):#valid iteration
-                    # print(new_mags[n_bumps])
-                    # print(f'Times = {np.round(pars[:n_bumps].prod(axis=1).cumsum())}')
-
-                    time = new_pars[:n_bumps+1].prod(axis=1).sum()+j*step
-                    if time < end-step*2-self.min_duration:
-                        j = 0
-                        n_bumps += 1
-                        # print(pars[:n_bumps+1])
-                        pars[:n_bumps], mags[:n_bumps] = new_pars[:n_bumps].copy(), new_mags[:n_bumps].copy()
-                        # print(pars[:n_bumps])
-                        if verbose:
-                            print(f'Transition event {n_bumps} found around sample {int(np.round(np.sum(pars[:n_bumps,:].prod(axis=1))))} (step {i}): Transition event samples = {np.round(pars[:n_bumps].prod(axis=1).cumsum())}')
-                    else:
-                        j += 1
-                    # print(f'Times = {np.round(pars[:n_bumps].prod(axis=1).cumsum())}')
-
-                else:
-                    # if np.all(np.any(new_mags[n_bumps] > threshold)) :
-                    pars[:n_bumps,:] = new_pars[:n_bumps,:]
-                    mags[:n_bumps] = new_mags[:n_bumps]
-                    next_mags = new_mags[n_bumps]
-                    # else:
-                    #     next_mags = np.zeros(self.n_dims)#reinitialisze mags
-                    j += 1
-
-                i += 1
-                time = pars[:n_bumps].prod(axis=1).sum()+j*step
-                pbar.update(int(np.round(time-prev_time)))
-            else:
+        while end-time >= self.min_duration:
+            prev_n_bumps, prev_lkh, prev_time = n_bumps, lkh, time
+            pars_prop = pars[:n_bumps+2]
+            pars_prop[n_bumps,1] = step*j/self.shape
+            pars_prop[n_bumps+1,1] = end/self.shape - np.sum(pars_prop[:n_bumps+1,1])
+            time = np.sum(pars_prop[:n_bumps+1,1])*self.shape
+            null_stages = np.where(pars_prop[:,1]<0)[0]
+            if len(null_stages) > 0:
+                warn('One stage is negative, stopping the transition search', RuntimeWarning)
+                pars_prop[null_stages,1] = 1/self.shape
                 break
-        pbar.update(int(np.round(end-time)))
+            lkh, mags[:n_bumps+1], pars[:n_bumps+2], _ = \
+                self.EM(n_bumps+1, mags[:n_bumps+1], pars_prop, 1, [], [])
+            diffs = np.diff(mags[:n_bumps+1], axis=0, prepend=0)
+            if trace:
+                all_mags_prop.append(mags[:n_bumps+1].copy())
+                all_pars_prop.append(pars_prop.copy())
+                all_mags.append(mags[:n_bumps+1].copy())
+                all_pars.append(pars[:n_bumps+2].copy())
+                all_diffs.append(diffs)
+            if np.all(np.any(np.abs(diffs) > threshold, axis=1)):
+                n_bumps += 1
+                j = 0
+                if verbose:
+                    print(f'Transition event {n_bumps} found around sample {int(np.round(np.sum(pars[:n_bumps,:].prod(axis=1))))} (step {i}): Transition event samples = {np.round(pars[:n_bumps].prod(axis=1).cumsum())}')
+            # if prev_lkh > lkh :
+            #     pars[:n_bumps+1] = pars_prop[:n_bumps+1]
+            j += 1
+            pbar.update(int(np.round(time-prev_time)))
+        pbar.update(int(np.round(end-prev_time)+self.min_duration))
         mags = mags[:n_bumps, :]
         pars = pars[:n_bumps+1, :]
         pars[-1, :] = np.concatenate([[self.shape], [self.mean_d/self.shape-np.sum(pars[:-1, 1])]])
         fit = self.fit_single(len(pars)-1, parameters=pars, magnitudes=mags, verbose=verbose)
         if trace:
-            all_pars_aligned = np.tile(np.nan, (i+1, np.max([len(x) for x in all_pars]), 2))
-            all_pars_prop_aligned = np.tile(np.nan, (i+1, np.max([len(x) for x in all_pars_prop]), 2))
-            all_mags_aligned = np.tile(np.nan, (i+1, np.max([len(x) for x in all_mags]), self.n_dims))
-            all_mags_prop_aligned = np.tile(np.nan, (i+1, np.max([len(x) for x in all_mags_prop]), self.n_dims))
-            all_diffs_aligned = np.tile(np.nan, (i+1, self.n_dims))
+            all_pars_aligned = np.tile(np.nan, (len(all_pars)+1, np.max([len(x) for x in all_pars]), 2))
+            all_pars_prop_aligned = np.tile(np.nan, (len(all_pars_prop)+1, np.max([len(x) for x in all_pars_prop]), 2))
+            all_mags_aligned = np.tile(np.nan, (len(all_mags)+1, np.max([len(x) for x in all_mags]), self.n_dims))
+            all_mags_prop_aligned = np.tile(np.nan, (len(all_mags_prop)+1, np.max([len(x) for x in all_mags_prop]), self.n_dims))
+            all_diffs_aligned = np.tile(np.nan, (len(all_diffs)+1, self.n_dims))
             for iteration, _i in enumerate(zip(all_pars, all_mags, all_mags_prop, all_pars_prop, all_diffs)):
                 all_pars_aligned[iteration, :len(_i[0]), :] = _i[0]
                 all_mags_aligned[iteration, :len(_i[1]), :] = _i[1]

@@ -7,6 +7,8 @@ import os
 import numpy as np
 import mne
 from mne.datasets import sample
+from warnings import warn
+
 
 def available_sources():
     '''
@@ -120,7 +122,8 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
         else: subj_file = file + f'_{subj}_raw.fif'
         if subj_file in os.listdir(path) and not overwrite:
             subj_file = path+subj_file
-            print(f'{subj_file} exists no new simulation performed')
+            warn(f'{subj_file} exists no new simulation performed', UserWarning)
+            print()
             files_subj.append(subj_file)
             files_subj.append(subj_file.split('.fif')[0]+'_generating_events.npy')
             files.append(files_subj)
@@ -154,10 +157,12 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
                 # Define the time course of the activity for each source of the region to
                 # activate
                 bump_duration = int(((1/source[1])/2)*info['sfreq'])
-                source_time_series = bump_shape(((1000/source[1])/2),bump_duration,1000/info['sfreq'])* source[2]
+                source_time_series = bump_shape(((1000/source[1])/2),bump_duration,1000/info['sfreq'])*source[2]
                 #adding source event
                 events = events.copy()
-                rand_i = np.round(source[-1].rvs(size=n_trials)/(tstep*1000),decimals=0)+1#+1 as bump is next sample after stage
+                rand_i = np.round(source[-1].rvs(size=n_trials)/(tstep*1000),decimals=0)
+                if 0 in rand_i:
+                    warn("0 stage duration found, if using a gamma distribution consider adding a location parameter to avoid this case", UserWarning)
                 random_source_times.append(rand_i) #varying event 
                 events[:, 0] = events[:,0] + random_source_times[-1] # Events sample.
                 events[:, 2] = trigger  # All events have the sample id.
