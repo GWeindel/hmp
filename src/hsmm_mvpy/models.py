@@ -60,6 +60,7 @@ class hsmm:
         self.starts = starts
         self.ends = ends
         self.durations =  self.ends-self.starts+1
+        self.max_bumps = self.compute_max_bumps()
         if durations.trial_x_participant.count() > 1:
             self.named_durations =  durations.dropna("trial_x_participant") - durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
             self.coords = durations.reset_index('trial_x_participant').coords
@@ -278,15 +279,22 @@ class hsmm:
             parameters_prev = initial_parameters
             eventprobs_prev = eventprobs
         else:
-            lkh_prev = -np.inf
             for bump in range(n_bumps):
                 for comp in range(self.n_dims):
                     magnitudes[bump,comp] = np.mean(np.sum( \
                         eventprobs[:,:,bump]*means[:,:,comp], axis=0))
             parameters = self.gamma_parameters(eventprobs, n_bumps)
-            magnitudes_prev = magnitudes.copy()
-            parameters_prev = parameters.copy()
-            eventprobs_prev = eventprobs.copy()
+            null_stages = np.where(parameters[:,1]<0)[0]
+            if len(null_stages) == 0: 
+                lkh_prev = -np.inf
+                magnitudes_prev = magnitudes.copy()
+                parameters_prev = parameters.copy()
+                eventprobs_prev = eventprobs.copy()
+            else:#Corner case in simulations
+                lkh_prev = lkh
+                magnitudes_prev = initial_magnitudes
+                parameters_prev = initial_parameters
+                eventprobs_prev = eventprobs
         i = 0
         while lkh - lkh_prev > threshold and i < max_iteration:#Expectation-Maximization algorithm
             #As long as new run gives better likelihood, go on  
@@ -306,9 +314,14 @@ class hsmm:
             magnitudes[magnitudes_to_fix,:] = initial_magnitudes[magnitudes_to_fix,:].copy()
             #Parameters from Expectation
             parameters = self.gamma_parameters(eventprobs, n_bumps)
+            # null_stages = np.where(parameters[:,1]<0)[0]
+            # parameters[null_stages, :] = 1/self.shape
             parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
             lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_bumps)
             i += 1
+        null_probs = np.where(eventprobs_prev<0)[0]
+        if len(null_probs)>0:
+            warn('Negative probabilities found after estimation, this likely refers to several events overlapping events. In case of simulated data ensure that bumps are enoughly separated (i.e. location parameter). In the case of real data this error is not expected, please report to the maintainers')
         if i == max_iteration:
             warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
         return lkh_prev, magnitudes_prev, parameters_prev, eventprobs_prev
@@ -328,7 +341,7 @@ class hsmm:
         for i in range(self.n_dims):
             # computes the gains, i.e. how much the congruence between the pattern shape
             # and the data given the magnitudes of the sensors
-            gains = gains + self.bumps[:,i][np.newaxis].T * magnitudes[:,i]
+            gains = gains + self.bumps[:,i][np.newaxis].T * magnitudes[:,i] - (magnitudes[:,i]**2)/2
         gains = np.exp(gains)
         probs = np.zeros([self.max_d,self.n_trials,n_bumps], dtype=np.float64) # prob per trial
         probs_b = np.zeros([self.max_d,self.n_trials,n_bumps], dtype=np.float64)# Sample and state reversed
@@ -375,6 +388,10 @@ class hsmm:
             for trial in np.arange(self.n_trials):#Undoes sample inversion
                 backward[:self.durations[trial],trial,:] = \
                     backward[:self.durations[trial],trial,:][::-1]
+            # null_probs = np.where(forward<0)[0]
+            # forward[null_probs] = 0
+            # null_probs = np.where(backward<0)[0]
+            # backward[null_probs] = 0
             eventprobs = forward * backward
             likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
             eventprobs = eventprobs / eventprobs.sum(axis=0)
@@ -391,7 +408,10 @@ class hsmm:
                     backward[:self.durations[trial],trial][::-1]
             eventprobs = forward * backward
             likelihood = np.sum(np.log(eventprobs[:,:].sum(axis=0)))#sum over max_samples to avoid 0s in log
-            eventprobs = eventprobs / eventprobs.sum(axis=0)
+            for trial in np.arange(self.n_trials):#Undoes sample inversion
+                backward[:self.durations[trial],trial] = \
+                    backward[:self.durations[trial],trial][::-1]
+                eventprobs[:,trial,:] = eventprobs[:,trial,:] / eventprobs[:,trial,:].sum(axis=0)
         if lkh_only:
             return likelihood
         else:
@@ -442,7 +462,6 @@ class hsmm:
         params = np.zeros((n_bumps+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:-1,1] = np.diff(averagepos, prepend=self.min_duration+1)#accounts for location
-        # params[:-1,1] -= 1
         params[-1,1] = self.mean_d-averagepos[-1]+self.min_duration-1
         params[:,1] = params[:,1]/params[:,0]
         return params
@@ -590,7 +609,7 @@ class hsmm:
         '''
         Compute the maximum possible number of bumps given bump width and mean or minimum reaction time
         '''
-        return int(np.min(self.durations)//(self.min_duration+1))
+        return int(np.min(self.durations)//(self.min_duration+1))-1
 
     def bump_times(self, eventprobs, mean=True):
         '''
@@ -889,10 +908,10 @@ class hsmm:
         '''
         if end is None:
             end = self.mean_d
-        if threshold is None:
-            threshold = stdev/np.sqrt(self.n_trials)*self.n_dims
-            print(threshold)
         n_points = int(end//step)
+        if threshold is None:
+            threshold = (stdev/np.sqrt(self.n_trials))
+            print(threshold)
         end = step*(n_points)#Rounding up to step size  
         lkh = -np.inf
         pars = np.zeros((n_points-1,2))
@@ -904,7 +923,7 @@ class hsmm:
         #Adding an initial bump as threshold might miss the difference with 0
         if trace:
             all_pars, all_mags, all_mags_prop, all_pars_prop, all_diffs = [],[],[],[],[]
-        while end-time >= self.min_duration:
+        while end-time >= self.min_duration:# and n_bumps <= self.max_bumps:
             prev_n_bumps, prev_lkh, prev_time = n_bumps, lkh, time
             pars_prop = pars[:n_bumps+2]
             pars_prop[n_bumps,1] = step*j/self.shape
@@ -929,8 +948,8 @@ class hsmm:
                 j = 0
                 if verbose:
                     print(f'Transition event {n_bumps} found around sample {int(np.round(np.sum(pars[:n_bumps,:].prod(axis=1))))} (step {i}): Transition event samples = {np.round(pars[:n_bumps].prod(axis=1).cumsum())}')
-            # if prev_lkh > lkh :
-            #     pars[:n_bumps+1] = pars_prop[:n_bumps+1]
+            if prev_lkh > lkh :
+                pars[:n_bumps+1] = pars_prop[:n_bumps+1]
             j += 1
             pbar.update(int(np.round(time-prev_time)))
         pbar.update(int(np.round(end-prev_time)+self.min_duration))
@@ -943,13 +962,13 @@ class hsmm:
             all_pars_prop_aligned = np.tile(np.nan, (len(all_pars_prop)+1, np.max([len(x) for x in all_pars_prop]), 2))
             all_mags_aligned = np.tile(np.nan, (len(all_mags)+1, np.max([len(x) for x in all_mags]), self.n_dims))
             all_mags_prop_aligned = np.tile(np.nan, (len(all_mags_prop)+1, np.max([len(x) for x in all_mags_prop]), self.n_dims))
-            all_diffs_aligned = np.tile(np.nan, (len(all_diffs)+1, self.n_dims))
+            all_diffs_aligned = np.tile(np.nan, (len(all_diffs)+1, np.max([len(x) for x in all_diffs]), self.n_dims))
             for iteration, _i in enumerate(zip(all_pars, all_mags, all_mags_prop, all_pars_prop, all_diffs)):
                 all_pars_aligned[iteration, :len(_i[0]), :] = _i[0]
                 all_mags_aligned[iteration, :len(_i[1]), :] = _i[1]
                 all_mags_prop_aligned[iteration, :len(_i[2]), :] = _i[2]
                 all_pars_prop_aligned[iteration, :len(_i[3]), :] = _i[3]
-                all_diffs_aligned[iteration, :] = _i[4]
+                all_diffs_aligned[iteration, :len(_i[4]), :] = _i[4]
             traces = xr.Dataset({'parameters_accepted': (('iteration', 'stage','parameter'), 
                                          all_pars_aligned),
                                 'magnitudes_accepted': (('iteration', 'bump','component'), 
@@ -958,7 +977,7 @@ class hsmm:
                                          all_pars_prop_aligned),
                                 'magnitudes_proposed': (('iteration', 'bump', 'component'), 
                                          all_mags_prop_aligned),
-                                'difference_magnitudes':(('iteration', 'component'), 
+                                'difference_magnitudes':(('iteration','bump', 'component'), 
                                          all_diffs_aligned)})
             return fit, traces
         else:
