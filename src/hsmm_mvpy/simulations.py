@@ -50,7 +50,7 @@ def bump_shape(bump_width, bump_width_samples, steps):
     return template
 
 
-def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=False, verbose=False, noise=True): 
+def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None): 
     '''
     Simulates EEG n_trials using MNE's tools based on the specified sources
     
@@ -91,8 +91,11 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
     #Infer max duration of a trial from the specified sources
     percentiles = np.empty(len(sources[0]))
     for source in range(len(sources[0])):
-        stage_dur_fun = sources[0][source][-1]
-        percentiles[source] = np.percentile(stage_dur_fun.rvs(size=n_trials), q=99)
+        if times is None:
+            stage_dur_fun = sources[0][source][-1]
+            percentiles[source] = np.percentile(stage_dur_fun.rvs(size=n_trials), q=99)
+        else:
+            percentiles[source] = np.max(times[:,source])
     max_trial_length = np.sum(percentiles)+1000
     # Following code and comments largely comes from MNE examples (e.g. \
     # https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html)
@@ -160,7 +163,10 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
                 source_time_series = bump_shape(((1000/source[1])/2),bump_duration,1000/info['sfreq'])*source[2]
                 #adding source event
                 events = events.copy()
-                rand_i = np.round(source[-1].rvs(size=n_trials)/(tstep*1000),decimals=0)
+                if times is None:
+                    rand_i = np.round(source[-1].rvs(size=n_trials)/(tstep*1000),decimals=0)
+                else:
+                    rand_i = times[:,trigger-2]
                 if 0 in rand_i:
                     warn("0 stage duration found, adding a location parameter to avoid this case", UserWarning)
                 random_source_times.append(rand_i) #varying event 
