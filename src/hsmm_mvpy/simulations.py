@@ -50,7 +50,7 @@ def bump_shape(bump_width, bump_width_samples, steps):
     return template
 
 
-def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=False, verbose=False): 
+def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=False, verbose=False, noise=True): 
     '''
     Simulates EEG n_trials using MNE's tools based on the specified sources
     
@@ -104,6 +104,8 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
     # First, we get an info structure from the test subject.
     evoked_fname = op.join(data_path, 'MEG', subject, 'sample_audvis-ave.fif')
     info = mne.io.read_info(evoked_fname, verbose=verbose)
+    eeg_indices = mne.pick_types(info, meg=False, eeg=True)
+    info = mne.pick_info(info, eeg_indices)
     tstep = 1. / info['sfreq']
     # To simulate sources, we also need a source space. It can be obtained from the
     # forward solution of the sample subject.
@@ -123,7 +125,6 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
         if subj_file in os.listdir(path) and not overwrite:
             subj_file = path+subj_file
             warn(f'{subj_file} exists no new simulation performed', UserWarning)
-            print()
             files_subj.append(subj_file)
             files_subj.append(subj_file.split('.fif')[0]+'_generating_events.npy')
             files.append(files_subj)
@@ -153,7 +154,6 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
                     subject, regexp=source[0], subjects_dir=subjects_dir, verbose=verbose)[0]
                 label = mne.label.select_sources(subject, selected_label, subjects_dir=subjects_dir, location='random', extent=1)
                 #last two parameters ensure sources that are different enough
-
                 # Define the time course of the activity for each source of the region to
                 # activate
                 bump_duration = int(((1/source[1])/2)*info['sfreq'])
@@ -162,7 +162,7 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
                 events = events.copy()
                 rand_i = np.round(source[-1].rvs(size=n_trials)/(tstep*1000),decimals=0)
                 if 0 in rand_i:
-                    warn("0 stage duration found, if using a gamma distribution consider adding a location parameter to avoid this case", UserWarning)
+                    warn("0 stage duration found, adding a location parameter to avoid this case", UserWarning)
                 random_source_times.append(rand_i) #varying event 
                 events[:, 0] = events[:,0] + random_source_times[-1] # Events sample.
                 events[:, 2] = trigger  # All events have the sample id.
@@ -177,8 +177,9 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
             # simulator can be given directly to the simulate_raw function.
             raw = mne.simulation.simulate_raw(info, source_simulator, forward=fwd, n_jobs=n_jobs,verbose=verbose)
             raw = raw.pick_types(meg=False, eeg=True, stim=True)
-            cov = mne.make_ad_hoc_cov(raw.info, verbose=verbose)
-            mne.simulation.add_noise(raw, cov, iir_filter=[0.2, -0.2, 0.04], verbose=verbose)
+            if noise:
+                cov = mne.make_ad_hoc_cov(raw.info, verbose=verbose)
+                mne.simulation.add_noise(raw, cov, iir_filter=[0.2, -0.2, 0.04], verbose=verbose)
             raw.save(subj_file, overwrite=True)
             files_subj.append(subj_file)
             np.save(subj_file.split('.fif')[0]+'_generating_events.npy', generating_events)
