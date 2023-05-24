@@ -137,7 +137,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq=None, subj_idx=None, events_pr
 
         if sfreq < data.info['sfreq']:#Downsampling
             print(f'Downsampling to {sfreq} Hz')
-            data, events = data.resample(sfreq, events=events)#100 Hz is the standard used for previous applications of HsMM
+            data, events = data.resample(sfreq, events=events)#100 Hz is the standard used for previous applications of HMP
         
         print(f'Creating epochs based on following event ID :{np.unique(events[:,2])}')
             
@@ -193,7 +193,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq=None, subj_idx=None, events_pr
             print(f'RTs > 0 longer than expected ({x})')
         print(f'{len(cropped_data_epoch)} trials were retained for participant {participant}')
         print(f'End sampling frequency is {sfreq} Hz')
-        epoch_data.append(hsmm_data_format(cropped_data_epoch, cropped_trigger, epochs.info['sfreq'], offset_after_resp_samples, epochs=[int(x) for x in epochs_idx], electrodes = epochs.ch_names))
+        epoch_data.append(hmp_data_format(cropped_data_epoch, cropped_trigger, epochs.info['sfreq'], offset_after_resp_samples, epochs=[int(x) for x in epochs_idx], electrodes = epochs.ch_names))
         y += 1
         
     epoch_data = xr.concat(epoch_data, dim = xr.DataArray(subj_idx, dims='participant'),
@@ -287,10 +287,10 @@ def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after
         (data[epoch,:,:rts[epoch]+offset_after_resp_samples])
         j += 1
     print(f'Totaling {len(cropped_data_epoch)} valid trials')
-    data_xr = hsmm_data_format(cropped_data_epoch, conditions, sfreq, offset_after_resp_samples, epochs=epochs, electrodes = electrode_columns)
+    data_xr = hmp_data_format(cropped_data_epoch, conditions, sfreq, offset_after_resp_samples, epochs=epochs, electrodes = electrode_columns)
     return data_xr
 
-def hsmm_data_format(data, events, sfreq, offset=0, participants=[], epochs=None, electrodes=None):
+def hmp_data_format(data, events, sfreq, offset=0, participants=[], epochs=None, electrodes=None):
     '''
     Converting 3D matrix with dimensions (participant) * trials * electrodes * sample into xarray Dataset
     
@@ -404,7 +404,7 @@ def stack_data(data, subjects_variable='participant', electrode_variable='compon
 
 def transform_data(data, subjects_variable="participant", apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, return_weights=False):
     '''
-    Adapts EEG epoched data (in xarray format) to the expected data format for hsmms. 
+    Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
     Second, a spatial PCA on the average variance-covariance matrix is performed (if method='pca', more methods in development)
     Third,stacks the data going from format [participant * epochs * samples * electrodes] to [samples * electrodes]
@@ -496,7 +496,7 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
 
 def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
     '''
-    Performs Leave-one-out cross validation, removes one participant from data, estimate n_bumps HsMM parameters, 
+    Performs Leave-one-out cross validation, removes one participant from data, estimate n_bumps HMP parameters, 
     compute the likelihood of the data from the left out participant with the estimated parameters. The model is fit
     using initial fit as starting points for magnitudes and parameters
     
@@ -524,25 +524,25 @@ def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
         name of the subject to remove
     '''
     # warn('This method is deprecated and will be removed in future version, use loocv() instead', DeprecationWarning, stacklevel=2) 
-    from hsmm_mvpy.models import hsmm
+    from hsmm_mvpy.models import hmp
     #Looping over possible number of bumps
     subjects_idx = data.participant.values
     likelihoods_loo = []
     #Extracting data without left out subject
     stacked_loo = stack_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False))
-    #Fitting the HsMM using previous estimated parameters as initial parameters
-    model_loo = hsmm(stacked_loo, sfreq=sfreq, bump_width=bump_width)
+    #Fitting the HMP using previous estimated parameters as initial parameters
+    model_loo = hmp(stacked_loo, sfreq=sfreq, bump_width=bump_width)
     fit = model_loo.fit_single(n_bumps, initial_fit.magnitudes.dropna('bump').values, initial_fit.parameters, 1, verbose=False)
     #Evaluating likelihood for left out subject
     #Extracting data of left out subject
     stacked_left_out = stack_data(data.sel(participant=subject, drop=False))
-    model_left_out = hsmm(stacked_left_out, sfreq=sfreq, bump_width=bump_width)
+    model_left_out = hmp(stacked_left_out, sfreq=sfreq, bump_width=bump_width)
     likelihood = model_left_out.estim_probs(fit.magnitudes.dropna('bump').values, fit.parameters, n_bumps,True)
     return likelihood, subject
 
 def loocv_estimation(data, subject, sfreq, bump_width):
     '''
-    Performs Leave-one-out cross validation, removes one participant from data, estimate n_bumps HsMM parameters, 
+    Performs Leave-one-out cross validation, removes one participant from data, estimate n_bumps HMP parameters, 
     compute the likelihood of the data from the left out participant with the estimated parameters. The model is fit
     using initial fit as starting points for magnitudes and parameters
     
@@ -566,20 +566,20 @@ def loocv_estimation(data, subject, sfreq, bump_width):
         name of the subject to remove
     '''    
     print(f'Leaving out participant #{subject}')
-    from hsmm_mvpy.models import hsmm
+    from hsmm_mvpy.models import hmp
     #Looping over possible number of bumps
     subjects_idx = data.participant.values
     likelihoods_loo = []
     #Extracting data without left out subject
     stacked_loo = stack_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False))
-    #Fitting the HsMM using previous estimated parameters as initial parameters
-    model_loo = hsmm(stacked_loo, sfreq=sfreq, bump_width=bump_width, cpus=1)
+    #Fitting the HMP using previous estimated parameters as initial parameters
+    model_loo = hmp(stacked_loo, sfreq=sfreq, bump_width=bump_width, cpus=1)
     parameters, magnitudes, likelihoods = model_loo.sliding_bump(verbose=False)
     estimates = model_loo.iterative_fit(likelihoods=likelihoods, parameters=parameters, magnitudes=magnitudes)
     #Evaluating likelihood for left out subject
     #Extracting data of left out subject
     stacked_left_out = stack_data(data.sel(participant=subject, drop=False))
-    model_left_out = hsmm(stacked_left_out, sfreq=sfreq, bump_width=bump_width, cpus=1)
+    model_left_out = hmp(stacked_left_out, sfreq=sfreq, bump_width=bump_width, cpus=1)
     n_bumps = int(estimates.dropna('n_bumps',how='all').n_bumps.max())
     for n_bump in range(1,n_bumps+1):
         likelihoods_loo.append( model_left_out.calc_EEG_50h(estimates.sel(n_bumps=n_bump).magnitudes.dropna('bump').values, estimates.sel(n_bumps=n_bump).parameters.dropna('stage').values, n_bump, True))
@@ -587,7 +587,7 @@ def loocv_estimation(data, subject, sfreq, bump_width):
 
 def loocv(stacked_data,sfreq, max_bump, cpus=1, bump_width=50):
     '''
-    Performs Leave-one-out cross validation, removes one participant from data, estimate n_bumps HsMM parameters, 
+    Performs Leave-one-out cross validation, removes one participant from data, estimate n_bumps HMP parameters, 
     compute the likelihood of the data from the left out participant with the estimated parameters. The model is fit
     using initial fit as starting points for magnitudes and parameters
     
@@ -640,8 +640,8 @@ def loocv_mp(init, stacked_data, bests, func=LOOCV, cpus=2, verbose=True):
     
     Parameters
     ----------
-    init : hsmm.model
-        initialized hsmm model
+    init : hmp.model
+        initialized hmp model
     data : xarray.Dataset
         xarray data from transform_data() , can also be a subset, e.g. based on conditions
     bests : xarray.Dataset
@@ -750,7 +750,7 @@ def event_times(data, times, electrode, stage):
     Parameters
     ----------
     data : xr.Dataset
-        HsMM EEG data (untransformed but with trial and participant stacked)
+        HMP EEG data (untransformed but with trial and participant stacked)
     times : xr.DataArray
         Onset times as computed using onset_times()
     electrode : str
@@ -779,19 +779,19 @@ def event_times(data, times, electrode, stage):
 
     return brp_data    
     
-def condition_selection(hsmm_data, eeg_data, condition_string):
-    unstacked = hsmm_data.unstack().where(eeg_data.event.str.contains(condition_string),drop=True)
+def condition_selection(hmp_data, eeg_data, condition_string):
+    unstacked = hmp_data.unstack().where(eeg_data.event.str.contains(condition_string),drop=True)
     stacked = stack_data(unstacked)
     return stacked
 
     
-def participant_selection(hsmm_data, eeg_data, participant):
-    unstacked = hsmm_data.unstack().sel(participant = participant)
+def participant_selection(hmp_data, eeg_data, participant):
+    unstacked = hmp_data.unstack().sel(participant = participant)
     stacked = stack_data(unstacked)
     return stacked
 
-def bootstrapping(init, hsmm_data, general_run, positions, eeg_data, iterations, threshold=1, verbose=True, plots=True, cpus=1):
-    from hsmm_mvpy.models import hsmm
+def bootstrapping(init, hmp_data, general_run, positions, eeg_data, iterations, threshold=1, verbose=True, plots=True, cpus=1):
+    from hsmm_mvpy.models import hmp
     from hsmm_mvpy.visu import plot_topo_timecourse
     import xskillscore as xs
     fitted_mags = general_run.magnitudes.values[np.unique(np.where(np.isfinite(general_run.magnitudes))[0]),:]#remove NAs
@@ -799,9 +799,9 @@ def bootstrapping(init, hsmm_data, general_run, positions, eeg_data, iterations,
     pars_boot_mat = np.tile(np.nan, (iterations, init.compute_max_bumps()+1, 2))
 
     for i in range(iterations):
-        bootstapped = xs.resample_iterations(hsmm_data.unstack(), iterations=1, dim='epochs')
-        hsmm_data_boot = stack_data(bootstapped.squeeze())
-        init_boot = hsmm(hsmm_data_boot, sfreq=eeg_data.sfreq, bump_width=50, cpus=15)
+        bootstapped = xs.resample_iterations(hmp_data.unstack(), iterations=1, dim='epochs')
+        hmp_data_boot = stack_data(bootstapped.squeeze())
+        init_boot = hmp(hmp_data_boot, sfreq=eeg_data.sfreq, bump_width=50, cpus=15)
         estimates_boot = init_boot.fit(verbose=verbose, threshold=1)
         mags_boot_mat[i, :len(estimates_boot.magnitudes),:] = estimates_boot.magnitudes
         pars_boot_mat[i, :len(estimates_boot.parameters),:] = estimates_boot.parameters

@@ -18,14 +18,14 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
     ----------
     electrodes : ndarray | xr.Dataarray 
         a 2D or 3D matrix of electrode activity with electrodes and bump as dimension (+ eventually a varying dimension) OR
-        the original EEG data in HsMM format
+        the original EEG data in HMP format
     estimated : ndarray
-        a 1D or 2D matrix of times with bump as dimension OR directly the results from a fitted hsmm 
+        a 1D or 2D matrix of times with bump as dimension OR directly the results from a fitted hmp 
     channel_position : ndarray
         Either a 2D array with dimension electrode and [x,y] storing electrode location in meters or an info object from
         the mne package containning digit. points for electrode location
     init : float
-        initialized HsMM object
+        initialized HMP object
     time_step : float
         What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
         1/sf or 1000/sf where sf is the sampling frequency of the data
@@ -140,7 +140,7 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     Parameters
     ----------
     loocv_estimates : ndarray or xarra.DataArray
-        results from a call to hsmm.utils.loocv()
+        results from a call to hmp.utils.loocv()
     pvals : bool
         Whether to display the pvalue with the associated test
     test : str
@@ -223,7 +223,7 @@ def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=def
         2D or 3D numpy array, Either trials * bumps or conditions * trials * bumps
     bump_width : float
         Display size of the bump in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
-        can provide the bump_width_sample of fitted hsmm (e.g. init.bump_width_sample)
+        can provide the bump_width_sample of fitted hmp (e.g. init.bump_width_sample)
     time_step : float
         What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
         1/sf or 1000/sf where sf is the sampling frequency of the data
@@ -342,10 +342,10 @@ def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[''], colors=
     Parameters
     ----------
     gammas : ndarray
-        instance of hsmm.hsmm.parameters
+        instance of hmp.hmp.parameters
     bump_width : float
         Size of the bump in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
-        can provide the bump_width_sample of fitted hsmm (e.g. init.bump_width_sample)
+        can provide the bump_width_sample of fitted hmp (e.g. init.bump_width_sample)
     time_step : float
         What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
         1/sf or 1000/sf where sf is the sampling frequency of the data
@@ -411,7 +411,7 @@ def plot_latencies(times, bump_width, time_step=1, labels=[], colors=default_col
         2D or 3D numpy array, Either trials * bumps or conditions * trials * bumps
     bump_width : float
         Display size of the bump in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
-        can provide the bump_width_sample of fitted hsmm (e.g. init.bump_width_sample)
+        can provide the bump_width_sample of fitted hmp (e.g. init.bump_width_sample)
     time_step : float
         What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
         1/sf or 1000/sf where sf is the sampling frequency of the data
@@ -477,7 +477,7 @@ def plot_latencies(times, bump_width, time_step=1, labels=[], colors=default_col
     return axs
 
 def plot_iterations(iterations, eeg_data, init, positions, dims):
-    from hsmm_mvpy.models import hsmm
+    from hsmm_mvpy.models import hmp
     for iteration in iterations.iteration[:-1]:
         selected = init.fit_single(iterations.sel(iteration=iteration)[dims[0]].dropna(dim='bump').bump[-1].values+1,\
             magnitudes = iterations.sel(iteration=iteration)[dims[0]].dropna(dim='bump'),\

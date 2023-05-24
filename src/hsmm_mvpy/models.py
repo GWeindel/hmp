@@ -15,12 +15,12 @@ from tqdm.auto import tqdm
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold', 'brown']
 
 
-class hsmm:
+class hmp:
     
-    def __init__(self, data, eeg_data=None, sfreq=None, offset=0, cpus=1, bump_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, min_duration=None):
+    def __init__(self, data, eeg_data=None, sfreq=None, offset=0, cpus=1, bump_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, min_duration=None, distribution='gamma'):
         '''
-        HSMM calculates the probability of data summing over all ways of 
-        placing the n bumps to break the trial into n + 1 flats.
+        HMP calculates the probability of data summing over all ways of 
+        placing the n bumps to break the trial into n + 1 stages.
 
         Parameters
         ----------
@@ -33,6 +33,18 @@ class hsmm:
         min_duration : float
             Minimum stage duration in milliseconds. 
         '''
+        if distribution == 'gamma':
+            from scipy.stats import gamma as sp_dist
+        elif distribution == 'lognormal':
+            from scipy.stats import lognorm as sp_dist
+        elif distribution == 'wald':
+            from scipy.stats import invgauss as sp_dist
+        elif distribution == 'weibull':
+            from scipy.stats import weibull_min as sp_dist
+        else:
+            raise ValueError(f'Unknown Distribution {distribution}')
+        self.cdf = sp_dist.cdf
+            
         if sfreq is None:
             sfreq = eeg_data.sfreq
         if offset is None:
@@ -43,7 +55,7 @@ class hsmm:
         self.bump_width = bump_width
         self.bump_width_samples = int(np.round(self.bump_width / self.steps))
         if min_duration is None:
-            self.min_duration = int(self.bump_width_samples/2)
+            self.min_duration = int(np.round(self.bump_width_samples/2))
         else: self.min_duration =  int(np.round(min_duration / self.steps))
         durations = data.unstack().sel(component=0).swap_dims({'epochs':'trials'})\
             .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
@@ -123,7 +135,7 @@ class hsmm:
     def fit_single(self, n_bumps=None, magnitudes=None, parameters=None, threshold=1, verbose=True,
             starting_points=1, parameters_to_fix=None, magnitudes_to_fix=None, method='random', multiple_n_bumps=None):
         '''
-        Fit HsMM for a single n_bumps model
+        Fit HMP for a single n_bumps model
         Parameters
         ----------
         n_bumps : int
@@ -135,7 +147,7 @@ class hsmm:
             if parameters are fixed, parameters estimated will be the same as the one provided. When providing a list, stage need to be in the same order
             _n_th gamma parameter is  used for the _n_th stage
         threshold : float
-            threshold for the HsMM algorithm, 0 skips HsMM
+            threshold for the HMP algorithm, 0 skips HMP
         '''
         import pandas as pd 
         if verbose:
@@ -283,7 +295,7 @@ class hsmm:
                 for comp in range(self.n_dims):
                     magnitudes[bump,comp] = np.mean(np.sum( \
                         eventprobs[:,:,bump]*means[:,:,comp], axis=0))
-            parameters = self.gamma_parameters(eventprobs, n_bumps)
+            parameters = self.scale_parameters(eventprobs, n_bumps)
             null_stages = np.where(parameters[:,1]<0)[0]
             if len(null_stages) == 0: 
                 lkh_prev = -np.inf
@@ -313,13 +325,11 @@ class hsmm:
 
             magnitudes[magnitudes_to_fix,:] = initial_magnitudes[magnitudes_to_fix,:].copy()
             #Parameters from Expectation
-            parameters = self.gamma_parameters(eventprobs, n_bumps)
-            # null_stages = np.where(parameters[:,1]<0)[0]
-            # parameters[null_stages, :] = 1/self.shape
+            parameters = self.scale_parameters(eventprobs, n_bumps)
             parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
             lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_bumps)
             i += 1
-        null_probs = np.where(eventprobs_prev<0)[0]
+        null_probs = np.where(eventprobs_prev<-1e-10)[0]
         if len(null_probs)>0:
             warn('Negative probabilities found after estimation, this likely refers to several events overlapping events. In case of simulated data ensure that bumps are enoughly separated (i.e. location parameter). In the case of real data this error is not expected, please report to the maintainers')
         if i == max_iteration:
@@ -356,13 +366,8 @@ class hsmm:
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage parameters
         for stage in range(n_stages):
-            if n_stages-1 > stage > 0:
-                location = self.min_duration
-            elif stage == 0:
-                location = 1
-            else:
-                location = 0
-            pmf[:,stage] = self.gamma_EEG(parameters[stage,0], parameters[stage,1], location)
+            location = self.min_duration
+            pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1], location)
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
 
         if n_bumps > 0:
@@ -388,12 +393,9 @@ class hsmm:
             for trial in np.arange(self.n_trials):#Undoes sample inversion
                 backward[:self.durations[trial],trial,:] = \
                     backward[:self.durations[trial],trial,:][::-1]
-            # null_probs = np.where(forward<0)[0]
-            # forward[null_probs] = 0
-            # null_probs = np.where(backward<0)[0]
-            # backward[null_probs] = 0
             eventprobs = forward * backward
-            likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
+            eventprobs[eventprobs < 1e-10] = 0 #floating point precision error
+            likelihood = np.sum(np.log(eventprobs.sum(axis=0)))#sum over max_samples to avoid 0s in log
             eventprobs = eventprobs / eventprobs.sum(axis=0)
             #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
         else:
@@ -408,18 +410,16 @@ class hsmm:
                     backward[:self.durations[trial],trial][::-1]
             eventprobs = forward * backward
             likelihood = np.sum(np.log(eventprobs[:,:].sum(axis=0)))#sum over max_samples to avoid 0s in log
-            for trial in np.arange(self.n_trials):#Undoes sample inversion
-                backward[:self.durations[trial],trial] = \
-                    backward[:self.durations[trial],trial][::-1]
-                eventprobs[:,trial,:] = eventprobs[:,trial,:] / eventprobs[:,trial,:].sum(axis=0)
+            eventprobs = eventprobs / eventprobs.sum(axis=0)
+
         if lkh_only:
             return likelihood
         else:
             return [likelihood, eventprobs]
 
-    def gamma_EEG(self, a, scale, location):
+    def distribution_pmf(self, shape, scale, location):
         '''
-        Returns PMF of gamma dist with shape = a and scale, on a range from 0 to max_length 
+        Returns PMF of gamma or lognormal dist with shape and scale, on a range from 0 to max_length 
         
         Parameters
         ----------
@@ -430,17 +430,20 @@ class hsmm:
         Returns
         -------
         p : ndarray
-            probabilties for a gamma with given parameters, normalized to 1
+            probabilty mass function for a gamma with given parameters
         '''
-        p = sp_gamma.cdf(np.arange(self.max_d)-location, a, scale=scale)
+        if scale == 0:
+            warn('Convergence failed: one stage has been found to be null')
+        p = self.cdf(np.arange(self.max_d), shape, scale=scale, loc=location)
         p = np.diff(p, prepend=0)#going to pmf
+        p[:location+1] = 1e-20#
         return p
     
-    def gamma_parameters(self, eventprobs, n_bumps):
+    def scale_parameters(self, eventprobs, n_bumps):
         '''
         Used for the re-estimation in the EM procdure. The likeliest location of 
-        the bump is computed from eventprobs. The flats are then taken as the 
-        distance between the bumps
+        the bump is computed from eventprobs. The scale parameters are then taken as the average 
+        distance between the bumps corrected for (eventual) location
         Parameters
         ----------
         eventprobs : ndarray
@@ -456,13 +459,12 @@ class hsmm:
         params : ndarray
             shape and scale for the gamma distributions
         '''
-        averagepos = np.arange(1,self.max_d+1)@eventprobs.mean(axis=1)+self.min_duration
-        #Scale parameter for stages after a bump (excluding first one) need to be corrected for the\
-        #location parameter, i.e. the minimum stage duration declared
+        averagepos = np.concatenate([np.arange(self.max_d)@eventprobs.mean(axis=1),
+                                     [self.mean_d]])#Durations
         params = np.zeros((n_bumps+1,2), dtype=np.float64)
         params[:,0] = self.shape
-        params[:-1,1] = np.diff(averagepos, prepend=self.min_duration+1)#accounts for location
-        params[-1,1] = self.mean_d-averagepos[-1]+self.min_duration-1
+        params[:,1] = np.diff(averagepos, prepend=0)
+        params[1:,1] += self.min_duration
         params[:,1] = params[:,1]/params[:,0]
         return params
     
@@ -649,9 +651,9 @@ class hsmm:
         Parameters
         ----------
         estimates :
-            Estimated instance of an hsmm model
+            Estimated instance of an HMP model
         init : 
-            Initialized HsMM object  
+            Initialized HMP object  
         duration : bool
             Whether to compute onset times (False) or stage duration (True)
         fill_value : float | ndarray
@@ -903,7 +905,7 @@ class hsmm:
         eventprobs_sp = np.array([x[3] for x in estimates])
         return lkhs_sp, mags_sp, pars_sp, eventprobs_sp
     
-    def fit(self, step=1, verbose=True, figsize=(12,3), end=None, stdev=None, threshold=1, bwd=False, trace=False):
+    def fit(self, step=1, verbose=True, figsize=(12,3), end=None, stdev=None, threshold=1, trace=False):
         '''
         '''
         if end is None:
@@ -916,47 +918,50 @@ class hsmm:
         lkh = -np.inf
         pars = np.zeros((n_points-1,2))
         pars[:,0] = self.shape
+        pars[0,1] = 0.5#initialize with one bump
         mags = np.zeros((n_points-1, self.n_dims))
         pbar = tqdm(total = end)
-        n_bumps, i, j, time = 0,0,1,0
+        n_bumps, j, time = 1,1,0
         pars_prop = pars[:n_bumps+2]
-        #Adding an initial bump as threshold might miss the difference with 0
         if trace:
             all_pars, all_mags, all_mags_prop, all_pars_prop, all_diffs = [],[],[],[],[]
-        while end-time >= self.min_duration:# and n_bumps <= self.max_bumps:
+        pars_accepted, mags_accepted = pars.copy(), mags.copy()
+        while end-time >= step:
             prev_n_bumps, prev_lkh, prev_time = n_bumps, lkh, time
-            pars_prop = pars[:n_bumps+2]
+            pars_prop = pars_accepted[:n_bumps+2].copy()#cumulative
             pars_prop[n_bumps,1] = step*j/self.shape
             pars_prop[n_bumps+1,1] = end/self.shape - np.sum(pars_prop[:n_bumps+1,1])
-            time = np.sum(pars_prop[:n_bumps+1,1])*self.shape
+            time = np.sum(pars_prop[:n_bumps,1])*self.shape + \
+                self.min_duration*n_bumps + step*j/self.shape
             null_stages = np.where(pars_prop[:,1]<0)[0]
             if len(null_stages) > 0:
                 warn('One stage is negative, stopping the transition search', RuntimeWarning)
                 pars_prop[null_stages,1] = 1/self.shape
                 break
             lkh, mags[:n_bumps+1], pars[:n_bumps+2], _ = \
-                self.EM(n_bumps+1, mags[:n_bumps+1], pars_prop, 1, [], [])
+                self.EM(n_bumps+1, mags_accepted[:n_bumps+1], pars_prop.copy(), 1, [], [])
             diffs = np.diff(mags[:n_bumps+1], axis=0, prepend=0)
+            if np.all(np.any(np.abs(diffs) > threshold, axis=1)):
+                n_bumps += 1
+                end -= self.min_duration
+                pars_accepted = pars[:n_bumps+2].copy()
+                mags_accepted = mags[:n_bumps+2].copy()
+                mags_accepted[n_bumps] =  np.zeros(self.n_dims)
+                j = 0
+                if verbose:
+                    print(f'Transition event {n_bumps} found around sample {int(np.round(np.sum(pars_accepted[:n_bumps,:].prod(axis=1))))}: Transition event samples = {np.round(pars[:n_bumps].prod(axis=1).cumsum())+self.min_duration*np.arange(n_bumps)}')
             if trace:
                 all_mags_prop.append(mags[:n_bumps+1].copy())
                 all_pars_prop.append(pars_prop.copy())
-                all_mags.append(mags[:n_bumps+1].copy())
-                all_pars.append(pars[:n_bumps+2].copy())
+                all_mags.append(mags_accepted[:n_bumps+1].copy())
+                all_pars.append(pars_accepted[:n_bumps+2].copy())
                 all_diffs.append(diffs)
-            if np.all(np.any(np.abs(diffs) > threshold, axis=1)):
-                n_bumps += 1
-                j = 0
-                if verbose:
-                    print(f'Transition event {n_bumps} found around sample {int(np.round(np.sum(pars[:n_bumps,:].prod(axis=1))))} (step {i}): Transition event samples = {np.round(pars[:n_bumps].prod(axis=1).cumsum())}')
-            if prev_lkh > lkh :
-                pars[:n_bumps+1] = pars_prop[:n_bumps+1]
             j += 1
-            pbar.update(int(np.round(time-prev_time)))
-        pbar.update(int(np.round(end-prev_time)+self.min_duration))
-        mags = mags[:n_bumps, :]
-        pars = pars[:n_bumps+1, :]
-        pars[-1, :] = np.concatenate([[self.shape], [self.mean_d/self.shape-np.sum(pars[:-1, 1])]])
-        fit = self.fit_single(len(pars)-1, parameters=pars, magnitudes=mags, verbose=verbose)
+            pbar.update(int(np.round(time-prev_time+1)))
+        pbar.update(int(np.round(end-prev_time)+self.min_duration+step))
+        mags = mags_accepted[:n_bumps, :]
+        pars = pars_accepted[:n_bumps+1, :]
+        fit = self.fit_single(n_bumps, parameters=pars, magnitudes=mags, verbose=verbose)
         if trace:
             all_pars_aligned = np.tile(np.nan, (len(all_pars)+1, np.max([len(x) for x in all_pars]), 2))
             all_pars_prop_aligned = np.tile(np.nan, (len(all_pars_prop)+1, np.max([len(x) for x in all_pars_prop]), 2))
