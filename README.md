@@ -236,13 +236,8 @@ This pattern is assumed to be present in multiple electrodes (**multivariate**).
 ```python
 epoch = 0 #illustrating the first trial
 hmp_data.unstack().sel(component=[0,1,2], epochs=epoch).squeeze().plot.line(hue='component');
-plt.vlines(random_source_times[epoch,:-1].cumsum()-1, -3, 3, 'k')#overlaying the simulated stage transition times
+plt.vlines(random_source_times[epoch,:-1].cumsum()-1, -3, 3, 'k');#overlaying the simulated stage transition times
 ```
-
-
-
-
-    <matplotlib.collections.LineCollection at 0x7f9472bd2e90>
 
 
 
