@@ -247,7 +247,7 @@ plt.vlines(random_source_times[epoch,:-1].cumsum()-1, -3, 3, 'k');#overlaying th
     
 
 
-The by-trial onset of this transition event is assumed to be captured by a gamma distribution (**semi-Markov**)
+The by-trial onset of this transition event is assumed to be captured by a probability distribution (**semi-Markov**), e.g. in this application a gamma with a shape of 2:
 
 
 ```python
