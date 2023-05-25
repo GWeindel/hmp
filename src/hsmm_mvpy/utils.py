@@ -168,7 +168,7 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq=None, subj_idx=None, events_pr
         rts = np.array(rts)
         print(f'Applying reaction time trim to keep RTs between {lower_limit_RT} and {upper_limit_RT} seconds')
         rts[rts > sfreq*upper_limit_RT] = 0 #removes RT above x sec
-        rts[rts < sfreq*lower_limit_RT] = 0 #removes RT below x sec, important as determines max bumps
+        rts[rts < sfreq*lower_limit_RT] = 0 #removes RT below x sec, important as determines max events
         print(f'{len(rts[rts > 0])} RTs kept of {len(stim_events)} clean epochs')
         triggers = epochs.metadata["event_name"].reset_index(drop=True)
         cropped_data_epoch = np.empty([len(rts[rts> 0]), len(epochs.ch_names), max(rts)+offset_after_resp_samples])
@@ -494,9 +494,9 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         return data
     
 
-def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
+def LOOCV(data, subject, n_events, initial_fit, sfreq, event_width=50):
     '''
-    Performs Leave-one-out cross validation, removes one participant from data, estimate n_bumps HMP parameters, 
+    Performs Leave-one-out cross validation, removes one participant from data, estimate n_events HMP parameters, 
     compute the likelihood of the data from the left out participant with the estimated parameters. The model is fit
     using initial fit as starting points for magnitudes and parameters
     
@@ -507,14 +507,14 @@ def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
         xarray data from transform_data() 
     subject : str
         name of the subject to remove
-    n_bumps : int 
-        How many bumps in the model
+    n_events : int 
+        How many events in the model
     initial_fit : xarray.Dataset
-        Fit of the model with the same number of bumps and all participants
+        Fit of the model with the same number of events and all participants
     sfreq : float
         Sampling frequency of the data
-    bump_width : float
-        length of the bumps in milliseconds
+    event_width : float
+        length of the events in milliseconds
     
     Returns
     -------
@@ -525,24 +525,24 @@ def LOOCV(data, subject, n_bumps, initial_fit, sfreq, bump_width=50):
     '''
     # warn('This method is deprecated and will be removed in future version, use loocv() instead', DeprecationWarning, stacklevel=2) 
     from hsmm_mvpy.models import hmp
-    #Looping over possible number of bumps
+    #Looping over possible number of events
     subjects_idx = data.participant.values
     likelihoods_loo = []
     #Extracting data without left out subject
     stacked_loo = stack_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False))
     #Fitting the HMP using previous estimated parameters as initial parameters
-    model_loo = hmp(stacked_loo, sfreq=sfreq, bump_width=bump_width)
-    fit = model_loo.fit_single(n_bumps, initial_fit.magnitudes.dropna('bump').values, initial_fit.parameters, 1, verbose=False)
+    model_loo = hmp(stacked_loo, sfreq=sfreq, event_width=event_width)
+    fit = model_loo.fit_single(n_events, initial_fit.magnitudes.dropna('event').values, initial_fit.parameters, 1, verbose=False)
     #Evaluating likelihood for left out subject
     #Extracting data of left out subject
     stacked_left_out = stack_data(data.sel(participant=subject, drop=False))
-    model_left_out = hmp(stacked_left_out, sfreq=sfreq, bump_width=bump_width)
-    likelihood = model_left_out.estim_probs(fit.magnitudes.dropna('bump').values, fit.parameters, n_bumps,True)
+    model_left_out = hmp(stacked_left_out, sfreq=sfreq, event_width=event_width)
+    likelihood = model_left_out.estim_probs(fit.magnitudes.dropna('event').values, fit.parameters, n_events,True)
     return likelihood, subject
 
-def loocv_estimation(data, subject, sfreq, bump_width):
+def loocv_estimation(data, subject, sfreq, event_width):
     '''
-    Performs Leave-one-out cross validation, removes one participant from data, estimate n_bumps HMP parameters, 
+    Performs Leave-one-out cross validation, removes one participant from data, estimate n_events HMP parameters, 
     compute the likelihood of the data from the left out participant with the estimated parameters. The model is fit
     using initial fit as starting points for magnitudes and parameters
     
@@ -555,8 +555,8 @@ def loocv_estimation(data, subject, sfreq, bump_width):
         name of the subject to remove
     sfreq : float
         Sampling frequency of the data
-    bump_width : float
-        length of the bumps in milliseconds
+    event_width : float
+        length of the events in milliseconds
     
     Returns
     -------
@@ -567,27 +567,27 @@ def loocv_estimation(data, subject, sfreq, bump_width):
     '''    
     print(f'Leaving out participant #{subject}')
     from hsmm_mvpy.models import hmp
-    #Looping over possible number of bumps
+    #Looping over possible number of events
     subjects_idx = data.participant.values
     likelihoods_loo = []
     #Extracting data without left out subject
     stacked_loo = stack_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False))
     #Fitting the HMP using previous estimated parameters as initial parameters
-    model_loo = hmp(stacked_loo, sfreq=sfreq, bump_width=bump_width, cpus=1)
-    parameters, magnitudes, likelihoods = model_loo.sliding_bump(verbose=False)
+    model_loo = hmp(stacked_loo, sfreq=sfreq, event_width=event_width, cpus=1)
+    parameters, magnitudes, likelihoods = model_loo.sliding_event(verbose=False)
     estimates = model_loo.iterative_fit(likelihoods=likelihoods, parameters=parameters, magnitudes=magnitudes)
     #Evaluating likelihood for left out subject
     #Extracting data of left out subject
     stacked_left_out = stack_data(data.sel(participant=subject, drop=False))
-    model_left_out = hmp(stacked_left_out, sfreq=sfreq, bump_width=bump_width, cpus=1)
-    n_bumps = int(estimates.dropna('n_bumps',how='all').n_bumps.max())
-    for n_bump in range(1,n_bumps+1):
-        likelihoods_loo.append( model_left_out.calc_EEG_50h(estimates.sel(n_bumps=n_bump).magnitudes.dropna('bump').values, estimates.sel(n_bumps=n_bump).parameters.dropna('stage').values, n_bump, True))
+    model_left_out = hmp(stacked_left_out, sfreq=sfreq, event_width=event_width, cpus=1)
+    n_events = int(estimates.dropna('n_events',how='all').n_events.max())
+    for n_event in range(1,n_events+1):
+        likelihoods_loo.append( model_left_out.calc_EEG_50h(estimates.sel(n_events=n_event).magnitudes.dropna('event').values, estimates.sel(n_events=n_event).parameters.dropna('stage').values, n_event, True))
     return likelihoods_loo, subject
 
-def loocv(stacked_data,sfreq, max_bump, cpus=1, bump_width=50):
+def loocv(stacked_data,sfreq, max_event, cpus=1, event_width=50):
     '''
-    Performs Leave-one-out cross validation, removes one participant from data, estimate n_bumps HMP parameters, 
+    Performs Leave-one-out cross validation, removes one participant from data, estimate n_events HMP parameters, 
     compute the likelihood of the data from the left out participant with the estimated parameters. The model is fit
     using initial fit as starting points for magnitudes and parameters
     
@@ -597,18 +597,18 @@ def loocv(stacked_data,sfreq, max_bump, cpus=1, bump_width=50):
     data : xarray.Dataset
         xarray data from transform_data() 
     initial_fit : xarray.Dataset
-        Fit of the model with the same number of bumps and all participants
+        Fit of the model with the same number of events and all participants
     sfreq : float
         Sampling frequency of the data
-    bump_width : float
-        length of the bumps in milliseconds
+    event_width : float
+        length of the events in milliseconds
     
     Returns
     -------
     loocv
     '''
     unstacked_data = stacked_data.unstack()
-    #Looping over possible number of bumps
+    #Looping over possible number of events
     participants = unstacked_data.participant.data
     likelihoods_loo = []
     loocv = []
@@ -616,20 +616,20 @@ def loocv(stacked_data,sfreq, max_bump, cpus=1, bump_width=50):
         import multiprocessing
         with multiprocessing.Pool(processes=cpus) as pool:
             loo = pool.starmap(loocv_estimation, 
-                zip(itertools.repeat(unstacked_data), participants, itertools.repeat(sfreq), itertools.repeat(bump_width)))
+                zip(itertools.repeat(unstacked_data), participants, itertools.repeat(sfreq), itertools.repeat(event_width)))
         loocv.append(loo)
     else:
         loo = []
         for participant in participants:
-            loo.append(loocv_estimation(unstacked_data, participant,sfreq, bump_width))
+            loo.append(loocv_estimation(unstacked_data, participant,sfreq, event_width))
         loocv.append(loo)
-    loocv_arr = np.tile(np.nan, (max_bump, len(participants)))
+    loocv_arr = np.tile(np.nan, (max_event, len(participants)))
     par_arr = np.repeat(np.nan, len(participants))
     for idx, values in enumerate(loocv[0]):
         par_arr[idx] = np.array(values[-1])
         values = np.array(values[:-1][0])
         loocv_arr[:len(values), idx] = values 
-    loocv = xr.DataArray(loocv_arr, coords={"n_bump":np.arange(1,max_bump+1),
+    loocv = xr.DataArray(loocv_arr, coords={"n_event":np.arange(1,max_event+1),
                                                            "participants":par_arr}, name="loo_likelihood")
     return loocv
 
@@ -645,7 +645,7 @@ def loocv_mp(init, stacked_data, bests, func=LOOCV, cpus=2, verbose=True):
     data : xarray.Dataset
         xarray data from transform_data() , can also be a subset, e.g. based on conditions
     bests : xarray.Dataset
-        Fit from all possible n bump solution
+        Fit from all possible n event solution
     
     Returns
     -------
@@ -658,16 +658,16 @@ def loocv_mp(init, stacked_data, bests, func=LOOCV, cpus=2, verbose=True):
     participants = unstacked_data.participant.data
     likelihoods_loo = []
     loocv = []
-    for n_bumps in bests.n_bumps.values:
+    for n_events in bests.n_events.values:
         if verbose:
-            print(f'LOOCV for model with {n_bumps} bump(s)')
+            print(f'LOOCV for model with {n_events} event(s)')
         with multiprocessing.Pool(processes=cpus) as pool:
             loo = pool.starmap(func, 
-                zip(itertools.repeat(unstacked_data), participants, itertools.repeat(n_bumps), 
-                    itertools.repeat(bests.sel(n_bumps=n_bumps)), itertools.repeat(init.sfreq)))
+                zip(itertools.repeat(unstacked_data), participants, itertools.repeat(n_events), 
+                    itertools.repeat(bests.sel(n_events=n_events)), itertools.repeat(init.sfreq)))
         loocv.append(loo)
 
-    loocv = xr.DataArray(np.array(loocv)[:,:,0].astype(np.float64), coords={"n_bump":np.arange(1,bests.n_bumps.max().values+1),
+    loocv = xr.DataArray(np.array(loocv)[:,:,0].astype(np.float64), coords={"n_event":np.arange(1,bests.n_events.max().values+1),
                                                            "participants":np.array(loocv)[0,:,1]}, name="loo_likelihood")
     return loocv
 
@@ -678,7 +678,7 @@ def reconstruct(magnitudes, PCs, eigen, means):
     Parameters
     ----------
     magnitudes :  
-        2D or 3D ndarray with [n_components * n_bumps] can also contain several estimations [estimation * n_components * n_bumps]
+        2D or 3D ndarray with [n_components * n_events] can also contain several estimations [estimation * n_components * n_events]
     PCs : 
         2D ndarray with PCA loadings [channels x n_components]
     eigen : 
@@ -689,31 +689,31 @@ def reconstruct(magnitudes, PCs, eigen, means):
     Returns
     -------
     electrodes : ndarray
-        a 2D ndarray with [electrodes * bumps]
+        a 2D ndarray with [electrodes * events]
     '''
     if len(np.shape(magnitudes))==2:
         magnitudes = np.array([magnitudes])
-    n_iter, n_comp, n_bumps = np.shape(magnitudes)
+    n_iter, n_comp, n_events = np.shape(magnitudes)
     list_electrodes = []
     for iteration in np.arange(n_iter): 
         #electrodes = np.array(magnitudes[iteration].T * 
-        electrodes =  np.array(magnitudes[iteration, ].T * np.tile(np.sqrt(eigen[:n_comp]).T, (n_bumps,1))) @ np.array(PCs[:,:n_comp]).T
-        list_electrodes.append(electrodes + np.tile(means,(n_bumps,1)))#add means for each electrode
+        electrodes =  np.array(magnitudes[iteration, ].T * np.tile(np.sqrt(eigen[:n_comp]).T, (n_events,1))) @ np.array(PCs[:,:n_comp]).T
+        list_electrodes.append(electrodes + np.tile(means,(n_events,1)))#add means for each electrode
     return np.array(list_electrodes)
 
 def stage_durations(times):
     '''
-    Returns the stage durations from the bump onset times by substracting each stage to the previous
+    Returns the stage durations from the event onset times by substracting each stage to the previous
     
     Parameters
     ----------
     times : ndarray
-        2D ndarray with [n_trials * n_bumps]
+        2D ndarray with [n_trials * n_events]
     
     Returns
     -------
     times : ndarray
-        2D ndarray with [n_trials * n_bumps]
+        2D ndarray with [n_trials * n_events]
     '''
     times = np.diff(times, axis=1, prepend=0)
     return times
@@ -744,8 +744,8 @@ def save_eventprobs(eventprobs, filename):
 
 def event_times(data, times, electrode, stage):
     '''
-    Event times parses the single trial EEG signal of a given electrode in a given stage, from bump onset to the next one. If requesting the last
-    stage it is defined as the onset of the last bump until the response of the participants.
+    Event times parses the single trial EEG signal of a given electrode in a given stage, from event onset to the next one. If requesting the last
+    stage it is defined as the onset of the last event until the response of the participants.
 
     Parameters
     ----------
@@ -764,11 +764,11 @@ def event_times(data, times, electrode, stage):
         Matrix with trial_x_participant * samples with sample dimension given by the maximum stage duration
     '''
 
-    brp_data = np.tile(np.nan, (len(data.trial_x_participant), int(round(max(times.sel(bump=stage+1).data- times.sel(bump=stage).data)))+1))
+    brp_data = np.tile(np.nan, (len(data.trial_x_participant), int(round(max(times.sel(event=stage+1).data- times.sel(event=stage).data)))+1))
     i=0
     for trial, trial_dat in data.groupby('trial_x_participant'):
-        trial_time = slice(times.sel(bump=stage, trial_x_participant=trial), \
-                                                 times.sel(bump=stage+1, trial_x_participant=trial))
+        trial_time = slice(times.sel(event=stage, trial_x_participant=trial), \
+                                                 times.sel(event=stage+1, trial_x_participant=trial))
         trial_elec = trial_dat.sel(electrodes = electrode, samples=trial_time).squeeze()
         try:
             brp_data[i, :len(trial_elec)] = trial_elec
@@ -795,13 +795,13 @@ def bootstrapping(init, hmp_data, general_run, positions, eeg_data, iterations, 
     from hsmm_mvpy.visu import plot_topo_timecourse
     import xskillscore as xs
     fitted_mags = general_run.magnitudes.values[np.unique(np.where(np.isfinite(general_run.magnitudes))[0]),:]#remove NAs
-    mags_boot_mat = np.tile(np.nan, (iterations, init.compute_max_bumps(), init.n_dims))
-    pars_boot_mat = np.tile(np.nan, (iterations, init.compute_max_bumps()+1, 2))
+    mags_boot_mat = np.tile(np.nan, (iterations, init.compute_max_events(), init.n_dims))
+    pars_boot_mat = np.tile(np.nan, (iterations, init.compute_max_events()+1, 2))
 
     for i in range(iterations):
         bootstapped = xs.resample_iterations(hmp_data.unstack(), iterations=1, dim='epochs')
         hmp_data_boot = stack_data(bootstapped.squeeze())
-        init_boot = hmp(hmp_data_boot, sfreq=eeg_data.sfreq, bump_width=50, cpus=15)
+        init_boot = hmp(hmp_data_boot, sfreq=eeg_data.sfreq, event_width=50, cpus=15)
         estimates_boot = init_boot.fit(verbose=verbose, threshold=1)
         mags_boot_mat[i, :len(estimates_boot.magnitudes),:] = estimates_boot.magnitudes
         pars_boot_mat[i, :len(estimates_boot.parameters),:] = estimates_boot.parameters
@@ -816,6 +816,6 @@ def bootstrapping(init, hmp_data, general_run, positions, eeg_data, iterations, 
 
     booted = xr.Dataset({'parameters': (('iteration', 'stage','parameter'), 
                                  all_pars_aligned),
-                        'magnitudes': (('iteration', 'bump','component'), 
+                        'magnitudes': (('iteration', 'event','component'), 
                                  all_mags_aligned)})
     return booted

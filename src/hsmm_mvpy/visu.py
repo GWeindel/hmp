@@ -12,15 +12,15 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
                         ylabels=[], max_time = None, vmin=None, vmax=None, title=False, ax=False, 
                         sensors=False, skip_electrodes_computation=False):
     '''
-    Plotting the bump topologies at the average time of the end of the previous stage.
+    Plotting the event topologies at the average time of the end of the previous stage.
     
     Parameters
     ----------
     electrodes : ndarray | xr.Dataarray 
-        a 2D or 3D matrix of electrode activity with electrodes and bump as dimension (+ eventually a varying dimension) OR
+        a 2D or 3D matrix of electrode activity with electrodes and event as dimension (+ eventually a varying dimension) OR
         the original EEG data in HMP format
     estimated : ndarray
-        a 1D or 2D matrix of times with bump as dimension OR directly the results from a fitted hmp 
+        a 1D or 2D matrix of times with event as dimension OR directly the results from a fitted hmp 
     channel_position : ndarray
         Either a 2D array with dimension electrode and [x,y] storing electrode location in meters or an info object from
         the mne package containning digit. points for electrode location
@@ -34,8 +34,8 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
     dpi : float
         DPI of the  matplotlib plot
     magnify : float
-        How much should the bumps be enlarged, useful to zoom on topologies, providing any other value than 1 will 
-        however change the displayed size of the bump
+        How much should the events be enlarged, useful to zoom on topologies, providing any other value than 1 will 
+        however change the displayed size of the event
     times_to_display : ndarray
         Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
     cmap : str
@@ -67,16 +67,16 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
     return_ax = True
     if times_to_display is None:
         times_to_display = init.mean_d*time_step
-    if 'bump' in estimated:
+    if 'event' in estimated:
         #This is to keep backward compatibility but supplyng externally computed electrodes and times will probably be
         # DEPRECATED
-        if ydim is None and 'n_bumps' in estimated.dims:
-            if estimated.n_bumps.count() > 1:
-                ydim = 'n_bumps'
+        if ydim is None and 'n_events' in estimated.dims:
+            if estimated.n_events.count() > 1:
+                ydim = 'n_events'
         if ydim is not None and not skip_electrodes_computation:
-            electrodes = init.compute_topologies(electrodes, estimated, init.bump_width_samples, ydim).data
+            electrodes = init.compute_topologies(electrodes, estimated, init.event_width_samples, ydim).data
         elif not skip_electrodes_computation:
-            electrodes = init.compute_topologies(electrodes, estimated, init.bump_width_samples).data
+            electrodes = init.compute_topologies(electrodes, estimated, init.event_width_samples).data
         electrodes[electrodes == 0] = np.nan
         times = init.compute_times(init, estimated, mean=True).data
     else:#assumes times already computed
@@ -89,7 +89,7 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
             figsize = (12, 1*n_iter)
         fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
         return_ax = False
-    bump_size = init.bump_width_samples*time_step*magnify
+    event_size = init.event_width_samples*time_step*magnify
     yoffset =.25*magnify
     axes = []
     if n_iter == 1:
@@ -98,13 +98,13 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
     for iteration in np.arange(n_iter):
         times_iteration = times[iteration]*time_step
         electrodes_ = electrodes[iteration,:,:]
-        n_bump = int(sum(np.isfinite(electrodes_[:,0])))
-        electrodes_ = electrodes_[:n_bump,:]
-        for bump in np.arange(n_bump):
-            # if np.sum(electrodes_[bump,:]) != 0:
-            axes.append(ax.inset_axes([times_iteration[bump],iteration-yoffset,
-                                       (bump_size),yoffset*2], transform=ax.transData))
-            plot_topomap(electrodes_[bump,:], channel_position, axes=axes[-1], show=False,
+        n_event = int(sum(np.isfinite(electrodes_[:,0])))
+        electrodes_ = electrodes_[:n_event,:]
+        for event in np.arange(n_event):
+            # if np.sum(electrodes_[event,:]) != 0:
+            axes.append(ax.inset_axes([times_iteration[event],iteration-yoffset,
+                                       (event_size),yoffset*2], transform=ax.transData))
+            plot_topomap(electrodes_[event,:], channel_position, axes=axes[-1], show=False,
                          cmap=cmap, vlim=(vmin, vmax), sensors=sensors)
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
@@ -133,7 +133,7 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
         plt.show()    
 
 
-def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=False, mean=False):
+def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=False, mean=False):
     '''
     Plotting the LOOCV results
     
@@ -170,7 +170,7 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
         return_ax = False
     else:
         return_ax = True
-    loocv_estimates = loocv_estimates.dropna('n_bump', how='all')
+    loocv_estimates = loocv_estimates.dropna('n_event', how='all')
     if mean:
         alpha = .2#for the indiv plot
         means = np.nanmean(loocv_estimates.data,axis=1)
@@ -180,16 +180,16 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
         alpha=1
     if indiv:
         for loo in loocv_estimates.T:
-            ax[0].plot(np.arange(loocv_estimates.n_bump.max())+1,loo, alpha=alpha)
+            ax[0].plot(np.arange(loocv_estimates.n_event.max())+1,loo, alpha=alpha)
     ax[0].set_ylabel('LOOCV Loglikelihood')
-    ax[0].set_xlabel('Number of bumps')
-    ax[0].set_xticks(ticks=np.arange(1,loocv_estimates.n_bump.max()+1))
+    ax[0].set_xlabel('Number of events')
+    ax[0].set_xticks(ticks=np.arange(1,loocv_estimates.n_event.max()+1))
     total_sub = len(loocv_estimates.participants)
     diffs, diff_bin, labels = [],[],[]
-    for n_bump in np.arange(2,loocv_estimates.n_bump.max()+1):
-        diffs.append(loocv_estimates.sel(n_bump=n_bump).data - loocv_estimates.sel(n_bump=n_bump-1).data)
+    for n_event in np.arange(2,loocv_estimates.n_event.max()+1):
+        diffs.append(loocv_estimates.sel(n_event=n_event).data - loocv_estimates.sel(n_event=n_event-1).data)
         diff_bin.append([1 for x in diffs[-1] if x > 0])
-        labels.append(str(n_bump-1)+'->'+str(n_bump))
+        labels.append(str(n_event-1)+'->'+str(n_event))
         if pvals:
             pvalues = []
             if test == 'sign':
@@ -198,11 +198,11 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
                 pvalues.append((sign_test(diff_tmp[-1])))
             elif test == 't-test':
                 pvalues.append((ttest_1samp(diffs[-1], 0, alternative='greater')))
-            mean = np.nanmean(loocv_estimates.sel(n_bump=n_bump).data)
-            ax[1].text(x=n_bump-2, y=0, s=str(int(np.nansum(diff_bin[-1])))+'/'+str(len(diffs[-1]))+':'+str(np.around(pvalues[-1][-1],3)))
+            mean = np.nanmean(loocv_estimates.sel(n_event=n_event).data)
+            ax[1].text(x=n_event-2, y=0, s=str(int(np.nansum(diff_bin[-1])))+'/'+str(len(diffs[-1]))+':'+str(np.around(pvalues[-1][-1],3)))
     ax[1].plot(diffs,'.-', alpha=.3)
-    ax[1].set_xticks(ticks=np.arange(0,loocv_estimates.n_bump.max()-1), labels=labels)
-    ax[1].hlines(0,0,len(np.arange(2,loocv_estimates.n_bump.max())),color='k')
+    ax[1].set_xticks(ticks=np.arange(0,loocv_estimates.n_event.max()-1), labels=labels)
+    ax[1].hlines(0,0,len(np.arange(2,loocv_estimates.n_event.max())),color='k')
     ax[1].set_ylabel('Change in likelihood')
     ax[1].set_xlabel('')
     if return_ax:
@@ -211,7 +211,7 @@ def plot_LOOCV(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
         plt.tight_layout()
         plt.show()
 
-def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=default_colors,
+def plot_latencies_average(times, event_width, time_step=1, labels=[], colors=default_colors,
     figsize=None, errs='ci', max_time=None, times_to_display=None):
     '''
     REDUNDANT WITH plot_latencies() WILL BE DEPRECATED
@@ -220,10 +220,10 @@ def plot_latencies_average(times, bump_width, time_step=1, labels=[], colors=def
     Parameters
     ----------
     times : ndarray
-        2D or 3D numpy array, Either trials * bumps or conditions * trials * bumps
-    bump_width : float
-        Display size of the bump in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
-        can provide the bump_width_sample of fitted hmp (e.g. init.bump_width_sample)
+        2D or 3D numpy array, Either trials * events or conditions * trials * events
+    event_width : float
+        Display size of the event in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
+        can provide the event_width_sample of fitted hmp (e.g. init.event_width_sample)
     time_step : float
         What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
         1/sf or 1000/sf where sf is the sampling frequency of the data
@@ -292,7 +292,7 @@ def plot_distribution(times, colors=default_colors, xlims=False, figsize=(8, 3),
     Parameters
     ----------
     times : ndarray
-        2D or 3D numpy array, Either trials * bumps or conditions * trials * bumps
+        2D or 3D numpy array, Either trials * events or conditions * trials * events
     colors : ndarray
         array of colors for the different stages
     xlims : tuple | list
@@ -334,7 +334,7 @@ def __display_times(ax, times_to_display, yoffset, time_step, max_time, times):
         ax.set_xlim(-1*time_step, max_time)
     return ax
 
-def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[''], colors=default_colors, 
+def plot_latencies_gamma(gammas, event_width=0, time_step=1, labels=[''], colors=default_colors, 
                          figsize=False, times_to_display=None, max_time=None, kind='bar', legend=False):
     '''
     Plots the average of stage latencies based on the estimated scale parameter of the gamma distributions
@@ -343,9 +343,9 @@ def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[''], colors=
     ----------
     gammas : ndarray
         instance of hmp.hmp.parameters
-    bump_width : float
-        Size of the bump in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
-        can provide the bump_width_sample of fitted hmp (e.g. init.bump_width_sample)
+    event_width : float
+        Size of the event in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
+        can provide the event_width_sample of fitted hmp (e.g. init.event_width_sample)
     time_step : float
         What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
         1/sf or 1000/sf where sf is the sampling frequency of the data
@@ -400,7 +400,7 @@ def plot_latencies_gamma(gammas, bump_width=0, time_step=1, labels=[''], colors=
         axs.legend()
     return axs
 
-def plot_latencies(times, bump_width, time_step=1, labels=[], colors=default_colors,
+def plot_latencies(times, event_width, time_step=1, labels=[], colors=default_colors,
     figsize=False, errs='ci',  max_time=None, times_to_display=None, kind='bar', legend=False):
     '''
     Plots the average of stage latencies with choosen errors bars
@@ -408,10 +408,10 @@ def plot_latencies(times, bump_width, time_step=1, labels=[], colors=default_col
     Parameters
     ----------
     times : ndarray
-        2D or 3D numpy array, Either trials * bumps or conditions * trials * bumps
-    bump_width : float
-        Display size of the bump in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
-        can provide the bump_width_sample of fitted hmp (e.g. init.bump_width_sample)
+        2D or 3D numpy array, Either trials * events or conditions * trials * events
+    event_width : float
+        Display size of the event in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
+        can provide the event_width_sample of fitted hmp (e.g. init.event_width_sample)
     time_step : float
         What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
         1/sf or 1000/sf where sf is the sampling frequency of the data
@@ -479,8 +479,8 @@ def plot_latencies(times, bump_width, time_step=1, labels=[], colors=default_col
 def plot_iterations(iterations, eeg_data, init, positions, dims):
     from hsmm_mvpy.models import hmp
     for iteration in iterations.iteration[:-1]:
-        selected = init.fit_single(iterations.sel(iteration=iteration)[dims[0]].dropna(dim='bump').bump[-1].values+1,\
-            magnitudes = iterations.sel(iteration=iteration)[dims[0]].dropna(dim='bump'),\
+        selected = init.fit_single(iterations.sel(iteration=iteration)[dims[0]].dropna(dim='event').event[-1].values+1,\
+            magnitudes = iterations.sel(iteration=iteration)[dims[0]].dropna(dim='event'),\
             parameters = iterations.sel(iteration=iteration)[dims[1]].dropna(dim='stage'),\
             threshold=0, verbose=False)
 
