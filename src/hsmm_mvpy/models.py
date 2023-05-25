@@ -17,7 +17,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 class hmp:
     
-    def __init__(self, data, eeg_data=None, sfreq=None, offset=0, cpus=1, bump_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, min_duration=None, distribution='gamma'):
+    def __init__(self, data, eeg_data=None, sfreq=None, offset=0, cpus=1, bump_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma'):
         '''
         HMP calculates the probability of data summing over all ways of 
         placing the n bumps to break the trial into n + 1 stages.
@@ -30,7 +30,7 @@ class hmp:
             Sampling frequency of the signal (initially 100)
         bump_width : int
             width of bumps in milliseconds, originally 5 samples
-        min_duration : float
+        location : float
             Minimum stage duration in milliseconds. 
         '''
         if distribution == 'gamma':
@@ -54,9 +54,9 @@ class hmp:
         self.shape = float(shape)
         self.bump_width = bump_width
         self.bump_width_samples = int(np.round(self.bump_width / self.steps))
-        if min_duration is None:
-            self.min_duration = int(np.round(self.bump_width_samples/2))
-        else: self.min_duration =  int(np.round(min_duration / self.steps))
+        if location is None:
+            self.location = int(np.round(self.bump_width_samples/2))
+        else: self.location =  int(np.round(location / self.steps))
         durations = data.unstack().sel(component=0).swap_dims({'epochs':'trials'})\
             .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
             how="all").groupby('trial_x_participant').count(dim="samples").cumsum().squeeze()
@@ -351,7 +351,7 @@ class hmp:
         for i in range(self.n_dims):
             # computes the gains, i.e. how much the congruence between the pattern shape
             # and the data given the magnitudes of the sensors
-            gains = gains + self.bumps[:,i][np.newaxis].T * magnitudes[:,i] - (magnitudes[:,i]**2)/2
+            gains = gains + self.bumps[:,i][np.newaxis].T * magnitudes[:,i]
         gains = np.exp(gains)
         probs = np.zeros([self.max_d,self.n_trials,n_bumps], dtype=np.float64) # prob per trial
         probs_b = np.zeros([self.max_d,self.n_trials,n_bumps], dtype=np.float64)# Sample and state reversed
@@ -366,7 +366,10 @@ class hmp:
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage parameters
         for stage in range(n_stages):
-            location = self.min_duration
+            if n_stages-1 > stage > 0:
+                location = self.location
+            else:
+                location = 0
             pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1], location)
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
 
@@ -435,8 +438,8 @@ class hmp:
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
         p = self.cdf(np.arange(self.max_d), shape, scale=scale, loc=location)
+        #Location is in fact +1 as np.arange starts from 0
         p = np.diff(p, prepend=0)#going to pmf
-        p[:location+1] = 1e-20#
         return p
     
     def scale_parameters(self, eventprobs, n_bumps):
@@ -459,12 +462,14 @@ class hmp:
         params : ndarray
             shape and scale for the gamma distributions
         '''
-        averagepos = np.concatenate([np.arange(self.max_d)@eventprobs.mean(axis=1),
+        averagepos = np.concatenate([np.arange(1,self.max_d+1)@eventprobs.mean(axis=1),
                                      [self.mean_d]])#Durations
         params = np.zeros((n_bumps+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
-        params[1:,1] += self.min_duration
+        params[1:-1,1] += self.location
+        params[0,1] -= .5#Event following starts half-sample before position
+        params[-1,1] += .5# Last event terminates half-sample earlier
         params[:,1] = params[:,1]/params[:,0]
         return params
     
@@ -611,7 +616,7 @@ class hmp:
         '''
         Compute the maximum possible number of bumps given bump width and mean or minimum reaction time
         '''
-        return int(np.min(self.durations)//(self.min_duration+1))-1
+        return int(np.min(self.durations)//(self.location+1))-1
 
     def bump_times(self, eventprobs, mean=True):
         '''
@@ -721,7 +726,7 @@ class hmp:
         random_stages : ndarray
             random partition between 0 and mean_d
         '''
-        random_stages = np.array([[self.shape,(x*mean_d/self.shape)+self.min_duration/self.shape] for x in np.random.beta(2, 2, n_bumps+1)])
+        random_stages = np.array([[self.shape,(x*mean_d/self.shape)+self.location/self.shape] for x in np.random.beta(2, 2, n_bumps+1)])
         return random_stages
     
     def grid_search(self, n_stages, n_points=None, verbose=True, start_time=0, end_time=None, iter_limit=np.inf, step=1, offset=None, method='slide'):
@@ -748,7 +753,7 @@ class hmp:
         from math import comb as binomcoeff
         import more_itertools as mit
         if offset is None:
-            offset = self.min_duration
+            offset = 1
         start_time = int(start_time)
         if end_time is None:
             end_time = int(self.mean_d)
@@ -932,7 +937,7 @@ class hmp:
             pars_prop[n_bumps,1] = step*j/self.shape
             pars_prop[n_bumps+1,1] = end/self.shape - np.sum(pars_prop[:n_bumps+1,1])
             time = np.sum(pars_prop[:n_bumps,1])*self.shape + \
-                self.min_duration*n_bumps + step*j/self.shape
+                self.location*n_bumps + step*j/self.shape
             null_stages = np.where(pars_prop[:,1]<0)[0]
             if len(null_stages) > 0:
                 warn('One stage is negative, stopping the transition search', RuntimeWarning)
@@ -943,13 +948,13 @@ class hmp:
             diffs = np.diff(mags[:n_bumps+1], axis=0, prepend=0)
             if np.all(np.any(np.abs(diffs) > threshold, axis=1)):
                 n_bumps += 1
-                end -= self.min_duration
+                end -= self.location
                 pars_accepted = pars[:n_bumps+2].copy()
                 mags_accepted = mags[:n_bumps+2].copy()
                 mags_accepted[n_bumps] =  np.zeros(self.n_dims)
                 j = 0
                 if verbose:
-                    print(f'Transition event {n_bumps} found around sample {int(np.round(np.sum(pars_accepted[:n_bumps,:].prod(axis=1))))}: Transition event samples = {np.round(pars[:n_bumps].prod(axis=1).cumsum())+self.min_duration*np.arange(n_bumps)}')
+                    print(f'Transition event {n_bumps} found around sample {int(np.round(np.sum(pars_accepted[:n_bumps,:].prod(axis=1))))}: Transition event samples = {np.round(pars[:n_bumps].prod(axis=1).cumsum())+self.location*np.arange(n_bumps)}')
             if trace:
                 all_mags_prop.append(mags[:n_bumps+1].copy())
                 all_pars_prop.append(pars_prop.copy())
@@ -958,7 +963,7 @@ class hmp:
                 all_diffs.append(diffs)
             j += 1
             pbar.update(int(np.round(time-prev_time+1)))
-        pbar.update(int(np.round(end-prev_time)+self.min_duration+step))
+        pbar.update(int(np.round(end-prev_time)+self.location+step))
         mags = mags_accepted[:n_bumps, :]
         pars = pars_accepted[:n_bumps+1, :]
         fit = self.fit_single(n_bumps, parameters=pars, magnitudes=mags, verbose=verbose)
