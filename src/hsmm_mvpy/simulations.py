@@ -50,7 +50,7 @@ def bump_shape(bump_width, bump_width_samples, steps):
     return template
 
 
-def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, location=0): 
+def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, location=1): 
     '''
     Simulates EEG n_trials using MNE's tools based on the specified sources
     
@@ -172,6 +172,8 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
                     rand_i = times[:,trigger-2]
                 if len(sources_subj)+1 > trigger > 2:
                     rand_i += location/(tstep*1000)
+                else:
+                    rand_i += 1
                 if 0 in rand_i:
                     warn("0 stage duration found, add a location parameter to avoid this case", UserWarning)
                 random_source_times.append(rand_i) #varying event 
