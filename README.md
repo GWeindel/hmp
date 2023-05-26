@@ -1,9 +1,9 @@
-HsMM MVpy
+hsmm_mvpy
 ==========
 
 ![](plots/general_illustration.png)
 
-HsMM MVpy is an open-source Python package to estimate Hidden Semi-Markov Models in a Multivariate Pattern Analysis (HMP) of neural time-series (e.g. EEG) based on the method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)), Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HMP_MVPA_BorstAnderson_preprint.pdf)) and Weindel, van Maanen & Borst (in preparation).
+hsmm_mvpy is an open-source Python package to estimate Hidden Semi-Markov Models in a Multivariate Pattern Analysis (HMP) of neural time-series (e.g. EEG) based on the method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)), Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HMP_MVPA_BorstAnderson_preprint.pdf)) and Weindel, van Maanen & Borst (in preparation).
 
 As a summary of the method, an HMP model parses the reaction time into a number of successive stages determined based on patterns in a neural time-serie. Hence any reaction time can then be described by a number of stage  and their duration estimated using hsmm_mvpy. The important aspect of HMP is that it is a whole-brain analysis (or whole scalp analysis) that estimates the onset of stages on a single-trial basis. This by-trial estimations allows you then to further dig into any aspect you are interested in a signal:
 - Describing an experiment or a clinical sample in terms of stages detected in the EEG signal
@@ -14,7 +14,7 @@ As a summary of the method, an HMP model parses the reaction time into a number 
 
 
 # Documentation
-**Important note** The current tutorials are based on the latest (unstable) version not yet available through _pip_, installing through github is therefore recommended.
+**Important note**: the current tutorials are based on the latest (unstable) version not yet available through _pip_, installing through github is therefore recommended.
 
 The package is available through *pip* with the command ```pip install hsmm_mvpy```. 
 A recommended way of using the package is to use a conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
@@ -55,23 +55,13 @@ To further learn about the method be sure to check the paper by Anderson, Zhang,
 - Van Maanen, L., Portoles, O., & Borst, J. P. (2021). The discovery and interpretation of evidence accumulation stages. Computational brain & behavior, 4(4), 395-415. [link](https://link.springer.com/article/10.1007/s42113-021-00105-2)
 - Portoles, O., Blesa, M., van Vugt, M., Cao, M., & Borst, J. P. (2022). Thalamic bursts modulate cortical synchrony locally to switch between states of global functional connectivity in a cognitive task. PLoS computational biology, 18(3), e1009407. [link](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009407)
 
-## Demo on simulated data
+## Demo on simulated EEG data
 
 The following section will quickly walk you through an example usage in simulated data (using [MNE](https://mne.tools/dev/auto_examples/simulation/index.html)'s simulation functions and tutorials)
 
 First we load the libraries necessary for the demo on simulated data
 
 ### Importing libraries
-
-
-```python
-#Development only
-import sys
-sys.path.insert(0, "/home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/src")
-%load_ext autoreload
-%autoreload 2
-```
-
 
 ```python
 ## Importing these packages is specific for this simulation case
@@ -84,9 +74,6 @@ from scipy.stats import gamma
 import hsmm_mvpy as hmp
 from hsmm_mvpy import simulations
 ```
-
-    <frozen importlib._bootstrap>:241: RuntimeWarning: scipy._lib.messagestream.MessageStream size changed, may indicate binary incompatibility. Expected 56 from C header, got 64 from PyObject
-
 
 ### Simulating data
 
@@ -290,10 +277,6 @@ We can directly fit an HMP model without giving any info on the number of stages
 estimates = init.fit(step=20, verbose=True)
 ```
 
-
-      0%|          | 0/380 [00:00<?, ?it/s]
-
-
     Transition event 2 found around sample 147
     Transition event 3 found around sample 262
     Transition event 4 found around sample 342
@@ -304,9 +287,6 @@ estimates = init.fit(step=20, verbose=True)
 ### Visualizing results of the fit
 
 In the previous cell we initiated an HMP model looking for 50ms bumps in the EEG signal and parsing the EEG data into a signal with 4 Transition events and 5 gamma distributed stages with a fixed shape of 2 and a scale estimated by stage. We can now inspect the results of the fit.
-
-We can directly take a look to the topologies and latencies of the events by calling ```hmp.visu.plot_topo_timecourse```
-
 
 We can directly take a look to the topologies and latencies of the events by calling ```hmp.visu.plot_topo_timecourse```
 
@@ -394,7 +374,7 @@ This then shows the likeliest stage onset location in time for the first trial!
 
 ## Comparing with ground truth
 
-As we simulated the data we have access to the ground truth of the underlying generative events. We can then compare the average stage durations compared to the one estimated by HMP-MVpy. As in the beginning, this code is specific to the case where you simulate data.
+As we simulated the data we have access to the ground truth of the underlying generative events. We can then compare the average stage durations compared to the one estimated by _hsmm_mvpy_. As in the beginning, this code is specific to the case where you simulate data.
 
 
 ```python
@@ -430,7 +410,7 @@ hmp.visu.plot_topo_timecourse(eeg_data, estimates, positions, init, magnify=1, s
     
 
 
-We see that the HSMM-MVpy package recovers the exact average location of the bumps defined in the simulated data.
+We see that the _hsmm_mvpy_ package recovers the exact average location of the bumps defined in the simulated data.
 
 We can further test how well the package did by comparing the generated single trial onsets with those estimated from the HMP model
 
