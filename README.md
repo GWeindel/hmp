@@ -19,8 +19,8 @@ As a summary of the method, an HMP model parses the reaction time into a number 
 The package is available through *pip* with the command ```pip install hsmm_mvpy```. 
 A recommended way of using the package is to use a conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
 
-    $ conda create -n hmp 
-    $ conda activate hmp
+    $ conda create -n hsmm
+    $ conda activate hsmm
     $ conda install pip #if not already installed
     $ pip install hsmm_mvpy
 
