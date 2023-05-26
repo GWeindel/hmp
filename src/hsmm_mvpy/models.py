@@ -469,7 +469,7 @@ class hmp:
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
-        params[1:-1,1] += self.location
+        # params[[0.-1],1] += self.location
         params[0,1] -= .5#Event following starts half-sample before position
         params[-1,1] += .5# Last event terminates half-sample earlier
         params[:,1] = params[:,1]/params[:,0]
@@ -618,7 +618,7 @@ class hmp:
         '''
         Compute the maximum possible number of events given event width and mean or minimum reaction time
         '''
-        return int(np.min(self.durations)//(self.event_width_samples))-1
+        return int(np.min(self.durations)//(self.event_width_samples))
 
     def event_times(self, eventprobs, mean=True):
         '''
