@@ -439,6 +439,8 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
     means : xarray.DataArray
         means of the electrodes before PCA/zscore
     '''
+    if isinstance(data, xr.DataArray):
+        raise ValueError('Expected a xarray Dataset with data and event as DataArrays, check the data format')
     if apply_standard:
         mean_std = data.groupby(subjects_variable).std(dim=...).data.mean()
         data = data.assign(mean_std=mean_std.data)
