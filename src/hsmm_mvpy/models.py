@@ -136,6 +136,7 @@ class hmp:
             starting_points=1, parameters_to_fix=None, magnitudes_to_fix=None, method='random', multiple_n_events=None):
         '''
         Fit HMP for a single n_events model
+        
         Parameters
         ----------
         n_events : int
@@ -150,6 +151,8 @@ class hmp:
             threshold for the HMP algorithm, 0 skips HMP
         '''
         import pandas as pd 
+        if n_events is None:
+            raise ValueError('The fit_single() function needs to be provided with a number of expected transition events. Look at function fit() if you want to fit a model without assuming a particular number of events.')
         if verbose:
             if parameters is None:
                 print(f'Estimating {n_events} events model with {starting_points} starting point(s)')
@@ -194,7 +197,7 @@ class hmp:
                     parameters.append(proposal_p)
                     magnitudes.append(proposal_m)
             elif method == 'grid':
-                parameters = self.grid_search(n_events+1, iter_limit=starting_points, method='grid')
+                parameters = self._grid_search(n_events+1, iter_limit=starting_points, method='grid')
                 magnitudes = np.zeros((len(parameters), n_events, self.n_dims), dtype=np.float64)
             else:
                 raise ValueError('Unknown starting point method requested, use "random" or "grid"')
@@ -489,38 +492,7 @@ class hmp:
                 n_event = len(event_loo_results)+1
                 event_loo_results.append(self.fit_single(n_event, event_tmp, flat_tmp, 0, False))
         return event_loo_results
-    
-    def iterative_fit(self, likelihoods, fitted=None, parameters=None, magnitudes=None):
-        if fitted is not None:
-            parameters = fitted.parameters.values
-            magnitudes = fitted.magnitudes.values
-        parameters = parameters.copy()
-        magnitudes = magnitudes.copy()
-        n_events_max = len(magnitudes)
-        magnitudes = magnitudes.copy()
-        n_events = len(likelihoods)
-        pars_n_events = []
-        mags_n_events = []
-        for n_event in range(1, n_events+1):
-            temp_par = parameters.copy()
-            event_idx = np.sort(np.argsort(likelihoods)[::-1][:n_event])#sort the index of highest likelihood events
-            print(n_event)
-            print(event_idx)
-            event_mags = magnitudes[event_idx,:].copy()
-            print(event_mags)
-
-            event_pars = np.tile(self.shape, (n_event+1,2))
-            event_pars[:-1,1] = temp_par[event_idx,1]
-            event_pars[-1,1] = temp_par[-1,1]
-            event_pars[:,1] = np.diff(event_pars[:,1], prepend=0)
-            pars_n_events.append(event_pars)
-            mags_n_events.append(event_mags)
-        event_loo_results = self.__multi_cpu_dispatch(np.arange(1,n_events+1), mags_n_events, 
-                             pars_n_events, 1, False)
-        bests = xr.concat(event_loo_results, dim="n_events")
-        bests = bests.assign_coords({"n_events": np.arange(1,n_events+1)})
-        return bests
-    
+        
     def loo_loglikelihood(self, estimates):
         event_loo_results = [estimates.copy()]
         n_events = event_loo_results[0].dropna('event').event.max().values
@@ -639,7 +611,7 @@ class hmp:
         warn('This method is deprecated and will be removed in future version, use compute_times() instead', DeprecationWarning, stacklevel=2)
         eventprobs = eventprobs.dropna('event', how="all")
         eventprobs = eventprobs.dropna('trial_x_participant', how="all")
-        onsets = np.empty((len(eventprobs.trial_x_participant),len(eventprobs.event)+1))
+        onsets = np.empty((len(eventprobs.trial_x_participant),len(eventprobs.event)+1))*np.nan
         i = 0
         for trial in eventprobs.trial_x_participant.dropna('trial_x_participant', how="all").values:
             onsets[i, :len(eventprobs.event)] = np.arange(self.max_d) @ eventprobs.sel(trial_x_participant=trial).data
@@ -731,7 +703,7 @@ class hmp:
         random_stages = np.array([[self.shape,x*mean_d/self.shape] for x in np.random.beta(2, 2, n_events+1)])
         return random_stages
     
-    def grid_search(self, n_stages, n_points=None, verbose=True, start_time=0, end_time=None, iter_limit=np.inf, step=1, offset=None, method='slide'):
+    def _grid_search(self, n_stages, n_points=None, verbose=True, start_time=0, end_time=None, iter_limit=np.inf, step=1, offset=None, method='slide'):
         '''
         This function decomposes the mean RT into a grid with points. Ideal case is to have a grid with one sample = one search point but the number
         of possibilities badly scales with the length of the RT and the number of stages. Therefore the iter_limit is used to select an optimal number
@@ -808,7 +780,7 @@ class hmp:
         init_n_events = n_events
         # if n_events == None:
         #     n_events = self.max_events
-        parameters = self.grid_search(2, verbose=verbose, step=step)#Looking for all possibilities with one event
+        parameters = self._grid_search(2, verbose=verbose, step=step)#Looking for all possibilities with one event
         if magnitudes is None:
             magnitudes = np.zeros((len(parameters),1, self.n_dims), dtype=np.float64)
         else:
@@ -999,7 +971,7 @@ class hmp:
         else:
             return fit
     
-    def bwd_fit(self, step=1, verbose=True, figsize=(12,3), end=None, threshold=None, bwd=True):
+    def _bwd_fit(self, step=1, verbose=True, figsize=(12,3), end=None, threshold=None, bwd=True):
         '''
         '''
         if threshold is None:
@@ -1021,7 +993,7 @@ class hmp:
                 index = range(0,n_events+2)[::-1]
             if j == 0:
                 print(np.round(pars[index[1:]].prod(axis=1).sum()))
-                next_pars = self.grid_search(2, verbose=False, start_time=(np.round(pars[index[:n_events]].prod(axis=1).sum())), step=step, end_time=end)#next steps in parameter space
+                next_pars = self._grid_search(2, verbose=False, start_time=(np.round(pars[index[:n_events]].prod(axis=1).sum())), step=step, end_time=end)#next steps in parameter space
                 if bwd:
                     next_pars = next_pars[:,::-1,:]
                     
@@ -1086,7 +1058,7 @@ class hmp:
         _, ax = plt.subplots(figsize=figsize, dpi=300)
         cycol = cycle(colors)
         colors = [next(cycol) for x in range(n_events)]
-        parameters = self.grid_search(2, verbose=True)
+        parameters = self._grid_search(2, verbose=True)
         for event in range(n_events):
             event_lkh = np.zeros(len(parameters))
             iteration = 0
