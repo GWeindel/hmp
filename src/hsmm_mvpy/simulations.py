@@ -50,9 +50,9 @@ def bump_shape(bump_width, bump_width_samples, steps):
     return template
 
 
-def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, location=1): 
+def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, location=1): 
     '''
-    Simulates EEG n_trials using MNE's tools based on the specified sources
+    Simulates n_trials of EEG and/or MEG using MNE's tools based on the specified sources
     
     Parameters
     ----------
@@ -69,12 +69,20 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
         Number of jobs to use with MNE's function (multithreading)
     file: str
         Name of the file to be saved (number of the subject will be added)
+    data_type: str
+        Whether to simulate "eeg" or "meg"
+    n_subj: int
+        How many subjects to simulate
     path: str
         path where to save the data
     overwrite: bool
         Whether to overwrite existing file
     verbose: bool
         Whether to display MNE's output
+    noise: bool
+        Adding noise to the simulated sources
+    times: ndarray
+        Deterministic simulation of event transitions times. Format is n_sources X n_trials
     location: float
         value in ms to add after a simulated event and before another one
     
@@ -109,8 +117,15 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
     # First, we get an info structure from the test subject.
     evoked_fname = op.join(data_path, 'MEG', subject, 'sample_audvis-ave.fif')
     info = mne.io.read_info(evoked_fname, verbose=verbose)
-    eeg_indices = mne.pick_types(info, meg=False, eeg=True)
-    info = mne.pick_info(info, eeg_indices)
+    if data_type == 'eeg':
+        picked_type = mne.pick_types(info, meg=False, eeg=True)
+    elif data_type == 'meg':
+        picked_type = mne.pick_types(info, meg=True, eeg=False)
+    elif data_type == 'eeg/meg':
+        picked_type = mne.pick_types(info, meg=True, eeg=False)
+    else:
+        raise ValueError(f'Invalid data type {data_type}, expected "eeg", "meg" or "eeg/meg"')
+    info = mne.pick_info(info, picked_type)
     tstep = 1. / info['sfreq']
     # To simulate sources, we also need a source space. It can be obtained from the
     # forward solution of the sample subject.
@@ -189,7 +204,12 @@ def simulate(sources, n_trials, n_jobs, file, n_subj=1, path='./', overwrite=Fal
             # Project the source time series to sensor space and add some noise. The source
             # simulator can be given directly to the simulate_raw function.
             raw = mne.simulation.simulate_raw(info, source_simulator, forward=fwd, n_jobs=n_jobs,verbose=verbose)
-            raw = raw.pick_types(meg=False, eeg=True, stim=True)
+            if data_type == 'eeg':
+                raw = raw.pick_types(meg=False, eeg=True, stim=True)
+            elif data_type == 'meg':
+                raw = raw.pick_types(meg=True, eeg=False, stim=True)
+            elif data_type == 'eeg/meg':
+                raw = raw.pick_types(meg=True, eeg=True, stim=True)
             if noise:
                 cov = mne.make_ad_hoc_cov(raw.info, verbose=verbose)
                 mne.simulation.add_noise(raw, cov, iir_filter=[0.2, -0.2, 0.04], verbose=verbose)
