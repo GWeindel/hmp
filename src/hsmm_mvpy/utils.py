@@ -7,41 +7,54 @@ import scipy.stats as stats
 import xarray as xr
 import multiprocessing as mp
 import itertools
+import pandas as pd
 import warnings
 from warnings import warn, filterwarnings
 
+def read_mne_EEG(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None, 
+                 subj_idx=None, metadata = None, events_provided=None, rt_col='response',
+                 verbose=True, tmin=-.2, tmax=5, offset_after_resp = 0, 
+                 high_pass=.5, low_pass = None, pick_channels = 'eeg', baseline=(None, 0),
+                 upper_limit_RT=5, lower_limit_RT=0.001, reject_threshold=None):
+    warn('This method is deprecated and will be removed in future version, use read_mne_data instead', DeprecationWarning, stacklevel=2)
+    return read_mne_data(pfiles, event_id, resp_id, epoched, sfreq, 
+                 subj_idx, metadata, events_provided, rt_col,
+                 verbose, tmin, tmax, offset_after_resp, 
+                 high_pass, low_pass, pick_channels, baseline,
+                 upper_limit_RT, lower_limit_RT, reject_threshold)
 
-filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later  
-
-def read_mne_EEG(pfiles, event_id, resp_id, sfreq=None, subj_idx=None, events_provided=None, verbose=True,
-                 tmin=-.2, tmax=5, offset_after_resp = 0, high_pass=.5, pick_channels = 'eeg', baseline=(None, 0),\
-                 low_pass = 30, upper_limit_RT=5, lower_limit_RT=0.001, reject_threshold=None):
+def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None, 
+                 subj_idx=None, metadata=None, events_provided=None, rt_col='rt', rts=None,
+                 verbose=True, tmin=-.2, tmax=5, offset_after_resp = 0, 
+                 high_pass=.5, low_pass = None, pick_channels = 'eeg', baseline=(None, 0),
+                 upper_limit_RT=5, lower_limit_RT=0.001, reject_threshold=None, scale=1):
     ''' 
-    Reads EEG data format (.fif or .bdf) using MNE's integrated function .
+    Reads EEG/MEG data format (.fif or .bdf) using MNE's integrated function .
     
     Notes: 
-    - Only EEG data are selected (other channel types are discarded)
+    - Only EEG or MEG data are selected (other channel types are discarded)
     - All times are expressed on the second scale.
     - If multiple files in pfiles the data of the group is read and seqentially processed.
-    - Reaction Times are only computed if response trigger is in the epoch window (determined by tmin and tmax)
+    - For non epoched data: Reaction Times are only computed if response trigger is in the epoch window (determined by tmin and tmax)
     
     Procedure:
-    1) the data is filtered with filters specified in low_pass and high_pass. Parameters of the filter are
+    if data not already epoched:
+        0.1) the data is filtered with filters specified in low_pass and high_pass. Parameters of the filter are
         determined by MNE's filter function.
-    2) if no events is provided, detect events in stumulus channel and keep events with id in event_id and resp_id.
-    3) eventual downsampling is performed if sfreq is lower than the data's sampling frequency. The event structure is
+        0.2) if no events is provided, detect events in stumulus channel and keep events with id in event_id and resp_id.
+        0.3) eventual downsampling is performed if sfreq is lower than the data's sampling frequency. The event structure is
         passed at the resample() function of MNE to ensure that events are approriately timed after downsampling.
-    4) epochs are created based on stimulus onsets (event_id) and tmin and tmax. Epoching removes any epoch where a 
+        0.4) epochs are created based on stimulus onsets (event_id) and tmin and tmax. Epoching removes any epoch where a 
         'BAD' annotiation is present and all epochs where an electrode exceeds reject_threshold. Epochs are baseline 
-        corrected from tmin to stimulus onset (time 0).
-    5) Reaction times (RT) are computed based on the sample difference between onset of stimulus and response triggers. 
+        corrected from tmin to stimulus onset (time 0).)
+    1) Reaction times (RT) are computed based on the sample difference between onset of stimulus and response triggers. 
         If no response event happens after a stimulus or if RT > upper_limit_RT & < upper_limit_RT, RT is 0.
-    6) all the non-rejected epochs with positive RTs are cropped to stimulus onset to stimulus_onset + RT.
+    2) all the non-rejected epochs with positive RTs are cropped to stimulus onset to stimulus_onset + RT.
     
     Parameters
     ----------
     pfiles : str or list
-        list of EEG files to read154,
+        list of EEG files to read,
     event_id : dict
         Dictionary containing the correspondance of named condition [keys] and event code [values]
     resp_id : dict
@@ -78,7 +91,8 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq=None, subj_idx=None, events_pr
         Lower limit for RTs. Shorter RTs are discarded
     reject_threshold : float
         Rejection threshold to apply when creating epochs, expressed in microvolt
-    
+    scale: float
+        Scale to apply to the RT data (e.g. 1000 if ms)
         
     Returns
     -------
@@ -88,117 +102,151 @@ def read_mne_EEG(pfiles, event_id, resp_id, sfreq=None, subj_idx=None, events_pr
         The choosen sampling frequnecy is stored as attribute.
     '''
     import mne
-    tstep = 1/sfreq
+    dict_datatype = {False:'continuous', True:'epoched'}
     epoch_data = [] 
     if isinstance(pfiles,str):#only one participant
         pfiles = [pfiles]
     if not subj_idx:
         subj_idx = ["S"+str(x) for x in np.arange(len(pfiles))]
+    if isinstance(subj_idx,str):
+        subj_idx = [subj_idx]
     y = 0
     for participant in pfiles:
-        print(f'Processing participant {participant}')
-        if '.fif' in participant:
-            data = mne.io.read_raw_fif(participant, preload=False, verbose=verbose)
-        elif '.bdf' in participant:
-            data = mne.io.read_raw_bdf(participant, preload=False, verbose=verbose)
-        else:
-            raise ValueError(f'Unknown EEG file format for participant {participant}')
-        # Loading events (in our case one event = one trial)
-        if sfreq is None: 
-            sfreq = data.info['sfreq']
-        if events_provided is None:
-            try:
-                events = mne.find_events(data, verbose=verbose, min_duration = 1 / data.info['sfreq'])
-            except:
-                events = mne.events_from_annotations(data, verbose=verbose)
-            if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicates offset in the trggers
-                print(f'Correcting event values as trigger channel has offset {np.unique(events[:,1])}')
-                events[:,2] = events[:,2]-events[:,1]#correction on event value                
-            events_values = np.concatenate([np.array([x for x in event_id.values()]), np.array([x for x in resp_id.values()])])
-            events = np.array([list(x) for x in events if x[2] in events_values])#only keeps events with stim or response
-        else:
-            if len(np.shape(events_provided)) == 2:
-                events_provided = events_provided[np.newaxis]
-            events = events_provided[y]
-
-        if isinstance(pick_channels, list):
-               try:
-                    data = data.pick_channels(pick_channels)
-               except:
-                    raise ValueError('incorrect electrode pick specified')
-        elif pick_channels == 'eeg':
-                data = data.pick_types(meg=False, eeg=True, stim=False, eog=False, misc=False, exclude='bads') 
-        else:
-             raise ValueError('incorrect electrode pick specified')
-    
-
-        data.load_data()
-        data.filter(high_pass, low_pass, fir_design='firwin', verbose=verbose)#Filtering out frequency outside range .5 and 30Hz, as study by Anderson et al.
-
-        if sfreq < data.info['sfreq']:#Downsampling
-            print(f'Downsampling to {sfreq} Hz')
-            data, events = data.resample(sfreq, events=events)#100 Hz is the standard used for previous applications of HMP
         
-        print(f'Creating epochs based on following event ID :{np.unique(events[:,2])}')
-            
-        offset_after_resp_samples = int(offset_after_resp/tstep)
-        metadata, meta_events, event_id = mne.epochs.make_metadata(
-            events=events, event_id= event_id,
-            tmin=tmin, tmax=tmax, sfreq=data.info['sfreq'])
-        epochs = mne.Epochs(data, meta_events, event_id, tmin, tmax, proj=False,
-                        baseline=baseline, preload=True,
-                        verbose=verbose,detrend=1, on_missing = 'warn', event_repeated='drop',
-                        metadata=metadata, reject_by_annotation=True, reject=reject_threshold)
-        data_epoch = epochs.get_data()
+        print(f"Processing participant {participant}'s {dict_datatype[epoched]} {pick_channels}")
 
-        valid_epochs_idx = [x for x in np.arange(len(epochs.drop_log)) if epochs.drop_log[x] == ()]
-        correct_stim_timing  = np.array([list(x) for x in events if x[2] in event_id.values()])[valid_epochs_idx,0]
-        stim_events = np.array([x for x in np.arange(len(events)) if events[x,0] in correct_stim_timing])
-        rts=[]#reaction times
-        trigger = []
-        without_rt = 0
-        for i in stim_events:
-            if any(x in resp_id.values() for x in events[i:,2]) and events[i+1,2] in resp_id.values():
-                rts.append(events[i+1,0] - events[i,0] )
-
+        # loading data
+        if epoched == False:# performs epoching on raw data
+            if '.fif' in participant:
+                data = mne.io.read_raw_fif(participant, preload=False, verbose=verbose)
+            elif '.bdf' in participant:
+                data = mne.io.read_raw_bdf(participant, preload=False, verbose=verbose)
             else:
-                rts.append(0)
-                without_rt += 1
-        print(f'N trials without response event: {without_rt}')
-        rts = np.array(rts)
-        print(f'Applying reaction time trim to keep RTs between {lower_limit_RT} and {upper_limit_RT} seconds')
-        rts[rts > sfreq*upper_limit_RT] = 0 #removes RT above x sec
-        rts[rts < sfreq*lower_limit_RT] = 0 #removes RT below x sec, important as determines max events
-        print(f'{len(rts[rts > 0])} RTs kept of {len(stim_events)} clean epochs')
-        triggers = epochs.metadata["event_name"].reset_index(drop=True)
-        cropped_data_epoch = np.empty([len(rts[rts> 0]), len(epochs.ch_names), max(rts)+offset_after_resp_samples])
+                raise ValueError(f'Unknown EEG file format for participant {participant}')
+            data = _pick_channels(pick_channels,data, stim=True)
+            if sfreq is None: 
+                sfreq = data.info['sfreq']
+
+            if 'response' not in list(resp_id.keys())[0]:
+                resp_id = {f'response/{k}': v for k, v in resp_id.items()}
+            if events_provided is None:
+                try:
+                    events = mne.find_events(data, verbose=verbose, min_duration = 1 / data.info['sfreq'])
+                except:
+                    events = mne.events_from_annotations(data, verbose=verbose)
+                if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicates offset in the trggers
+                    print(f'Correcting event values as trigger channel has offset {np.unique(events[:,1])}')
+                    events[:,2] = events[:,2]-events[:,1]#correction on event value                
+                events_values = np.concatenate([np.array([x for x in event_id.values()]), np.array([x for x in resp_id.values()])])
+                events = np.array([list(x) for x in events if x[2] in events_values])#only keeps events with stim or response
+                events_stim = np.array([list(x) for x in events if x[2] in event_id.values()])#only stim
+            else:
+                if len(np.shape(events_provided)) == 2:
+                    events_provided = events_provided[np.newaxis]
+                events = events_provided[y]
+
+            data.load_data()
+            data.filter(high_pass, low_pass, fir_design='firwin', verbose=verbose)
+
+            if sfreq < data.info['sfreq']:#Downsampling
+                print(f'Downsampling to {sfreq} Hz')
+                data, events = data.resample(sfreq, events=events)
+            combined =  {**event_id, **resp_id}#event_id | resp_id 
+            stim = list(event_id.keys())
+            
+            if verbose:
+                print(f'Creating epochs based on following event ID :{np.unique(events[:,2])}')
+
+            offset_after_resp_samples = int(offset_after_resp*sfreq)
+            if metadata is None:
+                metadata, meta_events, event_id = mne.epochs.make_metadata(
+                    events=events, event_id=combined, tmin=tmin, tmax=tmax,
+                    sfreq=data.info["sfreq"], row_events=stim, keep_first=["response"])
+                metadata = metadata[["event_name","response"]]#only keep event_names and rts
+            epochs = mne.Epochs(data, meta_events, event_id, tmin, tmax, proj=False,
+                    baseline=baseline, preload=True, picks=pick_channels,
+                    verbose=verbose,detrend=1, on_missing = 'warn', event_repeated='drop',
+                    metadata=metadata, reject_by_annotation=True, reject=reject_threshold)
+            metadata.rename({'response':'rt'}, axis=1, inplace=True)
+            rts = metadata.rt
+        else:
+            if '.fif' in participant:
+                epochs = mne.read_epochs(participant, preload=True, verbose=verbose)
+                if sfreq is None: 
+                    sfreq = epochs.info['sfreq']
+                elif sfreq  < epochs.info['sfreq']:
+                    if verbose:
+                        print(f'Resampling data at {sfreq}')
+                    epochs = epochs.resample(sfreq)
+            else:
+                raise ValueError('Incorrect file format')
+            _pick_channels(pick_channels,epochs, stim=False)
+            if metadata is not None and not isinstance(metadata, pd.DataFrame):
+                raise ValueError('Metadata should be a pandas data-frame as generated by mne')
+            metadata = epochs.metadata#accounts for dropped epochs
+        offset_after_resp_samples = np.rint(offset_after_resp*sfreq).astype(int)
+        valid_epoch_index = [x for x,y in enumerate(epochs.drop_log) if len(y) == 0]
+        data_epoch = epochs.get_data()#preserves index
+        if isinstance(metadata, pd.DataFrame):
+            if len(metadata) > len(data_epoch):#assumes metadata contains rejected epochs
+                metadata = metadata.iloc[valid_epoch_index]
+                metadata.reset_index(drop=True, inplace=True)
+            try:
+                rts = metadata[rt_col]/scale
+            except:
+                raise ValueError(f'Expected column named {rt_col} in the provided metadata file, alternative names can be passed through the rt_col parameter')
+        elif rts is None:
+            raise ValueError(f'Expected either a metadata Dataframe or an array of Reaction Times')
+        rts_arr = np.array(rts)
+        if verbose:
+            print(f'Applying reaction time trim to keep RTs between {lower_limit_RT} and {upper_limit_RT} seconds')
+        rts_arr[rts_arr > upper_limit_RT] = 0 #removes RT above x sec
+        rts_arr[rts_arr < lower_limit_RT] = 0 #removes RT below x sec, important as determines max events
+        rts_arr[np.isnan(rts_arr)] = 0#too long trial
+        rts_arr = np.rint(rts_arr*sfreq).astype(int)
+        if verbose:
+            print(f'{len(rts_arr[rts_arr > 0])} RTs kept of {len(rts_arr)} clean epochs')
+        triggers = epochs.metadata.iloc[:,0].values#assumes first col is trigger
+        cropped_data_epoch = np.empty([len(rts_arr[rts_arr>0]), len(epochs.ch_names), max(rts_arr)+offset_after_resp_samples])
         cropped_data_epoch[:] = np.nan
         cropped_trigger = []
         epochs_idx = []
         j = 0
-        for i in np.arange(len(data_epoch)):
-            if rts[i] > 0:
+        time0 = epochs.time_as_index(0)[0]
+        for i in range(len(data_epoch)):
+            if rts_arr[i] > 0:
                 cropped_trigger.append(triggers[i])
             #Crops the epochs to time 0 (stim onset) up to RT
-                cropped_data_epoch[j,:,:rts[i]+offset_after_resp_samples] = \
-                (data_epoch[i,:,epochs.time_as_index(0)[0]:\
-                epochs.time_as_index(0)[0]+int(rts[i])+offset_after_resp_samples])
-                epochs_idx.append(valid_epochs_idx[j])
+                cropped_data_epoch[j,:,:rts_arr[i]+offset_after_resp_samples] = \
+                (data_epoch[i,:,time0:time0+rts_arr[i]+offset_after_resp_samples])
+                epochs_idx.append(valid_epoch_index[i])#Keeps trial number
                 j += 1
         x = 0
-        while np.isnan(cropped_data_epoch[-1]).all():#Weird bug I guess it is perhps due to too long epoch?
+        while np.isnan(cropped_data_epoch[-1]).all():#Weird bug I guess it is perhps due to too long last epoch? update: cannot reproduce
             cropped_data_epoch = cropped_data_epoch[:-1]
             x += 1
         if x > 0:
             print(f'RTs > 0 longer than expected ({x})')
         print(f'{len(cropped_data_epoch)} trials were retained for participant {participant}')
-        print(f'End sampling frequency is {sfreq} Hz')
-        epoch_data.append(hmp_data_format(cropped_data_epoch, cropped_trigger, epochs.info['sfreq'], offset_after_resp_samples, epochs=[int(x) for x in epochs_idx], electrodes = epochs.ch_names))
+        if verbose:
+            print(f'End sampling frequency is {sfreq} Hz')
+        epoch_data.append(hmp_data_format(cropped_data_epoch, cropped_trigger, epochs.info['sfreq'], offset_after_resp_samples, epochs=[int(x) for x in epochs_idx], electrodes = epochs.ch_names, metadata = metadata))
         y += 1
-        
     epoch_data = xr.concat(epoch_data, dim = xr.DataArray(subj_idx, dims='participant'),
                           fill_value={'event':'', 'data':np.nan})
     return epoch_data
+
+def _pick_channels(pick_channels,data,stim=True):
+    if isinstance(pick_channels, list):
+        try:
+            data = data.pick_channels(pick_channels)
+        except:
+            raise ValueError('incorrect electrode pick specified')
+    elif pick_channels == 'eeg':
+            data = data.pick_types(meg=False, eeg=True, stim=stim, eog=False, misc=False, exclude='bads') 
+    else:
+         raise ValueError('incorrect electrode pick specified')
+    return data
 
 def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after_resp=0.1):
     '''
@@ -290,7 +338,7 @@ def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after
     data_xr = hmp_data_format(cropped_data_epoch, conditions, sfreq, offset_after_resp_samples, epochs=epochs, electrodes = electrode_columns)
     return data_xr
 
-def hmp_data_format(data, events, sfreq, offset=0, participants=[], epochs=None, electrodes=None):
+def hmp_data_format(data, events, sfreq, offset=0, participants=[], epochs=None, electrodes=None, metadata=None):
     '''
     Converting 3D matrix with dimensions (participant) * trials * electrodes * sample into xarray Dataset
     
@@ -326,7 +374,6 @@ def hmp_data_format(data, events, sfreq, offset=0, participants=[], epochs=None,
         data = xr.Dataset(
                 {
                     "data": (["epochs", "electrodes", "samples"],data),
-                    "event": (["epochs"], events),
                 },
                 coords={
                     "epochs" :epochs,
@@ -339,7 +386,6 @@ def hmp_data_format(data, events, sfreq, offset=0, participants=[], epochs=None,
         data = xr.Dataset(
                 {
                     "data": (['participant',"epochs", "electrodes", "samples"],data),
-                    "event": (['participant',"epochs"], events),
                 },
                 coords={
                     'participant':participants,
@@ -349,6 +395,11 @@ def hmp_data_format(data, events, sfreq, offset=0, participants=[], epochs=None,
                 },
                 attrs={'sfreq':sfreq,'offset':offset}
                 )
+    if metadata is not None:
+        metadata = metadata.to_xarray()
+        metadata = metadata.rename_dims({'index':'epochs'})
+        metadata = metadata.rename_vars({'index':'epochs'})
+        data = data.merge(metadata)
     return data
 
 def standardize(x):
@@ -525,7 +576,7 @@ def LOOCV(data, subject, n_events, initial_fit, sfreq, event_width=50):
     subject : str
         name of the subject to remove
     '''
-    # warn('This method is deprecated and will be removed in future version, use loocv() instead', DeprecationWarning, stacklevel=2) 
+    # wc 
     from hsmm_mvpy.models import hmp
     #Looping over possible number of events
     subjects_idx = data.participant.values
@@ -781,8 +832,8 @@ def event_times(data, times, electrode, stage):
 
     return brp_data    
     
-def condition_selection(hmp_data, eeg_data, condition_string):
-    unstacked = hmp_data.unstack().where(eeg_data.event.str.contains(condition_string),drop=True)
+def condition_selection(hmp_data, eeg_data, condition_string, variable='event'):
+    unstacked = hmp_data.unstack().where(eeg_data[variable].str.contains(condition_string),drop=True)
     stacked = stack_data(unstacked)
     return stacked
 
