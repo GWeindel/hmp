@@ -111,8 +111,10 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
     if isinstance(subj_idx,str):
         subj_idx = [subj_idx]
     y = 0
+    metadata_i = None
     for participant in pfiles:
-        
+        if metadata_i is not None:
+            metadata = None#avoids confusion of metadata infered for prev_subj
         print(f"Processing participant {participant}'s {dict_datatype[epoched]} {pick_channels}")
 
         # loading data
@@ -153,22 +155,23 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
                 data, events = data.resample(sfreq, events=events)
             combined =  {**event_id, **resp_id}#event_id | resp_id 
             stim = list(event_id.keys())
+            print(stim)
             
             if verbose:
                 print(f'Creating epochs based on following event ID :{np.unique(events[:,2])}')
 
             offset_after_resp_samples = int(offset_after_resp*sfreq)
             if metadata is None:
-                metadata, meta_events, event_id = mne.epochs.make_metadata(
+                metadata_i, meta_events, event_id = mne.epochs.make_metadata(
                     events=events, event_id=combined, tmin=tmin, tmax=tmax,
                     sfreq=data.info["sfreq"], row_events=stim, keep_first=["response"])
-                metadata = metadata[["event_name","response"]]#only keep event_names and rts
+                metadata_i = metadata_i[["event_name","response"]]#only keep event_names and rts
             epochs = mne.Epochs(data, meta_events, event_id, tmin, tmax, proj=False,
                     baseline=baseline, preload=True, picks=pick_channels,
-                    verbose=verbose,detrend=1, on_missing = 'warn', event_repeated='drop',
-                    metadata=metadata, reject_by_annotation=True, reject=reject_threshold)
-            metadata.rename({'response':'rt'}, axis=1, inplace=True)
-            rts = metadata.rt
+                    verbose=verbose, detrend=1, on_missing = 'warn', event_repeated='drop',
+                    metadata=metadata_i, reject_by_annotation=True, reject=reject_threshold)
+            epochs.metadata.rename({'response':'rt'}, axis=1, inplace=True)
+            rts = epochs.metadata.rt
         else:
             if '.fif' in participant:
                 epochs = mne.read_epochs(participant, preload=True, verbose=verbose)
@@ -837,6 +840,9 @@ def condition_selection(hmp_data, eeg_data, condition_string, variable='event'):
     stacked = stack_data(unstacked)
     return stacked
 
+def load_data(path):
+    return xr.load_dataset(path)
+
     
 def participant_selection(hmp_data, eeg_data, participant):
     unstacked = hmp_data.unstack().sel(participant = participant)
@@ -848,14 +854,14 @@ def bootstrapping(init, hmp_data, general_run, positions, eeg_data, iterations, 
     from hsmm_mvpy.visu import plot_topo_timecourse
     import xskillscore as xs
     fitted_mags = general_run.magnitudes.values[np.unique(np.where(np.isfinite(general_run.magnitudes))[0]),:]#remove NAs
-    mags_boot_mat = np.tile(np.nan, (iterations, init.compute_max_events()+3, init.n_dims))
-    pars_boot_mat = np.tile(np.nan, (iterations, init.compute_max_events()+4, 2))
+    mags_boot_mat = np.tile(np.nan, (iterations, init.compute_max_events(), init.n_dims))
+    pars_boot_mat = np.tile(np.nan, (iterations, init.compute_max_events()+1, 2))
 
     for i in range(iterations):
         bootstapped = xs.resample_iterations(hmp_data.unstack(), iterations=1, dim='epochs')
         hmp_data_boot = stack_data(bootstapped.squeeze())
-        init_boot = hmp(hmp_data_boot, sfreq=eeg_data.sfreq, event_width=50, cpus=cpus)
-        estimates_boot = init_boot.fit(verbose=verbose, threshold=threshold)
+        init_boot = hmp(hmp_data_boot, sfreq=eeg_data.sfreq, event_width=50, cpus=15)
+        estimates_boot = init_boot.fit(verbose=verbose, threshold=1)
         mags_boot_mat[i, :len(estimates_boot.magnitudes),:] = estimates_boot.magnitudes
         pars_boot_mat[i, :len(estimates_boot.parameters),:] = estimates_boot.parameters
         if plots:
