@@ -403,7 +403,7 @@ class hmp:
                     backward[:self.durations[trial],trial,:][::-1]
             eventprobs = forward * backward
             eventprobs[eventprobs < 1e-10] = 0 #floating point precision error
-            likelihood = np.sum(np.log(eventprobs.sum(axis=0)))#sum over max_samples to avoid 0s in log
+            likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
             eventprobs = eventprobs / eventprobs.sum(axis=0)
             #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
         else:
@@ -608,7 +608,7 @@ class hmp:
         d : ndarray
             density for a gamma with given parameters
         '''
-        warn('This method is deprecated and will be removed in future version, use compute_times() instead', DeprecationWarning, stacklevel=2)
+        # warn('This method is deprecated and will be removed in future version, use compute_times() instead', DeprecationWarning, stacklevel=2)
         eventprobs = eventprobs.dropna('event', how="all")
         eventprobs = eventprobs.dropna('trial_x_participant', how="all")
         onsets = np.empty((len(eventprobs.trial_x_participant),len(eventprobs.event)+1))*np.nan
