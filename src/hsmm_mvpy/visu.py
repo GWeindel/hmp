@@ -180,10 +180,10 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
         alpha=1
     if indiv:
         for loo in loocv_estimates.T:
-            ax[0].plot(np.arange(loocv_estimates.n_event.max())+1,loo, alpha=alpha)
+            ax[0].plot(loocv_estimates.n_event,loo, alpha=alpha)
     ax[0].set_ylabel('LOOCV Loglikelihood')
     ax[0].set_xlabel('Number of events')
-    ax[0].set_xticks(ticks=np.arange(1,loocv_estimates.n_event.max()+1))
+    ax[0].set_xticks(ticks=loocv_estimates.n_event)
     total_sub = len(loocv_estimates.participants)
     diffs, diff_bin, labels = [],[],[]
     for n_event in np.arange(2,loocv_estimates.n_event.max()+1):

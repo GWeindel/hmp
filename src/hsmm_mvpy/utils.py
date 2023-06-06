@@ -155,7 +155,6 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
                 data, events = data.resample(sfreq, events=events)
             combined =  {**event_id, **resp_id}#event_id | resp_id 
             stim = list(event_id.keys())
-            print(stim)
             
             if verbose:
                 print(f'Creating epochs based on following event ID :{np.unique(events[:,2])}')
@@ -723,7 +722,7 @@ def loocv_mp(init, stacked_data, bests, func=LOOCV, cpus=2, verbose=True):
                     itertools.repeat(bests.sel(n_events=n_events)), itertools.repeat(init.sfreq)))
         loocv.append(loo)
 
-    loocv = xr.DataArray(np.array(loocv)[:,:,0].astype(np.float64), coords={"n_event":np.arange(1,bests.n_events.max().values+1),
+    loocv = xr.DataArray(np.array(loocv)[:,:,0].astype(np.float64), coords={"n_event":np.arange(1,bests.n_events.max().values+1)[::-1],
                                                            "participants":np.array(loocv)[0,:,1]}, name="loo_likelihood")
     return loocv
 
