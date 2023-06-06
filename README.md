@@ -1,9 +1,9 @@
-hsmm_mvpy
+HsMM MVpy
 ==========
 
 ![](plots/general_illustration.png)
 
-hsmm_mvpy is an open-source Python package to estimate Hidden Semi-Markov Models in a Multivariate Pattern Analysis (HMP) of neural time-series (e.g. EEG) based on the method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)), Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HMP_MVPA_BorstAnderson_preprint.pdf)) and Weindel, van Maanen & Borst (in preparation).
+HsMM MVpy is an open-source Python package to estimate Hidden Semi-Markov Models in a Multivariate Pattern Analysis (HMP) of neural time-series (e.g. EEG) based on the method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)), Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HMP_MVPA_BorstAnderson_preprint.pdf)) and Weindel, van Maanen & Borst (in preparation).
 
 As a summary of the method, an HMP model parses the reaction time into a number of successive stages determined based on patterns in a neural time-serie. Hence any reaction time can then be described by a number of stage  and their duration estimated using hsmm_mvpy. The important aspect of HMP is that it is a whole-brain analysis (or whole scalp analysis) that estimates the onset of stages on a single-trial basis. This by-trial estimations allows you then to further dig into any aspect you are interested in a signal:
 - Describing an experiment or a clinical sample in terms of stages detected in the EEG signal
@@ -14,13 +14,13 @@ As a summary of the method, an HMP model parses the reaction time into a number 
 
 
 # Documentation
-**Important note**: the current tutorials are based on the latest (unstable) version not yet available through _pip_, installing through github is therefore recommended.
+**Important note** The current tutorials are based on the latest (unstable) version not yet available through _pip_, installing through github is therefore recommended.
 
 The package is available through *pip* with the command ```pip install hsmm_mvpy```. 
 A recommended way of using the package is to use a conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
 
-    $ conda create -n hsmm
-    $ conda activate hsmm
+    $ conda create -n hmp 
+    $ conda activate hmp
     $ conda install pip #if not already installed
     $ pip install hsmm_mvpy
 
@@ -55,7 +55,7 @@ To further learn about the method be sure to check the paper by Anderson, Zhang,
 - Van Maanen, L., Portoles, O., & Borst, J. P. (2021). The discovery and interpretation of evidence accumulation stages. Computational brain & behavior, 4(4), 395-415. [link](https://link.springer.com/article/10.1007/s42113-021-00105-2)
 - Portoles, O., Blesa, M., van Vugt, M., Cao, M., & Borst, J. P. (2022). Thalamic bursts modulate cortical synchrony locally to switch between states of global functional connectivity in a cognitive task. PLoS computational biology, 18(3), e1009407. [link](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009407)
 
-## Demo on simulated EEG data
+## Demo on simulated data
 
 The following section will quickly walk you through an example usage in simulated data (using [MNE](https://mne.tools/dev/auto_examples/simulation/index.html)'s simulation functions and tutorials)
 
@@ -101,12 +101,16 @@ for source in zip(names, means):#One source = one frequency, one amplitude and a
     sources.append([source[0], frequency, amplitude, gamma(shape, scale=source[1])])
 
 # Function used to generate the data
-file = simulations.simulate(sources, n_trials, cpus, 'dataset_README', location=25, overwrite=False)
+file = simulations.simulate(sources, n_trials, cpus, 'dataset_README', location=25, overwrite=True)
 #Recovering sampling frequency of the simulated dataset
 sfreq = simulations.simulation_sfreq()
 #load electrode position, specific to the simulations
 positions = simulations.simulation_positions()
 ```
+
+    Simulating ./dataset_README_raw.fif
+    ./dataset_README_raw.fif simulated
+
 
 
 ### Creating the event structure and plotting the raw data
@@ -129,6 +133,11 @@ import mne
 raw = mne.io.read_raw_fif(file[0], preload=False, verbose=False)
 raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events, block=True);
 ```
+
+    Using qt as 2D backend.
+    Channels marked as bad:
+    none
+    
 ![png](README_files/README_7_1.png)
 
 
@@ -153,19 +162,14 @@ First we read the EEG data as we would for a single participant:
 
 ```python
 # Reading the data
-eeg_data = hmp.utils.read_mne_EEG(file[0], event_id, resp_id, sfreq, 
+eeg_data = hmp.utils.read_mne_data(file[0], event_id=event_id, resp_id=resp_id, sfreq=sfreq, 
             events_provided=events, verbose=False)
 
 ```
 
-    Processing participant ./dataset_README_raw.fif
-    Reading 0 ... 161952  =      0.000 ...   269.644 secs...
-    Creating epochs based on following event ID :[1 6]
-    N trials without response event: 0
-    Applying reaction time trim to keep RTs between 0.001 and 5 seconds
-    50 RTs kept of 50 clean epochs
+    Processing participant ./dataset_README_raw.fif's continuous eeg
+    Reading 0 ... 153075  =      0.000 ...   254.864 secs...
     50 trials were retained for participant ./dataset_README_raw.fif
-    End sampling frequency is 600.614990234375 Hz
 
 
 The package uses [xarray](https://docs.xarray.dev/en/stable/) named dimension matrices, allowing to directly manipulate the data using the name of the dimensions:
@@ -179,15 +183,14 @@ eeg_data.sel(electrodes=['EEG 001','EEG 002','EEG 003'], samples=range(400))\
 ```
 
     <xarray.Dataset>
-    Dimensions:      (participant: 1, epochs: 50, electrodes: 59, samples: 680)
+    Dimensions:      (participant: 1, epochs: 50, electrodes: 59, samples: 711)
     Coordinates:
       * epochs       (epochs) int64 0 1 2 3 4 5 6 7 8 ... 41 42 43 44 45 46 47 48 49
       * electrodes   (electrodes) <U7 'EEG 001' 'EEG 002' ... 'EEG 059' 'EEG 060'
-      * samples      (samples) int64 0 1 2 3 4 5 6 7 ... 673 674 675 676 677 678 679
+      * samples      (samples) int64 0 1 2 3 4 5 6 7 ... 704 705 706 707 708 709 710
       * participant  (participant) <U2 'S0'
     Data variables:
-        data         (participant, epochs, electrodes, samples) float64 -1.873e-0...
-        event        (participant, epochs) <U8 'stimulus' 'stimulus' ... 'stimulus'
+        data         (participant, epochs, electrodes, samples) float64 1.96e-06 ...
     Attributes:
         sfreq:    600.614990234375
         offset:   0
@@ -243,7 +246,6 @@ plt.vlines(random_source_times[epoch,:-1].cumsum()-1, -3, 3, 'k')#overlaying the
 ```
 
 
-
     
 ![png](README_files/README_20_1.png)
     
@@ -277,9 +279,10 @@ We can directly fit an HMP model without giving any info on the number of stages
 estimates = init.fit(step=20, verbose=True)
 ```
 
-    Transition event 2 found around sample 147
-    Transition event 3 found around sample 262
-    Transition event 4 found around sample 342
+
+    Transition event 2 found around sample 137
+    Transition event 3 found around sample 258
+    Transition event 4 found around sample 330
     Estimating 4 events model
     Parameters estimated for 4 events model
 
@@ -287,6 +290,9 @@ estimates = init.fit(step=20, verbose=True)
 ### Visualizing results of the fit
 
 In the previous cell we initiated an HMP model looking for 50ms bumps in the EEG signal and parsing the EEG data into a signal with 4 Transition events and 5 gamma distributed stages with a fixed shape of 2 and a scale estimated by stage. We can now inspect the results of the fit.
+
+We can directly take a look to the topologies and latencies of the events by calling ```hmp.visu.plot_topo_timecourse```
+
 
 We can directly take a look to the topologies and latencies of the events by calling ```hmp.visu.plot_topo_timecourse```
 
@@ -374,7 +380,7 @@ This then shows the likeliest stage onset location in time for the first trial!
 
 ## Comparing with ground truth
 
-As we simulated the data we have access to the ground truth of the underlying generative events. We can then compare the average stage durations compared to the one estimated by _hsmm_mvpy_. As in the beginning, this code is specific to the case where you simulate data.
+As we simulated the data we have access to the ground truth of the underlying generative events. We can then compare the average stage durations compared to the one estimated by HMP-MVpy. As in the beginning, this code is specific to the case where you simulate data.
 
 
 ```python
@@ -410,7 +416,7 @@ hmp.visu.plot_topo_timecourse(eeg_data, estimates, positions, init, magnify=1, s
     
 
 
-We see that the _hsmm_mvpy_ package recovers the exact average location of the bumps defined in the simulated data.
+We see that the HSMM-MVpy package recovers the exact average location of the bumps defined in the simulated data.
 
 We can further test how well the package did by comparing the generated single trial onsets with those estimated from the HMP model
 
