@@ -14,15 +14,15 @@ As a summary of the method, an HMP model parses the reaction time into a number 
 
 
 # Documentation
-**Important note** The current tutorials are based on the latest (unstable) version not yet available through _pip_, installing through github is therefore recommended.
+**Important note** The current tutorials are based on the latest (unstable) version not yet default in _pip_, installing through github is therefore recommended or specify the beta version when installing through _pip_: ```pip install hsmm-mvpy==0.1.0b0```
 
-The package is available through *pip* with the command ```pip install hsmm_mvpy```. 
+The package is available through *pip*. 
 A recommended way of using the package is to use a conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
 
     $ conda create -n hmp 
     $ conda activate hmp
     $ conda install pip #if not already installed
-    $ pip install hsmm_mvpy
+    $ pip install hsmm-mvpy==0.1.0b0
 
 Then import hsmm-mvpy in your favorite python IDE through:
 
