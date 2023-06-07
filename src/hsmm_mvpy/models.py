@@ -911,10 +911,10 @@ class hmp:
         pars_prop[n_events+1,1] = last_stage
         while last_stage*self.shape > self.location+step:
             prev_n_events, prev_lkh, prev_time = n_events, lkh, time
-            mags_prop = mags_accepted[:n_events+1].copy()
+            mags_prop = mags[:n_events+1].copy()
             lkh, mags[:n_events+1], pars[:n_events+2], _ = \
                 self.EM(n_events+1, mags_prop, pars_prop.copy(), 1, [], [])
-            diffs = np.diff(mags[:n_events+1], axis=0, prepend=0)
+            diffs = np.diff(mags[:n_events+1], axis=0)
             if np.all(np.any(np.abs(diffs) > threshold, axis=1)):
                 n_events += 1
                 pars_accepted = pars[:n_events+2].copy()
@@ -930,13 +930,16 @@ class hmp:
                 all_pars.append(pars_accepted[:n_events+1].copy())
                 all_diffs.append(diffs)
             j += 1
-            pars_prop = pars_accepted[:n_events+2].copy()#cumulative
+            pars_prop = pars[:n_events+2].copy()#cumulative
             pars_prop[n_events,1] = step*j/self.shape
             last_stage = end/self.shape - np.sum(pars_prop[:n_events+1,1])
             pars_prop[n_events+1,1] = last_stage
             time = np.sum(pars_prop[:n_events,1])*self.shape + \
                 self.location*n_events + step*j/self.shape
-            pbar.update(int(np.round(time-prev_time+1)))
+            try:
+                pbar.update(int(np.round(time-prev_time+1)))
+            except:
+                pbar.update(1)
         # pbar.update(int(np.round(end-prev_time)+self.location+step))
         mags = mags_accepted[:n_events, :]
         pars = pars_accepted[:n_events+1, :]
