@@ -110,6 +110,8 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
         subj_idx = ["S"+str(x) for x in np.arange(len(pfiles))]
     if isinstance(subj_idx,str):
         subj_idx = [subj_idx]
+    if upper_limit_RT<0 or lower_limit_RT<0:
+        raise ValueError('Limit to RTs cannot be negative')
     y = 0
     if metadata is not None:
         if len(pfiles)> 1 and len(metadata) != len(pfiles):
