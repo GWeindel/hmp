@@ -16,7 +16,7 @@ def available_sources(subselection=True):
     '''
     data_path = sample.data_path()
     subjects_dir = op.join(data_path, 'subjects')
-    labels = mne.read_labels_from_annot('sample', subjects_dir=subjects_dir)
+    labels = mne.read_labels_from_annot('sample', subjects_dir=subjects_dir, verbose=False)
     named_labels = []
     for label in range(len(labels)):
         named_labels.append(labels[label].name)
@@ -24,7 +24,7 @@ def available_sources(subselection=True):
     named_labels = np.array(named_labels)
     if subselection:
         named_labels = named_labels[[0,1,3,5,7,15,17,22,30,33,37,40,42,46,50,54,57,59,65,67]]
-    return subselection
+    return named_labels
 
 def simulation_sfreq():
     data_path = sample.data_path()

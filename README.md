@@ -63,6 +63,8 @@ First we load the libraries necessary for the demo on simulated data
 
 ### Importing libraries
 
+
+
 ```python
 ## Importing these packages is specific for this simulation case
 import numpy as np
@@ -74,6 +76,7 @@ from scipy.stats import gamma
 import hsmm_mvpy as hmp
 from hsmm_mvpy import simulations
 ```
+
 
 ### Simulating data
 
@@ -89,12 +92,12 @@ cpus = 5 # For multiprocessing, usually a good idea to use multiple CPUs as long
 n_trials = 50 #Number of trials to simulate
 
 ##### Here we define the sources of the brain activity (event) for each trial
+n_sources = 5
 frequency = 10.#Frequency of the event defining its duration, half-sine of 10Hz = 50ms
-amplitude = .5e-6 #Amplitude of the event in Volt, defining signal to noise ratio
+amplitude = .5e-6 #Amplitude of the event in nAm, defining signal to noise ratio
 shape = 2 #shape of the gamma distribution
 means = np.array([60, 150, 200, 100, 80])/shape #Mean duration of the stages in ms
-names = ['bankssts-rh','posteriorcingulate-lh','parahippocampal-lh',\
-         'pericalcarine-rh','postcentral-lh']#Which source to activate at each stage (see atlas when calling simulations.available_sources())
+names = simulations.available_sources()[:n_sources+1]#Which source to activate at each stage (see atlas when calling simulations.available_sources())
 
 sources = []
 for source in zip(names, means):#One source = one frequency, one amplitude and a given by-trial variability distribution
@@ -133,13 +136,7 @@ import mne
 raw = mne.io.read_raw_fif(file[0], preload=False, verbose=False)
 raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events, block=True);
 ```
-
-    Using qt as 2D backend.
-    Channels marked as bad:
-    none
-    
 ![png](README_files/README_7_1.png)
-
 
 
 ### Recovering number of stages as well as actual by-trial variation
@@ -168,7 +165,7 @@ eeg_data = hmp.utils.read_mne_data(file[0], event_id=event_id, resp_id=resp_id, 
 ```
 
     Processing participant ./dataset_README_raw.fif's continuous eeg
-    Reading 0 ... 153075  =      0.000 ...   254.864 secs...
+    Reading 0 ... 143915  =      0.000 ...   239.613 secs...
     50 trials were retained for participant ./dataset_README_raw.fif
 
 
@@ -183,14 +180,16 @@ eeg_data.sel(electrodes=['EEG 001','EEG 002','EEG 003'], samples=range(400))\
 ```
 
     <xarray.Dataset>
-    Dimensions:      (participant: 1, epochs: 50, electrodes: 59, samples: 711)
+    Dimensions:      (participant: 1, epochs: 50, electrodes: 59, samples: 783)
     Coordinates:
       * epochs       (epochs) int64 0 1 2 3 4 5 6 7 8 ... 41 42 43 44 45 46 47 48 49
       * electrodes   (electrodes) <U7 'EEG 001' 'EEG 002' ... 'EEG 059' 'EEG 060'
-      * samples      (samples) int64 0 1 2 3 4 5 6 7 ... 704 705 706 707 708 709 710
+      * samples      (samples) int64 0 1 2 3 4 5 6 7 ... 776 777 778 779 780 781 782
       * participant  (participant) <U2 'S0'
     Data variables:
-        data         (participant, epochs, electrodes, samples) float64 1.96e-06 ...
+        data         (participant, epochs, electrodes, samples) float64 -3.747e-0...
+        event_name   (participant, epochs) object 'stimulus' ... 'stimulus'
+        rt           (participant, epochs) float64 0.5444 0.641 ... 0.8991 1.304
     Attributes:
         sfreq:    600.614990234375
         offset:   0
@@ -280,9 +279,11 @@ estimates = init.fit(step=20, verbose=True)
 ```
 
 
+
+    Transition event 1 found around sample 37
     Transition event 2 found around sample 137
-    Transition event 3 found around sample 258
-    Transition event 4 found around sample 330
+    Transition event 3 found around sample 277
+    Transition event 4 found around sample 348
     Estimating 4 events model
     Parameters estimated for 4 events model
 
@@ -294,8 +295,6 @@ In the previous cell we initiated an HMP model looking for 50ms bumps in the EEG
 We can directly take a look to the topologies and latencies of the events by calling ```hmp.visu.plot_topo_timecourse```
 
 
-We can directly take a look to the topologies and latencies of the events by calling ```hmp.visu.plot_topo_timecourse```
-
 
 ```python
 hmp.visu.plot_topo_timecourse(eeg_data, estimates, #Data and estimations 
@@ -306,7 +305,7 @@ hmp.visu.plot_topo_timecourse(eeg_data, estimates, #Data and estimations
 
 
     
-![png](README_files/README_27_0.png)
+![png](README_files/README_26_0.png)
     
 
 
@@ -323,7 +322,7 @@ ax.set_ylabel('your label here');
 
 
     
-![png](README_files/README_29_0.png)
+![png](README_files/README_28_0.png)
     
 
 
@@ -345,13 +344,13 @@ hmp.visu.plot_distribution(estimates.eventprobs.mean(dim=['trial_x_participant']
 
 
     
-![png](README_files/README_31_1.png)
+![png](README_files/README_30_1.png)
     
 
 
 
     
-![png](README_files/README_31_2.png)
+![png](README_files/README_30_2.png)
     
 
 
@@ -372,7 +371,7 @@ hmp.visu.plot_distribution(estimates.eventprobs.sel(trial_x_participant=('S0', 0
 
 
     
-![png](README_files/README_33_1.png)
+![png](README_files/README_32_1.png)
     
 
 
@@ -397,7 +396,7 @@ plt.show()
 
 
     
-![png](README_files/README_35_0.png)
+![png](README_files/README_34_0.png)
     
 
 
@@ -412,7 +411,7 @@ hmp.visu.plot_topo_timecourse(eeg_data, estimates, positions, init, magnify=1, s
 
 
     
-![png](README_files/README_37_0.png)
+![png](README_files/README_36_0.png)
     
 
 
@@ -436,7 +435,7 @@ for event in init.compute_times(init, estimates, duration=True, mean=False, add_
 
 
     
-![png](README_files/README_39_0.png)
+![png](README_files/README_38_0.png)
     
 
 
@@ -471,7 +470,7 @@ plt.ylim(-3e-6,3e-6);
 
 
     
-![png](README_files/README_41_0.png)
+![png](README_files/README_40_0.png)
     
 
 
@@ -500,7 +499,7 @@ for stage in range(number_of_sources):
 
 
     
-![png](README_files/README_43_0.png)
+![png](README_files/README_42_0.png)
     
 
 
