@@ -10,7 +10,7 @@ from mne.datasets import sample
 from warnings import warn
 
 
-def available_sources():
+def available_sources(subselection=True):
     '''
     list available sources for sample subject in MNE
     '''
@@ -20,7 +20,11 @@ def available_sources():
     named_labels = []
     for label in range(len(labels)):
         named_labels.append(labels[label].name)
-    return named_labels
+    #Here we select sources with different topologies on HMP and relativ equal contribution on electrodes, not checked on MEG
+    named_labels = np.array(named_labels)
+    if subselection:
+        named_labels = named_labels[[0,1,3,5,7,15,17,22,30,33,37,40,42,46,50,54,57,59,65,67]]
+    return subselection
 
 def simulation_sfreq():
     data_path = sample.data_path()
@@ -50,7 +54,7 @@ def bump_shape(bump_width, bump_width_samples, steps):
     return template
 
 
-def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, location=1): 
+def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, location=1, seed=123): 
     '''
     Simulates n_trials of EEG and/or MEG using MNE's tools based on the specified sources
     
@@ -132,6 +136,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
     fwd_fname = op.join(data_path, 'MEG', subject,'sample_audvis-meg-eeg-oct-6-fwd.fif')
     fwd = mne.read_forward_solution(fwd_fname, verbose=verbose)
     src = fwd['src']
+
     
     #For each subject, simulate associated sources
     files = []
@@ -172,7 +177,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             for source in sources_subj:
                 selected_label = mne.read_labels_from_annot(
                     subject, regexp=source[0], subjects_dir=subjects_dir, verbose=verbose)[0]
-                label = mne.label.select_sources(subject, selected_label, subjects_dir=subjects_dir, location='random', extent=1)
+                label = mne.label.select_sources(subject, selected_label, subjects_dir=subjects_dir, location=0, grow_outside=False)
                 #last two parameters ensure sources that are different enough
                 # Define the time course of the activity for each source of the region to
                 # activate
@@ -213,6 +218,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             if noise:
                 cov = mne.make_ad_hoc_cov(raw.info, verbose=verbose)
                 mne.simulation.add_noise(raw, cov, iir_filter=[0.2, -0.2, 0.04], verbose=verbose)
+            data = raw.get_data()
             raw.save(subj_file, overwrite=True)
             files_subj.append(subj_file)
             np.save(subj_file.split('.fif')[0]+'_generating_events.npy', generating_events)
@@ -223,3 +229,4 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
         return files[0]
     else:
         return files
+    
