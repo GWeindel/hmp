@@ -872,16 +872,16 @@ def bootstrapping(init, hmp_data, general_run, positions, eeg_data, iterations, 
     from hsmm_mvpy.visu import plot_topo_timecourse
     import xskillscore as xs
     fitted_mags = general_run.magnitudes.values[np.unique(np.where(np.isfinite(general_run.magnitudes))[0]),:]#remove NAs
-    mags_boot_mat = np.tile(np.nan, (iterations, init.compute_max_events(), init.n_dims))
-    pars_boot_mat = np.tile(np.nan, (iterations, init.compute_max_events()+1, 2))
+    mags_boot_mat = []#np.tile(np.nan, (iterations, init.compute_max_events(), init.n_dims))
+    pars_boot_mat = []#np.tile(np.nan, (iterations, init.compute_max_events()+1, 2))
 
     for i in range(iterations):
         bootstapped = xs.resample_iterations(hmp_data.unstack(), iterations=1, dim='epochs')
         hmp_data_boot = stack_data(bootstapped.squeeze())
-        init_boot = hmp(hmp_data_boot, sfreq=eeg_data.sfreq, event_width=50, cpus=15)
-        estimates_boot = init_boot.fit(verbose=verbose, threshold=1)
-        mags_boot_mat[i, :len(estimates_boot.magnitudes),:] = estimates_boot.magnitudes
-        pars_boot_mat[i, :len(estimates_boot.parameters),:] = estimates_boot.parameters
+        init_boot = hmp(hmp_data_boot, sfreq=eeg_data.sfreq, event_width=init.event_width, cpus=init.cpus)
+        estimates_boot = init_boot.fit(verbose=verbose, threshold=threshold)
+        mags_boot_mat.append(estimates_boot.magnitudes)
+        pars_boot_mat.append(estimates_boot.parameters)
         if plots:
             plot_topo_timecourse(eeg_data, estimates_boot, positions, init_boot)
 
