@@ -478,7 +478,7 @@ def plot_latencies(times, event_width, time_step=1, labels=[], colors=default_co
 
 def plot_iterations(iterations, eeg_data, init, positions, dims):
     from hsmm_mvpy.models import hmp
-    for iteration in iterations.iteration[:-1]:
+    for iteration in iterations.iteration:
         selected = init.fit_single(iterations.sel(iteration=iteration)[dims[0]].dropna(dim='event').event[-1].values+1,\
             magnitudes = iterations.sel(iteration=iteration)[dims[0]].dropna(dim='event'),\
             parameters = iterations.sel(iteration=iteration)[dims[1]].dropna(dim='stage'),\
