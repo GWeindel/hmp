@@ -391,7 +391,7 @@ def hmp_data_format(data, events, sfreq, offset=0, participants=[], epochs=None,
         electrodes = np.arange(n_electrodes)
     if epochs is None:
          epochs = np.arange(n_epochs)
-    if len(participants) < 2:
+    if n_subj < 2:
         data = xr.Dataset(
                 {
                     "data": (["epochs", "electrodes", "samples"],data),
@@ -868,9 +868,10 @@ def participant_selection(hmp_data, eeg_data, participant):
     return stacked
 
 def bootstrapping(init, hmp_data, general_run, positions, eeg_data, iterations, threshold=1, verbose=True, plots=True, cpus=1):
+    warn('This method is inaccurate and will be removed in future version, see the bootstraping function in the resample module instead', DeprecationWarning, stacklevel=2)
     from hsmm_mvpy.models import hmp
     from hsmm_mvpy.visu import plot_topo_timecourse
-    import xskillscore as xs
+    import xskillscore as xs#Todo remove from dependency list
     fitted_mags = general_run.magnitudes.values[np.unique(np.where(np.isfinite(general_run.magnitudes))[0]),:]#remove NAs
     mags_boot_mat = []#np.tile(np.nan, (iterations, init.compute_max_events(), init.n_dims))
     pars_boot_mat = []#np.tile(np.nan, (iterations, init.compute_max_events()+1, 2))

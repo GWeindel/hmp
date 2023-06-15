@@ -884,15 +884,15 @@ class hmp:
         eventprobs_sp = np.array([x[3] for x in estimates])
         return lkhs_sp, mags_sp, pars_sp, eventprobs_sp
     
-    def fit(self, step=1, verbose=True, figsize=(12,3), end=None, stdev=None, threshold=1, trace=False):
+    def fit(self, step=1, verbose=True, figsize=(12,3), end=None, threshold=None, trace=False):
         '''
         '''
         if end is None:
             end = self.mean_d
         n_points = int(end//step)
         if threshold is None:
-            threshold = (stdev/np.sqrt(self.n_trials))
-            print(threshold)
+            means = np.array([np.mean(self.events[np.random.choice(range(len(self.events)), self.n_trials),:], axis=0) for x in range(1000)])
+            threshold = np.abs(np.max(np.percentile(means, [0.01, 99.99], axis=0)))
         end = step*(n_points)#Rounding up to step size  
         lkh = -np.inf
         pars = np.zeros((n_points-1,2))
@@ -900,7 +900,7 @@ class hmp:
         pars[0,1] = 0.5#initialize with one event
         mags = np.zeros((n_points-1, self.n_dims))
         pbar = tqdm(total = end)
-        n_events, j, time = 1,1,0
+        n_events, j, time = 0,1,0
         last_stage = end
         if trace:
             all_pars, all_mags, all_mags_prop, all_pars_prop, all_diffs = [],[],[],[],[]
@@ -911,11 +911,15 @@ class hmp:
         pars_prop[n_events+1,1] = last_stage
         while last_stage*self.shape > self.location+step:
             prev_n_events, prev_lkh, prev_time = n_events, lkh, time
-            mags_prop = mags[:n_events+1].copy()
+            mags_prop = mags[:n_events+1].copy()#cumulative
             lkh, mags[:n_events+1], pars[:n_events+2], _ = \
                 self.EM(n_events+1, mags_prop, pars_prop.copy(), 1, [], [])
-            diffs = np.diff(mags[:n_events+1], axis=0)
-            if np.all(np.any(np.abs(diffs) > threshold, axis=1)):
+            signif = np.all(np.any(np.abs(mags[:n_events+1]) > threshold, axis=1))
+            if n_events > 0:
+                diffs = np.all(np.any(np.abs(np.diff(mags[:n_events+1], axis=0)) > threshold, axis=1))
+            else:
+                diffs = True
+            if signif and diffs:
                 n_events += 1
                 pars_accepted = pars[:n_events+2].copy()
                 mags_accepted = mags[:n_events+2].copy()
@@ -928,9 +932,9 @@ class hmp:
                 all_pars_prop.append(pars_prop.copy())
                 all_mags.append(mags_accepted[:n_events].copy())
                 all_pars.append(pars_accepted[:n_events+1].copy())
-                all_diffs.append(diffs)
+                all_diffs.append(np.abs(np.diff(mags[:n_events+1], axis=0)))
             j += 1
-            pars_prop = pars[:n_events+2].copy()#cumulative
+            pars_prop = pars_accepted[:n_events+2].copy()
             pars_prop[n_events,1] = step*j/self.shape
             last_stage = end/self.shape - np.sum(pars_prop[:n_events+1,1])
             pars_prop[n_events+1,1] = last_stage

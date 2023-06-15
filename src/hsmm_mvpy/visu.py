@@ -8,9 +8,9 @@ from itertools import cycle
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold']
 
 def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_step=1, ydim=None,
-                        figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
-                        ylabels=[], max_time = None, vmin=None, vmax=None, title=False, ax=False, 
-                        sensors=False, skip_electrodes_computation=False):
+                figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
+                ylabels=[], max_time = None, vmin=None, vmax=None, title=False, ax=None, 
+                sensors=False, skip_electrodes_computation=False):
     '''
     Plotting the event topologies at the average time of the end of the previous stage.
     
@@ -84,7 +84,7 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
     if len(np.shape(electrodes)) == 2:
         electrodes = electrodes[np.newaxis]
     n_iter = np.shape(electrodes)[0]
-    if isinstance(ax, bool):
+    if ax is None:
         if figsize == None:
             figsize = (12, 1*n_iter)
         fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
@@ -101,9 +101,8 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
         n_event = int(sum(np.isfinite(electrodes_[:,0])))
         electrodes_ = electrodes_[:n_event,:]
         for event in np.arange(n_event):
-            # if np.sum(electrodes_[event,:]) != 0:
             axes.append(ax.inset_axes([times_iteration[event],iteration-yoffset,
-                                       (event_size),yoffset*2], transform=ax.transData))
+                                (event_size),yoffset*2], transform=ax.transData))
             plot_topomap(electrodes_[event,:], channel_position, axes=axes[-1], show=False,
                          cmap=cmap, vlim=(vmin, vmax), sensors=sensors)
     if isinstance(ylabels, dict):
@@ -133,7 +132,7 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
         plt.show()    
 
 
-def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=False, mean=False):
+def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=None, mean=False):
     '''
     Plotting the LOOCV results
     
@@ -165,7 +164,7 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
             from scipy.stats import ttest_1samp
         else:
             raise ValueError('Expected sign or t-test argument to test parameter')
-    if isinstance(ax, bool):
+    if ax is None:
         fig, ax = plt.subplots(1,2, figsize=figsize)
         return_ax = False
     else:
@@ -476,14 +475,23 @@ def plot_latencies(times, event_width, time_step=1, labels=[], colors=default_co
         axs.legend()
     return axs
 
-def plot_iterations(iterations, eeg_data, init, positions, dims):
+def plot_iterations(iterations, eeg_data, init, positions, dims=['magnitudes','parameters'], alpha=1, ax=None):
     from hsmm_mvpy.models import hmp
+    if 'iteration' not in iterations.dims:
+        try:
+            iterations['iteration'] = [0]
+        except:
+            iterations = iterations.expand_dims({'iteration':[0]}, axis=1)
+            iterations['iteration'] = [0]
     for iteration in iterations.iteration:
         selected = init.fit_single(iterations.sel(iteration=iteration)[dims[0]].dropna(dim='event').event[-1].values+1,\
             magnitudes = iterations.sel(iteration=iteration)[dims[0]].dropna(dim='event'),\
             parameters = iterations.sel(iteration=iteration)[dims[1]].dropna(dim='stage'),\
             threshold=0, verbose=False)
-
         #Visualizing
-        plot_topo_timecourse(eeg_data, selected, positions,  init, magnify=1, sensors=False)
+        plot_topo_timecourse(eeg_data, selected, positions,  init, magnify=1, sensors=False,ax=ax)
     
+
+# def plot_bootstrap_results(max_model, counts):
+#     fig, axes = plt.subplots(b
+                             
