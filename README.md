@@ -3,9 +3,9 @@ HsMM MVpy
 
 ![](plots/general_illustration.png)
 
-HsMM MVpy is an open-source Python package to estimate Hidden Semi-Markov Models in a Multivariate Pattern Analysis (HMP) of neural time-series (e.g. EEG) based on the method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)), Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HMP_MVPA_BorstAnderson_preprint.pdf)) and Weindel, van Maanen & Borst (in preparation).
+HsMM MVpy is an open-source Python package to estimate Hidden Semi-Markov Models in a Multivariate Pattern Analysis (HMP) of neural time-series (e.g. EEG) based on the HsMM-MVPA method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030); see Borst & Anderson, [2021](http://jelmerborst.nl/pubs/ACTR_HMP_MVPA_BorstAnderson_preprint.pdf), for an accessible introduction). HMP is described in Weindel, van Maanen & Borst (in preparation).
 
-As a summary of the method, an HMP model parses the reaction time into a number of successive stages determined based on patterns in a neural time-serie. Hence any reaction time can then be described by a number of stage  and their duration estimated using hsmm_mvpy. The important aspect of HMP is that it is a whole-brain analysis (or whole scalp analysis) that estimates the onset of stages on a single-trial basis. This by-trial estimations allows you then to further dig into any aspect you are interested in a signal:
+As a summary of the method, an HMP model parses the reaction time into a number of successive stages determined based on patterns in a neural time-serie. Hence any reaction time can then be described by a number of stages and their duration estimated using HMP. The important aspect of HMP is that it is a whole-brain analysis (or whole scalp analysis) that estimates the onset of stages on a single-trial basis. These by-trial estimates allow you then to further dig into any aspect you are interested in a signal:
 - Describing an experiment or a clinical sample in terms of stages detected in the EEG signal
 - Describing experimental effects based on a particular stage duration
 - Estimating the effect of trial-wise manipuations on the identified stages (e.g. the by-trial variation of stimulus strength or the effect of time-on-task)
@@ -45,15 +45,21 @@ Then move to the clone repository and run
 To get started with the code:
 - Check the demo below 
 - Inspect the tutorials in the tutorials repository
-    - Load EEG data (tutorial 1)
-    - Estimating a HMP with given number of stages (tutorial 2)
-    - Test for the number of stages that best explains the data (tutorial 3)
-    - Testing differences across conditions (tutorial 4)
+    - Tutorial 1: Loading EEG data 
+    - Tutorial 2: Estimating a HMP with given number of stages
+    - Tutorial 3: Test for the number of stages that best explains the data
+    - Tutorial 4: Testing differences across conditions
 
-To further learn about the method be sure to check the paper by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)) as well as the book chapter by Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HMP_MVPA_BorstAnderson_preprint.pdf)). The following list also contains a non-exhaustive list of papers published using HMP:
+To further learn about the oriignal HsMM-MVPA method be sure to check the paper by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)) as well as the book chapter by Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HMP_MVPA_BorstAnderson_preprint.pdf)). The following list contains a non-exhaustive list of papers published using the original HsMM-MVPA method:
+- Anderson, J.R., Borst, J.P., Fincham, J.M., Ghuman, A.S., Tenison, C., & Zhang, Q. (2018). The Common Time Course of Memory Processes Revealed. Psychological Science 29(9), pp. 1463-1474. [link](https://doi.org/10.1177/0956797618774526)
+- Berberyan, H.S., Van Rijn, H., & Borst, J.P. (2021). Discovering the brain stages of lexical decision: Behavioral effects originate from a single neural decision process. Brain and Cognition 153: 105786. [link](https://www.sciencedirect.com/science/article/pii/S0278262621001068)
 - Berberyan, H. S., van Maanen, L., van Rijn, H., & Borst, J. (2021). EEG-based identification of evidence accumulation stages in decision-making. Journal of Cognitive Neuroscience, 33(3), 510-527. [link](https://doi.org/10.1162/jocn_a_01663)
 - Van Maanen, L., Portoles, O., & Borst, J. P. (2021). The discovery and interpretation of evidence accumulation stages. Computational brain & behavior, 4(4), 395-415. [link](https://link.springer.com/article/10.1007/s42113-021-00105-2)
 - Portoles, O., Blesa, M., van Vugt, M., Cao, M., & Borst, J. P. (2022). Thalamic bursts modulate cortical synchrony locally to switch between states of global functional connectivity in a cognitive task. PLoS computational biology, 18(3), e1009407. [link](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009407)
+- Portoles, O., Borst, J.P., & Van Vugt, M.K. (2018). Characterizing synchrony patterns across cognitive task stages of associative recognition memory. European Journal of Neuroscience 48, pp. 2759-2769. [link](http://onlinelibrary.wiley.com/doi/10.1111/ejn.13817/epdf)
+- Zhang, Q., van Vugt, M.K., Borst, J.P., & Anderson, J.R. (2018). Mapping Working Memory Retrieval in Space and in Time: A Combined Electroencephalography and Electrocorticography Approach. NeuroImage 174, pp. 472-484. [link](https://www.sciencedirect.com/science/article/pii/S1053811918302490)
+
+
 
 ## Demo on simulated data
 
@@ -80,7 +86,7 @@ from hsmm_mvpy import simulations
 
 ### Simulating data
 
-In the following code block we simulate 50 trials from four known sources, this is not code you would need for your own analysis except if you want to simulate and test properties of HMP models. All these four sources are defined by a localization, an activation amplitude and a distribution (here a gamma with shape and scale parameters) for the onsets of the stages on each trial. The simulation functions are based on this [MNE tutorial ](https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html).
+In the following code block we simulate 50 trials from four known sources, this is not code you would need for your own analysis except if you'd want to simulate and test properties of HMP models. All four sources are defined by a location, an activation amplitude and a distribution in time (here a gamma with shape and scale parameters) for the onsets of the stages on each trial. The simulation functions are based on this [MNE tutorial ](https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html).
 
 _If you're running this for the first time a 1.65 G file will be downloaded in order to perform the simulation but this will be done only once (alternatively you can just download the corresponding simulation file and place it in the same folder from where you are running this notebook)_
 
@@ -92,19 +98,20 @@ cpus = 5 # For multiprocessing, usually a good idea to use multiple CPUs as long
 n_trials = 50 #Number of trials to simulate
 
 ##### Here we define the sources of the brain activity (event) for each trial
+# Because the last source determines the response, we will get four events during the trials, and therefore five stages
 n_sources = 5
 frequency = 10.#Frequency of the event defining its duration, half-sine of 10Hz = 50ms
 amplitude = .5e-6 #Amplitude of the event in nAm, defining signal to noise ratio
 shape = 2 #shape of the gamma distribution
 means = np.array([60, 150, 200, 100, 80])/shape #Mean duration of the stages in ms
-names = simulations.available_sources()[:n_sources+1]#Which source to activate at each stage (see atlas when calling simulations.available_sources())
+names = simulations.available_sources()[:n_sources]#Which source to activate at each stage (see atlas when calling simulations.available_sources())
 
 sources = []
 for source in zip(names, means):#One source = one frequency, one amplitude and a given by-trial variability distribution
     sources.append([source[0], frequency, amplitude, gamma(shape, scale=source[1])])
 
 # Function used to generate the data
-file = simulations.simulate(sources, n_trials, cpus, 'dataset_README', location=25, overwrite=True)
+file = simulations.simulate(sources, n_trials, cpus, 'dataset_README', location=25, overwrite=True) #location indicates the middle of the event after the stage start time in ms
 #Recovering sampling frequency of the simulated dataset
 sfreq = simulations.simulation_sfreq()
 #load electrode position, specific to the simulations
@@ -141,8 +148,7 @@ raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events, block=True
 
 ### Recovering number of stages as well as actual by-trial variation
 
-To compare the by-trial duration of bumps that we will estimate later on we first recover the actual number of stages or sources used in the simulation as well as the actual by-trial variation in the onset of the bumps. Again with a typical dataset you wouldn't need that part as you ignore the ground truth.
-
+To see how well HMP does at recovering by-trial stages below, here we get the ground truth from our simulation. Unfortunately, with an actual dataset you don’t have access to this, of course. 
 
 ```python
 %matplotlib inline
@@ -169,7 +175,7 @@ eeg_data = hmp.utils.read_mne_data(file[0], event_id=event_id, resp_id=resp_id, 
     50 trials were retained for participant ./dataset_README_raw.fif
 
 
-The package uses [xarray](https://docs.xarray.dev/en/stable/) named dimension matrices, allowing to directly manipulate the data using the name of the dimensions:
+HMP uses [xarray](https://docs.xarray.dev/en/stable/) named dimension matrices, allowing to directly manipulate the data using the name of the dimensions:
 
 
 ```python
@@ -211,14 +217,13 @@ Note that if the number of components to retain is not specified, the scree plot
 hmp_data = hmp.utils.transform_data(eeg_data, apply_standard=False, n_comp=4)
 ```
 
-Once the data is in the expected format, we can initialize an HMP
+# HMP model
 
+Once the data is in the expected format, we can initialize an HMP object; note that no estimation is performed yet.
 
 ```python
 init = hmp.models.hmp(hmp_data, eeg_data, event_width=50, cpus=cpus)#Initialization of the model
 ```
-
-# HMP model
 
 We are looking for stages in the data (**Hidden Markov**) and assume that transitions between stages are signaled by a template in the data (**pattern analysis**). By default we use the same template as Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet'.apa.org/doi/10.1037/rev0000030)), a 10 Hz half-sine, resulting in a 50ms duration bump-like shape:
 
@@ -234,7 +239,7 @@ plt.plot(init.template,'x');
     
 
 
-This pattern is assumed to be present in multiple electrodes (**multivariate**). In order to find it, we apply a cross-correlation between that shape and the (normalized) EEG data:
+This pattern is assumed to be present across several electrodes (**multivariate**). In order to find it, we apply a cross-correlation between that shape and the (normalized) EEG data:
 
 
 
@@ -251,7 +256,7 @@ plt.vlines(random_source_times[epoch,:-1].cumsum()-1, -3, 3, 'k')#overlaying the
 
 
 
-The by-trial onset of this transition event is assumed to be captured by a probability distribution (**semi-Markov**), e.g. in this application a gamma with a shape of 2:
+The by-trial onset of this transition pattern event is assumed to be captured by a probability distribution (**semi-Markov**), e.g. in this application a gamma with a shape of 2:
 
 
 ```python
@@ -266,11 +271,11 @@ plt.xlabel('t');
     
 
 
-And this is then the full explanation of an HMP model: Looking for a transition event across several electrodes and trials that signals a transition to the next stage and which onset is expected to follow a probability distribution (in this case a gamma).
+And this is then the full explanation of an HMP model: Looking for a transition event across several electrodes and trials that signals a transition to the next stage and which onset is expected to follow a probability distribution (by default a gamma distribution).
 
 # Estimating an HMP model
 
-We can directly fit an HMP model without giving any info on the number of stages (see tutorial 2 for the explanation of the following cell)
+We can directly fit an HMP model without giving any info on the number of stages (see tutorial 2 for a detailed explanation of the following cell)
 
 
 
@@ -290,7 +295,7 @@ estimates = init.fit(step=20, verbose=True)
 
 ### Visualizing results of the fit
 
-In the previous cell we initiated an HMP model looking for 50ms bumps in the EEG signal and parsing the EEG data into a signal with 4 Transition events and 5 gamma distributed stages with a fixed shape of 2 and a scale estimated by stage. We can now inspect the results of the fit.
+In the previous cell we initiated an HMP model looking for default 50ms bumps – the transition events – in the EEG signal. The method discovered four events, and therefore five gamma-distributed stages with a fixed shape of 2 and an estimated scale. We can now inspect the results of the fit.
 
 We can directly take a look to the topologies and latencies of the events by calling ```hmp.visu.plot_topo_timecourse```
 
@@ -379,7 +384,7 @@ This then shows the likeliest stage onset location in time for the first trial!
 
 ## Comparing with ground truth
 
-As we simulated the data we have access to the ground truth of the underlying generative events. We can then compare the average stage durations compared to the one estimated by HMP-MVpy. As in the beginning, this code is specific to the case where you simulate data.
+As we simulated the data we have access to the ground truth of the underlying generative events. We can then compare the average stage durations compared to the one estimated by HMP. Perhaps to state the obvious, this code is specific to the case where you simulate data.
 
 
 ```python
@@ -400,7 +405,7 @@ plt.show()
     
 
 
-Or also overlay actual bumps onset with predicted one
+We can also overlay actual bumps onset with predicted one
 
 
 
@@ -415,7 +420,7 @@ hmp.visu.plot_topo_timecourse(eeg_data, estimates, positions, init, magnify=1, s
     
 
 
-We see that the HSMM-MVpy package recovers the exact average location of the bumps defined in the simulated data.
+We see that the HMP recovered the exact average location of the bumps defined in the simulated data.
 
 We can further test how well the package did by comparing the generated single trial onsets with those estimated from the HMP model
 
@@ -474,7 +479,7 @@ plt.ylim(-3e-6,3e-6);
     
 
 
-Given how variable and serial each of these stages are, the more you progress in the chain of events the less clear the signal gets. This is very close to traditional ERPs with very clear signal in the beginning of a trial (as events are more in phase) and summed and blurried in later stages of the reaction times (as event are off phase).
+Given how variable and serial each of these stages are, the more you progress in the chain of events the less clear the signal gets. This is similar to traditional ERPs that have a very clear signal in the beginning of a trial (as events are more in phase) and summed and blurred further away from the stimulus (as events are off phase).
 
 Now things can get better if we first parse, by-trial, the signal into the different stages based on the HMP estimates:
 
@@ -504,7 +509,7 @@ for stage in range(number_of_sources):
 
 
 
-In this case we clearly see at each stage the half-sin (of 50ms hence ~ 30 samples for the sampling frequency used) we simulated in the first step and the preceding period of silence (hence the first stage doesn't contain such a half-sin). Note that the end of the stages tend to be noisier because less trial are defining the average signal (also why the confidence interval grows).
+In this case we clearly see at each stage the half-sine (of 50ms hence ~ 30 samples for the sampling frequency used) we simulated in the first step and the preceding period of silence (hence the first stage doesn't contain such a half-sine). Note that the end of the stages tend to be noisier because fewer trials are defining the average signal.
 
 
 ### Follow-up
