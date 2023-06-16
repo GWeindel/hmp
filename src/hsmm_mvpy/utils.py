@@ -421,6 +421,7 @@ def hmp_data_format(data, events, sfreq, offset=0, participants=[], epochs=None,
         metadata = metadata.rename_dims({'index':'epochs'})
         metadata = metadata.rename_vars({'index':'epochs'})
         data = data.merge(metadata)
+        data = data.set_coords(list(metadata.data_vars))
     return data
 
 def standardize(x):
