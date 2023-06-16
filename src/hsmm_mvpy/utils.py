@@ -212,10 +212,10 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
                 metadata_i = metadata_i.iloc[valid_epoch_index]
                 metadata_i.reset_index(drop=True, inplace=True)
                 rts = metadata_i[rt_col]
-            try:
-                rts = rts/scale
-            except:
-                raise ValueError(f'Expected column named {rt_col} in the provided metadata file, alternative names can be passed through the rt_col parameter')
+#            try:
+#                rts = rts/scale
+#            except:
+#                raise ValueError(f'Expected column named {rt_col} in the provided metadata file, alternative names can be passed through the rt_col parameter')
         elif rts is None:
             raise ValueError(f'Expected either a metadata Dataframe or an array of Reaction Times')
         rts_arr = np.array(rts)
