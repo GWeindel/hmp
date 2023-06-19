@@ -11,7 +11,7 @@ import pandas as pd
 import warnings
 from warnings import warn, filterwarnings
 
-filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later  
+filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later 
 
 def read_mne_EEG(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None, 
                  subj_idx=None, metadata = None, events_provided=None, rt_col='response',
@@ -253,7 +253,9 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
         print(f'{len(cropped_data_epoch)} trials were retained for participant {participant}')
         if verbose:
             print(f'End sampling frequency is {sfreq} Hz')
-        epoch_data.append(hmp_data_format(cropped_data_epoch, cropped_trigger, epochs.info['sfreq'], offset_after_resp_samples, epochs=[int(x) for x in epochs_idx], channels = epochs.ch_names, metadata = metadata_i))
+
+        epoch_data.append(hmp_data_format(cropped_data_epoch, epochs.info['sfreq'], None, offset_after_resp_samples, epochs=[int(x) for x in epochs_idx], electrodes = epochs.ch_names, metadata = metadata_i))
+
         y += 1
     epoch_data = xr.concat(epoch_data, dim = xr.DataArray(subj_idx, dims='participant'),
                           fill_value={'event':'', 'data':np.nan})
@@ -358,10 +360,12 @@ def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after
         (data[epoch,:,:rts[epoch]+offset_after_resp_samples])
         j += 1
     print(f'Totaling {len(cropped_data_epoch)} valid trials')
-    data_xr = hmp_data_format(cropped_data_epoch, conditions, sfreq, offset_after_resp_samples, epochs=epochs, channels = channel_columns)
+
+    data_xr = hmp_data_format(cropped_data_epoch, sfreq, conditions, offset_after_resp_samples, epochs=epochs, electrodes = electrode_columns)
     return data_xr
 
-def hmp_data_format(data, events, sfreq, offset=0, participants=[], epochs=None, channels=None, metadata=None):
+def hmp_data_format(data, sfreq, events=None, offset=0, participants=[], epochs=None, electrodes=None, metadata=None):
+
     '''
     Converting 3D matrix with dimensions (participant) * trials * channels * sample into xarray Dataset
     
@@ -388,10 +392,8 @@ def hmp_data_format(data, events, sfreq, offset=0, participants=[], epochs=None,
         n_subj = 1
     else:
         raise ValueError(f'Unknown data format with dimensions {np.shape(data)}')
-    if events is None:
-        events = np.repeat(np.nan, n_epochs)
-    if channels is None:
-        channels = np.arange(n_channels)
+    if electrodes is None:
+        electrodes = np.arange(n_electrodes)
     if epochs is None:
          epochs = np.arange(n_epochs)
     if n_subj < 2:
@@ -425,6 +427,12 @@ def hmp_data_format(data, events, sfreq, offset=0, participants=[], epochs=None,
         metadata = metadata.rename_vars({'index':'epochs'})
         data = data.merge(metadata)
         data = data.set_coords(list(metadata.data_vars))
+    if events is not None:
+        data['events'] = xr.DataArray(
+            events,
+            dims=("participant", "epochs"),
+            coords={"participant": participants, "epochs": epochs})
+        data = data.set_coords('events')
     return data
 
 def standardize(x):
