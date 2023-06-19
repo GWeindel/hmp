@@ -422,6 +422,7 @@ def hmp_data_format(data, sfreq, events=None, offset=0, participants=[], epochs=
                 attrs={'sfreq':sfreq,'offset':offset}
                 )
     if metadata is not None:
+        metadata = metadata.loc[epochs]
         metadata = metadata.to_xarray()
         metadata = metadata.rename_dims({'index':'epochs'})
         metadata = metadata.rename_vars({'index':'epochs'})
