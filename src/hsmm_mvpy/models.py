@@ -234,11 +234,12 @@ class hmp:
             eventprobs = np.concatenate((eventprobs, np.tile(np.nan, (np.shape(eventprobs)[0],\
                     np.shape(eventprobs)[1], multiple_n_events-np.shape(eventprobs)[2]))),axis=2)
             n_events = multiple_n_events
-            # print(np.shape(eventprobs))
         
         xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
-        xrparams = xr.DataArray(pars, dims=("stage",'parameter'), name="parameters")
-        xrmags = xr.DataArray(mags, dims=("event","component"), name="magnitudes")
+        xrparams = xr.DataArray(pars, dims=("stage",'parameter'), name="parameters", 
+                        coords = [range(len(pars)), ['shape','scale']])
+        xrmags = xr.DataArray(mags, dims=("event","component"), name="magnitudes",
+                    coords = [range(len(mags)), range(np.shape(mags)[1])])
         part, trial = self.coords['participant'].values, self.coords['trials'].values
         if n_events>0:
             n_samples, n_participant_x_trials,_ = np.shape(eventprobs)
@@ -563,6 +564,8 @@ class hmp:
             flats = temp_best.parameters.values
             events_temp,flats_temp = [],[]
             for event in np.arange(n_events+1):#creating all possible solutions
+                print(event)
+                print(temp_best.magnitudes)
                 events_temp.append(temp_best.magnitudes.sel(event = np.array(list(set(n_events_list) - set([event])))).values)
                 flat = event + 1 #one more flat than events
                 temp = np.copy(flats[:,1])
@@ -670,18 +673,21 @@ class hmp:
         return times
    
     @staticmethod
-    def compute_topologies(electrodes, estimated, event_width_samples, extra_dim=False):
-        shifted_times = estimated.eventprobs.shift(samples=event_width_samples//2+1, fill_value=0).copy()#Shifts to compute electrode topology at the peak of the event
+    def compute_topologies(channels, estimated, event_width_samples, extra_dim=False, mean=True):
+        shifted_times = estimated.eventprobs.shift(samples=event_width_samples//2+1, fill_value=0).copy()#Shifts to compute channel topology at the peak of the event
         if extra_dim:
-            return xr.dot(electrodes.rename({'epochs':'trials'}).\
-                      stack(trial_x_participant=['participant','trials']).data.fillna(0), \
-                      shifted_times.fillna(0), dims=['samples']).mean('trial_x_participant').\
-                      transpose(extra_dim,'event','electrodes')
+            data =  xr.dot(channels.rename({'epochs':'trials'}).\
+                      stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant'), \
+                      shifted_times.fillna(0), dims=['samples']).\
+                      transpose(extra_dim,'trial_x_participant','event','channels')
         else:
-            return xr.dot(electrodes.rename({'epochs':'trials'}).\
-                      stack(trial_x_participant=['participant','trials']).data.fillna(0), \
-                      shifted_times.fillna(0), dims=['samples']).mean('trial_x_participant').\
-                      transpose('event','electrodes')
+            data = xr.dot(channels.rename({'epochs':'trials'}).\
+                      stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant'), \
+                      shifted_times.fillna(0), dims=['samples']).\
+                      transpose('trial_x_participant','event','channels')
+        if mean:
+            data = data.mean('trial_x_participant')
+        return data
     
     def gen_random_stages(self, n_events, mean_d):
         '''
@@ -914,7 +920,7 @@ class hmp:
             mags_prop = mags[:n_events+1].copy()#cumulative
             lkh, mags[:n_events+1], pars[:n_events+2], _ = \
                 self.EM(n_events+1, mags_prop, pars_prop.copy(), 1, [], [])
-            signif = np.all(np.any(np.abs(mags[:n_events+1]) > threshold, axis=1))
+            signif = True# np.all(np.any(np.abs(mags[:n_events+1]) > threshold, axis=1))
             if n_events > 0:
                 diffs = np.all(np.any(np.abs(np.diff(mags[:n_events+1], axis=0)) > threshold, axis=1))
             else:
