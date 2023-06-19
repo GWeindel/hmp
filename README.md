@@ -14,7 +14,7 @@ As a summary of the method, an HMP model parses the reaction time into a number 
 
 
 # Documentation
-**Important note** The current tutorials are based on the latest (unstable) version not yet default in _pip_, installing through github is therefore recommended or specify the beta version when installing through _pip_: ```pip install hsmm-mvpy==0.1.0b1```
+**Important note** The current tutorials are based on the latest (unstable) version not yet default in _pip_, installing through github is therefore recommended or specify the beta version when installing through _pip_: ```pip install hsmm-mvpy==0.1.0b7```
 
 The package is available through *pip*. 
 A recommended way of using the package is to use a conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
@@ -22,7 +22,7 @@ A recommended way of using the package is to use a conda environment (see [anaco
     $ conda create -n hmp 
     $ conda activate hmp
     $ conda install pip #if not already installed
-    $ pip install hsmm-mvpy==0.1.0b1
+    $ pip install hsmm-mvpy==0.1.0b7
 
 Then import hsmm-mvpy in your favorite python IDE through:
 
@@ -70,7 +70,6 @@ First we load the libraries necessary for the demo on simulated data
 ### Importing libraries
 
 
-
 ```python
 ## Importing these packages is specific for this simulation case
 import numpy as np
@@ -84,11 +83,13 @@ from hsmm_mvpy import simulations
 ```
 
 
+
 ### Simulating data
 
 In the following code block we simulate 50 trials from four known sources, this is not code you would need for your own analysis except if you'd want to simulate and test properties of HMP models. All four sources are defined by a location, an activation amplitude and a distribution in time (here a gamma with shape and scale parameters) for the onsets of the stages on each trial. The simulation functions are based on this [MNE tutorial ](https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html).
 
 _If you're running this for the first time a 1.65 G file will be downloaded in order to perform the simulation but this will be done only once (alternatively you can just download the corresponding simulation file and place it in the same folder from where you are running this notebook)_
+
 
 
 
@@ -98,20 +99,19 @@ cpus = 5 # For multiprocessing, usually a good idea to use multiple CPUs as long
 n_trials = 50 #Number of trials to simulate
 
 ##### Here we define the sources of the brain activity (event) for each trial
-# Because the last source determines the response, we will get four events during the trials, and therefore five stages
 n_sources = 5
 frequency = 10.#Frequency of the event defining its duration, half-sine of 10Hz = 50ms
 amplitude = .5e-6 #Amplitude of the event in nAm, defining signal to noise ratio
 shape = 2 #shape of the gamma distribution
 means = np.array([60, 150, 200, 100, 80])/shape #Mean duration of the stages in ms
-names = simulations.available_sources()[:n_sources]#Which source to activate at each stage (see atlas when calling simulations.available_sources())
+names = simulations.available_sources()[:n_sources+1]#Which source to activate at each stage (see atlas when calling simulations.available_sources())
 
 sources = []
 for source in zip(names, means):#One source = one frequency, one amplitude and a given by-trial variability distribution
     sources.append([source[0], frequency, amplitude, gamma(shape, scale=source[1])])
 
 # Function used to generate the data
-file = simulations.simulate(sources, n_trials, cpus, 'dataset_README', location=25, overwrite=True) #location indicates the middle of the event after the stage start time in ms
+file = simulations.simulate(sources, n_trials, cpus, 'dataset_README', location=25, overwrite=True)
 #Recovering sampling frequency of the simulated dataset
 sfreq = simulations.simulation_sfreq()
 #load electrode position, specific to the simulations
@@ -119,12 +119,40 @@ positions = simulations.simulation_positions()
 ```
 
     Simulating ./dataset_README_raw.fif
+
+
+    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
+    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
+    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
+    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
+    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
+    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
+    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
+
+
+    NOTE: pick_types() is a legacy function. New code should use inst.pick(...).
+    Removing projector <Projection | PCA-v1, active : True, n_channels : 102>
+    Removing projector <Projection | PCA-v2, active : True, n_channels : 102>
+    Removing projector <Projection | PCA-v3, active : True, n_channels : 102>
+    Overwriting existing file.
+    Writing /home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/dataset_README_raw.fif
+    Closing /home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/dataset_README_raw.fif
+    [done]
     ./dataset_README_raw.fif simulated
 
 
-
 ### Creating the event structure and plotting the raw data
-
 
 To recover the data we need to create the event structure based on the triggers sent during simulation. This is the same as analyzing real EEG data and recovering events in the stimulus channel. In our case 1 signal the onset of the stimulus and 6 the moment of the response. Hence a trial is defined as the times occuring between the triggers 1 and 6.
 
@@ -143,12 +171,19 @@ import mne
 raw = mne.io.read_raw_fif(file[0], preload=False, verbose=False)
 raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events, block=True);
 ```
-![png](README_files/README_7_1.png)
 
+    NOTE: pick_types() is a legacy function. New code should use inst.pick(...).
+    Using qt as 2D backend.
+    Channels marked as bad:
+    none
+
+
+![png](README_files/README_7_1.png)
 
 ### Recovering number of stages as well as actual by-trial variation
 
 To see how well HMP does at recovering by-trial stages below, here we get the ground truth from our simulation. Unfortunately, with an actual dataset you don’t have access to this, of course. 
+
 
 ```python
 %matplotlib inline
@@ -160,7 +195,7 @@ random_source_times = np.reshape(np.ediff1d(generating_events[:,0],to_begin=0)[g
 
 ## Demo for a single participant in a single condition based on the simulated data
 
-First we read the EEG data as we would for a single participant:
+First we read the EEG data as we would for a single participant
 
 
 ```python
@@ -171,31 +206,34 @@ eeg_data = hmp.utils.read_mne_data(file[0], event_id=event_id, resp_id=resp_id, 
 ```
 
     Processing participant ./dataset_README_raw.fif's continuous eeg
-    Reading 0 ... 143915  =      0.000 ...   239.613 secs...
+    Reading 0 ... 148481  =      0.000 ...   247.215 secs...
     50 trials were retained for participant ./dataset_README_raw.fif
+
 
 
 HMP uses [xarray](https://docs.xarray.dev/en/stable/) named dimension matrices, allowing to directly manipulate the data using the name of the dimensions:
 
 
+
+
 ```python
 #example of usage of xarray
 print(eeg_data)
-eeg_data.sel(electrodes=['EEG 001','EEG 002','EEG 003'], samples=range(400))\
-    .data.groupby('samples').mean(['participant','epochs']).plot.line(hue='electrodes');
+eeg_data.sel(channels=['EEG 001','EEG 002','EEG 003'], samples=range(400))\
+    .data.groupby('samples').mean(['participant','epochs']).plot.line(hue='channels');
 ```
 
     <xarray.Dataset>
-    Dimensions:      (participant: 1, epochs: 50, electrodes: 59, samples: 783)
+    Dimensions:      (participant: 1, epochs: 50, channels: 59, samples: 931)
     Coordinates:
       * epochs       (epochs) int64 0 1 2 3 4 5 6 7 8 ... 41 42 43 44 45 46 47 48 49
-      * electrodes   (electrodes) <U7 'EEG 001' 'EEG 002' ... 'EEG 059' 'EEG 060'
-      * samples      (samples) int64 0 1 2 3 4 5 6 7 ... 776 777 778 779 780 781 782
+      * channels     (channels) <U7 'EEG 001' 'EEG 002' ... 'EEG 059' 'EEG 060'
+      * samples      (samples) int64 0 1 2 3 4 5 6 7 ... 924 925 926 927 928 929 930
+        event_name   (epochs) object 'stimulus' 'stimulus' ... 'stimulus' 'stimulus'
+        rt           (epochs) float64 0.7076 0.5611 1.041 ... 0.5661 0.4246 0.4712
       * participant  (participant) <U2 'S0'
     Data variables:
-        data         (participant, epochs, electrodes, samples) float64 -3.747e-0...
-        event_name   (participant, epochs) object 'stimulus' ... 'stimulus'
-        rt           (participant, epochs) float64 0.5444 0.641 ... 0.8991 1.304
+        data         (participant, epochs, channels, samples) float64 -3.225e-07 ...
     Attributes:
         sfreq:    600.614990234375
         offset:   0
@@ -203,9 +241,8 @@ eeg_data.sel(electrodes=['EEG 001','EEG 002','EEG 003'], samples=range(400))\
 
 
     
-![png](README_files/README_12_1.png)
+![png](README_files/README_13_1.png)
     
-
 
 
 Next we transform the data as in Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)) including standardization of individual variances (not in this case as we have only one simulated participant), z-scoring and spatial principal components analysis (PCA). 
@@ -221,9 +258,12 @@ hmp_data = hmp.utils.transform_data(eeg_data, apply_standard=False, n_comp=4)
 
 Once the data is in the expected format, we can initialize an HMP object; note that no estimation is performed yet.
 
+
+
 ```python
 init = hmp.models.hmp(hmp_data, eeg_data, event_width=50, cpus=cpus)#Initialization of the model
 ```
+
 
 We are looking for stages in the data (**Hidden Markov**) and assume that transitions between stages are signaled by a template in the data (**pattern analysis**). By default we use the same template as Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet'.apa.org/doi/10.1037/rev0000030)), a 10 Hz half-sine, resulting in a 50ms duration bump-like shape:
 
@@ -235,7 +275,7 @@ plt.plot(init.template,'x');
 
 
     
-![png](README_files/README_18_0.png)
+![png](README_files/README_19_0.png)
     
 
 
@@ -250,13 +290,20 @@ plt.vlines(random_source_times[epoch,:-1].cumsum()-1, -3, 3, 'k')#overlaying the
 ```
 
 
-    
-![png](README_files/README_20_1.png)
-    
 
+
+    <matplotlib.collections.LineCollection at 0x7f47d02a0210>
+
+
+
+
+    
+![png](README_files/README_21_1.png)
+    
 
 
 The by-trial onset of this transition pattern event is assumed to be captured by a probability distribution (**semi-Markov**), e.g. in this application a gamma with a shape of 2:
+
 
 
 ```python
@@ -267,7 +314,7 @@ plt.xlabel('t');
 
 
     
-![png](README_files/README_22_0.png)
+![png](README_files/README_23_0.png)
     
 
 
@@ -279,16 +326,20 @@ We can directly fit an HMP model without giving any info on the number of stages
 
 
 
+
+
 ```python
 estimates = init.fit(step=20, verbose=True)
 ```
 
 
+      0%|          | 0/400 [00:00<?, ?it/s]
 
-    Transition event 1 found around sample 37
-    Transition event 2 found around sample 137
-    Transition event 3 found around sample 277
-    Transition event 4 found around sample 348
+
+    Transition event 1 found around sample 38
+    Transition event 2 found around sample 144
+    Transition event 3 found around sample 294
+    Transition event 4 found around sample 358
     Estimating 4 events model
     Parameters estimated for 4 events model
 
@@ -301,6 +352,7 @@ We can directly take a look to the topologies and latencies of the events by cal
 
 
 
+
 ```python
 hmp.visu.plot_topo_timecourse(eeg_data, estimates, #Data and estimations 
                                positions, init,#position of the electrodes and initialized model
@@ -310,13 +362,14 @@ hmp.visu.plot_topo_timecourse(eeg_data, estimates, #Data and estimations
 
 
     
-![png](README_files/README_26_0.png)
+![png](README_files/README_27_0.png)
     
 
 
 This shows us the electrode activity on the scalp as well as the average time of occurence of the events based on the stage distributions.
 
 As we are estimating the event onsets on a by-trial basis we can look at the by-trial variation in stage duration.
+
 
 
 ```python
@@ -327,7 +380,7 @@ ax.set_ylabel('your label here');
 
 
     
-![png](README_files/README_28_0.png)
+![png](README_files/README_29_0.png)
     
 
 
@@ -343,23 +396,24 @@ hmp.visu.plot_distribution(estimates.eventprobs.mean(dim=['trial_x_participant']
 
 
 
-    <AxesSubplot: xlabel='Time (in samples)', ylabel='p(event)'>
+    <Axes: xlabel='Time (in samples)', ylabel='p(event)'>
 
 
 
 
     
-![png](README_files/README_30_1.png)
+![png](README_files/README_31_1.png)
     
 
 
 
     
-![png](README_files/README_30_2.png)
+![png](README_files/README_31_2.png)
     
 
 
 As HMP estimated stage onset per trial we can also look at the predicted stage onsets for a given trial.
+
 
 
 ```python
@@ -370,14 +424,15 @@ hmp.visu.plot_distribution(estimates.eventprobs.sel(trial_x_participant=('S0', 0
 
 
 
-    <AxesSubplot: xlabel='Time (in samples)', ylabel='p(event)'>
+    <Axes: xlabel='Time (in samples)', ylabel='p(event)'>
 
 
 
 
     
-![png](README_files/README_32_1.png)
+![png](README_files/README_33_1.png)
     
+
 
 
 This then shows the likeliest stage onset location in time for the first trial!
@@ -385,6 +440,7 @@ This then shows the likeliest stage onset location in time for the first trial!
 ## Comparing with ground truth
 
 As we simulated the data we have access to the ground truth of the underlying generative events. We can then compare the average stage durations compared to the one estimated by HMP. Perhaps to state the obvious, this code is specific to the case where you simulate data.
+
 
 
 ```python
@@ -401,7 +457,7 @@ plt.show()
 
 
     
-![png](README_files/README_34_0.png)
+![png](README_files/README_35_0.png)
     
 
 
@@ -416,13 +472,15 @@ hmp.visu.plot_topo_timecourse(eeg_data, estimates, positions, init, magnify=1, s
 
 
     
-![png](README_files/README_36_0.png)
+![png](README_files/README_37_0.png)
     
+
 
 
 We see that the HMP recovered the exact average location of the bumps defined in the simulated data.
 
 We can further test how well the package did by comparing the generated single trial onsets with those estimated from the HMP model
+
 
 
 ```python
@@ -440,8 +498,9 @@ for event in init.compute_times(init, estimates, duration=True, mean=False, add_
 
 
     
-![png](README_files/README_38_0.png)
+![png](README_files/README_39_0.png)
     
+
 
 
 We see that every stage gets nicely recovered even on a by-trial basis!
@@ -463,7 +522,7 @@ fig, ax = plt.subplots(1,1, figsize=(20,5), sharey=True)
 
 for electrode in zip(['EEG 016','EEG 025','EEG 020'],#Cherry-picked electrodes
                      ['darkgreen','darkred','darkblue']):
-    df = pd.DataFrame(data.sel(electrodes=electrode[0]).squeeze().T).melt(var_name='Time')
+    df = pd.DataFrame(data.sel(channels=electrode[0]).squeeze().T).melt(var_name='Time')
     sns.lineplot(x='Time', y='value',data=df, color=electrode[1])
 
 plt.vlines(np.cumsum(random_source_times.mean(axis=0)), -3e-6, 3e-6)
@@ -475,13 +534,15 @@ plt.ylim(-3e-6,3e-6);
 
 
     
-![png](README_files/README_40_0.png)
+![png](README_files/README_41_0.png)
     
 
 
 Given how variable and serial each of these stages are, the more you progress in the chain of events the less clear the signal gets. This is similar to traditional ERPs that have a very clear signal in the beginning of a trial (as events are more in phase) and summed and blurred further away from the stimulus (as events are off phase).
 
 Now things can get better if we first parse, by-trial, the signal into the different stages based on the HMP estimates:
+
+
 
 
 ```python
@@ -504,8 +565,9 @@ for stage in range(number_of_sources):
 
 
     
-![png](README_files/README_42_0.png)
+![png](README_files/README_43_0.png)
     
+
 
 
 
@@ -519,4 +581,3 @@ For examples on how to use the package when the number of transition events/stag
 - Estimating a given number of events (tutorial 2)
 - Test for the number of events that best explains the data (tutorial 3)
 - Testing differences across conditions (tutorial 4)
-
