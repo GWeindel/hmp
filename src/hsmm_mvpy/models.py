@@ -564,8 +564,6 @@ class hmp:
             flats = temp_best.parameters.values
             events_temp,flats_temp = [],[]
             for event in np.arange(n_events+1):#creating all possible solutions
-                print(event)
-                print(temp_best.magnitudes)
                 events_temp.append(temp_best.magnitudes.sel(event = np.array(list(set(n_events_list) - set([event])))).values)
                 flat = event + 1 #one more flat than events
                 temp = np.copy(flats[:,1])
