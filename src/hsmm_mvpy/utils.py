@@ -132,7 +132,6 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
                 data = mne.io.read_raw_bdf(participant, preload=False, verbose=verbose)
             else:
                 raise ValueError(f'Unknown EEG file format for participant {participant}')
-            data = _pick_channels(pick_channels,data, stim=True)
             if sfreq is None: 
                 sfreq = data.info['sfreq']
 
@@ -143,6 +142,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
                     events = mne.find_events(data, verbose=verbose, min_duration = 1 / data.info['sfreq'])
                 except:
                     events = mne.events_from_annotations(data, verbose=verbose)
+                data = _pick_channels(pick_channels,data, stim=True)
                 if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicates offset in the trggers
                     print(f'Correcting event values as trigger channel has offset {np.unique(events[:,1])}')
                     events[:,2] = events[:,2]-events[:,1]#correction on event value                
@@ -210,9 +210,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
         rts = metadata_i[rt_col]
         if isinstance(metadata_i, pd.DataFrame):
             if len(metadata_i) > len(data_epoch):#assumes metadata contains rejected epochs
-                print(True)
-                metadata_i = metadata_i.iloc[valid_epoch_index]
-                metadata_i.reset_index(drop=True, inplace=True)
+                metadata_i = metadata_i.loc[valid_epoch_index]
                 rts = metadata_i[rt_col]
             try:
                 rts = rts/scale

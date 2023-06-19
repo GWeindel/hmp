@@ -888,7 +888,7 @@ class hmp:
         eventprobs_sp = np.array([x[3] for x in estimates])
         return lkhs_sp, mags_sp, pars_sp, eventprobs_sp
     
-    def fit(self, step=1, verbose=True, figsize=(12,3), end=None, threshold=None, trace=False):
+    def fit(self, step=1, verbose=True, figsize=(12,3), end=None, threshold=1, trace=False):
         '''
         '''
         if end is None:

@@ -153,7 +153,9 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
 
     Returns
     -------
-    ax : matplotlib.pyplot.ax
+    ax : matplotlib.pyplot.aiptions: ['BAD_', 'BAD_breaks']
+(array([[     0,      0,      2],
+       [     0,      0,      2],x
         if ax was specified otherwise returns the plot
     '''
     if pvals:
@@ -503,8 +505,10 @@ def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoc
         plot_topo_timecourse(epoch_data, model_to_compare, info, init,ax=axes['a'])
         times = init.compute_times(init, model_to_compare, mean=True)
         maxboot_model = model_to_compare
+    counts_adjusted = np.zeros(int(maxboot_model.event.max()+1))
+    counts_adjusted[:len(counts)] = counts
     axes['a'].set_xlabel('Time (samples)')
-    axes['b'].bar(maxboot_model.event+1,counts)
+    axes['b'].bar(maxboot_model.event+1,counts_adjusted)
     axes['b'].set_xlabel('Event number')
     axes['b'].set_xticks(maxboot_model.event+1)
     axes['b'].set_ylabel('Frequency')

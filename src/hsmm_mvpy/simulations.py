@@ -99,6 +99,8 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
     '''
     if seed is not None:
         random_state = np.random.RandomState(seed)
+    else:
+        random_state = None
     sources = np.array(sources, dtype=object)
     if len(np.shape(sources)) == 2:
         sources = [sources]#If only one subject
