@@ -47,7 +47,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
         0.3) eventual downsampling is performed if sfreq is lower than the data's sampling frequency. The event structure is
         passed at the resample() function of MNE to ensure that events are approriately timed after downsampling.
         0.4) epochs are created based on stimulus onsets (event_id) and tmin and tmax. Epoching removes any epoch where a 
-        'BAD' annotiation is present and all epochs where an channel exceeds reject_threshold. Epochs are baseline 
+        'BAD' annotiation is present and all epochs where an electrode exceeds reject_threshold. Epochs are baseline 
         corrected from tmin to stimulus onset (time 0).)
     1) Reaction times (RT) are computed based on the sample difference between onset of stimulus and response triggers. 
         If no response event happens after a stimulus or if RT > upper_limit_RT & < upper_limit_RT, RT is 0.
@@ -99,8 +99,8 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
     Returns
     -------
     epoch_data : xarray
-        Returns an xarray Dataset with all the data, events, channels, participant. 
-        All eventual participant/channels naming and epochs index are kept. 
+        Returns an xarray Dataset with all the data, events, electrodes, participant. 
+        All eventual participant/electrodes naming and epochs index are kept. 
         The choosen sampling frequnecy is stored as attribute.
     '''
     import mne
@@ -253,9 +253,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
         print(f'{len(cropped_data_epoch)} trials were retained for participant {participant}')
         if verbose:
             print(f'End sampling frequency is {sfreq} Hz')
-
         epoch_data.append(hmp_data_format(cropped_data_epoch, epochs.info['sfreq'], None, offset_after_resp_samples, epochs=[int(x) for x in epochs_idx], electrodes = epochs.ch_names, metadata = metadata_i))
-
         y += 1
     epoch_data = xr.concat(epoch_data, dim = xr.DataArray(subj_idx, dims='participant'),
                           fill_value={'event':'', 'data':np.nan})
@@ -264,13 +262,13 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
 def _pick_channels(pick_channels,data,stim=True):
     if isinstance(pick_channels, list):
         try:
-            data = data.pick(pick_channels)
+            data = data.pick_channels(pick_channels)
         except:
-            raise ValueError('incorrect channel pick specified')
-    elif pick_channels == 'eeg' or pick_channels == 'meg':
-            data = data.pick(pick_channels)
+            raise ValueError('incorrect electrode pick specified')
+    elif pick_channels == 'eeg':
+            data = data.pick_types(meg=False, eeg=True, stim=stim, eog=False, misc=False, exclude='bads') 
     else:
-         raise ValueError('incorrect channel pick specified')
+         raise ValueError('incorrect electrode pick specified')
     return data
 
 def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after_resp=0.1):
@@ -287,14 +285,14 @@ def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after
     Parameters
     ----------
     data: pandas.dataframe
-        pandas dataframe with columns time (in milliseconds), epoch number and one column for each channel 
-        (column name will be taken as channel names)
+        pandas dataframe with columns time (in milliseconds), epoch number and one column for each electrode 
+        (column name will be taken as electrode names)
     rts: list or 1d array
         list of reaction times in milliseconds for each epoch 
     epoch_index: list or 1d array
         number of the index (important for eventual dropped trials during the prepro154,cessing
-    channel_index: list or 1d array
-        list of name of the channels
+    electrode_index: list or 1d array
+        list of name of the electrodes
     condition: list or 1d array
         list of condition associated with each epoch
     sfreq: float
@@ -328,10 +326,10 @@ def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after
     conditions = conditions[epochs]
     times = data.time.unique()
     data = data.drop(columns=['time', 'epoch'])
-    #channel names/columns are assumed to be remaining columns affter removing time and epoch columns
-    channel_columns = [x for x in data.columns]
+    #electrode names/columns are assumed to be remaining columns affter removing time and epoch columns
+    electrode_columns = [x for x in data.columns]
     data = data.values.flatten()
-    data = data.reshape((len(epochs), len(times),len(channel_columns)))
+    data = data.reshape((len(epochs), len(times),len(electrode_columns)))
     data = np.swapaxes(data,1,2)
 
     nan_con = np.array([i for i,x in enumerate(conditions) if isinstance(x, float) and np.isnan(x)])
@@ -351,7 +349,7 @@ def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after
         epoch += 1
     cropped_conditions = []
     epoch_idx = []
-    cropped_data_epoch = np.empty([len(epochs), len(channel_columns), max(rts)+offset_after_resp_samples])
+    cropped_data_epoch = np.empty([len(epochs), len(electrode_columns), max(rts)+offset_after_resp_samples])
     cropped_data_epoch[:] = np.nan
     j = 0
     for epoch in np.arange(len(data)):
@@ -360,19 +358,17 @@ def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after
         (data[epoch,:,:rts[epoch]+offset_after_resp_samples])
         j += 1
     print(f'Totaling {len(cropped_data_epoch)} valid trials')
-
     data_xr = hmp_data_format(cropped_data_epoch, sfreq, conditions, offset_after_resp_samples, epochs=epochs, electrodes = electrode_columns)
     return data_xr
 
 def hmp_data_format(data, sfreq, events=None, offset=0, participants=[], epochs=None, electrodes=None, metadata=None):
-
     '''
-    Converting 3D matrix with dimensions (participant) * trials * channels * sample into xarray Dataset
+    Converting 3D matrix with dimensions (participant) * trials * electrodes * sample into xarray Dataset
     
     Parameters
     ----------
     data : ndarray
-        4/3D matrix with dimensions (participant) * trials * channels * sample  
+        4/3D matrix with dimensions (participant) * trials * electrodes * sample  
     events : ndarray
         np.array with 3 columns -> [samples of the event, initial value of the channel, event code]. To use if the
         automated event detection method of MNE is not appropriate 
@@ -382,28 +378,27 @@ def hmp_data_format(data, sfreq, events=None, offset=0, participants=[], epochs=
         List of participant index
     epochs : list
         List of epochs index
-    channels : list
-        List of channel index
+    electrodes : list
+        List of electrode index
     '''
     if len(np.shape(data)) == 4:#means group
-        n_subj, n_epochs, n_channels, n_samples = np.shape(data)
+        n_subj, n_epochs, n_electrodes, n_samples = np.shape(data)
     elif len(np.shape(data)) == 3:
-        n_epochs, n_channels, n_samples = np.shape(data)
-        n_subj = 1
+        n_epochs, n_electrodes, n_samples = np.shape(data)
     else:
         raise ValueError(f'Unknown data format with dimensions {np.shape(data)}')
     if electrodes is None:
         electrodes = np.arange(n_electrodes)
     if epochs is None:
          epochs = np.arange(n_epochs)
-    if n_subj < 2:
+    if len(participants) < 2:
         data = xr.Dataset(
                 {
-                    "data": (["epochs", "channels", "samples"],data),
+                    "data": (["epochs", "electrodes", "samples"],data),
                 },
                 coords={
                     "epochs" :epochs,
-                    "channels":  channels,
+                    "electrodes":  electrodes,
                     "samples": np.arange(n_samples)
                 },
                 attrs={'sfreq':sfreq,'offset':offset}
@@ -411,12 +406,12 @@ def hmp_data_format(data, sfreq, events=None, offset=0, participants=[], epochs=
     else:
         data = xr.Dataset(
                 {
-                    "data": (['participant',"epochs", "channels", "samples"],data),
+                    "data": (['participant',"epochs", "electrodes", "samples"],data),
                 },
                 coords={
                     'participant':participants,
                     "epochs" :epochs,
-                    "channels":  channels,
+                    "electrodes":  electrodes,
                     "samples": np.arange(n_samples)
                 },
                 attrs={'sfreq':sfreq,'offset':offset}
@@ -433,6 +428,7 @@ def hmp_data_format(data, sfreq, events=None, offset=0, participants=[], epochs=
             dims=("participant", "epochs"),
             coords={"participant": participants, "epochs": epochs})
         data = data.set_coords('events')
+
     return data
 
 def standardize(x):
@@ -456,9 +452,9 @@ def zscore(data):
     return (data - data.mean()) / data.std()
 
 
-def stack_data(data, subjects_variable='participant', channel_variable='component', single=False):
+def stack_data(data, subjects_variable='participant', electrode_variable='component', single=False):
     '''
-    Stacks the data going from format [participant * epochs * samples * channels] to [samples * channels]
+    Stacks the data going from format [participant * epochs * samples * electrodes] to [samples * electrodes]
     with sample indexes starts and ends to delimitate the epochs.
     
     
@@ -466,7 +462,7 @@ def stack_data(data, subjects_variable='participant', channel_variable='componen
     ----------
     data : xarray
         unstacked xarray data from transform_data() or anyother source yielding an xarray with dimensions 
-        [participant * epochs * samples * channels] 
+        [participant * epochs * samples * electrodes] 
     subjects_variable : str
         name of the dimension for subjects ID
     single : bool 
@@ -475,10 +471,10 @@ def stack_data(data, subjects_variable='participant', channel_variable='componen
     Returns
     -------
     data : xarray.Dataset
-        xarray dataset [samples * channels]
+        xarray dataset [samples * electrodes]
     '''    
     if isinstance(data, (xr.DataArray,xr.Dataset)) and 'component' not in data.dims:
-        data = data.rename_dims({'channels':'component'})
+        data = data.rename_dims({'electrodes':'component'})
         print(data.participant)
     if "participant" not in data.dims:
         data = data.expand_dims("participant")
@@ -491,7 +487,7 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
     Second, a spatial PCA on the average variance-covariance matrix is performed (if method='pca', more methods in development)
-    Third,stacks the data going from format [participant * epochs * samples * channels] to [samples * channels]
+    Third,stacks the data going from format [participant * epochs * samples * electrodes] to [samples * electrodes]
     Last, performs z-scoring on each epoch and for each principal component (PC)
     
     
@@ -499,7 +495,7 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
     ----------
     data : xarray
         unstacked xarray data from transform_data() or anyother source yielding an xarray with dimensions 
-        [participant * epochs * samples * channels] 
+        [participant * epochs * samples * electrodes] 
     subjects_variable : str
         name of the dimension for subjects ID
     apply_standard : bool 
@@ -517,11 +513,11 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
     data : xarray.Dataset
         xarray dataset [n_samples * n_comp] data expressed in the PC space, ready for hsMM fit
     pca_data : xarray.Dataset
-        loadings of the PCA, used to retrieve channel space
+        loadings of the PCA, used to retrieve electrode space
     pca.explained_variance_ : ndarray
         explained variance for each component
     means : xarray.DataArray
-        means of the channels before PCA/zscore
+        means of the electrodes before PCA/zscore
     '''
     if isinstance(data, xr.DataArray):
         raise ValueError('Expected a xarray Dataset with data and event as DataArrays, check the data format')
@@ -534,7 +530,7 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         var_cov_matrices = []
         if isinstance(data, xr.Dataset):
             data = data.data
-        for i,trial_dat in data.stack(trial=("participant", "epochs")).drop_duplicates('trial').groupby('trial'):
+        for i,trial_dat in data.stack(trial=("participant", "epochs")).groupby('trial'):
             var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
         var_cov_matrix = np.mean(var_cov_matrices,axis=0)
         # Performing spatial PCA on the average var-cov matrix
@@ -561,14 +557,14 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         pca_data = pca.fit_transform(var_cov_matrix)/pca.explained_variance_ # divided by explained var for compatibility with matlab's PCA
         
         #Rebuilding pca PCs as xarray to ease computation
-        coords = dict(channels=("channels", data.coords["channels"].values),
+        coords = dict(electrodes=("electrodes", data.coords["electrodes"].values),
                      component=("component", np.arange(n_comp)))
-        pca_data = xr.DataArray(pca_data, dims=("channels","component"), coords=coords)
-        means = data.groupby('channels').mean(...)
+        pca_data = xr.DataArray(pca_data, dims=("electrodes","component"), coords=coords)
+        means = data.groupby('electrodes').mean(...)
         data = data @ pca_data
 
     elif method is None:
-        data = data.rename({'channels':'component'})
+        data = data.rename({'electrodes':'component'})
         data['component'] = np.arange(len(data.component ))
     if apply_zscore:
         data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
@@ -759,7 +755,7 @@ def loocv_mp(init, stacked_data, bests, func=LOOCV, cpus=2, verbose=True):
 
 def reconstruct(magnitudes, PCs, eigen, means):
     '''
-    Reconstruct channel activity from PCA
+    Reconstruct electrode activity from PCA
     
     Parameters
     ----------
@@ -774,18 +770,18 @@ def reconstruct(magnitudes, PCs, eigen, means):
         
     Returns
     -------
-    channels : ndarray
-        a 2D ndarray with [channels * events]
+    electrodes : ndarray
+        a 2D ndarray with [electrodes * events]
     '''
     if len(np.shape(magnitudes))==2:
         magnitudes = np.array([magnitudes])
     n_iter, n_comp, n_events = np.shape(magnitudes)
-    list_channels = []
+    list_electrodes = []
     for iteration in np.arange(n_iter): 
-        #channels = np.array(magnitudes[iteration].T * 
-        channels =  np.array(magnitudes[iteration, ].T * np.tile(np.sqrt(eigen[:n_comp]).T, (n_events,1))) @ np.array(PCs[:,:n_comp]).T
-        list_channels.append(channels + np.tile(means,(n_events,1)))#add means for each channel
-    return np.array(list_channels)
+        #electrodes = np.array(magnitudes[iteration].T * 
+        electrodes =  np.array(magnitudes[iteration, ].T * np.tile(np.sqrt(eigen[:n_comp]).T, (n_events,1))) @ np.array(PCs[:,:n_comp]).T
+        list_electrodes.append(electrodes + np.tile(means,(n_events,1)))#add means for each electrode
+    return np.array(list_electrodes)
 
 def stage_durations(times):
     '''
@@ -828,9 +824,9 @@ def save_eventprobs(eventprobs, filename):
     eventprobs.to_dataframe().to_csv(filename)
     print(f"Saved at {filename}")
 
-def event_times(data, times, channel, stage):
+def event_times(data, times, electrode, stage):
     '''
-    Event times parses the single trial EEG signal of a given channel in a given stage, from event onset to the next one. If requesting the last
+    Event times parses the single trial EEG signal of a given electrode in a given stage, from event onset to the next one. If requesting the last
     stage it is defined as the onset of the last event until the response of the participants.
 
     Parameters
@@ -839,8 +835,8 @@ def event_times(data, times, channel, stage):
         HMP EEG data (untransformed but with trial and participant stacked)
     times : xr.DataArray
         Onset times as computed using onset_times()
-    channel : str
-        channel to pick for the parsing of the signal
+    electrode : str
+        Electrode to pick for the parsing of the signal
     stage : float | ndarray
         Which stage to parse the signal into
 
@@ -855,7 +851,7 @@ def event_times(data, times, channel, stage):
     for trial, trial_dat in data.groupby('trial_x_participant'):
         trial_time = slice(times.sel(event=stage, trial_x_participant=trial), \
                                                  times.sel(event=stage+1, trial_x_participant=trial))
-        trial_elec = trial_dat.sel(channels = channel, samples=trial_time).squeeze()
+        trial_elec = trial_dat.sel(electrodes = electrode, samples=trial_time).squeeze()
         try:
             brp_data[i, :len(trial_elec)] = trial_elec
         except:
@@ -880,10 +876,9 @@ def participant_selection(hmp_data, eeg_data, participant):
     return stacked
 
 def bootstrapping(init, hmp_data, general_run, positions, eeg_data, iterations, threshold=1, verbose=True, plots=True, cpus=1):
-    warn('This method is inaccurate and will be removed in future version, see the bootstraping function in the resample module instead', DeprecationWarning, stacklevel=2)
     from hsmm_mvpy.models import hmp
     from hsmm_mvpy.visu import plot_topo_timecourse
-    import xskillscore as xs#Todo remove from dependency list
+    import xskillscore as xs
     fitted_mags = general_run.magnitudes.values[np.unique(np.where(np.isfinite(general_run.magnitudes))[0]),:]#remove NAs
     mags_boot_mat = []#np.tile(np.nan, (iterations, init.compute_max_events(), init.n_dims))
     pars_boot_mat = []#np.tile(np.nan, (iterations, init.compute_max_events()+1, 2))
