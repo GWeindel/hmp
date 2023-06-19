@@ -254,7 +254,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
         if verbose:
             print(f'End sampling frequency is {sfreq} Hz')
 
-        epoch_data.append(hmp_data_format(cropped_data_epoch, epochs.info['sfreq'], None, offset_after_resp_samples, epochs=[int(x) for x in epochs_idx], electrodes = epochs.ch_names, metadata = metadata_i))
+        epoch_data.append(hmp_data_format(cropped_data_epoch, epochs.info['sfreq'], None, offset_after_resp_samples, epochs=[int(x) for x in epochs_idx], channels = epochs.ch_names, metadata = metadata_i))
 
         y += 1
     epoch_data = xr.concat(epoch_data, dim = xr.DataArray(subj_idx, dims='participant'),
@@ -392,8 +392,8 @@ def hmp_data_format(data, sfreq, events=None, offset=0, participants=[], epochs=
         n_subj = 1
     else:
         raise ValueError(f'Unknown data format with dimensions {np.shape(data)}')
-    if electrodes is None:
-        electrodes = np.arange(n_electrodes)
+    if channels is None:
+        channels = np.arange(n_channels)
     if epochs is None:
          epochs = np.arange(n_epochs)
     if n_subj < 2:
