@@ -20,7 +20,7 @@ def available_sources(subselection=True):
     named_labels = []
     for label in range(len(labels)):
         named_labels.append(labels[label].name)
-    #Here we select sources with different topologies on HMP and relativ equal contribution on electrodes, not checked on MEG
+    #Here we select sources with different topologies on HMP and relativ equal contribution on channels, not checked on MEG
     named_labels = np.array(named_labels)
     if subselection:
         named_labels = named_labels[[0,1,3,5,7,15,17,22,30,33,37,40,42,46,50,54,57,59,65,67]]
@@ -40,7 +40,7 @@ def simulation_positions():
     subject = 'sample'
     evoked_fname = op.join(data_path, 'MEG', subject, 'sample_audvis-ave.fif')
     info = mne.io.read_info(evoked_fname, verbose=False)
-    positions = np.delete(channels.layout._find_topomap_coords(info, 'eeg'),52,axis=0)#inferring electrode location using MNE    
+    positions = np.delete(channels.layout._find_topomap_coords(info, 'eeg'),52,axis=0)#inferring channel location using MNE    
     return positions
 
 def bump_shape(bump_width, bump_width_samples, steps):

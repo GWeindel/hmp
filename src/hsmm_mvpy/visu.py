@@ -4,26 +4,27 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+import xarray as xr
 from itertools import cycle
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold']
 
-def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_step=1, ydim=None,
-                        figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
-                        ylabels=[], max_time = None, vmin=None, vmax=None, title=False, ax=False, 
-                        sensors=False, skip_electrodes_computation=False):
+def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=1, ydim=None,
+                figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
+                ylabels=[], max_time = None, vmin=None, vmax=None, title=False, ax=None, 
+                sensors=False, skip_channels_computation=False):
     '''
     Plotting the event topologies at the average time of the end of the previous stage.
     
     Parameters
     ----------
-    electrodes : ndarray | xr.Dataarray 
-        a 2D or 3D matrix of electrode activity with electrodes and event as dimension (+ eventually a varying dimension) OR
+    channels : ndarray | xr.Dataarray 
+        a 2D or 3D matrix of channel activity with channels and event as dimension (+ eventually a varying dimension) OR
         the original EEG data in HMP format
     estimated : ndarray
         a 1D or 2D matrix of times with event as dimension OR directly the results from a fitted hmp 
     channel_position : ndarray
-        Either a 2D array with dimension electrode and [x,y] storing electrode location in meters or an info object from
-        the mne package containning digit. points for electrode location
+        Either a 2D array with dimension channel and [x,y] storing channel location in meters or an info object from
+        the mne package containning digit. points for channel location
     init : float
         initialized HMP object
     time_step : float
@@ -67,24 +68,22 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
     return_ax = True
     if times_to_display is None:
         times_to_display = init.mean_d*time_step
-    if 'event' in estimated:
-        #This is to keep backward compatibility but supplyng externally computed electrodes and times will probably be
-        # DEPRECATED
+    if isinstance(estimated, (xr.DataArray, xr.Dataset)) and 'event' in estimated:
         if ydim is None and 'n_events' in estimated.dims:
             if estimated.n_events.count() > 1:
                 ydim = 'n_events'
-        if ydim is not None and not skip_electrodes_computation:
-            electrodes = init.compute_topologies(electrodes, estimated, init.event_width_samples, ydim).data
-        elif not skip_electrodes_computation:
-            electrodes = init.compute_topologies(electrodes, estimated, init.event_width_samples).data
-        electrodes[electrodes == 0] = np.nan
+        if ydim is not None and not skip_channels_computation:
+            channels = init.compute_topologies(channels, estimated, init.event_width_samples, ydim).data
+        elif not skip_channels_computation:
+            channels = init.compute_topologies(channels, estimated, init.event_width_samples).data
+        channels[channels == 0] = np.nan
         times = init.compute_times(init, estimated, mean=True).data
     else:#assumes times already computed
         times = estimated
-    if len(np.shape(electrodes)) == 2:
-        electrodes = electrodes[np.newaxis]
-    n_iter = np.shape(electrodes)[0]
-    if isinstance(ax, bool):
+    if len(np.shape(channels)) == 2:
+        channels = channels[np.newaxis]
+    n_iter = np.shape(channels)[0]
+    if ax is None:
         if figsize == None:
             figsize = (12, 1*n_iter)
         fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
@@ -97,14 +96,13 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
     times = np.array(times, dtype=object)
     for iteration in np.arange(n_iter):
         times_iteration = times[iteration]*time_step
-        electrodes_ = electrodes[iteration,:,:]
-        n_event = int(sum(np.isfinite(electrodes_[:,0])))
-        electrodes_ = electrodes_[:n_event,:]
+        channels_ = channels[iteration,:,:]
+        n_event = int(sum(np.isfinite(channels_[:,0])))
+        channels_ = channels_[:n_event,:]
         for event in np.arange(n_event):
-            # if np.sum(electrodes_[event,:]) != 0:
             axes.append(ax.inset_axes([times_iteration[event],iteration-yoffset,
-                                       (event_size),yoffset*2], transform=ax.transData))
-            plot_topomap(electrodes_[event,:], channel_position, axes=axes[-1], show=False,
+                                (event_size),yoffset*2], transform=ax.transData))
+            plot_topomap(channels_[event,:], channel_position, axes=axes[-1], show=False,
                          cmap=cmap, vlim=(vmin, vmax), sensors=sensors)
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
@@ -113,7 +111,7 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
     else:
         ax.set_yticks([])
         ax.spines['left'].set_visible(False)
-    __display_times(ax, times_to_display, 0, time_step, max_time, times)
+    __display_times(ax, times_to_display, 0, time_step, max_time, times, n_iter)
     if not return_ax:
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
@@ -133,7 +131,7 @@ def plot_topo_timecourse(electrodes, estimated, channel_position, init, time_ste
         plt.show()    
 
 
-def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=False, mean=False):
+def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=None, mean=False):
     '''
     Plotting the LOOCV results
     
@@ -165,7 +163,7 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
             from scipy.stats import ttest_1samp
         else:
             raise ValueError('Expected sign or t-test argument to test parameter')
-    if isinstance(ax, bool):
+    if ax is None:
         fig, ax = plt.subplots(1,2, figsize=figsize)
         return_ax = False
     else:
@@ -320,15 +318,15 @@ def plot_distribution(times, colors=default_colors, xlims=False, figsize=(8, 3),
         axs.set_xlim(xlims[0], xlims[1])
     return axs
 
-def __display_times(ax, times_to_display, yoffset, time_step, max_time, times):
+def __display_times(ax, times_to_display, yoffset, time_step, max_time, times, ymax=1):
     n_iter = len(times)
     times = np.asarray(times,dtype=object)
     if isinstance(times_to_display, (np.ndarray, np.generic)):
         if isinstance(times_to_display, np.ndarray):
-            ax.vlines(times_to_display*time_step, yoffset-1.1, yoffset+1.1, ls='--')
+            ax.vlines(times_to_display*time_step, yoffset-1.1, yoffset+ymax+1.1, ls='--')
             ax.set_xlim(-1*time_step, max(times_to_display)*time_step+((max(times_to_display)*time_step)/15))
         else:
-            ax.vlines(times_to_display*time_step, yoffset-1.1, yoffset+1.1, ls='--')
+            ax.vlines(times_to_display*time_step, yoffset-1.1, yoffset+ymax+1.1, ls='--')
             ax.set_xlim(-1*time_step, times_to_display*time_step+(times_to_display*time_step)/15)
     if max_time:
         ax.set_xlim(-1*time_step, max_time)
@@ -476,14 +474,51 @@ def plot_latencies(times, event_width, time_step=1, labels=[], colors=default_co
         axs.legend()
     return axs
 
-def plot_iterations(iterations, eeg_data, init, positions, dims):
+def plot_iterations(iterations, eeg_data, init, positions, dims=['magnitudes','parameters'], alpha=1, ax=None):
     from hsmm_mvpy.models import hmp
-    for iteration in iterations.iteration:
+    if 'iteration' not in iterations.dims:
+        try:
+            iterations['iteration'] = [0]
+        except:
+            iterations = iterations.expand_dims({'iteration':[0]}, axis=1)
+            iterations['iteration'] = [0]
+    for iteration in iterations.iteration[:-1]:
         selected = init.fit_single(iterations.sel(iteration=iteration)[dims[0]].dropna(dim='event').event[-1].values+1,\
             magnitudes = iterations.sel(iteration=iteration)[dims[0]].dropna(dim='event'),\
             parameters = iterations.sel(iteration=iteration)[dims[1]].dropna(dim='stage'),\
             threshold=0, verbose=False)
-
         #Visualizing
-        plot_topo_timecourse(eeg_data, selected, positions,  init, magnify=1, sensors=False)
+        plot_topo_timecourse(eeg_data, selected, positions,  init, magnify=1, sensors=False,ax=ax)
     
+
+def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoch_data=None):
+    from hsmm_mvpy.resample import percent_event_occurence
+    maxboot_model, labels, counts, event_number, label_event_num = percent_event_occurence(bootstrapped, model_to_compare)
+    fig, axes = plt.subplot_mosaic([['a', 'a'], ['b', 'c'], ['b', 'c']],
+                              layout='constrained')
+    if model_to_compare is None: 
+        plot_topo_timecourse(maxboot_model.channels_activity.values, maxboot_model.event_times.values, info, init,ax=axes['a'])
+        times = maxboot_model.event_times#init.compute_times(init, maxboot_model, mean=True)#computing predicted event times
+    else:
+        plot_topo_timecourse(epoch_data, model_to_compare, info, init,ax=axes['a'])
+        times = init.compute_times(init, model_to_compare, mean=True)
+        maxboot_model = model_to_compare
+    axes['a'].set_xlabel('Time (samples)')
+    axes['b'].bar(maxboot_model.event+1,counts)
+    axes['b'].set_xlabel('Event number')
+    axes['b'].set_xticks(maxboot_model.event+1)
+    axes['b'].set_ylabel('Frequency')
+    axes['b'].set_ylim(0,1)
+    
+    axes['c'].bar(label_event_num,event_number)
+    axes['c'].set_xlabel('Number of events')
+    
+    axes['c'].set_ylabel('Frequency')
+    axes['c'].set_ylim(0,1)
+    axes['a'].spines[['right', 'top']].set_visible(False)
+    axes['b'].spines[['right', 'top']].set_visible(False)
+    axes['c'].spines[['right', 'top']].set_visible(False)
+    # plt.tight_layout()
+    plt.show()
+    
+                             
