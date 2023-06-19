@@ -361,10 +361,10 @@ def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after
         j += 1
     print(f'Totaling {len(cropped_data_epoch)} valid trials')
 
-    data_xr = hmp_data_format(cropped_data_epoch, sfreq, conditions, offset_after_resp_samples, epochs=epochs, electrodes = electrode_columns)
+    data_xr = hmp_data_format(cropped_data_epoch, sfreq, conditions, offset_after_resp_samples, epochs=epochs, channels = channel_columns)
     return data_xr
 
-def hmp_data_format(data, sfreq, events=None, offset=0, participants=[], epochs=None, electrodes=None, metadata=None):
+def hmp_data_format(data, sfreq, events=None, offset=0, participants=[], epochs=None, channels=None, metadata=None):
 
     '''
     Converting 3D matrix with dimensions (participant) * trials * channels * sample into xarray Dataset
@@ -883,7 +883,10 @@ def bootstrapping(init, hmp_data, general_run, positions, eeg_data, iterations, 
     warn('This method is inaccurate and will be removed in future version, see the bootstraping function in the resample module instead', DeprecationWarning, stacklevel=2)
     from hsmm_mvpy.models import hmp
     from hsmm_mvpy.visu import plot_topo_timecourse
-    import xskillscore as xs#Todo remove from dependency list
+    try:
+        import xskillscore as xs#Todo remove from dependency list
+    except:
+        raise ValueError('xskillscore should be installed to run this (deprecated) function')
     fitted_mags = general_run.magnitudes.values[np.unique(np.where(np.isfinite(general_run.magnitudes))[0]),:]#remove NAs
     mags_boot_mat = []#np.tile(np.nan, (iterations, init.compute_max_events(), init.n_dims))
     pars_boot_mat = []#np.tile(np.nan, (iterations, init.compute_max_events()+1, 2))
