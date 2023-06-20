@@ -10,7 +10,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=1, ydim=None,
                 figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
-                ylabels=[], max_time = None, vmin=None, vmax=None, title=False, ax=None, 
+                ylabels=[], xlabel = None, max_time = None, vmin=None, vmax=None, title=False, ax=None, 
                 sensors=False, skip_channels_computation=False):
     '''
     Plotting the event topologies at the average time of the end of the previous stage.
@@ -41,6 +41,8 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
     cmap : str
         Colormap of matplotlib
+    xlabel : str
+        label of x-axis, default = None, which give "Time (samples)" or "Time" in case time_step != 1
     ylabels : dict
         dictonary with {label_name : label_values}
     max_time : float
@@ -67,7 +69,12 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
     return_ax = True
     if times_to_display is None:
-        times_to_display = init.mean_d*time_step
+        times_to_display = init.mean_d
+    if xlabel is None:
+        if time_step == 1:
+            xlabel = 'Time (in samples)'
+        else:
+            xlabel = 'Time'
     if isinstance(estimated, (xr.DataArray, xr.Dataset)) and 'event' in estimated:
         if ydim is None and 'n_events' in estimated.dims:
             if estimated.n_events.count() > 1:
@@ -116,10 +123,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.set_ylim(0-yoffset, n_iter-1+yoffset)
-        if time_step == 1:
-            ax.set_xlabel('Time (in samples)')
-        else:
-            ax.set_xlabel('Time')
+        ax.set_xlabel(xlabel)
         if title:
             ax.set_title(title)
         if np.any(max_time) == None and np.any(times_to_display) == None:
