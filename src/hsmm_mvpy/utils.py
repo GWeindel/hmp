@@ -485,7 +485,7 @@ def stack_data(data, subjects_variable='participant', channel_variable='componen
     return data #xr.Dataset({'data':data, 'durations':durations})
     #return data, durations
 
-def transform_data(data, subjects_variable="participant", apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, return_weights=False):
+def transform_data(data, subjects_variable="participant", apply_standard=True,  apply_zscore='subject', method='pca', n_comp=None, return_weights=False):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -503,8 +503,8 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         name of the dimension for subjects ID
     apply_standard : bool 
         Whether to apply standardization
-    apply_zscore : bool 
-        Whether to apply z-scoring
+    apply_zscore : str 
+        Whether to apply z-scoring and on what data, either None, 'all', 'subject', 'trial', for zscoring across all data, by subject, or by trial, respectively.
     method : str
         Method to apply, for now limited to 'pca'
     n_comp : int
@@ -569,8 +569,15 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
     elif method is None:
         data = data.rename({'channels':'component'})
         data['component'] = np.arange(len(data.component ))
-    if apply_zscore:
-        data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
+    
+    # zscore either across all data, by subject (preferred), or by trial
+    match apply_zscore:
+        case 'all':
+            data = data.stack(component=['component']).groupby('component').map(zscore).unstack()
+        case 'subject':
+            data = data.stack(subject_comp=[subjects_variable,'component']).groupby('subject_comp').map(zscore).unstack()
+        case 'trial' | True: #for backward compatibility
+            data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
     if stack_data:
         data = stack_data(data)
     if return_weights:
