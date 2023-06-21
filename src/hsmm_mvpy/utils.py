@@ -485,26 +485,26 @@ def stack_data(data, subjects_variable='participant', channel_variable='componen
     return data #xr.Dataset({'data':data, 'durations':durations})
     #return data, durations
 
-def transform_data(data, subjects_variable="participant", apply_standard=True,  apply_zscore=True, method='pca', n_comp=None, return_weights=False):
+def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', n_comp=None, return_weights=False):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
     Second, a spatial PCA on the average variance-covariance matrix is performed (if method='pca', more methods in development)
     Third,stacks the data going from format [participant * epochs * samples * channels] to [samples * channels]
-    Last, performs z-scoring on each epoch and for each principal component (PC)
-    
-    
+    Last, performs z-scoring on each epoch and for each principal component (PC), or for each participant and PC,
+    or across all data for each PC.
+        
     Parameters
     ----------
     data : xarray
         unstacked xarray data from transform_data() or anyother source yielding an xarray with dimensions 
         [participant * epochs * samples * channels] 
-    subjects_variable : str
-        name of the dimension for subjects ID
+    participants_variable : str
+        name of the dimension for participants ID
     apply_standard : bool 
         Whether to apply standardization
-    apply_zscore : bool 
-        Whether to apply z-scoring
+    apply_zscore : str 
+        Whether to apply z-scoring and on what data, either None, 'all', 'participant', 'trial', for zscoring across all data, by participant, or by trial, respectively. If set to true, evaluates to 'trial' for backward compatibility.
     method : str
         Method to apply, for now limited to 'pca'
     n_comp : int
@@ -524,10 +524,14 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
     '''
     if isinstance(data, xr.DataArray):
         raise ValueError('Expected a xarray Dataset with data and event as DataArrays, check the data format')
+    if not apply_zscore in ['all', 'participant', 'trial'] and not isinstance(apply_zscore,bool):
+        raise ValueError('apply_zscore should be either a boolean or one of [\'all\', \'participant\', \'trial\']')
+    if apply_zscore == True:
+        apply_zscore = 'trial' #defaults to trial
     if apply_standard:
-        mean_std = data.groupby(subjects_variable).std(dim=...).data.mean()
+        mean_std = data.groupby(participants_variable).std(dim=...).data.mean()
         data = data.assign(mean_std=mean_std.data)
-        data = data.groupby(subjects_variable).map(standardize)
+        data = data.groupby(participants_variable).map(standardize)
     if method == 'pca':
         from sklearn.decomposition import PCA
         var_cov_matrices = []
@@ -569,8 +573,15 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
     elif method is None:
         data = data.rename({'channels':'component'})
         data['component'] = np.arange(len(data.component ))
-    if apply_zscore:
-        data = data.stack(trial=[subjects_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
+    
+    # zscore either across all data, by participant (preferred), or by trial
+    match apply_zscore:
+        case 'all':
+            data = data.stack(comp=['component']).groupby('comp').map(zscore).unstack()
+        case 'participant':
+            data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore).unstack()
+        case 'trial':
+            data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
     if stack_data:
         data = stack_data(data)
     if return_weights:
@@ -579,7 +590,7 @@ def transform_data(data, subjects_variable="participant", apply_standard=True,  
         return data
     
 
-def LOOCV(data, subject, n_events, initial_fit, sfreq, event_width=50):
+def LOOCV(data, participant, n_events, initial_fit, sfreq, event_width=50):
     '''
     Performs Leave-one-out cross validation, removes one participant from data, estimate n_events HMP parameters, 
     compute the likelihood of the data from the left out participant with the estimated parameters. The model is fit
@@ -590,8 +601,8 @@ def LOOCV(data, subject, n_events, initial_fit, sfreq, event_width=50):
     ----------
     data : xarray.Dataset
         xarray data from transform_data() 
-    subject : str
-        name of the subject to remove
+    participant : str
+        name of the participant to remove
     n_events : int 
         How many events in the model
     initial_fit : xarray.Dataset
@@ -605,27 +616,27 @@ def LOOCV(data, subject, n_events, initial_fit, sfreq, event_width=50):
     -------
     likelihood : float
         likelihood computed for the left-out participant
-    subject : str
-        name of the subject to remove
+    participant : str
+        name of the participant to remove
     '''
     # wc 
     from hsmm_mvpy.models import hmp
     #Looping over possible number of events
-    subjects_idx = data.participant.values
+    participants_idx = data.participant.values
     likelihoods_loo = []
-    #Extracting data without left out subject
-    stacked_loo = stack_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False))
+    #Extracting data without left out participant
+    stacked_loo = stack_data(data.sel(participant= participants_idx[participants_idx!=participant],drop=False))
     #Fitting the HMP using previous estimated parameters as initial parameters
     model_loo = hmp(stacked_loo, sfreq=sfreq, event_width=event_width)
     fit = model_loo.fit_single(n_events, initial_fit.magnitudes.dropna('event').values, initial_fit.parameters, 1, verbose=False)
-    #Evaluating likelihood for left out subject
-    #Extracting data of left out subject
-    stacked_left_out = stack_data(data.sel(participant=subject, drop=False))
+    #Evaluating likelihood for left out participant
+    #Extracting data of left out participant
+    stacked_left_out = stack_data(data.sel(participant=participant, drop=False))
     model_left_out = hmp(stacked_left_out, sfreq=sfreq, event_width=event_width)
     likelihood = model_left_out.estim_probs(fit.magnitudes.dropna('event').values, fit.parameters, n_events,True)
-    return likelihood, subject
+    return likelihood, participant
 
-def loocv_estimation(data, subject, sfreq, event_width):
+def loocv_estimation(data, participant, sfreq, event_width):
     '''
     Performs Leave-one-out cross validation, removes one participant from data, estimate n_events HMP parameters, 
     compute the likelihood of the data from the left out participant with the estimated parameters. The model is fit
@@ -636,8 +647,8 @@ def loocv_estimation(data, subject, sfreq, event_width):
     ----------
     data : xarray
         xarray data from transform_data() 
-    subject : str
-        name of the subject to remove
+    participant : str
+        name of the participant to remove
     sfreq : float
         Sampling frequency of the data
     event_width : float
@@ -647,28 +658,28 @@ def loocv_estimation(data, subject, sfreq, event_width):
     -------
     likelihood : float
         likelihood computed for the left-out participant
-    subject : str
-        name of the subject to remove
+    participant : str
+        name of the participant to remove
     '''    
-    print(f'Leaving out participant #{subject}')
+    print(f'Leaving out participant #{participant}')
     from hsmm_mvpy.models import hmp
     #Looping over possible number of events
-    subjects_idx = data.participant.values
+    participants_idx = data.participant.values
     likelihoods_loo = []
-    #Extracting data without left out subject
-    stacked_loo = stack_data(data.sel(participant= subjects_idx[subjects_idx!=subject],drop=False))
+    #Extracting data without left out participant
+    stacked_loo = stack_data(data.sel(participant= participants_idx[participants_idx!=participant],drop=False))
     #Fitting the HMP using previous estimated parameters as initial parameters
     model_loo = hmp(stacked_loo, sfreq=sfreq, event_width=event_width, cpus=1)
     parameters, magnitudes, likelihoods = model_loo.sliding_event(verbose=False)
     estimates = model_loo.iterative_fit(likelihoods=likelihoods, parameters=parameters, magnitudes=magnitudes)
-    #Evaluating likelihood for left out subject
-    #Extracting data of left out subject
-    stacked_left_out = stack_data(data.sel(participant=subject, drop=False))
+    #Evaluating likelihood for left out participant
+    #Extracting data of left out participant
+    stacked_left_out = stack_data(data.sel(participant=participant, drop=False))
     model_left_out = hmp(stacked_left_out, sfreq=sfreq, event_width=event_width, cpus=1)
     n_events = int(estimates.dropna('n_events',how='all').n_events.max())
     for n_event in range(1,n_events+1):
         likelihoods_loo.append( model_left_out.calc_EEG_50h(estimates.sel(n_events=n_event).magnitudes.dropna('event').values, estimates.sel(n_events=n_event).parameters.dropna('stage').values, n_event, True))
-    return likelihoods_loo, subject
+    return likelihoods_loo, participant
 
 def loocv(stacked_data,sfreq, max_event, cpus=1, event_width=50):
     '''
