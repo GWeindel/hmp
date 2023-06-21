@@ -864,8 +864,8 @@ def event_times(data, times, channel, stage):
 
     return brp_data    
     
-def condition_selection(hmp_data, eeg_data, condition_string, variable='event'):
-    unstacked = hmp_data.unstack().where(eeg_data[variable].str.contains(condition_string),drop=True)
+def condition_selection(hmp_data, epoch_data, condition_string, variable='event'):
+    unstacked = hmp_data.unstack().where(epoch_data[variable].str.contains(condition_string),drop=True)
     stacked = stack_data(unstacked)
     return stacked
 
@@ -873,12 +873,12 @@ def load_data(path):
     return xr.load_dataset(path)
 
     
-def participant_selection(hmp_data, eeg_data, participant):
+def participant_selection(hmp_data, participant):
     unstacked = hmp_data.unstack().sel(participant = participant)
     stacked = stack_data(unstacked)
     return stacked
 
-def bootstrapping(init, hmp_data, general_run, positions, eeg_data, iterations, threshold=1, verbose=True, plots=True, cpus=1):
+def bootstrapping(init, hmp_data, general_run, positions, epoch_data, iterations, threshold=1, verbose=True, plots=True, cpus=1):
     warn('This method is inaccurate and will be removed in future version, see the bootstraping function in the resample module instead', DeprecationWarning, stacklevel=2)
     from hsmm_mvpy.models import hmp
     from hsmm_mvpy.visu import plot_topo_timecourse
@@ -893,12 +893,12 @@ def bootstrapping(init, hmp_data, general_run, positions, eeg_data, iterations, 
     for i in range(iterations):
         bootstapped = xs.resample_iterations(hmp_data.unstack(), iterations=1, dim='epochs')
         hmp_data_boot = stack_data(bootstapped.squeeze())
-        init_boot = hmp(hmp_data_boot, sfreq=eeg_data.sfreq, event_width=init.event_width, cpus=init.cpus)
+        init_boot = hmp(hmp_data_boot, sfreq=epoch_data.sfreq, event_width=init.event_width, cpus=init.cpus)
         estimates_boot = init_boot.fit(verbose=verbose, threshold=threshold)
         mags_boot_mat.append(estimates_boot.magnitudes)
         pars_boot_mat.append(estimates_boot.parameters)
         if plots:
-            plot_topo_timecourse(eeg_data, estimates_boot, positions, init_boot)
+            plot_topo_timecourse(epoch_data, estimates_boot, positions, init_boot)
 
     all_pars_aligned = np.tile(np.nan, (iterations, np.max([len(x) for x in pars_boot_mat]), 2))
     all_mags_aligned = np.tile(np.nan, (iterations, np.max([len(x) for x in mags_boot_mat]), init.n_dims))
