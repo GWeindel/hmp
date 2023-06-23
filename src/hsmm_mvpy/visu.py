@@ -8,10 +8,11 @@ import xarray as xr
 from itertools import cycle
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold']
 
+
 def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=1, ydim=None,
                 figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
                 ylabels=[], xlabel = None, max_time = None, vmin=None, vmax=None, title=False, ax=None, 
-                sensors=False, skip_channels_computation=False, contours=6, event_lines=False):
+                sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange'):
     '''
     Plotting the event topologies at the average time of the end of the previous stage.
     
@@ -60,15 +61,16 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         Whether to plot the sensors on the topologies
     contours : int / array_like
         The number of contour lines to draw (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
-    event_lines : bool
-        Whether to plot lines to indicate the exact moment of the event
+    event_lines : bool / color
+        Whether to plot lines and shading to indicate the moment of the event. If True uses tab:orange, if
+        set as color, uses the color
         
     Returns
     -------
     ax : matplotlib.pyplot.ax
         if ax was specified otherwise returns the plot
     '''
-    
+
     from mne.viz import plot_topomap
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
     return_ax = True
@@ -79,6 +81,11 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             xlabel = 'Time (in samples)'
         else:
             xlabel = 'Time'
+    if event_lines == True:
+        event_color='tab:orange'
+    else:
+        event_color=event_lines
+    
     if isinstance(estimated, (xr.DataArray, xr.Dataset)) and 'event' in estimated:
         if ydim is None and 'n_events' in estimated.dims:
             if estimated.n_events.count() > 1:
@@ -116,10 +123,13 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         for event in np.arange(n_event):
             axes.append(ax.inset_axes([times_iteration[event] + event_size/2 - (event_size*magnify) / 2,iteration-yoffset,
                                 (event_size*magnify),yoffset*2], transform=ax.transData))
-            if event_lines:
-                axes[-1].vlines(0,-.15, -.11, linestyles='dotted')
             plot_topomap(channels_[event,:], channel_position, axes=axes[-1], show=False,
                          cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours)
+            if event_lines:
+                ax.vlines(times_iteration[event],0,1, linestyles='dotted',color=event_color,alpha=.5,transform=ax.get_xaxis_transform())
+                ax.vlines(times_iteration[event]+event_size,0, 1, linestyles='dotted',color=event_color,alpha=.5, transform=ax.get_xaxis_transform())
+                ax.fill_between(np.array([times_iteration[event],times_iteration[event]+event_size]), 0,1, alpha=0.15,color=event_color, transform=ax.get_xaxis_transform(),edgecolor=None)
+
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])
