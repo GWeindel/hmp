@@ -561,7 +561,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
 
         pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
 
-        pca_data = pca.fit_transform(var_cov_matrix)/pca.explained_variance_ # divided by explained var for compatibility with matlab's PCA
+        pca_data = pca.fit_transform(var_cov_matrix)#/pca.explained_variance_ # divided by explained var for compatibility with matlab's PCA
         
         #Rebuilding pca PCs as xarray to ease computation
         coords = dict(channels=("channels", data.coords["channels"].values),
@@ -582,6 +582,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
             data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore).unstack()
         case 'trial':
             data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
+    data.attrs['components'] = pca_data
     if stack_data:
         data = stack_data(data)
     if return_weights:
