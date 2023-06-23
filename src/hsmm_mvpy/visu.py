@@ -12,7 +12,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=1, ydim=None,
                 figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
                 ylabels=[], xlabel = None, max_time = None, vmin=None, vmax=None, title=False, ax=None, 
-                sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange'):
+                sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange', colorbar=True):
     '''
     Plotting the event topologies at the average time of the end of the previous stage.
     
@@ -49,9 +49,11 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     max_time : float
         limit of the x (time) axe
     vmin : float
-        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
+        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html). If not explicitly
+        set, uses min across all topos.
     vmax : float
-        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
+        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html). If not explicitly
+        set, uses max across all topos.
     title : str
         title of the plot
     ax : matplotlib.pyplot.ax
@@ -64,6 +66,8 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     event_lines : bool / color
         Whether to plot lines and shading to indicate the moment of the event. If True uses tab:orange, if
         set as color, uses the color
+    colorbar : bool
+        Whether a colorbar is plotted.
         
     Returns
     -------
@@ -71,8 +75,11 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         if ax was specified otherwise returns the plot
     '''
 
-    from mne.viz import plot_topomap
+    from mne.viz import plot_brain_colorbar, plot_topomap
+    from mne.io.meas_info import Info
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+
     return_ax = True
     if times_to_display is None:
         times_to_display = init.mean_d
@@ -85,6 +92,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         event_color='tab:orange'
     else:
         event_color=event_lines
+
     
     if isinstance(estimated, (xr.DataArray, xr.Dataset)) and 'event' in estimated:
         if ydim is None and 'n_events' in estimated.dims:
@@ -113,7 +121,12 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         times = [times]
     times = np.array(times, dtype=object)
     
-    
+    #fix vmin/vmax across topos
+    if vmin == None:
+        vmin = np.min(channels[:])
+    if vmax == None:
+        vmax = np.max(channels[:])
+
     for iteration in np.arange(n_iter):
         times_iteration = times[iteration]*time_step
 
@@ -130,6 +143,14 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
                 ax.vlines(times_iteration[event]+event_size,0, 1, linestyles='dotted',color=event_color,alpha=.5, transform=ax.get_xaxis_transform())
                 ax.fill_between(np.array([times_iteration[event],times_iteration[event]+event_size]), 0,1, alpha=0.15,color=event_color, transform=ax.get_xaxis_transform(),edgecolor=None)
 
+    if colorbar:
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="1%", pad=0.2)
+        if isinstance(channel_position, Info):
+            lab = 'Voltage' if channel_position['chs'][0]['unit'] == 107 else channel_position['chs'][0]['unit']._name
+        else:
+            lab = 'Voltage'
+        plot_brain_colorbar(cax, dict(kind='value', lims = [vmin,0,vmax]),colormap=cmap, label = lab)
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])
