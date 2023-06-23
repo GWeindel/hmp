@@ -145,12 +145,12 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
 
     if colorbar:
         divider = make_axes_locatable(ax)
-        cax = divider.append_axes("right", size="1%", pad=0.2)
+        cax = divider.append_axes("right", size="1.25%", pad=0.2)
         if isinstance(channel_position, Info):
             lab = 'Voltage' if channel_position['chs'][0]['unit'] == 107 else channel_position['chs'][0]['unit']._name
         else:
             lab = 'Voltage'
-        plot_brain_colorbar(cax, dict(kind='value', lims = [vmin,0,vmax]),colormap=cmap, label = lab)
+        plot_brain_colorbar(cax, dict(kind='value', lims = [vmin,0,vmax]),colormap=cmap, label = lab, bgcolor='.5', transparent=None)
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])
