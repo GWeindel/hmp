@@ -11,7 +11,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=1, ydim=None,
                 figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
                 ylabels=[], xlabel = None, max_time = None, vmin=None, vmax=None, title=False, ax=None, 
-                sensors=False, skip_channels_computation=False):
+                sensors=False, skip_channels_computation=False, contours=6, event_lines=False):
     '''
     Plotting the event topologies at the average time of the end of the previous stage.
     
@@ -58,6 +58,10 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         outside of this function
     sensors : bool
         Whether to plot the sensors on the topologies
+    contours : int / array_like
+        The number of contour lines to draw (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
+    event_lines : bool
+        Whether to plot lines to indicate the exact moment of the event
         
     Returns
     -------
@@ -95,22 +99,27 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             figsize = (12, 1*n_iter)
         fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
         return_ax = False
-    event_size = init.event_width_samples*time_step*magnify
+    event_size = init.event_width_samples*time_step #*magnify
     yoffset =.25*magnify
     axes = []
     if n_iter == 1:
         times = [times]
     times = np.array(times, dtype=object)
+    
+    
     for iteration in np.arange(n_iter):
         times_iteration = times[iteration]*time_step
+
         channels_ = channels[iteration,:,:]
         n_event = int(sum(np.isfinite(channels_[:,0])))
         channels_ = channels_[:n_event,:]
         for event in np.arange(n_event):
-            axes.append(ax.inset_axes([times_iteration[event],iteration-yoffset,
-                                (event_size),yoffset*2], transform=ax.transData))
+            axes.append(ax.inset_axes([times_iteration[event] + event_size/2 - (event_size*magnify) / 2,iteration-yoffset,
+                                (event_size*magnify),yoffset*2], transform=ax.transData))
+            if event_lines:
+                axes[-1].vlines(0,-.15, -.11, linestyles='dotted')
             plot_topomap(channels_[event,:], channel_position, axes=axes[-1], show=False,
-                         cmap=cmap, vlim=(vmin, vmax), sensors=sensors)
+                         cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours)
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])

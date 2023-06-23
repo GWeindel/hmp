@@ -178,6 +178,7 @@ class hmp:
         if starting_points > 0:#Initialize with equally spaced option
             if parameters is None:
                 parameters = np.tile([self.shape, ((np.mean(self.durations))/(n_events+1)-self.location)/self.shape], (n_events+1,1))
+                parameters[0,1] = np.mean(self.durations)/(n_events+1)/self.shape #first stage has no location
             initial_p = parameters
             
             if magnitudes is None:
@@ -185,7 +186,7 @@ class hmp:
             initial_m = magnitudes
         
         if starting_points > 1:
-            filterwarnings("ignore", category=RuntimeWarning)#Error in the generation of random see GH issue #38
+            #filterwarnings("ignore", category=RuntimeWarning)#Error in the generation of random see GH issue #38
             parameters = [initial_p]
             magnitudes = [initial_m]
             if method == 'random':
@@ -372,7 +373,7 @@ class hmp:
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage parameters
         for stage in range(n_stages):
-            if n_stages-1 > stage > 0:
+            if stage > 0: #all stages except first stage have a location
                 location = self.location
             else:
                 location = 0
@@ -403,7 +404,7 @@ class hmp:
                 backward[:self.durations[trial],trial,:] = \
                     backward[:self.durations[trial],trial,:][::-1]
             eventprobs = forward * backward
-            eventprobs[eventprobs < 1e-10] = 0 #floating point precision error
+            eventprobs[eventprobs < 0] = 0 #floating point precision error
             likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
             eventprobs = eventprobs / eventprobs.sum(axis=0)
             #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
