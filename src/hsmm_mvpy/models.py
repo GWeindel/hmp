@@ -458,12 +458,6 @@ class hmp:
         ----------
         eventprobs : ndarray
             [samples(max_d)*n_trials*n_events] = [max_d*trials*nTransition events]
-        durations : ndarray
-            1D array of trial length
-        mags : ndarray
-            2D ndarray components * nTransition events, initial conditions for events magnitudes
-        shape : float
-            shape parameter for the gamma, defaults to 2  
         Returns
         -------
         params : ndarray
@@ -474,12 +468,9 @@ class hmp:
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
-        # params[[0.-1],1] += self.location
-        params[0,1] -= .5#Event following starts half-sample before position
-        params[-1,1] += .5# Last event terminates half-sample earlier
         params[:,1] = params[:,1]/params[:,0]
         return params
-    
+        
     def __multi_cpu_dispatch(self, list_n_events, list_mags, list_pars, threshold=1, verbose=False):
         if self.cpus > 1:
             if len(list_n_events) == 1:
