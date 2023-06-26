@@ -529,6 +529,8 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     if apply_zscore == True:
         apply_zscore = 'trial' #defaults to trial
     if apply_standard:
+        if 'participant' not in data.dims or len(data.participant) == 1:
+            raise ValueError('Requested standardization of between participant variance yet no participant dimension is found in the data or only one participant is present. Turn apply_standard to False')
         mean_std = data.groupby(participants_variable).std(dim=...).data.mean()
         data = data.assign(mean_std=mean_std.data)
         data = data.groupby(participants_variable).map(standardize)
