@@ -243,7 +243,7 @@ class hmp:
             n_events = multiple_n_events
         
         xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
-        xrtraces = xr.DataArray(traces, dims=("em_iteration"), name="traces")
+        xrtraces = xr.DataArray(traces, dims=("em_iteration"), name="traces", coords={'em_iteration':range(len(traces))})
         xrparams = xr.DataArray(pars, dims=("stage",'parameter'), name="parameters", 
                         coords = [range(len(pars)), ['shape','scale']])
         xrmags = xr.DataArray(mags, dims=("event","component"), name="magnitudes",
@@ -281,7 +281,7 @@ class hmp:
             print(f"Parameters estimated for {n_events} events model")
         return estimated
     
-    def EM(self, n_events, magnitudes, parameters,  threshold, magnitudes_to_fix=None, parameters_to_fix=None, min_iteration=10, max_iteration = 1e3):
+    def EM(self, n_events, magnitudes, parameters,  threshold, magnitudes_to_fix=None, parameters_to_fix=None, min_iteration=10, max_iteration = 1e3):  
         '''
         Expectation maximization function underlying fit
         ''' 
@@ -455,6 +455,12 @@ class hmp:
         ----------
         eventprobs : ndarray
             [samples(max_d)*n_trials*n_events] = [max_d*trials*nTransition events]
+        durations : ndarray
+            1D array of trial length
+        mags : ndarray
+            2D ndarray components * nTransition events, initial conditions for events magnitudes
+        shape : float
+            shape parameter for the gamma, defaults to 2  
         Returns
         -------
         params : ndarray
@@ -467,7 +473,7 @@ class hmp:
         params[:,1] = np.diff(averagepos, prepend=0)
         params[:,1] = params[:,1]/params[:,0]
         return params
-        
+    
     def __multi_cpu_dispatch(self, list_n_events, list_mags, list_pars, threshold=1, verbose=False):
         if self.cpus > 1:
             if len(list_n_events) == 1:
