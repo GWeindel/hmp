@@ -141,9 +141,13 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
                          cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours)
             if event_lines:
                 #bottom of row + 5%
-                ylow = iteration * 1/n_iter + (1/n_iter * .05)
+                ylow = iteration * 1/n_iter
+                if n_iter > 1:
+                    ylow = ylow + (1/n_iter * .05)
                 #top of row - 5%
-                yhigh = (iteration + 1) * 1/n_iter - (1/n_iter * .05)
+                yhigh = (iteration + 1) * 1/n_iter 
+                if n_iter > 1:
+                    yhigh = yhigh - (1/n_iter * .05)
 
                 ax.vlines(times_iteration[event],ylow,yhigh, linestyles='dotted',color=event_color,alpha=.5,transform=ax.get_xaxis_transform())
                 ax.vlines(times_iteration[event]+event_size,ylow, yhigh, linestyles='dotted',color=event_color,alpha=.5, transform=ax.get_xaxis_transform())
@@ -151,7 +155,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
 
     if colorbar:
         cheight = "100%" if n_iter == 1 else f"{200/n_iter}%" 
-        axins = inset_axes(ax, width="1.0%", height=cheight, loc="lower left", bbox_to_anchor=(1.025, 0, 2, 1), bbox_transform=ax.transAxes, borderpad=0)
+        axins = inset_axes(ax, width="0.5%", height=cheight, loc="lower left", bbox_to_anchor=(1.025, 0, 2, 1), bbox_transform=ax.transAxes, borderpad=0)
         if isinstance(channel_position, Info):
             lab = 'Voltage' if channel_position['chs'][0]['unit'] == 107 else channel_position['chs'][0]['unit']._name
         else:
