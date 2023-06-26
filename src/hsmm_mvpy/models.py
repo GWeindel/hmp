@@ -190,7 +190,7 @@ class hmp:
             parameters = [initial_p]
             magnitudes = [initial_m]
             if method == 'random':
-                for sp in np.arange(starting_points):
+                for _ in np.arange(starting_points):
                     proposal_p = self.gen_random_stages(n_events, self.mean_d)
                     proposal_m = np.zeros((n_events,self.n_dims), dtype=np.float64)#Mags are NOT random but always 0
                     proposal_p[parameters_to_fix] = initial_p[parameters_to_fix]
@@ -741,7 +741,7 @@ class hmp:
             n_points = duration//step
             duration = step*n_points
         check_n_posibilities = binomcoeff(n_points-1, n_stages-1)
-        if binomcoeff(n_points-1, n_stages-1) > iter_limit:
+        if check_n_posibilities > iter_limit:
             while binomcoeff(n_points-1, n_stages-1) > iter_limit:
                 n_points = n_points-1
             step = duration//n_points#same if no points removed in the previous step
@@ -762,9 +762,10 @@ class hmp:
                 parameters[idx, :, :] = [[self.shape, x/self.shape] for x in y]
             if verbose:
                 if check_n_posibilities > iter_limit:
-                    print(f'Initial number of possibilities is {check_n_posibilities}. Given a number of max iteration = {iter_limit}: fitting {len(parameters)} models based on all possibilities from grid search with a spacing of {int(step)} samples and {n_points} points and durations of {grid}')
+                    print(f'Initial number of possibilities is {check_n_posibilities}.') 
+                    print(f'Given the number of max iterations = {iter_limit}: fitting {len(comb)} models based on all \n possibilities from grid search with a spacing of {int(step)} samples and {n_points} points  \n and durations of {grid}.')
                 else:
-                    print(f'Fitting {len(parameters)} models using grid search')
+                    print(f'Fitting {len(comb)} models using grid search')
             if method == 'grid':
                 return parameters
             else:
