@@ -55,6 +55,7 @@ class hmp:
         self.event_width = event_width
         self.event_width_samples = int(np.round(self.event_width / self.steps))
         if location is None:
+            print('setting default location parameter to half-event width')
             self.location = int(np.round(self.event_width_samples/2))
         else: self.location =  int(np.round(location / self.steps))
         durations = data.unstack().sel(component=0).swap_dims({'epochs':'trials'})\
@@ -89,6 +90,10 @@ class hmp:
         else: self.template = template
         self.events = self.cross_correlation(data.data.T)#adds event morphology
         self.max_d = self.durations.max()
+        self.data_matrix = np.zeros((self.max_d, self.n_trials, self.n_dims), dtype=np.float64)
+        for trial in range(self.n_trials):
+            self.data_matrix[:self.durations[trial],trial,:] = self.events[self.starts[trial]:self.ends[trial]+1,:]
+            #Reorganize samples crosscorrelated with template on trial basis
         self.estimate_magnitudes = estimate_magnitudes
         self.estimate_parameters = estimate_parameters
         if self.max_d > 500:#FFT conv from scipy faster in this case
@@ -118,7 +123,7 @@ class hmp:
             2D ndarray with n_samples * components
         Returns
         -------
-        bumbs : ndarray
+        events : ndarray
             a 2D ndarray with samples * PC components where cell values have
             been correlated with event morphology
         '''
@@ -186,7 +191,6 @@ class hmp:
             initial_m = magnitudes
         
         if starting_points > 1:
-            #filterwarnings("ignore", category=RuntimeWarning)#Error in the generation of random see GH issue #38
             parameters = [initial_p]
             magnitudes = [initial_m]
             if method == 'random':
@@ -217,7 +221,6 @@ class hmp:
             pars = pars_sp[max_lkhs]
             eventprobs = eventprobs_sp[max_lkhs]
             traces = traces_sp[max_lkhs]
-            resetwarnings()
             
         elif starting_points==1:#informed starting point
             lkh, mags, pars, eventprobs, traces = self.EM(n_events, initial_m, initial_p,\
@@ -277,7 +280,7 @@ class hmp:
             print(f"Parameters estimated for {n_events} events model")
         return estimated
     
-    def EM(self, n_events, magnitudes, parameters,  threshold, magnitudes_to_fix=None, parameters_to_fix=None, min_iteration=20, max_iteration = 100):
+    def EM(self, n_events, magnitudes, parameters,  threshold, magnitudes_to_fix=None, parameters_to_fix=None, min_iteration=10, max_iteration = 1e3):
         '''
         Expectation maximization function underlying fit
         ''' 
@@ -291,41 +294,17 @@ class hmp:
         initial_magnitudes = np.copy(magnitudes)
         
         lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
-        means = np.zeros((self.max_d, self.n_trials, self.n_dims), dtype=np.float64)
-        for trial in range(self.n_trials):
-            means[:self.durations[trial],trial,:] = self.events[self.starts[trial]:self.ends[trial]+1,:]
-            #Reorganize samples crosscorrelated with template on trial basis
         if threshold == 0 or n_events==0:
             lkh_prev = lkh
             magnitudes_prev = initial_magnitudes
             parameters_prev = initial_parameters
             eventprobs_prev = eventprobs
-        # else:
-        #     for event in range(n_events):
-        #         for comp in range(self.n_dims):
-        #             magnitudes[event,comp] = np.mean(np.sum( \
-        #                 eventprobs[:,:,event]*means[:,:,comp], axis=0))
-        #     parameters = self.scale_parameters(eventprobs, n_events)
-        #     null_stages = np.where(parameters[:,1]<0)[0]
-        #     if len(null_stages) == 0: 
-        #         lkh_prev = -np.inf
-        #         magnitudes_prev = magnitudes.copy()
-        #         parameters_prev = parameters.copy()
-        #         eventprobs_prev = eventprobs.copy()
-        #     else:#Corner case in simulations
-        #         lkh_prev = lkh
-        #         magnitudes_prev = initial_magnitudes
-        #         parameters_prev = initial_parameters
-        #         eventprobs_prev = eventprobs
         traces = []
         i = 0
         while i < max_iteration :#Expectation-Maximization algorithm
             if i > min_iteration and lkh - lkh_prev < threshold:
                 break
             #As long as new run gives better likelihood, go on  
-            if i == max_iteration:
-                warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
-                break
             lkh_prev = lkh.copy()
             magnitudes_prev = magnitudes.copy()
             parameters_prev = parameters.copy()
@@ -334,24 +313,22 @@ class hmp:
             for event in range(n_events):
                 for comp in range(self.n_dims):
                     magnitudes[event,comp] = np.mean(np.sum( \
-                        eventprobs[:,:,event]*means[:,:,comp], axis=0))
+                        eventprobs[:,:,event]*self.data_matrix[:,:,comp], axis=0))
                     # Scale cross-correlation with likelihood of the transition
                     # sum by-trial these scaled activation for each transition events
                     # average across trials
 
             magnitudes[magnitudes_to_fix,:] = initial_magnitudes[magnitudes_to_fix,:].copy()
-            #Parameters from Expectation
-            parameters = self.scale_parameters(eventprobs, n_events)
+            parameters = self.scale_parameters(eventprobs, n_events)#Parameters from Expectation
             parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
             lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
             traces.append(lkh)
             i += 1
-        null_probs = np.where(eventprobs_prev<-1e-10)[0]
-        if len(null_probs)>0:
-            warn('Negative probabilities found after estimation, this likely refers to several events overlapping events. In case of simulated data ensure that events are enoughly separated (i.e. location parameter). In the case of real data this error is not expected, please report to the maintainers')
-
+        if i == max_iteration:
+            warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
         return lkh_prev, magnitudes_prev, parameters_prev, eventprobs_prev, np.array(traces)
 
+    
     def estim_probs(self, magnitudes, parameters, n_events, lkh_only=False):
         '''
         
@@ -483,9 +460,6 @@ class hmp:
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
-        # params[[0.-1],1] += self.location
-        params[0,1] -= .5#Event following starts half-sample before position
-        params[-1,1] += .5# Last event terminates half-sample earlier
         params[:,1] = params[:,1]/params[:,0]
         return params
     
@@ -926,6 +900,7 @@ class hmp:
         while last_stage*self.shape > step:
             prev_n_events, prev_lkh, prev_time = n_events, lkh, time
             mags_prop = mags[:n_events+1].copy()#cumulative
+            mags_prop[n_events,:] = np.zeros(self.n_dims)
             lkh, mags[:n_events+1], pars[:n_events+2], _, _ = \
                 self.EM(n_events+1, mags_prop, pars_prop.copy(), 1, [], [])
             signif = True# np.all(np.any(np.abs(mags[:n_events+1]) > threshold, axis=1))
@@ -933,7 +908,11 @@ class hmp:
                 diffs = np.all(np.any(np.abs(np.diff(mags[:n_events+1], axis=0)) > threshold, axis=1))
             else:
                 diffs = True
-            if signif and diffs:
+            print(pars[:n_events+1,1])
+            print(signif)
+            print(diffs)
+            print(pars[n_events,1] - pars[n_events-1,1])
+            if signif and diffs and pars[n_events,1] - pars_prop[-1,1] < self.event_width_samples/self.shape:
                 n_events += 1
                 pars_accepted = pars[:n_events+2].copy()
                 mags_accepted = mags[:n_events+2].copy()
