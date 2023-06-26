@@ -26,7 +26,8 @@ dependencies=["mne >=1.0.0",
 "statsmodels",
 "seaborn",
 "scipy",
-"netcdf4"]
+"netcdf4",
+"more_itertools"]
 
 [project.urls]
 "Homepage" = "https://github.com/GWeindel/hmp"
