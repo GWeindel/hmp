@@ -8,10 +8,11 @@ import xarray as xr
 from itertools import cycle
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold']
 
+
 def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=1, ydim=None,
                 figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
                 ylabels=[], xlabel = None, max_time = None, vmin=None, vmax=None, title=False, ax=None, 
-                sensors=False, skip_channels_computation=False, contours=6, event_lines=False):
+                sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange', colorbar=True):
     '''
     Plotting the event topologies at the average time of the end of the previous stage.
     
@@ -48,9 +49,11 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     max_time : float
         limit of the x (time) axe
     vmin : float
-        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
+        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html). If not explicitly
+        set, uses min across all topos while keeping colormap symmetric.
     vmax : float
-        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
+        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html). If not explicitly
+        set, uses max across all topos while keeping colormap symmetric.
     title : str
         title of the plot
     ax : matplotlib.pyplot.ax
@@ -60,17 +63,23 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         Whether to plot the sensors on the topologies
     contours : int / array_like
         The number of contour lines to draw (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
-    event_lines : bool
-        Whether to plot lines to indicate the exact moment of the event
+    event_lines : bool / color
+        Whether to plot lines and shading to indicate the moment of the event. If True uses tab:orange, if
+        set as color, uses the color
+    colorbar : bool
+        Whether a colorbar is plotted.
         
     Returns
     -------
     ax : matplotlib.pyplot.ax
         if ax was specified otherwise returns the plot
     '''
-    
-    from mne.viz import plot_topomap
+
+    from mne.viz import plot_brain_colorbar, plot_topomap
+    from mne.io.meas_info import Info
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+
     return_ax = True
     if times_to_display is None:
         times_to_display = init.mean_d
@@ -79,6 +88,12 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             xlabel = 'Time (in samples)'
         else:
             xlabel = 'Time'
+    if event_lines == True:
+        event_color='tab:orange'
+    else:
+        event_color=event_lines
+
+    
     if isinstance(estimated, (xr.DataArray, xr.Dataset)) and 'event' in estimated:
         if ydim is None and 'n_events' in estimated.dims:
             if estimated.n_events.count() > 1:
@@ -94,19 +109,25 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     if len(np.shape(channels)) == 2:
         channels = channels[np.newaxis]
     n_iter = np.shape(channels)[0]
+    yscaling = .85
     if ax is None:
         if figsize == None:
-            figsize = (12, 1*n_iter)
-        fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+            figsize = (12, yscaling*n_iter)
+        _, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
         return_ax = False
-    event_size = init.event_width_samples*time_step #*magnify
-    yoffset =.25*magnify
+    event_size = init.event_width_samples*time_step
+    yoffset =.25 * magnify
     axes = []
     if n_iter == 1:
         times = [times]
     times = np.array(times, dtype=object)
     
-    
+    #fix vmin/vmax across topos, while keeping symmetric
+    if vmax == None: #vmax = absolute max, unless no positive values
+        vmax = np.nanmax(np.abs(channels[:])) if np.nanmax(channels[:]) >= 0 else 0
+    if vmin == None: #vmin = absolute max, unless no negative values
+        vmin = -np.nanmax(np.abs(channels[:])) if np.nanmin(channels[:]) < 0 else 0
+ 
     for iteration in np.arange(n_iter):
         times_iteration = times[iteration]*time_step
 
@@ -116,10 +137,34 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         for event in np.arange(n_event):
             axes.append(ax.inset_axes([times_iteration[event] + event_size/2 - (event_size*magnify) / 2,iteration-yoffset,
                                 (event_size*magnify),yoffset*2], transform=ax.transData))
-            if event_lines:
-                axes[-1].vlines(0,-.15, -.11, linestyles='dotted')
+            
+            print('iteration - yoffset: ' + str(iteration-yoffset)
+            print(yoffset)
+
             plot_topomap(channels_[event,:], channel_position, axes=axes[-1], show=False,
                          cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours)
+            if event_lines:
+                #bottom of row + 5%
+                ylow = iteration * 1/n_iter
+                if n_iter > 1:
+                    ylow = ylow + (1/n_iter * .05)
+                #top of row - 5%
+                yhigh = (iteration + 1) * 1/n_iter 
+                if n_iter > 1:
+                    yhigh = yhigh - (1/n_iter * .05)
+
+                ax.vlines(times_iteration[event],ylow,yhigh, linestyles='dotted',color=event_color,alpha=.5,transform=ax.get_xaxis_transform())
+                ax.vlines(times_iteration[event]+event_size,ylow, yhigh, linestyles='dotted',color=event_color,alpha=.5, transform=ax.get_xaxis_transform())
+                ax.fill_between(np.array([times_iteration[event],times_iteration[event]+event_size]), ylow, yhigh, alpha=0.15,color=event_color, transform=ax.get_xaxis_transform(),edgecolor=None)
+
+    if colorbar:
+        cheight = "100%" if n_iter == 1 else f"{200/n_iter}%" 
+        axins = inset_axes(ax, width="0.5%", height=cheight, loc="lower left", bbox_to_anchor=(1.025, 0, 2, 1), bbox_transform=ax.transAxes, borderpad=0)
+        if isinstance(channel_position, Info):
+            lab = 'Voltage' if channel_position['chs'][0]['unit'] == 107 else channel_position['chs'][0]['unit']._name
+        else:
+            lab = 'Voltage'
+        plot_brain_colorbar(axins, dict(kind='value', lims = [vmin,0,vmax]),colormap=cmap, label = lab, bgcolor='.5', transparent=None)
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])),
                       [str(x) for x in list(ylabels.values())[0]])
