@@ -33,16 +33,17 @@ class hmp:
         location : float
             Minimum stage duration in milliseconds. 
         '''
-        if distribution == 'gamma':
-            from scipy.stats import gamma as sp_dist
-        elif distribution == 'lognormal':
-            from scipy.stats import lognorm as sp_dist
-        elif distribution == 'wald':
-            from scipy.stats import invgauss as sp_dist
-        elif distribution == 'weibull':
-            from scipy.stats import weibull_min as sp_dist
-        else:
-            raise ValueError(f'Unknown Distribution {distribution}')
+        match distribution:
+            case 'gamma':
+                from scipy.stats import gamma as sp_dist
+            case 'lognormal':
+                from scipy.stats import lognorm as sp_dist
+            case 'wald':
+                from scipy.stats import invgauss as sp_dist
+            case 'weibull':
+                from scipy.stats import weibull_min as sp_dist
+            case _:
+                raise ValueError(f'Unknown Distribution {distribution}')
         self.cdf = sp_dist.cdf
             
         if sfreq is None:
@@ -55,7 +56,6 @@ class hmp:
         self.event_width = event_width
         self.event_width_samples = int(np.round(self.event_width / self.steps))
         if location is None:
-            print('setting default location parameter to half-event width')
             self.location = int(np.round(self.event_width_samples/2))
         else: self.location =  int(np.round(location / self.steps))
         durations = data.unstack().sel(component=0).swap_dims({'epochs':'trials'})\
@@ -90,10 +90,12 @@ class hmp:
         else: self.template = template
         self.events = self.cross_correlation(data.data.T)#adds event morphology
         self.max_d = self.durations.max()
-        self.data_matrix = np.zeros((self.max_d, self.n_trials, self.n_dims), dtype=np.float64)
-        for trial in range(self.n_trials):
-            self.data_matrix[:self.durations[trial],trial,:] = self.events[self.starts[trial]:self.ends[trial]+1,:]
-            #Reorganize samples crosscorrelated with template on trial basis
+        self.em_method = em_method
+        if self.em_method == "mean":
+            self.data_matrix = np.zeros((self.max_d, self.n_trials, self.n_dims), dtype=np.float64)
+            for trial in range(self.n_trials):
+                self.data_matrix[:self.durations[trial],trial,:] = self.events[self.starts[trial]:self.ends[trial]+1,:]
+                #Reorganize samples crosscorrelated with template on trial basis
         self.estimate_magnitudes = estimate_magnitudes
         self.estimate_parameters = estimate_parameters
         if self.max_d > 500:#FFT conv from scipy faster in this case
@@ -101,7 +103,6 @@ class hmp:
             self.convolution = fftconvolve
         else:
             self.convolution = np.convolve
-        self.em_method = em_method
     
     def event_shape(self):
         '''
@@ -369,12 +370,9 @@ class hmp:
                 gains[self.starts[trial]:self.ends[trial]+1,:][::-1,::-1]
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage parameters
+        locations = np.concatenate([[0], np.repeat(1, n_events)])#all stages except first stage have a location
         for stage in range(n_stages):
-            if stage > 0: #all stages except first stage have a location
-                location = self.location
-            else:
-                location = 0
-            pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1], location)
+            pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1], locations[stage])
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
 
         if n_events > 0:
@@ -473,56 +471,6 @@ class hmp:
         params[:,1] = np.diff(averagepos, prepend=0)
         params[:,1] = params[:,1]/params[:,0]
         return params
-    
-    def __multi_cpu_dispatch(self, list_n_events, list_mags, list_pars, threshold=1, verbose=False):
-        if self.cpus > 1:
-            if len(list_n_events) == 1:
-                list_n_events = itertools.repeat(list_n_events)
-            with mp.Pool(processes=self.cpus) as pool:
-                event_loo_results = pool.starmap(self.fit_single, 
-                    zip(list_n_events, list_mags, list_pars,
-                        itertools.repeat(threshold),itertools.repeat(verbose)))
-        else:
-            event_loo_results = []
-            for event_tmp, flat_tmp in zip(list_mags, list_pars):
-                n_event = len(event_loo_results)+1
-                event_loo_results.append(self.fit_single(n_event, event_tmp, flat_tmp, 0, False))
-        return event_loo_results
-        
-    def loo_loglikelihood(self, estimates):
-        event_loo_results = [estimates.copy()]
-        n_events = event_loo_results[0].dropna('event').event.max().values
-        list_values_n_events = [n_events]
-        print(event_loo_results[0].parameters.values)  
-        i = 0
-        while n_events  > 0:
-            print(f'Estimating all solutions for {n_events} number of events')
-            temp_best = event_loo_results[i]#previous event solution
-            temp_best = temp_best.dropna('event')
-            temp_best = temp_best.dropna('stage')
-            n_events_list = np.arange(n_events+1)#all events from previous solution
-            flats = temp_best.parameters.values
-            print(flats)
-            events_temp, flats_temp = [], []
-            for event in np.arange(n_events+1):#creating all possible solutions
-                events_temp.append(temp_best.magnitudes.sel(event = np.array(list(set(n_events_list) - set([event])))).values)
-                flat = event + 1 #one more flat than events
-                temp = flats[:,1].copy()
-                temp[flat-1] += temp[flat]
-                temp = np.delete(temp, flat)
-                flats_temp.append(np.reshape(np.concatenate([np.repeat(self.shape, len(temp)), temp]), (2, len(temp))).T)
-
-            event_loo_likelihood_temp = self.__multi_cpu_dispatch(np.repeat(n_events,n_events+1), events_temp, 
-                     flats_temp, 0, False)
-            print([[x.likelihoods.values, x.parameters.values[:,1],'---------------------------------------\n'] for x in event_loo_likelihood_temp])
-            print('---------------------------------------\n')
-            models = xr.concat(event_loo_likelihood_temp, dim="iteration")
-            event_loo_results.append(models.sel(iteration=[np.where(models.likelihoods == models.likelihoods.max())[0][0]]).squeeze('iteration'))
-            n_events = event_loo_results[-1].dropna('event').event.max().values
-            list_values_n_events.append(n_events)
-            i += 1
-        lkh = [x.likelihoods for x in event_loo_results]
-        return lkh
 
 
     def backward_estimation(self,max_events=None, min_events=0, max_fit=None, max_starting_points=1, method="random", threshold=1):
@@ -925,85 +873,6 @@ class hmp:
         else:
             return fit
     
-    def _bwd_fit(self, step=1, verbose=True, figsize=(12,3), end=None, threshold=None, bwd=True):
-        '''
-        '''
-        if threshold is None:
-            threshold = .05*self.n_dims
-        if end is None:
-            end = int(self.mean_d)
-        n_points = int(end//step)
-        lkh = np.repeat(-np.inf, n_points*3)
-        pars, mags = np.zeros((n_points-1,2)),np.zeros((n_points-1, self.n_dims))
-        new_pars, new_mags = pars.copy(), mags.copy()
-        pbar = tqdm(total = n_points-1)
-        n_events, i,j = 0,1,0
-        event_width = self.event_width_samples / self.shape
-        all_diffs = []
-        while pars[-n_events:].prod(axis=1).sum() < self.mean_d:
-            if bwd:
-                index = range(-n_events-2,0)
-            else:
-                index = range(0,n_events+2)[::-1]
-            if j == 0:
-                print(np.round(pars[index[1:]].prod(axis=1).sum()))
-                next_pars = self._grid_search(2, verbose=False, start_time=(np.round(pars[index[:n_events]].prod(axis=1).sum())), step=step, end_time=end)#next steps in parameter space
-                if bwd:
-                    next_pars = next_pars[:,::-1,:]
-                    
-                next_mags = np.zeros(self.n_dims)#reinitialisze mags
-            if j < len(next_pars):
-                pars_prop = np.concatenate([pars[index[2:]], next_pars[j]])
-                mags_prop = np.concatenate([mags[index[2:]], [next_mags]])
-                print(mags_prop)
-                print(pars_prop)
-                # next_pars[j, 1, 1] = end/self.shape-np.sum(pars_prop[:n_events+1, 1])
-                lkh[i], new_mags[index[1:],:], new_pars[index,:], _ = \
-                    self.EM(n_events+1, mags_prop.copy(), pars_prop.copy(), 1, [], [])
-                print(new_mags[index[1:],:])
-                print(new_pars[index,:])
-
-                diffs = np.sum(np.diff(new_mags[index[1:]],axis=0, prepend=0)**2,axis=1)
-                all_diffs.append(diffs[-1])
-                print(diffs)
-                # print(f'Times = {np.round(pars[:n_events].prod(axis=1).cumsum())}')
-                if (diffs > threshold).all() and np.all(new_mags[index[1:]][-1]>0):#valid iteration
-                    j = 0
-                    n_events += 1
-                    pars[index], mags[index] = new_pars[index], new_mags[index]
-                    if verbose:
-                        print(f'Transition event {n_events} found around time {np.round(np.sum(pars[index[1:]].prod(axis=1)))} (step {i})')
-                    print(f'New pars : {pars[index[0]]}')
-                    print(int((pars[-n_events,1] - np.sum(pars_prop[index[1:],1]))*self.shape))
-                    pbar.update(int((np.sum(pars[-n_events:,1]) - np.sum(pars_prop[-n_events:,1]))*self.shape))
-                else:
-                    pbar.update(1)
-                    j += 1
-                i += 1
-            else:
-                break
-        all_diffs = np.array(all_diffs)
-        plt.hist(all_diffs, bins=40)
-        plt.xlim(0, threshold+threshold/2)
-        plt.show()
-        plt.plot(all_diffs)
-        plt.show()
-        mags = mags[index[2:], :]
-        pars = pars[index[1:], :]
-        pars[-1, :] = np.concatenate([[self.shape], [self.mean_d/self.shape-np.sum(pars[:-1, 1])]])
-        # if pars[-1, 1] <= 0:
-        #     print(True)
-        #     pars[-1, 1] = .5
-        if verbose:
-            _, ax = plt.subplots(figsize=figsize, dpi=300)
-            ax.plot(lkh, '-', color='k')
-            ax.set_ylabel('Log-likelihood')
-            ax.set_xlabel('Sample number')
-            plt.show()
-        print(mags)
-        print(pars)
-        fit = self.fit_single(len(pars)-1, parameters=pars, magnitudes=mags)
-        return fit, lkh    
     
     def event_gain_plot(self, lkh, pars, mags, colors=default_colors, figsize=(12,3)):
         
