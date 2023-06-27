@@ -137,6 +137,10 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         for event in np.arange(n_event):
             axes.append(ax.inset_axes([times_iteration[event] + event_size/2 - (event_size*magnify) / 2,iteration-yoffset,
                                 (event_size*magnify),yoffset*2], transform=ax.transData))
+            
+            print('iteration - yoffset: ' + str(iteration-yoffset)
+            print(yoffset)
+
             plot_topomap(channels_[event,:], channel_position, axes=axes[-1], show=False,
                          cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours)
             if event_lines:
