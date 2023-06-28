@@ -109,14 +109,12 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     if len(np.shape(channels)) == 2:
         channels = channels[np.newaxis]
     n_iter = np.shape(channels)[0]
-    yscaling = .85
     if ax is None:
         if figsize == None:
-            figsize = (12, yscaling*n_iter)
+            figsize = (12, n_iter*.5*magnify)
         _, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
         return_ax = False
     event_size = init.event_width_samples*time_step
-    yoffset =.25 * magnify
     axes = []
     if n_iter == 1:
         times = [times]
@@ -135,21 +133,21 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         n_event = int(sum(np.isfinite(channels_[:,0])))
         channels_ = channels_[:n_event,:]
         for event in np.arange(n_event):
-            axes.append(ax.inset_axes([times_iteration[event] + event_size/2 - (event_size*magnify) / 2,iteration-yoffset,
-                                (event_size*magnify),yoffset*2], transform=ax.transData))
-            
 
+            rowheight = 1/n_iter 
+            ylow = iteration * rowheight
+     
+            axes.append(ax.inset_axes([times_iteration[event] + event_size/2 - (event_size*magnify) / 2, ylow,
+                                (event_size * magnify), rowheight], transform=ax.get_xaxis_transform())) 
+         
             plot_topomap(channels_[event,:], channel_position, axes=axes[-1], show=False,
                          cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours)
+
             if event_lines:
-                #bottom of row + 5%
-                ylow = iteration * 1/n_iter
-                if n_iter > 1:
-                    ylow = ylow + (1/n_iter * .05)
-                #top of row - 5%
-                yhigh = (iteration + 1) * 1/n_iter 
-                if n_iter > 1:
-                    yhigh = yhigh - (1/n_iter * .05)
+                #bottom of row + 5% if n_iter > 1
+                ylow = iteration * rowheight if n_iter == 1 else iteration * rowheight + .05 * rowheight
+                #top of row - 5% if n_iter > 1
+                yhigh = (iteration + 1) * rowheight if n_iter == 1 else (iteration + 1) * rowheight - .05 * rowheight
 
                 ax.vlines(times_iteration[event],ylow,yhigh, linestyles='dotted',color=event_color,alpha=.5,transform=ax.get_xaxis_transform())
                 ax.vlines(times_iteration[event]+event_size,ylow, yhigh, linestyles='dotted',color=event_color,alpha=.5, transform=ax.get_xaxis_transform())
@@ -174,25 +172,19 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     if not return_ax:
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
-        ax.set_ylim(0-yoffset, n_iter-1+yoffset)
+        ax.set_ylim(0, n_iter) #-1
         ax.set_xlabel(xlabel)
         if title:
             ax.set_title(title)
         if np.any(max_time) == None and np.any(times_to_display) == None:
             ax.set_xlim(0, np.nanmax(times)+np.nanmax(times)/10)
     if return_ax:
-        ax.set_ylim(0-yoffset, n_iter-1+yoffset)
+        ax.set_ylim(0, n_iter) #-1
         return ax
     else:
         plt.show()    
 
-def plot_components_sensor(hmp_data, positions):
-    from mne.viz import plot_topomap
-    fig, ax = plt.subplots(1,len(hmp_data.attrs['components'].component))
-    for comp in hmp_data.attrs['components'].component:
-        plot_topomap(hmp_data.attrs['components'].values[:,comp], positions, axes=ax[comp], show=False, cmap='Spectral_r')
-    plt.show()
-    
+
 def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=None, mean=False):
     '''
     Plotting the LOOCV results
