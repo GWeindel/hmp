@@ -772,8 +772,12 @@ class hmp:
         eventprobs_sp = np.array([x[3] for x in estimates])
         return lkhs_sp, mags_sp, pars_sp, eventprobs_sp
     
-    def fit(self, step=1, verbose=True, figsize=(12,3), end=None, threshold=1, trace=False):
+    def fit(self, step=1, verbose=True, end=None, threshold=1, trace=False):
         '''
+        Cumulative fit method.
+        step = size of steps across samples
+        end = max explored duration
+        threshold = 
         '''
         if end is None:
             end = self.mean_d
@@ -784,10 +788,10 @@ class hmp:
         end = step*(n_points)#Rounding up to step size  
         lkh = -np.inf
         pars = np.zeros((n_points-1,2))
-        pars[:,0] = self.shape
+        pars[:,0] = self.shape #parameters during estimation, shape x scale
         pars[0,1] = 0.5#initialize with one event
-        mags = np.zeros((n_points-1, self.n_dims))
-        pbar = tqdm(total = end)
+        mags = np.zeros((n_points-1, self.n_dims)) #mags during estimation
+        pbar = tqdm(total = end) #progress bar
         n_events, j, time = 0,1,0
         last_stage = end
         if trace:
@@ -797,8 +801,8 @@ class hmp:
         pars_prop[n_events,1] = step*j/self.shape
         last_stage = end/self.shape - np.sum(pars_prop[:n_events+1,1])
         pars_prop[n_events+1,1] = last_stage
-        while last_stage*self.shape > step:
-            prev_n_events, prev_lkh, prev_time = n_events, lkh, time
+        while last_stage*self.shape > step: #while we did not estimate till the end yet...
+            prev_time = time
             mags_prop = mags[:n_events+1].copy()#cumulative
             # mags_prop[n_events,:] = np.zeros(self.n_dims)
             lkh, mags[:n_events+1], pars[:n_events+2], _, _ = \
