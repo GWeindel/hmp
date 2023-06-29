@@ -185,6 +185,15 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         plt.show()    
 
 
+
+def plot_components_sensor(hmp_data, positions):
+    from mne.viz import plot_topomap
+    fig, ax = plt.subplots(1,len(hmp_data.attrs['components'].component))
+    for comp in hmp_data.attrs['components'].component:
+        plot_topomap(hmp_data.attrs['components'].values[:,comp], positions, axes=ax[comp], show=False, cmap='Spectral_r')
+    plt.show()
+
+
 def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=None, mean=False):
     '''
     Plotting the LOOCV results
