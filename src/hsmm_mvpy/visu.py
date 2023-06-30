@@ -12,7 +12,8 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=1, ydim=None,
                 figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
                 ylabels=[], xlabel = None, max_time = None, vmin=None, vmax=None, title=False, ax=None, 
-                sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange', colorbar=True):
+                sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange',
+                colorbar=True, topo_size_scaling=False):
     '''
     Plotting the event topologies at the average time of the end of the previous stage.
     
@@ -68,6 +69,9 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         set as color, uses the color
     colorbar : bool
         Whether a colorbar is plotted.
+    topo_size_scaling : bool
+        Whether to scale the size of the topologies with the event size. If True, size of topologies depends
+        on total plotted time interval, if False it is only dependent on magnify.
         
     Returns
     -------
@@ -111,15 +115,24 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     n_iter = np.shape(channels)[0]
     if ax is None:
         if figsize == None:
-            figsize = (12, n_iter*.5*magnify)
+            if n_iter == 1:
+                figsize = (12, .7 * np.max([magnify,1.8])) #make sure they don't get too flat
+            else:
+                figsize = (12, n_iter*.7) #make sure they don't get too flat
+
         _, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
         return_ax = False
-    event_size = init.event_width_samples*time_step
+    event_size = init.event_width_samples * time_step
+    if topo_size_scaling: #does topo width scale with time interval of plot?
+        topo_size = event_size * magnify
+    else:
+        timescale = (max_time if max_time else (np.max(times_to_display) * time_step * 1.05)) + time_step
+        topo_size = .08 * timescale * magnify #8% of time scale
     axes = []
     if n_iter == 1:
         times = [times]
     times = np.array(times, dtype=object)
-    
+   
     #fix vmin/vmax across topos, while keeping symmetric
     if vmax == None: #vmax = absolute max, unless no positive values
         vmax = np.nanmax(np.abs(channels[:])) if np.nanmax(channels[:]) >= 0 else 0
@@ -137,9 +150,8 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             rowheight = 1/n_iter 
             ylow = iteration * rowheight
      
-            axes.append(ax.inset_axes([times_iteration[event] + event_size/2 - (event_size*magnify) / 2, ylow,
-                                (event_size * magnify), rowheight], transform=ax.get_xaxis_transform())) 
-         
+            axes.append(ax.inset_axes([times_iteration[event] + event_size/2 - topo_size / 2, ylow+.1*rowheight,
+                                topo_size, rowheight*.8], transform=ax.get_xaxis_transform())) 
             plot_topomap(channels_[event,:], channel_position, axes=axes[-1], show=False,
                          cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours)
 
@@ -387,12 +399,8 @@ def __display_times(ax, times_to_display, yoffset, time_step, max_time, times, y
     n_iter = len(times)
     times = np.asarray(times,dtype=object)
     if isinstance(times_to_display, (np.ndarray, np.generic)):
-        if isinstance(times_to_display, np.ndarray):
-            ax.vlines(times_to_display*time_step, yoffset-1.1, yoffset+ymax+1.1, ls='--')
-            ax.set_xlim(-1*time_step, max(times_to_display)*time_step+((max(times_to_display)*time_step)/15))
-        else:
-            ax.vlines(times_to_display*time_step, yoffset-1.1, yoffset+ymax+1.1, ls='--')
-            ax.set_xlim(-1*time_step, times_to_display*time_step+(times_to_display*time_step)/15)
+        ax.vlines(times_to_display*time_step, yoffset-1.1, yoffset+ymax+1.1, ls='--')
+        ax.set_xlim(-1*time_step, np.max(times_to_display)*time_step * 1.05)
     if max_time:
         ax.set_xlim(-1*time_step, max_time)
     return ax
