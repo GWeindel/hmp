@@ -716,7 +716,7 @@ class hmp:
         else:
             raise ValueError(f'No combination found given length of the data {self.mean_d}, number of events {n_stages} and a max iteration of {iter_limit}')
     
-    def sliding_event(self, n_events=None, color='k', figsize=(12,3), verbose=True, method=None, plot_deriv=False, magnitudes=None, step=1, show=True, ax=None, fix_mags=True):
+    def sliding_event(self, n_events=None, color='k', figsize=(12,3), verbose=True, method=None, plot_deriv=False, magnitudes=None, step=1, show=True, ax=None, fix_mags=True, cpus=None):
         '''
         This method outputs the likelihood and estimated parameters of a 1 event model with each sample, from 0 to the mean 
         epoch duration. The parameters and likelihoods that are returned are 
@@ -724,7 +724,6 @@ class hmp:
         '''
         
         from itertools import cycle
-        
         mean_d = int(self.mean_d)
         init_n_events = n_events
         parameters = self._grid_search(2, verbose=verbose, step=step, start_time=np.random.choice(range(step)))#Looking for all possibilities with one event
@@ -744,7 +743,7 @@ class hmp:
                 mags_to_fix = []
                 ls = '.'
         lkhs_init, mags_init, pars_init, _ = \
-            self.estimate_single_event(magnitudes, parameters, [], mags_to_fix, threshold)
+            self.estimate_single_event(magnitudes, parameters, [], mags_to_fix, threshold, cpus)
         if verbose:
             if ax is None:
                  _, ax = plt.subplots(figsize=figsize, dpi=100)
@@ -761,8 +760,10 @@ class hmp:
         else:
             return lkhs_init, mags_init, pars_init
         
-    def estimate_single_event(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, threshold):
-        if self.cpus >1:
+    def estimate_single_event(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, threshold, cpus):
+        if cpus is None:
+            cpus = self.cpus
+        if cpus >1:
             if np.shape(magnitudes) == 2:
                 magnitudes = np.tile(magnitudes, (len(parameters), 1, 1))
             with mp.Pool(processes=self.cpus) as pool:
@@ -844,7 +845,7 @@ class hmp:
             pars_prop[n_events+1,1] = last_stage
             #New mag proposition
             mags_prop = mags_accepted[:n_events+1].copy()#cumulative
-            # mags_prop[n_events,:] = np.zeros(self.n_dims)
+            mags_prop[n_events,:] = np.zeros(self.n_dims)
             time = np.sum(pars_prop[:n_events+1,1])*self.shape 
             pbar.update(int(np.round(time-prev_time)))
         pbar.update(step*2)
