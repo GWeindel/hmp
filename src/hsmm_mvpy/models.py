@@ -793,54 +793,19 @@ class hmp:
         if threshold is None:
             means = np.array([np.mean(self.events[np.random.choice(range(len(self.events)), self.n_trials),:], axis=0) for x in range(1000)])
             threshold = np.abs(np.max(np.percentile(means, [0.01, 99.99], axis=0)))
-<<<<<<< Updated upstream
-        end = step*(n_points)#Rounding up to step size  
-        lkh = -np.inf
-        pars = np.zeros((n_points-1,2))
-        pars[:,0] = self.shape #parameters during estimation, shape x scale
-        pars[0,1] = 0.5#initialize with one event
-        mags = np.zeros((n_points-1, self.n_dims)) #mags during estimation
-        pbar = tqdm(total = end) #progress bar
-=======
-
-        pbar = tqdm(total = int(np.rint(end)))
->>>>>>> Stashed changes
+        pbar = tqdm(total = int(np.rint(end)))#progress bar
         n_events, j, time = 0,1,0
         if trace:
             all_pars, all_mags, all_mags_prop, all_pars_prop, all_diffs = [],[],[],[],[]
-<<<<<<< Updated upstream
-        pars_accepted, mags_accepted = pars.copy(), mags.copy()
-        pars_prop = pars_accepted[:n_events+2].copy()#cumulative
-        pars_prop[n_events,1] = step*j/self.shape
-        last_stage = end/self.shape - np.sum(pars_prop[:n_events+1,1])
-        pars_prop[n_events+1,1] = last_stage
-        while last_stage*self.shape > step: #while we did not estimate till the end yet...
-            prev_time = time
-            mags_prop = mags[:n_events+1].copy()#cumulative
-            # mags_prop[n_events,:] = np.zeros(self.n_dims)
-            lkh, mags[:n_events+1], pars[:n_events+2], _, _ = \
-                self.EM(n_events+1, mags_prop, pars_prop.copy(), 1, [], [])
-            signif = True# np.all(np.any(np.abs(mags[:n_events+1]) > threshold, axis=1))
-            if n_events > 0:
-                diffs = np.all(np.any(np.abs(np.diff(mags[:n_events+1], axis=0)) > threshold, axis=1))
-            else:
-                diffs = True
-            # print(pars[:n_events+1,1])
-            # print(signif)
-            # print(diffs)
-            # print(pars[n_events,1] - pars_prop[n_events,1])
-            if signif and diffs: #and pars[n_events,1] - pars_prop[n_events,1] < self.event_width_samples/self.shape*2:
-=======
-            
         #Init pars
         pars = np.zeros((n_points-1,2))
-        pars[:,0] = self.shape
+        pars[:,0] = self.shape #parameters during estimation, shape x scale
         pars_prop = pars[:n_events+2].copy()
         pars_prop[0,1] = step/self.shape
         pars_prop[n_events+1,1] = last_stage = (end-step)/self.shape 
         pars_accepted = pars.copy()
         #init_mags
-        mags = np.zeros((n_points-1, self.n_dims))
+        mags = np.zeros((n_points-1, self.n_dims)) #mags during estimation
         mags_prop = mags[:n_events+1].copy()
         mags_prop[n_events,:] = np.zeros(self.n_dims)        
         mags_accepted = mags.copy()
@@ -857,7 +822,6 @@ class hmp:
                 # self.sliding_event(magnitudes=recalibration.magnitudes[n_events], show=False)
                 # plt.vlines(np.sum(recalibration.parameters[:n_events+1,1])*2, -4000, -2000)
                 # plt.show()
->>>>>>> Stashed changes
                 n_events += 1
                 pars_accepted[:n_events+1] = recalibration.parameters.values.copy()
                 mags_accepted[:n_events] = recalibration.magnitudes.values.copy()
