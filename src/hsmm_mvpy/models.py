@@ -444,7 +444,7 @@ class hmp:
         p = np.diff(p, prepend=0)#going to pmf
         return p
     
-    def scale_parameters(self, eventprobs, n_events):
+    def scale_parameters(self, eventprobs=None, n_events=None, averagepos=None):
         '''
         Used for the re-estimation in the EM procdure. The likeliest location of 
         the event is computed from eventprobs. The scale parameters are then taken as the average 
@@ -464,8 +464,9 @@ class hmp:
         params : ndarray
             shape and scale for the gamma distributions
         '''
-        averagepos = np.concatenate([np.arange(1,self.max_d+1)@eventprobs.mean(axis=1),
-                                     [self.mean_d]])#Durations
+        if eventprobs is not None:
+            averagepos = np.concatenate([np.arange(1,self.max_d+1)@eventprobs.mean(axis=1),
+                                         [self.mean_d]])#Durations
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
@@ -715,7 +716,7 @@ class hmp:
         else:
             raise ValueError(f'No combination found given length of the data {self.mean_d}, number of events {n_stages} and a max iteration of {iter_limit}')
     
-    def sliding_event(self, n_events=None, color='k', figsize=(12,3), verbose=True, method=None, plot_deriv=False, magnitudes=None, step=1, show=True, ax=None):
+    def sliding_event(self, n_events=None, color='k', figsize=(12,3), verbose=True, method=None, plot_deriv=False, magnitudes=None, step=1, show=True, ax=None, fix_mags=True):
         '''
         This method outputs the likelihood and estimated parameters of a 1 event model with each sample, from 0 to the mean 
         epoch duration. The parameters and likelihoods that are returned are 
@@ -726,23 +727,30 @@ class hmp:
         
         mean_d = int(self.mean_d)
         init_n_events = n_events
-        parameters = self._grid_search(2, verbose=verbose, step=step)#Looking for all possibilities with one event
-        if magnitudes is None:
+        parameters = self._grid_search(2, verbose=verbose, step=step, start_time=np.random.choice(range(step)))#Looking for all possibilities with one event
+        if method == 'null' or magnitudes is None:
             magnitudes = np.zeros((len(parameters),1, self.n_dims), dtype=np.float64)
             threshold = 1
             mags_to_fix = []
+            ls = '-'
         else:
-            magnitudes = np.tile(magnitudes, (len(parameters),1, self.n_dims))
-            threshold = 0
-            mags_to_fix = [0]
+            magnitudes = np.tile(magnitudes, (len(parameters),1,1))
+            if fix_mags:
+                threshold = 0
+                mags_to_fix = [0]
+                ls = '-'
+            else:
+                threshold = 1
+                mags_to_fix = []
+                ls = '.'
         lkhs_init, mags_init, pars_init, _ = \
-            self.estimate_single_event(magnitudes, parameters, [0,1], mags_to_fix, threshold)
+            self.estimate_single_event(magnitudes, parameters, [], mags_to_fix, threshold)
         if verbose:
             if ax is None:
                  _, ax = plt.subplots(figsize=figsize, dpi=100)
-            ax.plot(pars_init[:,0,1]*self.shape, lkhs_init, '-', color=color)
+            ax.plot(pars_init[:,0,1]*self.shape, lkhs_init, ls)
         
-        elif method is None:
+        if method is None:
             #pars, mags, lkhs = pars_init, mags_init, lkhs_init
             plt.ylabel('Log-likelihood')
             plt.xlabel('Sample number')
@@ -751,8 +759,8 @@ class hmp:
             else:
                 return ax
         else:
-            return pars, mags[:, 0, :], lkhs
-
+            return lkhs_init, mags_init, pars_init
+        
     def estimate_single_event(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, threshold):
         if self.cpus >1:
             if np.shape(magnitudes) == 2:
@@ -781,10 +789,11 @@ class hmp:
         '''
         if end is None:
             end = self.mean_d
-        n_points = int(end//step)
+        n_points = int(np.rint(end)//step)
         if threshold is None:
             means = np.array([np.mean(self.events[np.random.choice(range(len(self.events)), self.n_trials),:], axis=0) for x in range(1000)])
             threshold = np.abs(np.max(np.percentile(means, [0.01, 99.99], axis=0)))
+<<<<<<< Updated upstream
         end = step*(n_points)#Rounding up to step size  
         lkh = -np.inf
         pars = np.zeros((n_points-1,2))
@@ -792,10 +801,14 @@ class hmp:
         pars[0,1] = 0.5#initialize with one event
         mags = np.zeros((n_points-1, self.n_dims)) #mags during estimation
         pbar = tqdm(total = end) #progress bar
+=======
+
+        pbar = tqdm(total = int(np.rint(end)))
+>>>>>>> Stashed changes
         n_events, j, time = 0,1,0
-        last_stage = end
         if trace:
             all_pars, all_mags, all_mags_prop, all_pars_prop, all_diffs = [],[],[],[],[]
+<<<<<<< Updated upstream
         pars_accepted, mags_accepted = pars.copy(), mags.copy()
         pars_prop = pars_accepted[:n_events+2].copy()#cumulative
         pars_prop[n_events,1] = step*j/self.shape
@@ -817,38 +830,64 @@ class hmp:
             # print(diffs)
             # print(pars[n_events,1] - pars_prop[n_events,1])
             if signif and diffs: #and pars[n_events,1] - pars_prop[n_events,1] < self.event_width_samples/self.shape*2:
+=======
+            
+        #Init pars
+        pars = np.zeros((n_points-1,2))
+        pars[:,0] = self.shape
+        pars_prop = pars[:n_events+2].copy()
+        pars_prop[0,1] = step/self.shape
+        pars_prop[n_events+1,1] = last_stage = (end-step)/self.shape 
+        pars_accepted = pars.copy()
+        #init_mags
+        mags = np.zeros((n_points-1, self.n_dims))
+        mags_prop = mags[:n_events+1].copy()
+        mags_prop[n_events,:] = np.zeros(self.n_dims)        
+        mags_accepted = mags.copy()
+        while last_stage > 0:
+            prev_time = time
+            _, mags[:n_events+1], pars[:n_events+2], _, _ = \
+                self.EM(n_events+1, mags_prop.copy(), pars_prop.copy(), 1, [], [])
+            
+            diffs_mags = np.all(np.abs(np.sum(np.diff(mags[:n_events+1], prepend=0, axis=0), axis=1)) > threshold)
+            if diffs_mags:
+                recalibration = \
+                    self.fit_single(n_events+1, mags[:n_events+1], magnitudes_to_fix=n_events)
+                
+                # self.sliding_event(magnitudes=recalibration.magnitudes[n_events], show=False)
+                # plt.vlines(np.sum(recalibration.parameters[:n_events+1,1])*2, -4000, -2000)
+                # plt.show()
+>>>>>>> Stashed changes
                 n_events += 1
-                pars_accepted = pars[:n_events+2].copy()
-                mags_accepted = mags[:n_events+2].copy()
-                mags_accepted[n_events] =  np.zeros(self.n_dims)
+                pars_accepted[:n_events+1] = recalibration.parameters.values.copy()
+                mags_accepted[:n_events] = recalibration.magnitudes.values.copy()
+                mags_accepted[n_events] = np.zeros(self.n_dims)
                 j = 0
                 if verbose:
                     print(f'Transition event {n_events} found around sample {int(np.round(np.sum(pars_accepted[:n_events,:].prod(axis=1))))}')#: Transition event samples = {np.round(pars[:n_events].prod(axis=1).cumsum())+self.location*np.arange(n_events)}')
-            # elif pars[n_events,1] - pars_prop[n_events,1] > self.event_width_samples/self.shape*2:
-            #     mags[n_events] = np.random.normal(0, .5, self.n_dims)
             if trace:
-                all_mags_prop.append(mags_prop.copy())
-                all_pars_prop.append(pars_prop.copy())
+                all_mags_prop.append(mags[:n_events+1].copy())
+                all_pars_prop.append(pars[:n_events+2].copy())
                 all_mags.append(mags_accepted[:n_events].copy())
                 all_pars.append(pars_accepted[:n_events+1].copy())
                 all_diffs.append(np.abs(np.diff(mags[:n_events+1], axis=0)))
 
             j += 1
+            #New parameter proposition
             pars_prop = pars_accepted[:n_events+2].copy()
-            pars_prop[n_events,1] = step*j/self.shape
+            pars_prop[n_events,1] = self.location+step*j/self.shape
             last_stage = end/self.shape - np.sum(pars_prop[:n_events+1,1])
             pars_prop[n_events+1,1] = last_stage
-            time = np.sum(pars_prop[:n_events,1])*self.shape + \
-                self.location*n_events + step*j/self.shape
-            try:
-                pbar.update(int(np.round(time-prev_time+1)))
-            except:
-                pbar.update(1)
-        # pbar.update(int(np.round(end-prev_time)+self.location+step))
+            #New mag proposition
+            mags_prop = mags_accepted[:n_events+1].copy()#cumulative
+            # mags_prop[n_events,:] = np.zeros(self.n_dims)
+            time = np.sum(pars_prop[:n_events+1,1])*self.shape 
+            pbar.update(int(np.round(time-prev_time)))
+        pbar.update(step*2)
         mags = mags_accepted[:n_events, :]
         pars = pars_accepted[:n_events+1, :]
         if n_events > 1: 
-            fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose, min_iteration=0)
+            fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose, min_iteration=1)
         else:
             warn('Failed to find more than two stages, returning 2 stage model with default starting values')
             fit = self.fit_single(n_events)
