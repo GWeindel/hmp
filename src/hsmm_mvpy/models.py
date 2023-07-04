@@ -282,10 +282,15 @@ class hmp:
             print(f"Parameters estimated for {n_events} events model")
         return estimated
     
-    def EM(self, n_events, magnitudes, parameters,  threshold, magnitudes_to_fix=None, parameters_to_fix=None, min_iteration=10, max_iteration = 1e3):  
+    def EM(self, n_events, magnitudes, parameters,  maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, min_iteration=1, max_iteration = 1e3, tolerance=10e-4):  
         '''
         Expectation maximization function underlying fit
         ''' 
+        if isinstance(maximization, int):#Backward compatibility
+            warn('Deprecated use of the threshold function, use maximization and tolerance arguments')
+            maximization = {1:True, 0:False}[maximization]
+            if maximization:#Backward compatibility
+                tolerance=1
         null_stages = np.where(parameters[:,1]<0)[0]
         wrong_shape = np.where(parameters[:,0]!=self.shape)[0]
         if len(null_stages)>0:
@@ -298,14 +303,14 @@ class hmp:
         lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
         traces = []
         i = 0
-        if threshold == 0 or n_events==0:
+        if not maximization or n_events==0:
             lkh_prev = lkh
             magnitudes_prev = initial_magnitudes
             parameters_prev = initial_parameters
             eventprobs_prev = eventprobs
         else:
             while i < max_iteration :#Expectation-Maximization algorithm
-                if i > min_iteration and lkh - lkh_prev < threshold:
+                if i > min_iteration and tolerance > lkh - lkh_prev:
                     break
                 #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
@@ -356,7 +361,8 @@ class hmp:
         for i in range(self.n_dims):
             # computes the gains, i.e. how much the congruence between the pattern shape
             # and the data given the magnitudes of the sensors
-            gains = gains + self.events[:,i][np.newaxis].T * magnitudes[:,i]
+            gains = gains + self.events[:,i][np.newaxis].T * magnitudes[:,i]- \
+                    np.tile((magnitudes[:,i]**2),(self.n_samples,1))/2 
         gains = np.exp(gains)
         probs = np.zeros([self.max_d,self.n_trials,n_events], dtype=np.float64) # prob per trial
         probs_b = np.zeros([self.max_d,self.n_trials,n_events], dtype=np.float64)# Sample and state reversed
@@ -399,7 +405,7 @@ class hmp:
                 backward[:self.durations[trial],trial,:] = \
                     backward[:self.durations[trial],trial,:][::-1]
             eventprobs = forward * backward
-            eventprobs[eventprobs < 0] = 0 #floating point precision error
+            # eventprobs[eventprobs < 0] = 0 #floating point precision error
             likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
             eventprobs = eventprobs / eventprobs.sum(axis=0)
             #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
@@ -763,18 +769,13 @@ class hmp:
     def estimate_single_event(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, threshold, cpus):
         if cpus is None:
             cpus = self.cpus
-        if cpus >1:
-            if np.shape(magnitudes) == 2:
-                magnitudes = np.tile(magnitudes, (len(parameters), 1, 1))
-            with mp.Pool(processes=self.cpus) as pool:
-                estimates = pool.starmap(self.EM, 
-                    zip(itertools.repeat(1), magnitudes, parameters, 
-                        itertools.repeat(threshold), itertools.repeat(magnitudes_to_fix), 
-                        itertools.repeat(parameters_to_fix)))
-        else:
-            estimates = []
-            for pars, mags in zip(parameters, magnitudes):
-                estimates.append(self.EM(1, mags, pars, threshold, magnitudes_to_fix, parameters_to_fix))
+        if np.shape(magnitudes) == 2:
+            magnitudes = np.tile(magnitudes, (len(parameters), 1, 1))
+        with mp.Pool(processes=self.cpus) as pool:
+            estimates = pool.starmap(self.EM, 
+                zip(itertools.repeat(1), magnitudes, parameters, 
+                    itertools.repeat(True), itertools.repeat(magnitudes_to_fix), 
+                    itertools.repeat(parameters_to_fix)))
         lkhs_sp = np.array([x[0] for x in estimates])
         mags_sp = np.array([x[1] for x in estimates])
         pars_sp = np.array([x[2] for x in estimates])
@@ -812,20 +813,23 @@ class hmp:
         mags_accepted = mags.copy()
         while last_stage > 0:
             prev_time = time
-            _, mags[:n_events+1], pars[:n_events+2], _, _ = \
-                self.EM(n_events+1, mags_prop.copy(), pars_prop.copy(), 1, [], [])
-            
+            # estimate_single_event(
+            _, mags[:n_events+1], pars[:n_events+2], _, traces = \
+                self.EM(n_events+1, mags_prop.copy(), pars_prop.copy(), True, [range(n_events)], [range(n_events)])
+            plt.plot(traces)
+            print(traces)
+            plt.show()
             diffs_mags = np.all(np.abs(np.sum(np.diff(mags[:n_events+1], prepend=0, axis=0), axis=1)) > threshold)
-            if diffs_mags:
-                recalibration = \
-                    self.fit_single(n_events+1, mags[:n_events+1], magnitudes_to_fix=n_events)
+            if np.diff(traces[-2:]) > 0:
+                # recalibration = \
+                #     self.fit_single(n_events+1, mags[:n_events+1], magnitudes_to_fix=n_events)
                 
                 # self.sliding_event(magnitudes=recalibration.magnitudes[n_events], show=False)
                 # plt.vlines(np.sum(recalibration.parameters[:n_events+1,1])*2, -4000, -2000)
                 # plt.show()
                 n_events += 1
-                pars_accepted[:n_events+1] = recalibration.parameters.values.copy()
-                mags_accepted[:n_events] = recalibration.magnitudes.values.copy()
+                pars_accepted[:n_events+1] = pars[:n_events+1].copy()
+                mags_accepted[:n_events] = mags[:n_events].copy()
                 mags_accepted[n_events] = np.zeros(self.n_dims)
                 j = 0
                 if verbose:
