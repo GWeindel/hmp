@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold', 'brown']
 
-
+                   
 class hmp:
     
     def __init__(self, data, eeg_data=None, sfreq=None, offset=0, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', em_method="max"):
@@ -398,17 +398,36 @@ class hmp:
             for trial in np.arange(self.n_trials):#Undoes sample inversion
                 backward[:self.durations[trial],trial,:] = \
                     backward[:self.durations[trial],trial,:][::-1]
+            
             eventprobs = forward * backward
             eventprobs = np.clip(eventprobs, 0, None) #floating point precision error
            
             #eventprobs can be so low as to be 0, avoid dividing by 0
-            #if (eventprobs.sum(axis=0) == 0).any() or (eventprobs[:,:,0].sum(axis=0) == 0).any(): 
-            #    likelihood = np.log(0) #if directly set to -inf, throws error on copy in EM function
-            #    eventprobs = np.zeros(eventprobs.shape) #avoid NaNs
-            #else:
-            likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
-            eventprobs = eventprobs / eventprobs.sum(axis=0)
+            #this only happens when magnitudes are 0 and gammas are randomly determined
+            if (eventprobs.sum(axis=0) == 0).any() or (eventprobs[:,:,0].sum(axis=0) == 0).any(): 
+              
+                #set likelihood
+                eventsums = eventprobs[:,:,0].sum(axis=0)
+                eventsums[eventsums == 0] = -np.inf
+                eventsums[eventsums != 0] = np.log(eventsums[eventsums != 0])
+                likelihood = np.sum(eventsums)
+
+                #set eventprobs, check if any are 0   
+                eventsums = eventprobs.sum(axis=0)
+                if (eventsums == 0).any():
+                    for i in range(eventprobs.shape[0]):
+                        eventprobs[i,:,:][eventsums == 0] = 0
+                        eventprobs[i,:,:][eventsums != 0] = eventprobs[i,:,:][eventsums != 0] / eventsums[eventsums != 0]
+                else:
+                    eventprobs = eventprobs / eventprobs.sum(axis=0)
+                
+            else:
+           
+                likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
+                eventprobs = eventprobs / eventprobs.sum(axis=0)
                 #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
+
+
         else:
             forward = np.zeros((self.max_d, self.n_trials), dtype=np.float64)
             backward = np.zeros((self.max_d, self.n_trials), dtype=np.float64)
