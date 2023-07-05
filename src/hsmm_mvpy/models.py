@@ -282,7 +282,7 @@ class hmp:
             print(f"Parameters estimated for {n_events} events model")
         return estimated
     
-    def EM(self, n_events, magnitudes, parameters,  threshold, magnitudes_to_fix=None, parameters_to_fix=None, min_iteration=10, max_iteration = 1e3):  
+    def EM(self, n_events, magnitudes, parameters,  threshold, magnitudes_to_fix=None, parameters_to_fix=None, min_iteration=1, max_iteration = 1e3):  
         '''
         Expectation maximization function underlying fit
         ''' 
