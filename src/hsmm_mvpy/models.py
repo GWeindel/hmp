@@ -141,7 +141,7 @@ class hmp:
         return events
 
     def fit_single(self, n_events=None, magnitudes=None, parameters=None, parameters_to_fix=None, 
-                   magnitudes_to_fix=None, tolerance=1e-3, max_iteration=1e3, maximization=True,
+                   magnitudes_to_fix=None, tolerance=1e-5, max_iteration=1e3, maximization=True,
                    starting_points=1, method='random', verbose=True):
         '''
         Fit HMP for a single n_events model
@@ -282,7 +282,7 @@ class hmp:
             print(f"Parameters estimated for {n_events} events model")
         return estimated
     
-    def EM(self, n_events, magnitudes, parameters,  maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-3, min_iteration=1):  
+    def EM(self, n_events, magnitudes, parameters,  maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-5, min_iteration=1):  
         '''
         Expectation maximization function underlying fit
         ''' 
@@ -500,11 +500,13 @@ class hmp:
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
+        params[0,1] += .5
+        params[-1,1] -= 1
         params[:,1] = params[:,1]/params[:,0]
         return params
 
 
-    def backward_estimation(self,max_events=None, min_events=0, max_fit=None, max_starting_points=1, method="random", tolerance=1e-3, maximization=True, max_iteration=1e3):
+    def backward_estimation(self,max_events=None, min_events=0, max_fit=None, max_starting_points=1, method="random", tolerance=1e-5, maximization=True, max_iteration=1e3):
         '''
         First read or estimate max_event solution then estimate max_event - 1 solution by 
         iteratively removing one of the event and pick the one with the highest 
@@ -800,7 +802,7 @@ class hmp:
             estimates = pool.starmap(self.EM, 
                 zip(itertools.repeat(1), magnitudes, parameters, 
                     itertools.repeat(maximization), itertools.repeat(magnitudes_to_fix), 
-                    itertools.repeat(parameters_to_fix),  itertools.repeat(1e-2),
+                    itertools.repeat(parameters_to_fix),  itertools.repeat(1e-5),
                     itertools.repeat(max_iteration), itertools.repeat(1)))
         lkhs_sp = np.array([x[0] for x in estimates])
         mags_sp = np.array([x[1] for x in estimates])
@@ -808,7 +810,7 @@ class hmp:
         eventprobs_sp = np.array([x[3] for x in estimates])
         return lkhs_sp, mags_sp, pars_sp, eventprobs_sp
     
-    def fit(self, step=1, verbose=True, end=None, threshold=1, trace=False):
+    def fit(self, step=1, verbose=True, end=None, threshold=1, trace=False, fix_iter=True):
         '''
         Cumulative fit method.
         step = size of steps across samples
@@ -822,33 +824,36 @@ class hmp:
         if threshold is None:
             means = np.array([np.mean(self.events[np.random.choice(range(len(self.events)), self.n_trials),:], axis=0) for x in range(1000)])
             threshold = np.abs(np.max(np.percentile(means, [0.01, 99.99], axis=0)))
-        pbar = tqdm(total = int(np.rint(end)))#progress bar
+        pbar = tqdm(total = int(np.rint(end-self.location)))#progress bar
         n_events, j, time = 0,1,0
         if trace:
             all_pars, all_mags, all_mags_prop, all_pars_prop, all_diffs = [],[],[],[],[]
         #Init pars
-        pars = np.zeros((n_points-1,2))
+        pars = np.zeros((int(end),2))
         pars[:,0] = self.shape #parameters during estimation, shape x scale
         pars_prop = pars[:n_events+2].copy()
         pars_prop[0,1] = step/self.shape
         pars_prop[n_events+1,1] = last_stage = (end-step)/self.shape 
         pars_accepted = pars.copy()
         #init_mags
-        mags = np.zeros((n_points-1, self.n_dims)) #mags during estimation
+        mags = np.zeros((int(end), self.n_dims)) #mags during estimation
         mags_prop = mags[:n_events+1].copy()
         mags_prop[n_events,:] = np.zeros(self.n_dims)        
         mags_accepted = mags.copy()
+        if not fix_iter:
+            mags_to_fix = pars_to_fix = []
         while last_stage > self.location and n_events+1 < max_event_n:
             prev_time = time
-            # estimate_single_event(
+            if fix_iter:
+                mags_to_fix = pars_to_fix = [range(n_events)]
             _, mags[:n_events+1], pars[:n_events+2], _, traces = \
-                self.EM(n_events+1, mags_prop, pars_prop, True, [], [], 1e2, .01)
-            plt.plot(traces)
-            print(len(traces))
-            print(np.diff(traces[-2:]))
-            print(pars[:n_events+1,:])
-            print(mags[:n_events+1,:])
-            plt.show()
+                self.EM(n_events+1, mags_prop, pars_prop, True, [], [], 1e3)
+            plt.plot(traces-np.mean(traces))
+            # print(len(traces))
+            # print(np.diff(traces[-2:]))
+            # print(pars[:n_events+1,:])
+            # print(mags[:n_events+1,:])
+            # plt.show()
             diffs_mags = np.all(np.abs(np.sum(np.diff(mags[:n_events+1], prepend=0, axis=0), axis=1)) > threshold)
             # if np.diff(traces[-2:]) > 0:
             n_events += 1
@@ -859,8 +864,8 @@ class hmp:
             if verbose:
                 print(f'Transition event {n_events} found around sample {int(np.round(np.sum(pars_accepted[:n_events,:].prod(axis=1))))}')#: Transition event samples = {np.round(pars[:n_events].prod(axis=1).cumsum())+self.location*np.arange(n_events)}')
             if trace:
-                all_mags_prop.append(mags[:n_events+1].copy())
-                all_pars_prop.append(pars[:n_events+2].copy())
+                all_mags_prop.append(mags[:n_events].copy())
+                all_pars_prop.append(pars[:n_events+1].copy())
                 all_mags.append(mags_accepted[:n_events].copy())
                 all_pars.append(pars_accepted[:n_events+1].copy())
                 all_diffs.append(np.abs(np.diff(mags[:n_events+1], axis=0)))
@@ -868,7 +873,7 @@ class hmp:
             j += 1
             #New parameter proposition
             pars_prop = pars[:n_events+2].copy()
-            pars_prop[n_events,1] = self.location+step*j/self.shape
+            pars_prop[n_events,1] = self.event_width_samples+step*j/self.shape
             last_stage = end/self.shape - np.sum(pars_prop[:n_events+1,1])
             pars_prop[n_events+1,1] = last_stage
             #New mag proposition
