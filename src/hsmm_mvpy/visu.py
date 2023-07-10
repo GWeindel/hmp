@@ -559,7 +559,7 @@ def plot_iterations(iterations, eeg_data, init, positions, dims=['magnitudes','p
         selected = init.fit_single(iterations.sel(iteration=iteration)[dims[0]].dropna(dim='event').event[-1].values+1,\
             magnitudes = iterations.sel(iteration=iteration)[dims[0]].dropna(dim='event'),\
             parameters = iterations.sel(iteration=iteration)[dims[1]].dropna(dim='stage'),\
-            threshold=0, verbose=False)
+            maximization=False, verbose=False)
         #Visualizing
         plot_topo_timecourse(eeg_data, selected, positions,  init, magnify=1, sensors=False,ax=ax)
     
