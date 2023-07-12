@@ -249,7 +249,7 @@ class hmp:
             eventprobs_sp = [x[3] for x in estimates]
             traces_sp = [x[4] for x in estimates]
             if return_max:
-                max_lkhs = np.where(lkhs_sp == np.max(lkhs_sp))[0][0]
+                max_lkhs = np.argmax(lkhs_sp)
                 lkh = lkhs_sp[max_lkhs]
                 mags = mags_sp[max_lkhs]
                 pars = pars_sp[max_lkhs]
@@ -370,7 +370,7 @@ class hmp:
                         #Average channel activity at those points
                         event_values = np.zeros((self.n_trials, self.n_dims))
                         for trial in range(self.n_trials):
-                            time = self.starts[trial]+ np.argmax(eventprobs[:, trial, event])+1
+                            time = self.starts[trial]+ np.argmax(eventprobs[:, trial, event])
                             event_values[trial] = self.events[time]
                         magnitudes[event] = np.mean(event_values, axis=0)
                     elif self.em_method == "mean":
@@ -421,7 +421,7 @@ class hmp:
                 gains[self.starts[trial]:self.ends[trial]+1,:][::-1,::-1]
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage parameters
-        locations = np.concatenate([[.5], np.repeat(self.location, n_events)])#all stages except first stage have a location
+        locations = np.concatenate([[-.5], np.repeat(self.location, n_events)])#all stages except first stage have a location
         locations[-1] -= 1
         for stage in range(n_stages):
             pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1], locations[stage])
@@ -610,7 +610,7 @@ class hmp:
         '''
         Compute the maximum possible number of events given event width and mean or minimum reaction time
         '''
-        return int(np.rint(np.min(self.durations)//(self.location)))-2
+        return int(np.rint(np.min(self.durations)//(self.location)))-1
 
     def event_times(self, eventprobs, mean=True):
         '''
