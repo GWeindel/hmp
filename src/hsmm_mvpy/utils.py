@@ -925,3 +925,10 @@ def bootstrapping(init, hmp_data, general_run, positions, epoch_data, iterations
                         'magnitudes': (('iteration', 'event','component'), 
                                  all_mags_aligned)})
     return booted
+
+def filter_non_converged(estimates):
+    for iteration in estimates.iteration.values:
+        if np.diff(estimates.sel(iteration=iteration).traces.dropna('em_iteration')[-2:]) < -1e-4:
+            estimates = estimates.drop_sel({'iteration':iteration})
+    estimates["iteration"] = range(len(estimates.iteration))
+    return estimates
