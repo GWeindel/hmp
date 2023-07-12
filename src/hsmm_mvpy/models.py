@@ -738,7 +738,7 @@ class hmp:
         '''
         from itertools import product    
         if n_samples == 1:
-            grid = np.zeros((1, n_events, self.n_dims))
+            grid = np.zeros((n_events, 1, self.n_dims))
         else: 
             grid = np.array([x for x in product(np.linspace(lower_bound,upper_bound,size), repeat=self.n_dims)])
         if n_samples is None or n_samples > len(grid):
