@@ -190,6 +190,8 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             ax.set_title(title)
         if np.any(max_time) == None and np.any(times_to_display) == None:
             ax.set_xlim(0, np.nanmax(times)+np.nanmax(times)/10)
+    if plt.get_backend()[0:2] == 'Qt': #fixes issue with yscaling
+        plt.tight_layout()
     if return_ax:
         ax.set_ylim(0, n_iter) #-1
         return ax

@@ -6,14 +6,14 @@ import numpy as np
 import xarray as xr
 import multiprocessing as mp
 import itertools
-import math
-import time#Just for speed testing
 from pandas import MultiIndex
 from warnings import warn, filterwarnings, resetwarnings
 from scipy.stats import gamma as sp_gamma
 import matplotlib.pyplot as plt
-from tqdm.auto import tqdm
+from tqdm.auto import tqdm as tqdm_auto
 from hsmm_mvpy import utils
+import tqdm
+
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold', 'brown']
 
                    
@@ -236,12 +236,12 @@ class hmp:
 
                     estimates = pool.starmap(self.EM, 
                         zip(itertools.repeat(n_events), magnitudes, parameters, itertools.repeat(maximization),
-                        itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(1)))   
+                        itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance)))   
             else:#avoids problems if called in an already parallel function
                 estimates = []
                 for pars, mags in zip(parameters, magnitudes):
                     estimates.append(self.EM(n_events, mags, pars, maximization,\
-                    magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, 1))
+                    magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance))
                 resetwarnings()
             lkhs_sp = [x[0] for x in estimates]
             mags_sp = [x[1] for x in estimates]
@@ -328,7 +328,7 @@ class hmp:
             print(f"Parameters estimated for {n_events} events model")
         return estimated
     
-    def EM(self, n_events, magnitudes, parameters,  maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1):  
+    def EM(self, n_events, magnitudes, parameters,  maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4):  
         '''
         Expectation maximization function underlying fit
         ''' 
@@ -355,8 +355,9 @@ class hmp:
             parameters_prev = initial_parameters
             eventprobs_prev = eventprobs
         else:
+            lkh_prev = -np.inf
             while i < max_iteration :#Expectation-Maximization algorithm
-                if i > min_iteration and tolerance > lkh - lkh_prev:
+                if tolerance > lkh - lkh_prev:
                     break
                     #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
@@ -732,7 +733,7 @@ class hmp:
         random_stages = np.array([[self.shape, x / self.shape] for x in rnd_durations])
         return random_stages
     
-    def _gen_mags(self, n_events, n_samples=None, lower_bound=-1, upper_bound=1, method=None, size=3, verbose=True):
+    def _gen_mags(self, n_events, n_samples=None, lower_bound=-1, upper_bound=1, method=None, size=3, decimate=False, verbose=True):
         '''
         Return magnitudes sampled on a grid with n points between lower_bound and upper_bound for the n_events. All combinations are tested
         '''
@@ -741,8 +742,14 @@ class hmp:
             grid = np.zeros((n_events, 1, self.n_dims))
         else: 
             grid = np.array([x for x in product(np.linspace(lower_bound,upper_bound,size), repeat=self.n_dims)])
+
+        if verbose:
+            print(f'Number of potential magnitudes: {len(grid)}') 
+
         if n_samples is None or n_samples > len(grid):
             n_samples = len(grid)
+        if decimate:
+            n_samples = int(len(grid) / decimate)
             
         if method is None and len(grid) != n_samples:
             sort_table = np.argsort(np.abs(np.sum(grid, axis=-1)), axis=0)[::-1]
@@ -823,16 +830,65 @@ class hmp:
         else:
             raise ValueError(f'No combination found given length of the data {self.mean_d}, number of events {n_stages} and a max iteration of {iter_limit}')
     
-    def sliding_event(self, n_events=None, color='k', figsize=(12,3), verbose=True, method=None, plot_deriv=False, magnitudes=None, step=1, show=True, ax=None, fix_mags=True, cpus=None):
+    def sliding_event_mags(self, epoch_data, step=5, decimate_grid = False, cpu=1, plot=False, tolerance=1):
+
+        grid = np.squeeze(self._gen_mags(1, decimate = decimate_grid)) #get magn grid
+        n_iter = len(grid)
+
+        #calculate estimates, returns lkhs, mags, times
+        inputs = zip(itertools.repeat((12,3)), itertools.repeat(False), itertools.repeat('search'), 
+                    grid, itertools.repeat(step), itertools.repeat(False), itertools.repeat(None),
+                    itertools.repeat(False),itertools.repeat(1), itertools.repeat(tolerance))
+        with mp.Pool(processes=cpu) as pool:
+            estimates = list(tqdm.tqdm(pool.imap(self.sliding_event_star, inputs), total=len(grid)))
+        
+        #topo prep
+        stacked_eeg_data = epoch_data.stack(trial_x_participant=('participant','epochs')).dropna('trial_x_participant',how='all').data.to_numpy() 
+        n_electrodes, _, n_trials = stacked_eeg_data.shape
+        shift = int(self.event_width_samples/2)
+
+        #collect results
+        max_run_len = max([len(x[0]) for x in estimates])
+        lkhs = np.zeros((n_iter * max_run_len))*np.nan
+        times = np.zeros((n_iter * max_run_len))*np.nan
+        mags = np.zeros((n_iter * max_run_len, self.n_dims))*np.nan
+        channels = np.zeros((n_iter * max_run_len, epoch_data.dims['channels']))*np.nan
+
+        for i, est in enumerate(estimates):
+            idx = i * max_run_len
+            lkhs[idx:(idx + len(est[0]))] = est[0]
+            mags[idx:(idx + len(est[0])), :] = est[1].squeeze()
+            times[idx:(idx + len(est[0]))] = np.mean(est[2],axis=1)  #these should NOT be shifted, later used to calc pars
+            
+            #get topos per estimation per trial, then average
+            topos = np.zeros((n_electrodes, n_trials, len(est[0])))
+            for j, times_per_event in enumerate(est[2]):
+                for trial in range(n_trials):
+                    topos[:,trial,j] = stacked_eeg_data[:, times_per_event[trial] + shift,trial]
+                
+            channels[idx:(idx+len(est[0])), :] = np.nanmean(topos,axis=1).T
+
+        mags = mags[~np.isnan(lkhs),:]
+        channels = channels[~np.isnan(lkhs),:]
+        times = times[~np.isnan(lkhs)]
+        lkhs = lkhs[~np.isnan(lkhs)]
+
+        if plot:
+            _, ax = plt.subplots(1,1,figsize=(20,3))
+            ax.plot(times, lkhs, '.')
+            
+        return lkhs, mags, channels, times
+
+    def sliding_event_star(self, args): #for tqdm usage
+        return self.sliding_event(*args)
+        
+    def sliding_event(self, figsize=(12,3), verbose=True, method=None, magnitudes=None, step=1, show=True, ax=None, fix_mags=True, cpus=None, tolerance=1e-4):
         '''
         This method outputs the likelihood and estimated parameters of a 1 event model with each sample, from 0 to the mean 
         epoch duration. The parameters and likelihoods that are returned are 
         Take the highest likelihood, place a event by excluding event width space around it, follow with the next one
         '''
-        
-        from itertools import cycle
-        mean_d = int(self.mean_d)
-        init_n_events = n_events
+             
         parameters = self._grid_search(2, verbose=verbose, step=step, start_time=np.random.choice(range(step)))#Looking for all possibilities with one event
         if method is None or magnitudes is None:
             magnitudes = np.zeros((len(parameters),1, self.n_dims), dtype=np.float64)
@@ -852,8 +908,8 @@ class hmp:
                 maximization = True
                 mags_to_fix = []
                 ls = '.'
-        lkhs_init, mags_init, pars_init, _ = \
-            self.estimate_single_event(magnitudes, parameters, [], mags_to_fix, maximization, cpus)
+        lkhs_init, mags_init, pars_init, times_init = self.estimate_single_event(magnitudes, parameters, [], mags_to_fix, maximization, cpus, tolerance=tolerance)
+        
         if verbose:
             if ax is None:
                  _, ax = plt.subplots(figsize=figsize, dpi=100)
@@ -868,26 +924,34 @@ class hmp:
             else:
                 return ax
         else:
-            return lkhs_init, mags_init, pars_init
+            return lkhs_init, mags_init, times_init
         
     def estimate_single_event(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, maximization, cpus, max_iteration=1e2, tolerance=1e-4):
         filterwarnings('ignore', 'Convergence failed, estimation hitted the maximum ', )#will be the case but for a subset only hence ignore
         if cpus is None:
             cpus = self.cpus
-        if np.shape(magnitudes) == 2:
-            magnitudes = np.tile(magnitudes, (len(parameters), 1, 1))
-        with mp.Pool(processes=self.cpus) as pool:
-            estimates = pool.starmap(self.EM, 
-                zip(itertools.repeat(1), magnitudes, parameters, 
-                    itertools.repeat(maximization), itertools.repeat(magnitudes_to_fix), 
-                    itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration),
-                    itertools.repeat(tolerance), itertools.repeat(1)))
+        if cpus > 1:
+            if np.shape(magnitudes) == 2:
+                magnitudes = np.tile(magnitudes, (len(parameters), 1, 1))
+            with mp.Pool(processes=self.cpus) as pool:
+                estimates = pool.starmap(self.EM, 
+                    zip(itertools.repeat(1), magnitudes, parameters, 
+                        itertools.repeat(maximization), itertools.repeat(magnitudes_to_fix), 
+                        itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration),
+                        itertools.repeat(tolerance)))
+        else:
+            estimates = []
+            for pars, mags in zip(parameters, magnitudes):
+                estimates.append(self.EM(1, mags, pars, maximization, magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance))
         lkhs_sp = np.array([x[0] for x in estimates])
         mags_sp = np.array([x[1] for x in estimates])
         pars_sp = np.array([x[2] for x in estimates])
-        eventprobs_sp = np.array([x[3] for x in estimates])
+
+        #take max prob times from eventprobs, to reduce memory usage
+        times_sp = np.array([np.argmax(np.squeeze(x[3]),axis=0) for x in estimates])
+
         resetwarnings()
-        return lkhs_sp, mags_sp, pars_sp, eventprobs_sp
+        return lkhs_sp, mags_sp, pars_sp, times_sp
     
     def fit(self, step=1, verbose=True, end=None, threshold=1, trace=False, fix_iter=True, max_iterations=1e3, tolerance=1e-2, grid_points=25, cpus=None):
         '''
@@ -903,7 +967,7 @@ class hmp:
         max_event_n = self.compute_max_events()
         n_points = int(np.rint(end)//step)
         
-        pbar = tqdm(total = int(np.rint(end-self.location)))#progress bar
+        pbar = tqdm_auto(total = int(np.rint(end-self.location)))#progress bar
         n_events, j, time = 0,1,0
         if trace:
             all_pars, all_mags, all_mags_prop, all_pars_prop, all_diffs = [],[],[],[],[]
