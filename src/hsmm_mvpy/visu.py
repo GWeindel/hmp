@@ -106,8 +106,9 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             channels = init.compute_topologies(channels, estimated, init.event_width_samples, ydim).data
         elif not skip_channels_computation:
             channels = init.compute_topologies(channels, estimated, init.event_width_samples).data
-        channels[channels == 0] = np.nan
         times = init.compute_times(init, estimated, mean=True).data
+        channels[times == 0] = np.nan#removes the empty topologies, e.g. in the case of mutliple varying number of events
+
     else:#assumes times already computed
         times = estimated
     if len(np.shape(channels)) == 2:
@@ -132,7 +133,6 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     if n_iter == 1:
         times = [times]
     times = np.array(times, dtype=object)
-   
     #fix vmin/vmax across topos, while keeping symmetric
     if vmax == None: #vmax = absolute max, unless no positive values
         vmax = np.nanmax(np.abs(channels[:])) if np.nanmax(channels[:]) >= 0 else 0
@@ -149,7 +149,6 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
 
             rowheight = 1/n_iter 
             ylow = iteration * rowheight
-     
             axes.append(ax.inset_axes([times_iteration[event] + event_size/2 - topo_size / 2, ylow+.1*rowheight,
                                 topo_size, rowheight*.8], transform=ax.get_xaxis_transform())) 
             plot_topomap(channels_[event,:], channel_position, axes=axes[-1], show=False,

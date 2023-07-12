@@ -36,7 +36,7 @@ def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter,
         hmp_data_boot = transform_data(resampled_data, n_comp=init.n_dims)
     else:
         hmp_data_boot = resampled_data
-    init_boot = hmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=init.cpus)
+    init_boot = hmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1)
     estimates_boot = init_boot.fit(verbose=verbose, threshold=threshold)
     if trace:
         save_eventprobs(estimates_boot.eventprobs, path+str(n_iter)+'.nc')

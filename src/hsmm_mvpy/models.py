@@ -616,6 +616,8 @@ class hmp:
     def event_times(self, eventprobs, mean=True):
         '''
         Compute event onset times based on event probabilities
+        This function is mainly kept for compatibility with previous matlab applications
+
         Parameters
         ----------
         a : float
@@ -665,8 +667,11 @@ class hmp:
             Transition event onset or stage duration with trial_x_participant*event dimensions
         '''
 
-        eventprobs = estimates.eventprobs
-        times = xr.dot(eventprobs, eventprobs.samples, dims='samples')#Most likely event location
+        eventprobs = estimates.eventprobs.fillna(0).copy()
+        if init.em_method == "max":
+            times = times = eventprobs.argmax('samples')#Most likely event location
+        else:
+            times = xr.dot(eventprobs, eventprobs.samples, dims='samples')
         n = len(times[0,:].values[np.isfinite(times[0,:].values)])
         if duration:
             fill_value=0
@@ -692,21 +697,50 @@ class hmp:
    
     @staticmethod
     def compute_topologies(channels, estimated, event_width_samples, extra_dim=False, mean=True):
-        shifted_times = estimated.eventprobs.shift(samples=event_width_samples//2+1, fill_value=0).copy()#Shifts to compute channel topology at the peak of the event
-        if extra_dim:
-            data =  xr.dot(channels.rename({'epochs':'trials'}).\
-                      stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant'), \
-                      shifted_times.fillna(0), dims=['samples']).\
-                      transpose(extra_dim,'trial_x_participant','event','channels')
+        shift = event_width_samples//2+1#Shifts to compute channel topology at the peak of the event
+        channels = channels.rename({'epochs':'trials'}).\
+                          stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant')
+        estimated = estimated.eventprobs.fillna(0).copy()
+        n_events = estimated.event.count().values
+        n_trials = estimated.trial_x_participant.count().values
+        n_channels = channels.channels.count().values
+        if not extra_dim:
+            event_values = np.zeros((n_trials, n_events, n_channels))*np.nan
+            for event in range(n_events):
+                #Take time point at maximum p() for each trial
+                #Average channel activity at those points            
+                for t, trial in enumerate(estimated.trial_x_participant):
+                    time = estimated.sel(trial_x_participant=trial, event=event).argmax('samples')
+                    event_values[t, event, :] = channels.sel(trial_x_participant=trial, samples=time+shift).values
+            event_values = xr.DataArray(event_values, 
+                        dims = ["trial_x_participant","event","channels"],
+                        coords={"trial_x_participant":estimated.trial_x_participant,
+                                "event": estimated.event,
+                                "channels":channels.channels
+                        })
         else:
-            data = xr.dot(channels.rename({'epochs':'trials'}).\
-                      stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant'), \
-                      shifted_times.fillna(0), dims=['samples']).\
-                      transpose('trial_x_participant','event','channels')
+            n_dim = estimated[extra_dim].count().values
+            event_values = np.zeros((n_dim, n_trials, n_events, n_channels))*np.nan
+            for x in range(n_dim):
+                for event in range(n_events):
+                    #Take time point at maximum p() for each trial
+                    #Average channel activity at those points     
+                    for t, trial in enumerate(estimated[x].trial_x_participant):
+                        time = estimated[x].sel(trial_x_participant=trial, event=event).argmax('samples')
+                        event_values[x, t, event, :] = channels.sel(trial_x_participant=trial, samples=time+shift).values
+            event_values = xr.DataArray(event_values, 
+                    dims = [extra_dim, "trial_x_participant","event","channels"],
+                    coords={extra_dim:estimated[extra_dim],
+                            "trial_x_participant":estimated.trial_x_participant,
+                            "event": estimated.event,
+                            "channels":channels.channels
+                    })
         if mean:
-            data = data.mean('trial_x_participant')
-        return data
-    
+            return event_values.mean('trial_x_participant')
+        else:
+            return event_values
+
+
     def gen_random_stages(self, n_events, mean_d):
         '''
         Returns random stage duration between 0 and mean RT by iteratively drawind sample from a 
