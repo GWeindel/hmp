@@ -16,7 +16,7 @@ from tqdm.auto import tqdm
 from hsmm_mvpy import utils
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold', 'brown']
 
-
+                   
 class hmp:
     
     def __init__(self, data, eeg_data=None, sfreq=None, offset=0, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', em_method="max"):
@@ -450,9 +450,10 @@ class hmp:
             for trial in np.arange(self.n_trials):#Undoes sample inversion
                 backward[:self.durations[trial],trial,:] = \
                     backward[:self.durations[trial],trial,:][::-1]
+            
             eventprobs = forward * backward
             eventprobs = np.clip(eventprobs, 0, None) #floating point precision error
-
+            
             #eventprobs can be so low as to be 0, avoid dividing by 0
             #this only happens when magnitudes are 0 and gammas are randomly determined
             if (eventprobs.sum(axis=0) == 0).any() or (eventprobs[:,:,0].sum(axis=0) == 0).any(): 
@@ -477,7 +478,6 @@ class hmp:
                 likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
                 eventprobs = eventprobs / eventprobs.sum(axis=0)
             #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
-            
             
         else:
             forward = np.zeros((self.max_d, self.n_trials), dtype=np.float64)
@@ -568,7 +568,7 @@ class hmp:
         if max_events is None and max_fit is None:
             max_events = self.compute_max_events()
         if not max_fit:
-            if max_starting_points >0:
+            if max_starting_points > 0:
                 print(f'Estimating all solutions for maximal number of events ({max_events}) with 1 pre-defined starting point and {max_starting_points-1} {method} starting points')
             event_loo_results = [self.fit_single(max_events, starting_points=max_starting_points, method=method, verbose=False)]
         else:
@@ -723,7 +723,13 @@ class hmp:
         random_stages : ndarray
             random partition between 0 and mean_d
         '''
-        random_stages = np.array([[self.shape,x*mean_d/self.shape] for x in np.random.beta(2, 2, n_events+1)])
+        mean_d = int(mean_d) - n_events * self.location #remove minimum stage duration
+        rnd_durations = np.zeros(n_events + 1)
+        while any(rnd_durations < 2): #make sure they are at least 2 samples
+            rnd_events = np.random.default_rng().integers(low = 0, high = mean_d, size = n_events) #n_events between 0 and mean_d
+            rnd_events = np.sort(rnd_events)
+            rnd_durations = np.hstack((rnd_events, mean_d)) - np.hstack((0, rnd_events))  #associated durations
+        random_stages = np.array([[self.shape, x / self.shape] for x in rnd_durations])
         return random_stages
     
     def _gen_mags(self, n_events, n_samples=None, lower_bound=-1, upper_bound=1, method=None, size=3, verbose=True):
