@@ -357,7 +357,7 @@ class hmp:
         else:
             lkh_prev = -np.inf
             while i < max_iteration :#Expectation-Maximization algorithm
-                if i > min_duration and tolerance > lkh - lkh_prev:
+                if i > min_iteration and tolerance > lkh - lkh_prev:
                     break
                     #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
@@ -1032,7 +1032,10 @@ class hmp:
                 if verbose:#Diagnostic plot
                     plt.plot(solutions.traces.T)
                 #Average among the converged solutions and store as future starting points
-                mags[:n_events+1], pars[:n_events+2] = solutions.magnitudes.mean('iteration').values, solutions.parameters.mean('iteration').values
+                # mags[:n_events+1], pars[:n_events+2] = solutions.magnitudes.mean('iteration').values, solutions.parameters.mean('iteration').values
+                nearest_solution = solutions.sel(iteration=solutions.parameters.sel(parameter="scale", \
+                    stage=n_events).argmin('iteration').values)
+                mags[:n_events+1], pars[:n_events+2] = nearest_solution.magnitudes.values, nearest_solution.parameters.values
                 n_events += 1
                 pars_accepted[:n_events+1] = pars[:n_events+1].copy()
                 mags_accepted[:n_events] = mags[:n_events].copy()
