@@ -19,7 +19,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
                    
 class hmp:
     
-    def __init__(self, data, eeg_data=None, sfreq=None, offset=0, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', em_method="max"):
+    def __init__(self, data, eeg_data=None, sfreq=None, offset=0, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', em_method="mean"):
         '''
         HMP calculates the probability of data summing over all ways of 
         placing the n events to break the trial into n + 1 stages.
@@ -365,14 +365,15 @@ class hmp:
                 parameters_prev = parameters.copy()
                 eventprobs_prev = eventprobs.copy()
                 #Magnitudes from Expectation
+                event_times = np.zeros((n_events+1, self.n_trials))
                 for event in range(n_events):
                     if self.em_method == "max":
                         #Take time point at maximum p() for each trial
                         #Average channel activity at those points
                         event_values = np.zeros((self.n_trials, self.n_dims))
                         for trial in range(self.n_trials):
-                            time = self.starts[trial]+ np.argmax(eventprobs[:, trial, event])
-                            event_values[trial] = self.events[time]
+                            event_times[event,trial]  = np.argmax(eventprobs[:, trial, event])
+                            event_values[trial] = self.events[self.starts[trial] + int(event_times[event,trial])]
                         magnitudes[event] = np.mean(event_values, axis=0)
                     elif self.em_method == "mean":
                         for comp in range(self.n_dims):
@@ -381,9 +382,12 @@ class hmp:
                         # Scale cross-correlation with likelihood of the transition
                         # sum by-trial these scaled activation for each transition events
                         # average across trials
-
+                event_times[-1,:] = self.mean_d
                 magnitudes[magnitudes_to_fix,:] = initial_magnitudes[magnitudes_to_fix,:].copy()
-                parameters = self.scale_parameters(eventprobs, n_events)#Parameters from Expectation
+                if self.em_method == "max":
+                    parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=np.mean(event_times,axis=1))#Parameters from Expectation
+                elif self.em_method == "mean":
+                    parameters = self.scale_parameters(eventprobs, n_events)#Parameters from Expectation
                 parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
                 lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
                 traces.append(lkh)
@@ -547,6 +551,7 @@ class hmp:
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
+        params[:-1,1] += 1
         params[:,1] = params[:,1]/params[:,0]
         return params
 
@@ -767,7 +772,7 @@ class hmp:
         random_stages = np.array([[self.shape, x / self.shape] for x in rnd_durations])
         return random_stages
     
-    def _gen_mags(self, n_events, n_samples=None, lower_bound=-1, upper_bound=1, method=None, size=3, decimate=False, verbose=True):
+    def _gen_mags(self, n_events, n_samples=None, lower_bound=-1, upper_bound=1, method=None, size=2, decimate=False, verbose=True):
         '''
         Return magnitudes sampled on a grid with n points between lower_bound and upper_bound for the n_events. All combinations are tested
         '''
