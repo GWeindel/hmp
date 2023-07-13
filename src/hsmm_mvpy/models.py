@@ -328,7 +328,7 @@ class hmp:
             print(f"Parameters estimated for {n_events} events model")
         return estimated
     
-    def EM(self, n_events, magnitudes, parameters,  maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4):  
+    def EM(self, n_events, magnitudes, parameters,  maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1):  
         '''
         Expectation maximization function underlying fit
         ''' 
@@ -357,7 +357,7 @@ class hmp:
         else:
             lkh_prev = -np.inf
             while i < max_iteration :#Expectation-Maximization algorithm
-                if tolerance > lkh - lkh_prev:
+                if i > min_duration and tolerance > lkh - lkh_prev:
                     break
                     #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
