@@ -217,7 +217,7 @@ class hmp:
                         # proposal_m[magnitudes_to_fix] = initial_m[magnitudes_to_fix]
                         # magnitudes.append(proposal_m)
                         parameters.append(proposal_p)
-                    magnitudes = self._gen_mags(n_events, starting_points, method='random')
+                    magnitudes = self._gen_mags(n_events, starting_points, method='random', verbose=False)
                     magnitudes[:,magnitudes_to_fix,:] = np.tile(initial_m[magnitudes_to_fix], (len(magnitudes), 1, 1))
 
                 elif method == 'grid':
@@ -992,7 +992,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, threshold=1, trace=False, fix_iter=True, max_iterations=1e3, tolerance=1e-2, grid_points=25, cpus=None):
+    def fit(self, step=1, verbose=True, end=None, threshold=1, trace=False, fix_iter=True, max_iterations=1e3, tolerance=1e-2, grid_points=1, cpus=None):
         '''
         Cumulative fit method.
         step = size of steps across samples
