@@ -237,12 +237,12 @@ class hmp:
 
                     estimates = pool.starmap(self.EM, 
                         zip(itertools.repeat(n_events), magnitudes, parameters, itertools.repeat(maximization),
-                        itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance),itertools.repeat(1)))   
+                        itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance)))   
             else:#avoids problems if called in an already parallel function
                 estimates = []
                 for pars, mags in zip(parameters, magnitudes):
                     estimates.append(self.EM(n_events, mags, pars, maximization,\
-                    magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration=1))
+                    magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance))
                 resetwarnings()
             lkhs_sp = [x[0] for x in estimates]
             mags_sp = [x[1] for x in estimates]
@@ -268,7 +268,7 @@ class hmp:
         elif starting_points==1:#informed starting point
             lkh, mags, pars, eventprobs, traces = self.EM(n_events, initial_m, initial_p,\
                                         maximization, magnitudes_to_fix, parameters_to_fix, \
-                                         max_iteration, tolerance, min_iteration=1)
+                                         max_iteration, tolerance)
 
         else:#uninitialized    
             if np.any(parameters)== None:
@@ -276,7 +276,7 @@ class hmp:
             if np.any(magnitudes)== None:
                 magnitudes = np.zeros((n_events, self.n_dims), dtype=np.float64)
             lkh, mags, pars, eventprobs, traces = self.EM(n_events, magnitudes, parameters, maximization, magnitudes_to_fix, parameters_to_fix,\
-                                        max_iteration, tolerance, min_iteration=1)
+                                        max_iteration, tolerance)
         if len(np.shape(eventprobs)) == 3:
             n_event_xr = n_event_xreventprobs = len(mags)
             n_stage = n_event_xr+1
