@@ -355,7 +355,7 @@ def plot_latencies_average(times, time_step=1, labels=[], colors=default_colors,
     if time_step == 1:
         plt.xlabel('Cumulative stage durations from stimulus onset (samples)')
     else:
-        plt.xlabel('Cumulative stage durations from stimulus onset (ms_')
+        plt.xlabel('Cumulative stage durations from stimulus onset (ms)')
     plt.tight_layout()
     # Hide the right and top spines
     axs.spines.right.set_visible(False)
