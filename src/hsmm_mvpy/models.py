@@ -427,7 +427,8 @@ class hmp:
                 gains[self.starts[trial]:self.ends[trial]+1,:][::-1,::-1]
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage parameters
-        locations = np.concatenate([[-1], np.repeat(self.location, n_events)])#all stages except first stage have a location
+        locations = np.concatenate([[0], np.repeat(self.location, n_events)])#all stages except first stage have a location
+        locations[-1] -= 1
         for stage in range(n_stages):
             pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1], locations[stage])
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
@@ -520,7 +521,7 @@ class hmp:
         '''
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
-        p = self.cdf(np.arange(1, self.max_d+1), shape, scale=scale, loc=location)
+        p = self.cdf(np.arange(self.max_d)+.5, shape, scale=scale, loc=location)
         p = np.diff(p, prepend=0)#going to pmf
         return p
     
@@ -550,7 +551,7 @@ class hmp:
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
-        params[:-1,1] += .5
+        params[0,1] -= .5#First stage ends really 1/2 sample before next bump (template defined at half sample)
         params[:,1] = params[:,1]/params[:,0]
         return params
 
@@ -991,7 +992,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=False, max_iterations=1e3, tolerance=1e-4, grid_points=1, cpus=None, diagnostic=False):
+    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=False, max_iterations=1e3, tolerance=1e-2, grid_points=1, cpus=None, diagnostic=False):
         '''
         Cumulative fit method.
         step = size of steps across samples
