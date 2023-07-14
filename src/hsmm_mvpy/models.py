@@ -365,7 +365,9 @@ class hmp:
                 parameters_prev = parameters.copy()
                 eventprobs_prev = eventprobs.copy()
                 #Magnitudes from Expectation
-                event_times = np.zeros((n_events+1, self.n_trials))
+                if self.em_method == "max": 
+                    event_times = np.zeros((n_events+1, self.n_trials))
+                    event_times[-1,:] = self.mean_d
                 for event in range(n_events):
                     if self.em_method == "max":
                         #Take time point at maximum p() for each trial
@@ -382,7 +384,6 @@ class hmp:
                         # Scale cross-correlation with likelihood of the transition
                         # sum by-trial these scaled activation for each transition events
                         # average across trials
-                event_times[-1,:] = self.mean_d
                 magnitudes[magnitudes_to_fix,:] = initial_magnitudes[magnitudes_to_fix,:].copy()
                 if self.em_method == "max":
                     parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=np.mean(event_times,axis=1))#Parameters from Expectation
@@ -426,8 +427,7 @@ class hmp:
                 gains[self.starts[trial]:self.ends[trial]+1,:][::-1,::-1]
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage parameters
-        locations = np.concatenate([[-.5], np.repeat(self.location, n_events)])#all stages except first stage have a location
-        locations[-1] -= 1
+        locations = np.concatenate([[-1], np.repeat(self.location, n_events)])#all stages except first stage have a location
         for stage in range(n_stages):
             pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1], locations[stage])
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
@@ -520,8 +520,7 @@ class hmp:
         '''
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
-        p = self.cdf(np.arange(self.max_d), shape, scale=scale, loc=location)
-        #Location is in fact +1 as np.arange starts from 0
+        p = self.cdf(np.arange(1, self.max_d+1), shape, scale=scale, loc=location)
         p = np.diff(p, prepend=0)#going to pmf
         return p
     
@@ -551,7 +550,7 @@ class hmp:
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
-        params[:-1,1] += 1
+        params[:-1,1] += .5
         params[:,1] = params[:,1]/params[:,0]
         return params
 
@@ -992,7 +991,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, threshold=1, trace=False, fix_iter=True, max_iterations=1e3, tolerance=1e-2, grid_points=1, cpus=None):
+    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=False, max_iterations=1e3, tolerance=1e-4, grid_points=1, cpus=None, diagnostic=False):
         '''
         Cumulative fit method.
         step = size of steps across samples
@@ -1025,19 +1024,24 @@ class hmp:
 
         while last_stage*self.shape > self.location and n_events+1 < max_event_n:
             prev_time = time
+            if fix_iter:
+                to_fix = [range(n_events)]
+            else:
+                to_fix = []
             #Generate a grid of magnitudes 
             mags_props = self._gen_mags(n_events+1, n_samples=grid_points, verbose=False)
             #replave eventual event already found
             mags_props[:,:n_events,:] = np.tile(mags_prop[:n_events,:], (len(mags_props), 1, 1))
             #estimate all grid_points models while fixing previous found events
-            solutions = self.fit_single(n_events+1, mags_props, pars_prop, [range(n_events)], [range(n_events)], return_max=False, verbose=False, cpus=cpus)
+            solutions = self.fit_single(n_events+1, mags_props, pars_prop, to_fix, to_fix, return_max=False, verbose=False, cpus=cpus)
             #Exclude non-converged models (negative EM LL curve)
             solutions = utils.filter_non_converged(solutions)
             if len(solutions.iteration) > 0:#Success
-                if verbose:#Diagnostic plot
+                if diagnostic:#Diagnostic plot
                     plt.plot(solutions.traces.T)
                 #Average among the converged solutions and store as future starting points
                 # mags[:n_events+1], pars[:n_events+2] = solutions.magnitudes.mean('iteration').values, solutions.parameters.mean('iteration').values
+                #Take the nearest converged solution
                 nearest_solution = solutions.sel(iteration=solutions.parameters.sel(parameter="scale", \
                     stage=n_events).argmin('iteration').values)
                 mags[:n_events+1], pars[:n_events+2] = nearest_solution.magnitudes.values, nearest_solution.parameters.values
@@ -1057,7 +1061,7 @@ class hmp:
 
             j += 1
             #New parameter proposition
-            pars_prop = pars[:n_events+2].copy()
+            pars_prop = pars_accepted[:n_events+2].copy()
             pars_prop[n_events,1] = step*j/self.shape
             last_stage = end/self.shape - np.sum(pars_prop[:n_events+1,1])
             pars_prop[n_events+1,1] = last_stage
@@ -1067,7 +1071,7 @@ class hmp:
             time = np.sum(pars_prop[:n_events+1,1])*self.shape 
             pbar.update(int(np.round(time-prev_time)))
         pbar.update(step*2)
-        if verbose:
+        if diagnostic:
             plt.show()
         mags = mags_accepted[:n_events, :]
         pars = pars_accepted[:n_events+1, :]
