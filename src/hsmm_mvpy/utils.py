@@ -530,10 +530,11 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         apply_zscore = 'trial' #defaults to trial
     if apply_standard:
         if 'participant' not in data.dims or len(data.participant) == 1:
-            raise ValueError('Requested standardization of between participant variance yet no participant dimension is found in the data or only one participant is present. Turn apply_standard to False')
-        mean_std = data.groupby(participants_variable).std(dim=...).data.mean()
-        data = data.assign(mean_std=mean_std.data)
-        data = data.groupby(participants_variable).map(standardize)
+            warn('Requested standardization of between participant variance yet no participant dimension is found in the data or only one participant is present. No standardization is done, set apply_standard to False to avoid this warning.')
+        else:
+            mean_std = data.groupby(participants_variable).std(dim=...).data.mean()
+            data = data.assign(mean_std=mean_std.data)
+            data = data.groupby(participants_variable).map(standardize)
     if method == 'pca':
         from sklearn.decomposition import PCA
         var_cov_matrices = []
