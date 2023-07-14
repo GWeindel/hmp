@@ -29,15 +29,22 @@ def _gen_dataset(data, dim, n_iterations):
         named_index.append(_gen_idx(data, dim))
     return named_index, data, dim, original_dim_order_data
 
-def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter, threshold, summarize=True, verbose=True, plots=True, cpus=1,
+def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter, tolerance, summarize=True, verbose=True, plots=True, cpus=1,
                       trace=False, path='./'):
     resampled_data = data.loc[{dim:list(indexes)}].unstack().transpose(*order)
+    if '_x_' in dim:
+        dim = dim.split('_x_')
+    if isinstance(dim, list):
+        resampled_data = resampled_data.assign_coords({dim[0]: np.arange(len(resampled_data[dim[0]]))})#Removes indices to avoid duplicates
+        resampled_data = resampled_data.assign_coords({dim[1]: np.arange(len(resampled_data[dim[1]]))})
+    else:
+        resampled_data = resampled_data.assign_coords({dim: np.arange(len(resampled_data[dim]))})
     if 'channels' in resampled_data.dims:
         hmp_data_boot = transform_data(resampled_data, n_comp=init.n_dims)
     else:
         hmp_data_boot = resampled_data
     init_boot = hmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1)
-    estimates_boot = init_boot.fit(verbose=verbose, threshold=threshold)
+    estimates_boot = init_boot.fit(verbose=verbose, tolerance=tolerance)
     if trace:
         save_eventprobs(estimates_boot.eventprobs, path+str(n_iter)+'.nc')
     if summarize:
@@ -54,7 +61,7 @@ def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter,
                                          estimates_boot.eventprobs.to_dataset(name='eventprobs')])
     return boot_results
 
-def bootstrapping(data, dim, n_iterations, init, positions, sfreq, threshold, summarize=True, verbose=True,
+def bootstrapping(data, dim, n_iterations, init, positions, sfreq, tolerance=1e-4, summarize=True, verbose=True,
                   plots=True, cpus=1, trace=False, path='./'):
     import multiprocessing
     import itertools
@@ -70,7 +77,7 @@ def bootstrapping(data, dim, n_iterations, init, positions, sfreq, threshold, su
             zip(itertools.repeat(data), itertools.repeat(dim), data_views, itertools.repeat(order), 
                 itertools.repeat(init), 
                 itertools.repeat(positions), itertools.repeat(init.sfreq), np.arange(n_iterations),
-                itertools.repeat(threshold), itertools.repeat(summarize), itertools.repeat(verbose),
+                itertools.repeat(tolerance), itertools.repeat(summarize), itertools.repeat(verbose),
                 itertools.repeat(plots),itertools.repeat(cpus), itertools.repeat(trace), itertools.repeat(path)))
     boot = xr.concat(boot, dim='iteration')
     # if plots:
