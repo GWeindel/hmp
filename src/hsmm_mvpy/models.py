@@ -59,8 +59,8 @@ class hmp:
         self.event_width = event_width
         self.event_width_samples = int(np.round(self.event_width / self.steps))
         if location is None:
-            self.location = int(np.round(self.event_width_samples/2))
-        else: self.location =  int(np.round(location / self.steps))
+            self.location = self.event_width / self.steps/2
+        else: self.location =  location / self.steps
         durations = data.unstack().sel(component=0).swap_dims({'epochs':'trials'})\
             .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
             how="all").groupby('trial_x_participant').count(dim="samples").cumsum().squeeze()
@@ -76,7 +76,6 @@ class hmp:
         self.starts = starts
         self.ends = ends
         self.durations =  self.ends-self.starts+1
-        self.max_events = self.compute_max_events()
         if durations.trial_x_participant.count() > 1:
             self.named_durations =  durations.dropna("trial_x_participant") - durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
             self.coords = durations.reset_index('trial_x_participant').coords
@@ -163,7 +162,7 @@ class hmp:
             threshold for the HMP algorithm, 0 skips HMP
         '''
         assert n_events is not None, 'The fit_single() function needs to be provided with a number of expected transition events'
-        assert self.location*(n_events+1) < min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
+        assert self.location*(n_events) < min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
         if verbose:
             if parameters is None:
                 print(f'Estimating {n_events} events model with {starting_points} starting point(s)')
@@ -214,9 +213,6 @@ class hmp:
                     for _ in np.arange(starting_points):
                         proposal_p = self.gen_random_stages(n_events, self.mean_d)
                         proposal_p[parameters_to_fix] = initial_p[parameters_to_fix]
-                        #proposal_m = self._gen_mags(n_events, starting_points, method='random')
-                        # proposal_m[magnitudes_to_fix] = initial_m[magnitudes_to_fix]
-                        # magnitudes.append(proposal_m)
                         parameters.append(proposal_p)
                     magnitudes = self._gen_mags(n_events, starting_points, method='random', verbose=False)
                     magnitudes[:,magnitudes_to_fix,:] = np.tile(initial_m[magnitudes_to_fix], (len(magnitudes), 1, 1))
@@ -305,6 +301,8 @@ class hmp:
             xreventprobs = xreventprobs.transpose('trial_x_participant','samples','event')
         else: 
             n_event_xr = len(mags[0])
+            # if traces[-1] - traces[-2] < 0:
+            #     warn(f'Last iteration of the estimation procedure lead to a decrease in log-likelihood, convergence ', RuntimeWarning)
             xrlikelihoods = xr.DataArray(lkh , dims=("iteration"), name="likelihoods", coords={'iteration':range(len(lkh))})
             xrtraces = xr.DataArray(traces, dims=("iteration","em_iteration"), name="traces", coords={'iteration':range(len(lkh)), 'em_iteration':range(len(traces[0]))})
             xrparams = xr.DataArray(pars, dims=("iteration","stage",'parameter'), name="parameters", 
@@ -411,7 +409,7 @@ class hmp:
         n_stages = n_events+1
         gains = np.zeros((self.n_samples, n_events), dtype=np.float64)
         for i in range(self.n_dims):
-            # computes the gains, i.e. how much the congruence between the pattern shape
+            # computes the gains, i.e. congruence between the pattern shape
             # and the data given the magnitudes of the sensors
             gains = gains + self.events[:,i][np.newaxis].T * magnitudes[:,i]
         gains = np.exp(gains)
@@ -427,8 +425,7 @@ class hmp:
                 gains[self.starts[trial]:self.ends[trial]+1,:][::-1,::-1]
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage parameters
-        locations = np.concatenate([[0], np.repeat(self.location, n_events)])#all stages except first stage have a location
-        locations[-1] -= 1
+        locations = np.concatenate([[.5], np.repeat(self.location, n_events)])#all stages except first stage have a location (mainly to avoid overlap in cross-correlated signal)
         for stage in range(n_stages):
             pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1], locations[stage])
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
@@ -521,7 +518,7 @@ class hmp:
         '''
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
-        p = self.cdf(np.arange(self.max_d)+.5, shape, scale=scale, loc=location)
+        p = self.cdf(np.arange(1,self.max_d+1), shape, scale=scale, loc=location)
         p = np.diff(p, prepend=0)#going to pmf
         return p
     
@@ -551,7 +548,7 @@ class hmp:
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
-        params[0,1] -= .5#First stage ends really 1/2 sample before next bump (template defined at half sample)
+        params[-1,1] -= 1
         params[:,1] = params[:,1]/params[:,0]
         return params
 
@@ -1053,17 +1050,17 @@ class hmp:
                 j = 0
                 if verbose:
                     print(f'Transition event {n_events} found around sample {int(np.round(np.sum(pars_accepted[:n_events,:].prod(axis=1))))}')
-            if trace:#keep trace of algo
-                all_mags_prop.append(mags[:n_events].copy())
-                all_pars_prop.append(pars[:n_events+1].copy())
-                all_mags.append(mags_accepted[:n_events].copy())
-                all_pars.append(pars_accepted[:n_events+1].copy())
-                all_diffs.append(np.abs(np.diff(mags[:n_events+1], axis=0)))
+                if trace:#keep trace of algo
+                    all_mags_prop.append(mags[:n_events].copy())
+                    all_pars_prop.append(pars[:n_events+1].copy())
+                    all_mags.append(mags_accepted[:n_events].copy())
+                    all_pars.append(pars_accepted[:n_events+1].copy())
+                    all_diffs.append(np.abs(np.diff(mags[:n_events+1], axis=0)))
 
             j += 1
             #New parameter proposition
             pars_prop = pars_accepted[:n_events+2].copy()
-            pars_prop[n_events,1] = step*j/self.shape
+            pars_prop[n_events,1] = self.location+step*j/self.shape
             last_stage = end/self.shape - np.sum(pars_prop[:n_events+1,1])
             pars_prop[n_events+1,1] = last_stage
             #New mag proposition
@@ -1080,7 +1077,7 @@ class hmp:
             fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose)
         else:
             warn('Failed to find more than two stages, returning 2 stage model with default starting values')
-            fit = self.fit_single(n_events)
+            fit = self.fit_single(n_events, verbose=verbose)
         if trace:
             all_pars_aligned = np.tile(np.nan, (len(all_pars)+1, np.max([len(x) for x in all_pars]), 2))
             all_pars_prop_aligned = np.tile(np.nan, (len(all_pars_prop)+1, np.max([len(x) for x in all_pars_prop]), 2))
