@@ -14,7 +14,6 @@ As a summary of the method, an HMP model parses the reaction time into a number 
 
 
 # Documentation
-**Important note** The current tutorials are based on the latest (unstable) version not yet default in _pip_, installing through github is therefore recommended or specify the beta version when installing through _pip_: ```pip install hsmm-mvpy==0.1.0b7```
 
 The package is available through *pip*. 
 A recommended way of using the package is to use a conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
@@ -22,7 +21,7 @@ A recommended way of using the package is to use a conda environment (see [anaco
     $ conda create -n hmp 
     $ conda activate hmp
     $ conda install pip #if not already installed
-    $ pip install hsmm-mvpy==0.1.0b7
+    $ pip install hsmm-mvpy
 
 Then import hsmm-mvpy in your favorite python IDE through:
 
@@ -68,6 +67,7 @@ The following section will quickly walk you through an example usage in simulate
 First we load the libraries necessary for the demo on simulated data
 
 ### Importing libraries
+
 
 
 ```python
@@ -119,35 +119,6 @@ positions = simulations.simulation_positions()
 ```
 
     Simulating ./dataset_README_raw.fif
-
-
-    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
-    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
-    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
-    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
-    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
-    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
-    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
-    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
-    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
-    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
-    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
-    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
-    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
-    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
-    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
-    [Parallel(n_jobs=1)]: Using backend SequentialBackend with 1 concurrent workers.
-    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s remaining:    0.0s
-    [Parallel(n_jobs=1)]: Done   1 out of   1 | elapsed:    0.0s finished
-
-
-    NOTE: pick_types() is a legacy function. New code should use inst.pick(...).
-    Removing projector <Projection | PCA-v1, active : True, n_channels : 102>
-    Removing projector <Projection | PCA-v2, active : True, n_channels : 102>
-    Removing projector <Projection | PCA-v3, active : True, n_channels : 102>
-    Overwriting existing file.
-    Writing /home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/dataset_README_raw.fif
-    Closing /home/gweindel/owncloud/projects/RUGUU/hsmm-mvpy/dataset_README_raw.fif
     [done]
     ./dataset_README_raw.fif simulated
 
@@ -206,7 +177,7 @@ eeg_data = hmp.utils.read_mne_data(file[0], event_id=event_id, resp_id=resp_id, 
 ```
 
     Processing participant ./dataset_README_raw.fif's continuous eeg
-    Reading 0 ... 148481  =      0.000 ...   247.215 secs...
+    Reading 0 ... 161924  =      0.000 ...   269.597 secs...
     50 trials were retained for participant ./dataset_README_raw.fif
 
 
@@ -224,16 +195,16 @@ eeg_data.sel(channels=['EEG 001','EEG 002','EEG 003'], samples=range(400))\
 ```
 
     <xarray.Dataset>
-    Dimensions:      (participant: 1, epochs: 50, channels: 59, samples: 931)
+    Dimensions:      (participant: 1, epochs: 50, channels: 59, samples: 667)
     Coordinates:
       * epochs       (epochs) int64 0 1 2 3 4 5 6 7 8 ... 41 42 43 44 45 46 47 48 49
       * channels     (channels) <U7 'EEG 001' 'EEG 002' ... 'EEG 059' 'EEG 060'
-      * samples      (samples) int64 0 1 2 3 4 5 6 7 ... 924 925 926 927 928 929 930
+      * samples      (samples) int64 0 1 2 3 4 5 6 7 ... 660 661 662 663 664 665 666
         event_name   (epochs) object 'stimulus' 'stimulus' ... 'stimulus' 'stimulus'
-        rt           (epochs) float64 0.7076 0.5611 1.041 ... 0.5661 0.4246 0.4712
+        rt           (epochs) float64 0.5628 0.9956 0.5478 ... 0.7043 0.7659 0.8591
       * participant  (participant) <U2 'S0'
     Data variables:
-        data         (participant, epochs, channels, samples) float64 -3.225e-07 ...
+        data         (participant, epochs, channels, samples) float64 -1.603e-06 ...
     Attributes:
         sfreq:    600.614990234375
         offset:   0
@@ -241,7 +212,7 @@ eeg_data.sel(channels=['EEG 001','EEG 002','EEG 003'], samples=range(400))\
 
 
     
-![png](README_files/README_13_1.png)
+![png](README_files/README_12_1.png)
     
 
 
@@ -275,7 +246,7 @@ plt.plot(init.template,'x');
 
 
     
-![png](README_files/README_19_0.png)
+![png](README_files/README_18_0.png)
     
 
 
@@ -286,19 +257,12 @@ This pattern is assumed to be present across several electrodes (**multivariate*
 ```python
 epoch = 0 #illustrating the first trial
 hmp_data.unstack().sel(component=[0,1,2], epochs=epoch).squeeze().plot.line(hue='component');
-plt.vlines(random_source_times[epoch,:-1].cumsum()-1, -3, 3, 'k')#overlaying the simulated stage transition times
+plt.vlines(random_source_times[epoch,:-1].cumsum()-1, -3, 3, 'k');#overlaying the simulated stage transition times
 ```
 
 
-
-
-    <matplotlib.collections.LineCollection at 0x7f47d02a0210>
-
-
-
-
     
-![png](README_files/README_21_1.png)
+![png](README_files/README_20_0.png)
     
 
 
@@ -314,7 +278,7 @@ plt.xlabel('t');
 
 
     
-![png](README_files/README_23_0.png)
+![png](README_files/README_22_0.png)
     
 
 
@@ -333,13 +297,13 @@ estimates = init.fit(step=20, verbose=True)
 ```
 
 
-      0%|          | 0/400 [00:00<?, ?it/s]
+      0%|          | 0/418 [00:00<?, ?it/s]
 
 
-    Transition event 1 found around sample 38
-    Transition event 2 found around sample 144
-    Transition event 3 found around sample 294
-    Transition event 4 found around sample 358
+    Transition event 1 found around sample 42
+    Transition event 2 found around sample 154
+    Transition event 3 found around sample 285
+    Transition event 4 found around sample 369
     Estimating 4 events model
     Parameters estimated for 4 events model
 
@@ -362,7 +326,7 @@ hmp.visu.plot_topo_timecourse(eeg_data, estimates, #Data and estimations
 
 
     
-![png](README_files/README_27_0.png)
+![png](README_files/README_26_0.png)
     
 
 
@@ -373,14 +337,15 @@ As we are estimating the event onsets on a by-trial basis we can look at the by-
 
 
 ```python
-event_times_estimates = init.compute_times(init, estimates, mean=False, add_rt=True).dropna('event')#computing predicted event times
-ax = hmp.visu.plot_latencies_average(event_times_estimates, init.event_width_samples, 1, errs='ci', times_to_display = np.mean(init.ends - init.starts))
+event_times_estimates = init.compute_times(init, estimates, mean=False,fill_value=0, add_rt=True).dropna('event')#computing predicted event times
+ax = hmp.visu.plot_latencies_average(event_times_estimates, 1, errs='ci', \
+                                     times_to_display = np.mean(init.ends - init.starts))
 ax.set_ylabel('your label here');
 ```
 
 
     
-![png](README_files/README_29_0.png)
+![png](README_files/README_28_0.png)
     
 
 
@@ -402,13 +367,13 @@ hmp.visu.plot_distribution(estimates.eventprobs.mean(dim=['trial_x_participant']
 
 
     
-![png](README_files/README_31_1.png)
+![png](README_files/README_30_1.png)
     
 
 
 
     
-![png](README_files/README_31_2.png)
+![png](README_files/README_30_2.png)
     
 
 
@@ -430,7 +395,7 @@ hmp.visu.plot_distribution(estimates.eventprobs.sel(trial_x_participant=('S0', 0
 
 
     
-![png](README_files/README_33_1.png)
+![png](README_files/README_32_1.png)
     
 
 
@@ -457,7 +422,7 @@ plt.show()
 
 
     
-![png](README_files/README_35_0.png)
+![png](README_files/README_34_0.png)
     
 
 
@@ -472,7 +437,7 @@ hmp.visu.plot_topo_timecourse(eeg_data, estimates, positions, init, magnify=1, s
 
 
     
-![png](README_files/README_37_0.png)
+![png](README_files/README_36_0.png)
     
 
 
@@ -498,7 +463,7 @@ for event in init.compute_times(init, estimates, duration=True, mean=False, add_
 
 
     
-![png](README_files/README_39_0.png)
+![png](README_files/README_38_0.png)
     
 
 
@@ -534,7 +499,7 @@ plt.ylim(-3e-6,3e-6);
 
 
     
-![png](README_files/README_41_0.png)
+![png](README_files/README_40_0.png)
     
 
 
@@ -565,7 +530,7 @@ for stage in range(number_of_sources):
 
 
     
-![png](README_files/README_43_0.png)
+![png](README_files/README_42_0.png)
     
 
 
@@ -581,3 +546,5 @@ For examples on how to use the package when the number of transition events/stag
 - Estimating a given number of events (tutorial 2)
 - Test for the number of events that best explains the data (tutorial 3)
 - Testing differences across conditions (tutorial 4)
+- Plotting Event Related Potentials with an HMP decomposition (tutorial 5)
+

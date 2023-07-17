@@ -153,5 +153,6 @@ def cluster_events(init, lkhs, mags, channels, times, method='time_x_lkh_mags', 
     cl_times = np.sort(cl_times) #sort
     cl_durations = np.hstack((cl_times, init.mean_d)) - np.hstack((0, cl_times)) #get stage durations
     pars = np.array([np.repeat(init.shape, best_n_clust + 1), (cl_durations - np.hstack((0, np.repeat(init.location,best_n_clust)))) / init.shape]).T #calc params, take into account locations 
-
+    null_stages = np.where(pars[:,1] < 0)
+    pars[null_stages, 1] = 1/init.shape #avoids impossible parameters
     return mags, pars

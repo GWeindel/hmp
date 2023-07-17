@@ -34,22 +34,30 @@ def simulation_sfreq():
     return info['sfreq']
 
 def simulation_positions():
-    from mne import channels
     data_path = sample.data_path()
     subjects_dir = op.join(data_path, 'subjects')
     subject = 'sample'
     evoked_fname = op.join(data_path, 'MEG', subject, 'sample_audvis-ave.fif')
     info = mne.io.read_info(evoked_fname, verbose=False)
-    positions = np.delete(channels.layout._find_topomap_coords(info, 'eeg'),52,axis=0)#inferring channel location using MNE    
+    positions = np.delete(mne.channels.layout._find_topomap_coords(info, 'eeg'),52,axis=0)#inferring channel location using MNE    
     return positions
 
-def bump_shape(bump_width, bump_width_samples, steps):
+def simulation_info():
+    data_path = sample.data_path()
+    subjects_dir = op.join(data_path, 'subjects')
+    subject = 'sample'
+    evoked_fname = op.join(data_path, 'MEG', subject, 'sample_audvis-ave.fif')
+    info = mne.io.read_info(evoked_fname, verbose=False)
+    
+    return info
+
+def event_shape(event_width, event_width_samples, steps):
     '''
-    Computes the template of a half-sine (bump) with given frequency f and sampling frequency
+    Computes the template of a half-sine (event) with given frequency f and sampling frequency
     '''
-    bump_idx = np.arange(bump_width_samples)*steps+steps/2
-    bump_frequency = 1000/(bump_width*2)#gives bump frequency given that bumps are defined as half-sines
-    template = np.sin(2*np.pi*bump_idx/1000*bump_frequency)#bump morph based on a half sine with given bump width and sampling frequency
+    event_idx = np.arange(event_width_samples)*steps+steps/2
+    event_frequency = 1000/(event_width*2)#gives event frequency given that events are defined as half-sines
+    template = np.sin(2*np.pi*event_idx/1000*event_frequency)#event morph based on a half sine with given event width and sampling frequency
     template = template/np.sum(template**2)#Weight normalized
     return template
 
@@ -64,7 +72,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
         2D or 3D list with dimensions (n_subjects *) sources * source_parameters
         Source parameters should contain :
         - the name of the source (see the output of available_source())
-        - the duration of the bump (in frequency, usually 10Hz)
+        - the duration of the event (in frequency, usually 10Hz)
         - the amplitude or strength of the signal from the source, expressed in volt (e.g. 1e-8 V)
         - the duration of the preceding stage as a scipy.stats distribution (e.g. scipy.stats.gamma(a, scale))
     n_trials: int
@@ -93,7 +101,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
     Returns
     -------
     generating_events: ndarray
-        Times of the simulated bumps used to test for accurate recovery compared to estimation
+        Times of the simulated events used to test for accurate recovery compared to estimation
     files: list
         list of file names (file + number of subject)
     '''
@@ -185,8 +193,8 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
                 #last two parameters ensure sources that are different enough
                 # Define the time course of the activity for each source of the region to
                 # activate
-                bump_duration = int(((1/source[1])/2)*info['sfreq'])
-                source_time_series = bump_shape(((1000/source[1])/2),bump_duration,1000/info['sfreq'])*source[2]
+                event_duration = int(((1/source[1])/2)*info['sfreq'])
+                source_time_series = event_shape(((1000/source[1])/2),event_duration,1000/info['sfreq'])*source[2]
 
                 #adding source event
                 events = events.copy()
@@ -234,3 +242,57 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
     else:
         return files
     
+
+def demo(cpus, n_events, seed=667):#12
+    
+    ## Imports and code specific to the simulation (see tutorial 3 and 4 for real data)
+    from scipy.stats import gamma
+    import matplotlib.pyplot as plt 
+    from hsmm_mvpy.utils import read_mne_data
+    
+    random_gen =  np.random.default_rng(seed=seed)
+
+    ## Parameters for the simulations
+    frequency, amplitude = 10., .3e-6 #Frequency of the transition event and its amplitude in Volt
+    shape = 2#shape of the gamma distribution
+
+    #Storing electrode position, specific to the simulations
+    positions = simulation_info()#Electrode position
+    sfreq = simulation_sfreq()#sampling freqency of the simulated data
+    resample_freq = sfreq/np.round(sfreq / 100).astype(int)#Resampling at 100Hz to make processing faster and less demanding
+    all_source_names = available_sources()#all brain sources you can play with
+    n_trials = 50 #Number of trials to simulate
+    
+    # Randomly specify the transition events
+    name_sources = random_gen.choice(all_source_names,n_events+1, replace=False)#randomly pick source without replacement
+
+    times = random_gen.uniform(25,300,n_events+1)/shape#randomly pick average times in millisecond between the events
+
+    sources = []
+    for source in range(len(name_sources)):
+        sources.append([name_sources[source], frequency, amplitude, \
+                          gamma(shape, scale=times[source])])
+
+    file = 'dataset_tutorial2' #Name of the file to save
+
+    #Simulating and recover information on electrode location and true time onset of the simulated events
+    files = simulate(sources, n_trials, cpus,file, overwrite=True, location=25, seed=seed)
+    generating_events = np.load(files[1])
+    number_of_sources = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
+    random_source_times = np.reshape(np.diff(generating_events[:,0], prepend=0),(n_trials,number_of_sources+1))[:,1:]/(sfreq/resample_freq)#By-trial generated event times
+
+    #Reading the necessary info to read the EEG data
+    resp_trigger = int(np.max(np.unique(generating_events[:,2])))#Resp trigger is the last source in each trial
+    event_id = {'stimulus':1}
+    resp_id = {'response':resp_trigger}
+    events = generating_events[(generating_events[:,2] == 1) | (generating_events[:,2] == resp_trigger)]#only retain stimulus and response triggers
+
+    # Reading the data
+    eeg_dat = read_mne_data(files[0], event_id, resp_id, sfreq=resample_freq, events_provided=events, verbose=False)
+    
+    all_other_chans = range(len(positions.ch_names[:-61]))#non-eeg
+    chan_list = list(np.arange(len(positions.ch_names)))
+    chan_list = [e for e in chan_list if e not in all_other_chans]
+    chan_list.pop(52)#Bad elec
+    positions = mne.pick_info(positions, sel=chan_list)
+    return eeg_dat, random_source_times, positions

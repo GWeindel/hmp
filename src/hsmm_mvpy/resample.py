@@ -7,6 +7,12 @@ from hsmm_mvpy.models import hmp
 from hsmm_mvpy.utils import transform_data, stack_data, save_eventprobs
 from hsmm_mvpy.visu import plot_topo_timecourse
 
+try:
+    __IPYTHON__
+    from tqdm.notebook import tqdm
+except NameError:
+    import tqdm.tqdm
+
 def _gen_idx(data, dim, iterations=1):
     orig_index = data[dim].values
     indexes = np.array([np.random.choice(orig_index, size=len(orig_index), replace=True) for x in range(iterations)])
@@ -29,7 +35,7 @@ def _gen_dataset(data, dim, n_iterations):
         named_index.append(_gen_idx(data, dim))
     return named_index, data, dim, original_dim_order_data
 
-def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter, tolerance, summarize=True, verbose=True, plots=True, cpus=1,
+def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter, tolerance, decimate, summarize, verbose, plots=True, cpus=1,
                       trace=False, path='./'):
     resampled_data = data.loc[{dim:list(indexes)}].unstack().transpose(*order)
     if '_x_' in dim:
@@ -44,7 +50,7 @@ def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter,
     else:
         hmp_data_boot = resampled_data
     init_boot = hmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1)
-    estimates_boot = init_boot.fit(verbose=verbose, tolerance=tolerance)
+    estimates_boot = init_boot.fit(verbose=verbose, tolerance=tolerance, decimate=decimate)
     if trace:
         save_eventprobs(estimates_boot.eventprobs, path+str(n_iter)+'.nc')
     if summarize:
@@ -61,9 +67,9 @@ def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter,
                                          estimates_boot.eventprobs.to_dataset(name='eventprobs')])
     return boot_results
 
-def bootstrapping(data, dim, n_iterations, init, positions, sfreq, tolerance=1e-4, summarize=True, verbose=True,
+def bootstrapping(data, dim, n_iterations, init, positions, sfreq, tolerance=1e-4,
+                  decimate=None, summarize=True, verbose=False,
                   plots=True, cpus=1, trace=False, path='./'):
-    import multiprocessing
     import itertools
     if 'channels' in data.dims:
         data_type = 'raw'
@@ -72,13 +78,16 @@ def bootstrapping(data, dim, n_iterations, init, positions, sfreq, tolerance=1e-
     if verbose:
         print(f'Bootstrapping {data_type} on {n_iterations} iterations')
     data_views, data, dim, order = _gen_dataset(data, dim, n_iterations)
-    with multiprocessing.Pool(processes=cpus) as pool:
-        boot = pool.starmap(_bootstrapped_run, 
-            zip(itertools.repeat(data), itertools.repeat(dim), data_views, itertools.repeat(order), 
+    
+    #calculate estimates, returns lkhs, mags, times
+    inputs = zip(itertools.repeat(data), itertools.repeat(dim), data_views, itertools.repeat(order), 
                 itertools.repeat(init), 
                 itertools.repeat(positions), itertools.repeat(init.sfreq), np.arange(n_iterations),
-                itertools.repeat(tolerance), itertools.repeat(summarize), itertools.repeat(verbose),
-                itertools.repeat(plots),itertools.repeat(cpus), itertools.repeat(trace), itertools.repeat(path)))
+                itertools.repeat(tolerance), itertools.repeat(decimate), itertools.repeat(summarize), itertools.repeat(verbose),
+                itertools.repeat(plots),itertools.repeat(cpus), itertools.repeat(trace), itertools.repeat(path))
+    with mp.Pool(processes=cpus) as pool:
+            boot = list(tqdm(pool.imap(_boot_star, inputs), total=n_iterations))
+        
     boot = xr.concat(boot, dim='iteration')
     # if plots:
     #     plot_topo_timecourse(boot.channels, boot.event_times, positions, init_boot, title='iteration = '+str(n_iter), skip_electodes_computation=True)
@@ -96,19 +105,23 @@ def percent_event_occurence(iterations,  model_to_compare=None, count=False):
     all_n = np.zeros(len(iterations.iteration))
     for iteration in iterations.iteration:
         n_events_iter = int(np.sum(np.isfinite(iterations.sel(iteration=iteration).magnitudes.values[:,0])))
-        # if iteration != max_n_bump_model_index:
-        diffs = distance_matrix(iterations.sel(iteration=iteration).magnitudes.squeeze(),
-                    max_mags)
-        index_event = diffs.argmin(axis=1)
-        index_event[n_events_iter:] = 9999
-        all_diffs.append(index_event)
+        if iteration != max_n_bump_model_index:
+            diffs = distance_matrix(iterations.sel(iteration=iteration).magnitudes.squeeze(),
+                        max_mags)
+            index_event = diffs.argmin(axis=1)
+            index_event[n_events_iter:] = 9999
+
+            all_diffs.append(index_event)
         all_n[iteration] = n_events_iter
     labels, counts = np.unique(all_diffs, return_counts=True)
     n_event_labels, n_event_count = np.unique(all_n, return_counts=True)
-    if count:
+    n_events_per_iter = [int(np.sum(np.isfinite(iterations.sel(iteration=i).magnitudes.values[:,0]))) for i in iterations.iteration]
+    if np.any(np.diff(n_events_per_iter) != 0):
         labels, counts = labels[:-1], counts[:-1]
-    else:
-        labels, counts = labels[:-1], counts[:-1]/iterations.iteration.max().values
+    if not count:
+        labels, counts = labels, counts/iterations.iteration.max().values
         n_event_count = n_event_count/iterations.iteration.max().values
     return model_to_compare, labels, counts, n_event_count, n_event_labels
 
+def _boot_star(args): #for tqdm usage
+    return _bootstrapped_run(*args)

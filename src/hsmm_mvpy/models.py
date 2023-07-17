@@ -431,7 +431,7 @@ class hmp:
                 gains[self.starts[trial]:self.ends[trial]+1,:][::-1,::-1]
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage parameters
-        locations = np.concatenate([[.5], np.repeat(self.location, n_events)])#all stages except first stage have a location (mainly to avoid overlap in cross-correlated signal)
+        locations = np.concatenate([[0], np.repeat(self.location, n_events)])#all stages except first stage have a location (mainly to avoid overlap in cross-correlated signal)
         for stage in range(n_stages):
             pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1], locations[stage])
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
@@ -524,7 +524,8 @@ class hmp:
         '''
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
-        p = self.cdf(np.arange(1,self.max_d+1), shape, scale=scale, loc=location)
+        p = self.cdf(np.arange(1, self.max_d+1), shape, scale=scale, loc=location)
+        #Location is at least = to 1 given that range starts at 0, desirable as these are durations
         p = np.diff(p, prepend=0)#going to pmf
         return p
     
@@ -554,6 +555,7 @@ class hmp:
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
+        params[:-1,1] += .5
         params[-1,1] -= 1
         params[:,1] = params[:,1]/params[:,0]
         return params
@@ -873,7 +875,7 @@ class hmp:
         else:
             raise ValueError(f'No combination found given length of the data {self.mean_d}, number of events {n_stages} and a max iteration of {iter_limit}')
     
-    def sliding_event_mags(self, epoch_data, step=5, decimate_grid = False, cpu=1, plot=False, tolerance=1, min_iteration=10,alpha=.05):
+    def sliding_event_mags(self, epoch_data, step=5, decimate_grid = False, cpu=1, plot=False, tolerance=1e-4, min_iteration=10,alpha=.05):
 
         grid = np.squeeze(self.gen_mags(1, decimate = decimate_grid,size=3)) #get magn grid
         n_iter = len(grid)
@@ -884,7 +886,6 @@ class hmp:
                     itertools.repeat(False),itertools.repeat(1), itertools.repeat(tolerance),itertools.repeat(min_iteration))
         with mp.Pool(processes=cpu) as pool:
             estimates = list(tqdm(pool.imap(self.sliding_event_star, inputs), total=len(grid)))
-        
         #topo prep
         stacked_eeg_data = epoch_data.stack(trial_x_participant=('participant','epochs')).dropna('trial_x_participant',how='all').data.to_numpy() 
         n_electrodes, _, n_trials = stacked_eeg_data.shape
@@ -932,8 +933,8 @@ class hmp:
         Take the highest likelihood, place a event by excluding event width space around it, follow with the next one
         '''
              
-        parameters = self._grid_search(2, verbose=verbose, step=step, start_time=np.random.choice(range(step)))#Looking for all possibilities with one event
-        if magnitudes is None:
+        parameters = self._grid_search(2, verbose=verbose, step=step)#Looking for all possibilities with one event
+        if method is None or magnitudes is None:
             magnitudes = np.zeros((len(parameters),1, self.n_dims), dtype=np.float64)
             maximization = True
             if fix_mags:
@@ -955,22 +956,20 @@ class hmp:
             pars_to_fix = [0,1]
         else: 
             pars_to_fix = []
-            ls = '.'
+            ls = 'o'
         lkhs_init, mags_init, pars_init, times_init = self.estimate_single_event(magnitudes, parameters, pars_to_fix, mags_to_fix, maximization, cpus, tolerance=tolerance,min_iteration=min_iteration)
         
         if verbose:
             if ax is None:
                  _, ax = plt.subplots(figsize=figsize, dpi=100)
             ax.plot(pars_init[:,0,1]*self.shape, lkhs_init, ls)
-        
+        plt.ylabel('Log-likelihood')
+        plt.xlabel('Sample number')
+        if show:
+            plt.show()        
         if method is None:
             #pars, mags, lkhs = pars_init, mags_init, lkhs_init
-            plt.ylabel('Log-likelihood')
-            plt.xlabel('Sample number')
-            if show:
-                plt.show()
-            else:
-                return ax
+            return ax
         else:
             return lkhs_init, mags_init, times_init
         
@@ -1001,7 +1000,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=True, max_iterations=1e3, tolerance=1e-2, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None):
+    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=False, max_iterations=1e3, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None):
         '''
         Cumulative fit method.
         step = size of steps across samples
@@ -1018,7 +1017,7 @@ class hmp:
         n_points = int(np.rint(end)//step)
         if diagnostic:
             cycol = cycle(default_colors)
-        pbar = tqdm(total = int(np.rint(end-self.location)))#progress bar
+        pbar = tqdm(total = int(np.rint(end)))#progress bar
         n_events, j, time = 0,1,0
         if trace:
             all_pars, all_mags, all_mags_prop, all_pars_prop, all_diffs = [],[],[],[],[]
@@ -1027,12 +1026,10 @@ class hmp:
         pars[:,0] = self.shape #parameters during estimation, shape x scale
         pars_prop = pars[:n_events+2].copy()
         pars_prop[0,1] = 1/self.shape#initialize scale
-        pars_prop[n_events+1,1] = last_stage = (end-step)/self.shape 
+        pars_prop[n_events+1,1] = last_stage = (end-1)/self.shape 
         pars_accepted = pars.copy()
         #Init mags
         mags = np.zeros((int(end), self.n_dims)) #mags during estimation
-        mags_prop = mags[:n_events+1].copy()
-        mags_prop[n_events,:] = np.zeros(self.n_dims)
         mags_accepted = mags.copy()
         i = 0
         while last_stage*self.shape > self.location and n_events+1 < max_event_n:
@@ -1050,9 +1047,8 @@ class hmp:
             mags_props[:,:n_events,:] = np.tile(mags_accepted[:n_events,:], (len(mags_props), 1, 1))
             #estimate all grid_points models while fixing previous found events
             solutions = self.fit_single(n_events+1, mags_props, pars_prop, to_fix, to_fix,\
-                            return_max=False, verbose=False, cpus=cpus, min_iteration=min_iteration)
+                            return_max=False, verbose=False, cpus=cpus, min_iteration=min_iteration, tolerance=tolerance)
             if diagnostic:#Diagnostic plot
-                color = next(cycol)
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
             #Exclude non-converged models (negative EM LL curve)
             solutions = utils.filter_non_converged(solutions)
@@ -1060,19 +1056,21 @@ class hmp:
 
                 ##Average among the converged solutions and store as future starting points
                 # mags[:n_events+1], pars[:n_events+2] = solutions.magnitudes.mean('iteration').values, solutions.parameters.mean('iteration').values
-                #OR take the nearest converged solution
+                # #OR take the nearest converged solution
                 nearest_solution = solutions.sel(iteration=solutions.parameters.sel(parameter="scale", \
                     stage=n_events).argmin('iteration').values)
                 if diagnostic:#Diagnostic plot
-                    plt.plot(solutions.traces.T, c='k')
-                    plt.plot(nearest_solution.traces.T, c=color, label=f'Iteration {i}')
+                    color = next(cycol)
+                    plt.plot(solutions.traces.T, c=color)
+                    plt.plot(nearest_solution.traces.T, c='k', label=f'Iteration {i}')
                 mags[:n_events+1], pars[:n_events+2] = nearest_solution.magnitudes.values,\
                     nearest_solution.parameters.values
+                pars[n_events+1,1] -= 1
                 recalibrated = self.fit_single(n_events+1, mags[:n_events+1], pars[:n_events+2], [], [],\
-                            return_max=False, verbose=False, cpus=cpus, min_iteration=min_iteration)
+                            return_max=False, verbose=False, cpus=cpus, min_iteration=min_iteration, tolerance=tolerance)
                 n_events += 1
-                pars_accepted[:n_events+1] = recalibrated.parameters.values#pars[:n_events+1].copy()
-                mags_accepted[:n_events] = recalibrated.magnitudes.values#mags[:n_events].copy()
+                pars_accepted[:n_events+1] = recalibrated.parameters.values#pars[:n_events+1].copy()###
+                mags_accepted[:n_events] = recalibrated.magnitudes.values#mags[:n_events].copy()###
                 j = 0
                 if verbose:
                     print(f'Transition event {n_events} found around sample {int(np.round(np.sum(pars_accepted[:n_events,:].prod(axis=1))))}')
@@ -1092,6 +1090,7 @@ class hmp:
             time = np.sum(pars_prop[:n_events+1,1])*self.shape 
             pbar.update(int(np.round(time-prev_time)))
             i += 1
+        pbar.update(int(np.round(np.rint(end))-np.rint(time)))
         if diagnostic:
             plt.ylabel('Log-likelihood')
             plt.xlabel('EM iteration')

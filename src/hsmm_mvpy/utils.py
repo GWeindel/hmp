@@ -155,11 +155,15 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
                 events = events_provided[y]
 
             data.load_data()
-            data.filter(high_pass, low_pass, fir_design='firwin', verbose=verbose)
 
             if sfreq < data.info['sfreq']:#Downsampling
                 print(f'Downsampling to {sfreq} Hz')
-                data, events = data.resample(sfreq, events=events)
+                decim = np.round( data.info['sfreq'] / sfreq).astype(int)
+                obtained_sfreq = data.info['sfreq'] / decim
+                low_pass = obtained_sfreq / 3.1
+            else: decim = 1
+            data.filter(high_pass, low_pass, fir_design='firwin', verbose=verbose)
+
             combined =  {**event_id, **resp_id}#event_id | resp_id 
             stim = list(event_id.keys())
             
@@ -175,7 +179,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
             else:
                 metadata_i = metadata[y]
             epochs = mne.Epochs(data, meta_events, event_id, tmin, tmax, proj=False,
-                    baseline=baseline, preload=True, picks=pick_channels,
+                    baseline=baseline, preload=True, picks=pick_channels, decim=decim,
                     verbose=verbose, detrend=1, on_missing = 'warn', event_repeated='drop',
                     metadata=metadata_i, reject_by_annotation=True, reject=reject_threshold)
             epochs.metadata.rename({'response':'rt'}, axis=1, inplace=True)
@@ -478,12 +482,10 @@ def stack_data(data, subjects_variable='participant', channel_variable='componen
     '''    
     if isinstance(data, (xr.DataArray,xr.Dataset)) and 'component' not in data.dims:
         data = data.rename_dims({'channels':'component'})
-        print(data.participant)
     if "participant" not in data.dims:
         data = data.expand_dims("participant")
     data = data.stack(all_samples=['participant','epochs',"samples"]).dropna(dim="all_samples")
-    return data #xr.Dataset({'data':data, 'durations':durations})
-    #return data, durations
+    return data
 
 def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', n_comp=None, return_weights=False):
     '''
@@ -526,6 +528,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         raise ValueError('Expected a xarray Dataset with data and event as DataArrays, check the data format')
     if not apply_zscore in ['all', 'participant', 'trial'] and not isinstance(apply_zscore,bool):
         raise ValueError('apply_zscore should be either a boolean or one of [\'all\', \'participant\', \'trial\']')
+    sfreq = data.sfreq
     if apply_zscore == True:
         apply_zscore = 'trial' #defaults to trial
     if apply_standard:
@@ -564,7 +567,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
 
         pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
 
-        pca_data = pca.fit_transform(var_cov_matrix)#/pca.explained_variance_ # divided by explained var for compatibility with matlab's PCA
+        pca_data = pca.fit_transform(var_cov_matrix)/pca.explained_variance_ # divided by explained var for compatibility with matlab's PCA
         
         #Rebuilding pca PCs as xarray to ease computation
         coords = dict(channels=("channels", data.coords["channels"].values),
@@ -586,6 +589,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         case 'trial':
             data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
     data.attrs['components'] = pca_data
+    data.attrs['sfreq'] = sfreq
     if stack_data:
         data = stack_data(data)
     if return_weights:
@@ -893,43 +897,9 @@ def participant_selection(hmp_data, participant):
     stacked = stack_data(unstacked)
     return stacked
 
-def bootstrapping(init, hmp_data, general_run, positions, epoch_data, iterations, threshold=1, verbose=True, plots=True, cpus=1):
-    warn('This method is inaccurate and will be removed in future version, see the bootstraping function in the resample module instead', DeprecationWarning, stacklevel=2)
-    from hsmm_mvpy.models import hmp
-    from hsmm_mvpy.visu import plot_topo_timecourse
-    try:
-        import xskillscore as xs#Todo remove from dependency list
-    except:
-        raise ValueError('xskillscore should be installed to run this (deprecated) function')
-    fitted_mags = general_run.magnitudes.values[np.unique(np.where(np.isfinite(general_run.magnitudes))[0]),:]#remove NAs
-    mags_boot_mat = []#np.tile(np.nan, (iterations, init.compute_max_events(), init.n_dims))
-    pars_boot_mat = []#np.tile(np.nan, (iterations, init.compute_max_events()+1, 2))
-
-    for i in range(iterations):
-        bootstapped = xs.resample_iterations(hmp_data.unstack(), iterations=1, dim='epochs')
-        hmp_data_boot = stack_data(bootstapped.squeeze())
-        init_boot = hmp(hmp_data_boot, sfreq=epoch_data.sfreq, event_width=init.event_width, cpus=init.cpus)
-        estimates_boot = init_boot.fit(verbose=verbose, threshold=threshold)
-        mags_boot_mat.append(estimates_boot.magnitudes)
-        pars_boot_mat.append(estimates_boot.parameters)
-        if plots:
-            plot_topo_timecourse(epoch_data, estimates_boot, positions, init_boot)
-
-    all_pars_aligned = np.tile(np.nan, (iterations, np.max([len(x) for x in pars_boot_mat]), 2))
-    all_mags_aligned = np.tile(np.nan, (iterations, np.max([len(x) for x in mags_boot_mat]), init.n_dims))
-    for iteration, _i in enumerate(zip(pars_boot_mat, mags_boot_mat)):
-        all_pars_aligned[iteration, :len(_i[0]), :] = _i[0]
-        all_mags_aligned[iteration, :len(_i[1]), :] = _i[1]
-
-    booted = xr.Dataset({'parameters': (('iteration', 'stage','parameter'), 
-                                 all_pars_aligned),
-                        'magnitudes': (('iteration', 'event','component'), 
-                                 all_mags_aligned)})
-    return booted
-
 def filter_non_converged(estimates):
     for iteration in estimates.iteration.values:
-        if np.diff(estimates.sel(iteration=iteration).traces.dropna('em_iteration')[-2:]) < -1e-4:
+        if np.diff(estimates.sel(iteration=iteration).traces.dropna('em_iteration')[-2:]) < -1e-10:
             estimates = estimates.drop_sel({'iteration':iteration})
     estimates["iteration"] = range(len(estimates.iteration))
     return estimates
