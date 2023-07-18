@@ -1,7 +1,6 @@
 __pycache__/
 *.py[cod]
 *.nc
-*.npy
 /documentation
 /temp
 /papers
