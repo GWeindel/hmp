@@ -166,7 +166,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             files_subj.append(subj_file.split('.fif')[0]+'_generating_events.npy')
             files.append(files_subj)
         else:
-            subj_file = path+subj_file
+            subj_file = op.join(path, subj_file)
             print(f'Simulating {subj_file}')
             sources_subj = sources[subj]
             # stim_onset occurs every x samples.
@@ -276,7 +276,7 @@ def demo(cpus, n_events, seed=667):#12
     file = 'dataset_tutorial2' #Name of the file to save
 
     #Simulating and recover information on electrode location and true time onset of the simulated events
-    files = simulate(sources, n_trials, cpus,file, overwrite=True, location=25, seed=seed)
+    files = simulate(sources, n_trials, cpus,file, overwrite=False, location=25, seed=seed)
     generating_events = np.load(files[1])
     number_of_sources = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
     random_source_times = np.reshape(np.diff(generating_events[:,0], prepend=0),(n_trials,number_of_sources+1))[:,1:]/(sfreq/resample_freq)#By-trial generated event times
