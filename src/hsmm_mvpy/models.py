@@ -15,11 +15,11 @@ from hsmm_mvpy import utils
 from itertools import cycle
 
 
-try:
-    __IPYTHON__
-    from tqdm.notebook import tqdm
-except NameError:
-    import tqdm.tqdm
+# try:
+#     __IPYTHON__
+#     from tqdm.notebook import tqdm
+# except NameError:
+from tqdm import tqdm
 
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold', 'brown']
 
@@ -235,11 +235,11 @@ class hmp:
                 else:
                     parameters = np.tile(parameters, (len(magnitudes),1,1))
             if cpus>1: 
+                inputs = zip(itertools.repeat(n_events), magnitudes, parameters, itertools.repeat(maximization),
+                        itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(min_iteration))
                 with mp.Pool(processes=cpus) as pool:
-
-                    estimates = pool.starmap(self.EM, 
-                        zip(itertools.repeat(n_events), magnitudes, parameters, itertools.repeat(maximization),
-                        itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(min_iteration)))   
+                        estimates = list(tqdm(pool.imap(self._EM_star, inputs), total=len(magnitudes)))
+ 
             else:#avoids problems if called in an already parallel function
                 estimates = []
                 for pars, mags in zip(parameters, magnitudes):
@@ -331,6 +331,9 @@ class hmp:
         if verbose:
             print(f"Parameters estimated for {n_events} events model")
         return estimated
+    
+    def _EM_star(self, args): #for tqdm usage
+        return self.EM(*args)
     
     def EM(self, n_events, magnitudes, parameters,  maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1):  
         '''
@@ -791,8 +794,10 @@ class hmp:
         if verbose:
             print(f'Number of potential magnitudes: {len(grid)}') 
 
-        if n_samples is None or n_samples > len(grid):
+        if n_samples is None:
             n_samples = len(grid)
+        if n_samples > len(grid):
+            method='random'
         if decimate:
             n_samples = int(np.rint(len(grid) / decimate))
             
@@ -806,7 +811,7 @@ class hmp:
             if method is None:
                 gen_mags[event,:,:] = grid
             elif method == "random":
-                gen_mags[event,:,:] = grid[np.random.choice(range(len(grid)), size=n_samples, replace=False)]
+                gen_mags[event,:,:] = grid[np.random.choice(range(len(grid)), size=n_samples, replace=True)]
         gen_mags = np.transpose(gen_mags, axes=(1,0,2))
         return gen_mags
     

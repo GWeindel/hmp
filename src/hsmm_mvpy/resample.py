@@ -79,7 +79,6 @@ def bootstrapping(data, dim, n_iterations, init, positions, sfreq, tolerance=1e-
         print(f'Bootstrapping {data_type} on {n_iterations} iterations')
     data_views, data, dim, order = _gen_dataset(data, dim, n_iterations)
     
-    #calculate estimates, returns lkhs, mags, times
     inputs = zip(itertools.repeat(data), itertools.repeat(dim), data_views, itertools.repeat(order), 
                 itertools.repeat(init), 
                 itertools.repeat(positions), itertools.repeat(init.sfreq), np.arange(n_iterations),
