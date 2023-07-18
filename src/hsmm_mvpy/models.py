@@ -238,7 +238,10 @@ class hmp:
                 inputs = zip(itertools.repeat(n_events), magnitudes, parameters, itertools.repeat(maximization),
                         itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(min_iteration))
                 with mp.Pool(processes=cpus) as pool:
+                    if starting_points > 1:
                         estimates = list(tqdm(pool.imap(self._EM_star, inputs), total=len(magnitudes)))
+                    else:
+                        estimates = pool.starmap(self.EM, inputs)
  
             else:#avoids problems if called in an already parallel function
                 estimates = []
