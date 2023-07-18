@@ -9,7 +9,6 @@ import mne
 from mne.datasets import sample
 from warnings import warn
 
-
 def available_sources(subselection=True):
     '''
     list available sources for sample subject in MNE
@@ -243,7 +242,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
         return files
     
 
-def demo(cpus, n_events, seed=667):#12
+def demo(cpus, n_events, seed=9999):
     
     ## Imports and code specific to the simulation (see tutorial 3 and 4 for real data)
     from scipy.stats import gamma
