@@ -15,11 +15,11 @@ from hsmm_mvpy import utils
 from itertools import cycle
 
 
-# try:
-#     __IPYTHON__
-#     from tqdm.notebook import tqdm
-# except NameError:
-from tqdm import tqdm
+try:
+    __IPYTHON__
+    from tqdm.notebook import tqdm
+except NameError:
+    from tqdm import tqdm
 
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold', 'brown']
 

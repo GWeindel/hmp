@@ -11,7 +11,8 @@ try:
     __IPYTHON__
     from tqdm.notebook import tqdm
 except NameError:
-    import tqdm.tqdm
+    from tqdm import tqdm
+
 
 def _gen_idx(data, dim, iterations=1):
     orig_index = data[dim].values
