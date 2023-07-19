@@ -805,7 +805,8 @@ class hmp:
             n_samples = int(np.rint(len(grid) / decimate))
             
         if method is None and len(grid) != n_samples:
-            grid = grid[::len(grid)//n_samples]
+            sort_table = np.argsort(np.abs(np.sum(grid, axis=-1)), axis=0)[::-1]
+            grid = grid[sort_table[:n_samples]]
             n_samples = len(grid)
             if verbose:
                 print(f'Because of decimation {len(grid)} will be estimated.')
@@ -891,9 +892,10 @@ class hmp:
         #calculate estimates, returns lkhs, mags, times
         inputs = zip(itertools.repeat((12,3)), itertools.repeat(False), itertools.repeat('search'), 
                     grid, itertools.repeat(step), itertools.repeat(False), itertools.repeat(None),
-                    itertools.repeat(False),itertools.repeat(1), itertools.repeat(tolerance),itertools.repeat(min_iteration))
+                    itertools.repeat(False),itertools.repeat(False), itertools.repeat(1), itertools.repeat(tolerance),itertools.repeat(min_iteration))
         with mp.Pool(processes=cpu) as pool:
             estimates = list(tqdm(pool.imap(self.sliding_event_star, inputs), total=len(grid)))
+            
         #topo prep
         stacked_eeg_data = epoch_data.stack(trial_x_participant=('participant','epochs')).dropna('trial_x_participant',how='all').data.to_numpy() 
         n_electrodes, _, n_trials = stacked_eeg_data.shape
