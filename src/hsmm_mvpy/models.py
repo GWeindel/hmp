@@ -26,21 +26,36 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
                    
 class hmp:
     
-    def __init__(self, data, eeg_data=None, sfreq=None, offset=0, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', em_method="mean"):
+    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', em_method="mean"):
         '''
-        HMP calculates the probability of data summing over all ways of 
-        placing the n events to break the trial into n + 1 stages.
+        This function intializes an HMP model by providing the data, the expected probability distribution for the by-trial variation in stage onset, and the expected duration of the transition event.
 
-        Parameters
+        parameters
         ----------
         data : ndarray
-            2D ndarray with n_samples * components 
-        sfreq : int
-            Sampling frequency of the signal (initially 100)
-        event_width : int
-            width of events in milliseconds, originally 5 samples
+            2D ndarray with n_samples * components obtained dthrough the hmp.utils.transform_data() function
+        epoch_data: xr.Dataset
+            Xarray dataset with the EEG/MEG data
+        sfreq : float
+            (optional) Sampling frequency of the signal if not provided, inferred from the epoch_data
+        cpus: int
+            How many cpus to use for the functions`using multiprocessing`
+        event_width : float
+            width of events in milliseconds, originally 50 ms
+        shape: float
+            shape of the probability distributions of the by-trial stage onset (one shape for all stages)
+        estimated_magnitudes: bool
+            To estimate (True) or not the magnitudes of the transition events
+        estimate_parameters: bool
+            To estimate (True) or not the parameters parameter of the stages
+        template: ndarray
+            Expected shape for the transition event used in the cross-correlation, should be a vector of values capturing the expected shape over the sampling frequency of the data. If None, the template is created as a half-sine shape with a frequency derived from the event_width argument
         location : float
             Minimum stage duration in milliseconds. 
+        distribution: str
+            Probability distribution for the by-trial onset of stages can be one of 'gamma','lognormal','wald', or 'weibull'
+        em_method: str
+            can be either mean or max, max method isn't yet supported, only use the 'mean'method (default)
         '''
         match distribution:
             case 'gamma':
@@ -56,9 +71,7 @@ class hmp:
         self.cdf = sp_dist.cdf
             
         if sfreq is None:
-            sfreq = eeg_data.sfreq
-        if offset is None:
-            offset = eeg_data.offset
+            sfreq = epoch_data.sfreq
         self.sfreq = sfreq
         self.steps = 1000/self.sfreq
         self.shape = float(shape)
@@ -74,11 +87,11 @@ class hmp:
             dur_dropped_na = durations.dropna("trial_x_participant")
             starts = np.roll(dur_dropped_na.data, 1)
             starts[0] = 0
-            ends = dur_dropped_na.data-1 -offset
+            ends = dur_dropped_na.data-1
         else: 
             dur_dropped_na = durations
             starts = np.array([0])
-            ends = np.array([dur_dropped_na.data-1 -offset])
+            ends = np.array([dur_dropped_na.data-1])
         self.starts = starts
         self.ends = ends
         self.durations =  self.ends-self.starts+1
@@ -94,7 +107,7 @@ class hmp:
         self.cpus = cpus
         self.n_samples, self.n_dims = np.shape(data.data.T)
         if template is None:
-            self.template = self.event_shape()
+            self.template = self._event_shape()
         else: self.template = template
         self.events = self.cross_correlation(data.data.T)#adds event morphology
         self.max_d = self.durations.max()
@@ -113,7 +126,7 @@ class hmp:
         else:
             self.convolution = np.convolve
     
-    def event_shape(self):
+    def _event_shape(self):
         '''
         Computes the template of a half-sine (event) with given frequency f and sampling frequency
         '''
@@ -128,10 +141,11 @@ class hmp:
         This function puts on each sample the correlation of that sample and the next 
         x samples (depends on sampling frequency and event size) with a half sine on time domain.
         
-        Parameters
+        parameters
         ----------
         data : ndarray
             2D ndarray with n_samples * components
+
         Returns
         -------
         events : ndarray
@@ -154,18 +168,40 @@ class hmp:
         '''
         Fit HMP for a single n_events model
         
-        Parameters
+        parameters
         ----------
         n_events : int
             how many events are estimated
         magnitudes : ndarray
-            2D ndarray n_events * components, initial conditions for events magnitudes
+            2D ndarray n_events * components (or 3D iteration * n_events * n_components), initial conditions for events magnitudes. If magnitudes are estimated, the list provided is used as starting point,
+            if magnitudes are fixed, magnitudes estimated will be the same as the one provided. When providing a list, magnitudes need to be in the same order
+            _n_th magnitudes parameter is  used for the _n_th event
         parameters : list
-            list of initial conditions for Gamma distribution scale parameter. If parameters are estimated, the list provided is used as starting point,
+            list of initial conditions for Gamma distribution parameters parameter (2D stage * parameter or 3D iteration * n_events * n_components). If parameters are estimated, the list provided is used as starting point,
             if parameters are fixed, parameters estimated will be the same as the one provided. When providing a list, stage need to be in the same order
             _n_th gamma parameter is  used for the _n_th stage
-        threshold : float
-            threshold for the HMP algorithm, 0 skips HMP
+        parameters_to_fix : bool
+            To fix (True) or to estimate (False, default) the parameters of the gammas
+        magnitudes_to_fix: bool
+            To fix (True) or to estimate (False, default) the magnitudes of the channel contribution to the events
+        tolerance: float
+            Tolerance applied to the expectation maximization in the EM() function
+        max_iteration: int
+            Maximum number of iteration for the expectation maximization in the EM() function
+        maximization: bool
+            If True (Default) perform the maximization phase in EM() otherwhise skip
+        min_iteration: int
+            Minimum number of iteration for the expectation maximization in the EM() function
+        starting_points: int
+            How many starting points to use for the EM() function
+        method: str
+            What starting points generation method to use, 'random'or 'grid' (grid is not yet fully supported)
+        return_max: bool
+            In the case of multiple starting points, dictates whether to only return the max likelihood model (True, default) or all of the models (False)
+        verbose: bool
+            True displays output useful for debugging, recommended for first use
+        cpus: int
+            number of cores to use in the multiprocessing functions
         '''
         assert n_events is not None, 'The fit_single() function needs to be provided with a number of expected transition events'
         assert self.location*(n_events) < min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
@@ -217,7 +253,7 @@ class hmp:
                 magnitudes = [initial_m]
                 if method == 'random':
                     for _ in np.arange(starting_points):
-                        proposal_p = self.gen_random_stages(n_events, self.mean_d)
+                        proposal_p = self.gen_random_stages(n_events)
                         proposal_p[parameters_to_fix] = initial_p[parameters_to_fix]
                         parameters.append(proposal_p)
                     magnitudes = self.gen_mags(n_events, starting_points, method='random', verbose=False)
@@ -332,7 +368,7 @@ class hmp:
         estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrtraces))
 
         if verbose:
-            print(f"Parameters estimated for {n_events} events model")
+            print(f"parameters estimated for {n_events} events model")
         return estimated
     
     def _EM_star(self, args): #for tqdm usage
@@ -341,6 +377,44 @@ class hmp:
     def EM(self, n_events, magnitudes, parameters,  maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1):  
         '''
         Expectation maximization function underlying fit
+
+        parameters
+        ----------
+        n_events : int
+            how many events are estimated
+        magnitudes : ndarray
+            2D ndarray n_events * components (or 3D iteration * n_events * n_components), initial conditions for events magnitudes. If magnitudes are estimated, the list provided is used as starting point,
+            if magnitudes are fixed, magnitudes estimated will be the same as the one provided. When providing a list, magnitudes need to be in the same order
+            _n_th magnitudes parameter is  used for the _n_th event
+        parameters : list
+            list of initial conditions for Gamma distribution parameters parameter (2D stage * parameter or 3D iteration * n_events * n_components). If parameters are estimated, the list provided is used as starting point,
+            if parameters are fixed, parameters estimated will be the same as the one provided. When providing a list, stage need to be in the same order
+            _n_th gamma parameter is  used for the _n_th stage
+        maximization: bool
+            If True (Default) perform the maximization phase in EM() otherwhise skip
+        magnitudes_to_fix: bool
+            To fix (True) or to estimate (False, default) the magnitudes of the channel contribution to the events
+        parameters_to_fix : bool
+            To fix (True) or to estimate (False, default) the parameters of the gammas
+        max_iteration: int
+            Maximum number of iteration for the expectation maximization
+        tolerance: float
+            Tolerance applied to the expectation maximization
+        min_iteration: int
+            Minimum number of iteration for the expectation maximization in the EM() function
+
+        Returns
+        -------
+        lkh_prev : float
+            Summed log probabilities
+        magnitudes_prev : ndarray
+            Magnitudes of the channel contribution to each event
+        parameters_prev: ndarray
+            parameterss for the gammas of each stage
+        eventprobs_prev: ndarray
+            Probabilities with shape max_samples*n_trials*n_events
+        traces: ndarray
+            Values of the log-likelihood for each EM iteration
         ''' 
         if not isinstance(maximization, bool):#Backward compatibility with previous versions
             warn('Deprecated use of the threshold function, use maximization and tolerance arguments. Setting tolerance at 1 for compatibility')
@@ -391,14 +465,15 @@ class hmp:
                         for comp in range(self.n_dims):
                             magnitudes[event,comp] = np.mean(np.sum( \
                                 eventprobs[:,:,event]*self.data_matrix[:,:,comp], axis=0))
-                        # Scale cross-correlation with likelihood of the transition
+                        # scale cross-correlation with likelihood of the transition
                         # sum by-trial these scaled activation for each transition events
                         # average across trials
                 magnitudes[magnitudes_to_fix,:] = initial_magnitudes[magnitudes_to_fix,:].copy()
+                #Gamma parameters from Expectation
                 if self.em_method == "max":
-                    parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=np.mean(event_times,axis=1))#Parameters from Expectation
+                    parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=np.mean(event_times,axis=1))
                 elif self.em_method == "mean":
-                    parameters = self.scale_parameters(eventprobs, n_events)#Parameters from Expectation
+                    parameters = self.scale_parameters(eventprobs, n_events)
                 parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
                 lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
                 traces.append(lkh)
@@ -410,6 +485,20 @@ class hmp:
     
     def estim_probs(self, magnitudes, parameters, n_events, lkh_only=False):
         '''
+        parameters
+        ----------
+        magnitudes : ndarray
+            2D ndarray n_events * components (or 3D iteration * n_events * n_components), initial conditions for events magnitudes. If magnitudes are estimated, the list provided is used as starting point,
+            if magnitudes are fixed, magnitudes estimated will be the same as the one provided. When providing a list, magnitudes need to be in the same order
+            _n_th magnitudes parameter is  used for the _n_th event
+        parameters : list
+            list of initial conditions for Gamma distribution parameters parameter (2D stage * parameter or 3D iteration * n_events * n_components). If parameters are estimated, the list provided is used as starting point,
+            if parameters are fixed, parameters estimated will be the same as the one provided. When providing a list, stage need to be in the same order
+            _n_th gamma parameter is  used for the _n_th stage
+        n_events : int
+            how many events are estimated
+        lkh_only: bool
+            Returning eventprobs (True) or not (False)
         
         Returns
         -------
@@ -436,7 +525,7 @@ class hmp:
             probs_b[:self.durations[trial],trial,:] = \
                 gains[self.starts[trial]:self.ends[trial]+1,:][::-1,::-1]
 
-        pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage parameters
+        pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage scale
         locations = np.concatenate([[0], np.repeat(self.location, n_events)])#all stages except first stage have a location (mainly to avoid overlap in cross-correlated signal)
         for stage in range(n_stages):
             pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1], locations[stage])
@@ -515,18 +604,20 @@ class hmp:
 
     def distribution_pmf(self, shape, scale, location):
         '''
-        Returns PMF of gamma or lognormal dist with shape and scale, on a range from 0 to max_length 
+        Returns PMF for a provided scipy disttribution with shape and scale, on a range from 0 to max_length 
         
-        Parameters
+        parameters
         ----------
-        a : float
+        shape : float
             shape parameter
         scale : float
-            scale parameter      
+            scale parameter
+        location: float
+            location parameter      
         Returns
         -------
         p : ndarray
-            probabilty mass function for a gamma with given parameters
+            probabilty mass function for the distribution with given scale
         '''
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
@@ -538,9 +629,10 @@ class hmp:
     def scale_parameters(self, eventprobs=None, n_events=None, averagepos=None):
         '''
         Used for the re-estimation in the EM procdure. The likeliest location of 
-        the event is computed from eventprobs. The scale parameters are then taken as the average 
+        the event is computed from eventprobs. The scale parameter are then taken as the average 
         distance between the events corrected for (eventual) location
-        Parameters
+        
+        parameters
         ----------
         eventprobs : ndarray
             [samples(max_d)*n_trials*n_events] = [max_d*trials*nTransition events]
@@ -573,14 +665,25 @@ class hmp:
         iteratively removing one of the event and pick the one with the highest 
         likelihood
         
-        Parameters
+        parameters
         ----------
+        max_events : int
+            Maximum number of events to be estimated, by default the output of hmp.models.hmp.compute_max_events()
+        min_events : int
+            The minimum number of events to be estimated
         max_fit : xarray
             To avoid re-estimating the model with maximum number of events it can be provided 
             with this arguments, defaults to None
         max_starting_points: int
             how many random starting points iteration to try for the model estimating the maximal number of events
-        
+        method: str
+            What starting points generation method to use, 'random'or 'grid' (grid is not yet fully supported)
+        tolerance: float
+            Tolerance applied to the expectation maximization in the EM() function
+        maximization: bool
+            If True (Default) perform the maximization phase in EM() otherwhise skip
+        max_iteration: int
+            Maximum number of iteration for the expectation maximization in the EM() function
         '''
         if max_events is None and max_fit is None:
             max_events = self.compute_max_events()
@@ -635,7 +738,7 @@ class hmp:
         Compute event onset times based on event probabilities
         This function is mainly kept for compatibility with previous matlab applications
 
-        Parameters
+        parameters
         ----------
         a : float
             shape parameter
@@ -646,7 +749,7 @@ class hmp:
         Returns
         -------
         d : ndarray
-            density for a gamma with given parameters
+            density for a gamma with given scale
         '''
         # warn('This method is deprecated and will be removed in future version, use compute_times() instead', DeprecationWarning, stacklevel=2)
         eventprobs = eventprobs.dropna('event', how="all")
@@ -667,21 +770,27 @@ class hmp:
         '''
         Compute the likeliest onset times for each event
 
-        Parameters
+        parameters
         ----------
-        estimates :
-            Estimated instance of an HMP model
         init : 
-            Initialized HMP object  
+            Initialized HMP object 
+        estimates : xr.Dataset
+            Estimated instance of an HMP model 
         duration : bool
             Whether to compute onset times (False) or stage duration (True)
         fill_value : float | ndarray
-            What value to fill for the first onset/duration
-
+            What value to fill for the first onset/duration.
+        mean : bool 
+            Whether to compute the mean (True) or return the single trial estimates
+        cumulative : bool
+            Outputs stage duration (False) or time of onset of stages (True)
+        add_rt : bool
+            whether to append the last stage up to the RT
+        
         Returns
         -------
         times : xr.DataArray
-            Transition event onset or stage duration with trial_x_participant*event dimensions
+            Transition event onset or stage duration with trial_x_participant*event dimensions or only event dimension if mean = True
         '''
 
         eventprobs = estimates.eventprobs.fillna(0).copy()
@@ -714,6 +823,27 @@ class hmp:
    
     @staticmethod
     def compute_topologies(channels, estimated, event_width_samples, extra_dim=False, mean=True):
+        """
+        Compute topologies for each trial. 
+         
+        parameters
+        ----------
+         	 channels: xr.Dataset 
+                Epoched data
+         	 estimated: xr.Dataset 
+                estimated model parameters and event probabilities
+         	 event_width_samples: float 
+                number of samples to shift to the peak of the event
+         	 extra_dim: bool 
+                if True the topology is computed in the extra dimension
+         	 mean: bool 
+                if True mean will be computed instead of single-trial channel activities
+         
+         Returns
+         -------
+         	event_values: xr.DataArray
+                array containing the values of each electrode at the most likely transition time
+        """
         shift = event_width_samples//2+1#Shifts to compute channel topology at the peak of the event
         channels = channels.rename({'epochs':'trials'}).\
                           stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant')
@@ -758,24 +888,24 @@ class hmp:
             return event_values
 
 
-    def gen_random_stages(self, n_events, mean_d):
+    def gen_random_stages(self, n_events):
         '''
         Returns random stage duration between 0 and mean RT by iteratively drawind sample from a 
         uniform distribution between the last stage duration (equal to 0 for first iteration) and 1.
         Last stage is equal to 1-previous stage duration.
         The stages are then scaled to the mean RT
-        Parameters
+        
+        parameters
         ----------
         n_events : int
             how many events
-        mean_d : float
-            scale parameter
+        
         Returns
         -------
         random_stages : ndarray
             random partition between 0 and mean_d
         '''
-        mean_d = int(mean_d) - n_events * self.location #remove minimum stage duration
+        mean_d = int(self.mean_d) - n_events * self.location #remove minimum stage duration
         rnd_durations = np.zeros(n_events + 1)
         while any(rnd_durations < 2): #make sure they are at least 2 samples
             rnd_events = np.random.default_rng().integers(low = 0, high = mean_d, size = n_events) #n_events between 0 and mean_d
@@ -785,6 +915,33 @@ class hmp:
         return random_stages
     
     def gen_mags(self, n_events, n_samples=None, lower_bound=-1, upper_bound=1, method=None, size=3, decimate=False, verbose=True):
+        """
+        Generate magnitudes sampled on a grid with n_events combinations. 
+        This is a generator function that can be used to generate a set of magnitudes for testing different starting point to the EM algorithm
+         
+        parameters
+        ----------
+         	 n_events: int
+                Number of events in the HMP model
+         	 n_samples: int
+                Number of samples to generate ( default : len ( grid ))
+         	 lower_bound: float 
+                Lower bound of the grid ( default : - 1 )
+         	 upper_bound: float
+                Upper bound of the grid ( default : 1 )
+         	 method: str
+                Method for generating the magnitudes ( default : None )
+         	 size: int
+                Size of the grid ( default : 3 )
+         	 decimate: bool 
+                If True the number of samples will be decimated to the size of the grid ( default : False )
+         	 verbose: bool
+                If True the number of samples will be printed to standard output ( default : True )
+         
+         Returns
+         -------
+         	 List of n_samples magnitude ( s ) sampled on
+        """
         '''
         Return magnitudes sampled on a grid with n points between lower_bound and upper_bound for the n_events. All combinations are tested
         '''
@@ -827,12 +984,25 @@ class hmp:
         event placements within this grid. It is faster than using random points (both should converge) but depending on the mean RT and the number 
         of events to look for, the number of combination can be really large. 
         
-        Parameters
+        parameters
         ----------
         n_stages : int
-            how many event to look for
-        iter_limit : int
-            How much is too much
+            how many event to look for +1
+        n_points: int 
+            how many points to look for ( default : None ). If None the number of points will be chosen from the length of the time
+        verbose: bool
+            Output useful print (True, default)
+        start_time: int
+            at what time to start the grid
+        end_time: int
+            at what time to stop the grid
+        iter_limit: int
+            How many iteration max, if grid is longer the grid will be decimated
+        step: 
+            How many step, i.e. samples, between two iterations
+        offset:
+        method:
+
 
         Returns
         -------
@@ -885,6 +1055,39 @@ class hmp:
             raise ValueError(f'No combination found given length of the data {self.mean_d}, number of events {n_stages} and a max iteration of {iter_limit}')
     
     def sliding_event_mags(self, epoch_data, step=5, decimate_grid = False, cpu=1, plot=False, tolerance=1e-4, min_iteration=10,alpha=.05):
+        """
+        Use the sliding_event function with different initialized magnitudes values
+
+        parameters
+        ----------
+            epoch_data: xr.Dataset 
+                the epoched data
+            step: int 
+                The number of steps to be use when sliding form 0 to mean duration
+            decimate_grid: int 
+                If True the grid is decimated to the given number
+            cpu: int 
+                The number of CPUs to use
+            plot: bool
+                 If True draw a plot
+            tolerance: float 
+                Tolerance criterion for the EM
+            min_iteration: int 
+                minimum iteration for the EM
+            alpha: float
+                transparency option for the generated plots
+
+        Returns
+        -------
+            lkhs: ndarray 
+                likelihoods for each sliding_event with different magnitudes
+            mags: ndarray 
+                magnitudes values
+            channels: ndarray 
+                Channel activities during the likeliest transition times for each event
+            times : ndarray 
+                Likeliest time of transitions for each event 
+        """
 
         grid = np.squeeze(self.gen_mags(1, decimate = decimate_grid,size=3)) #get magn grid
         n_iter = len(grid)
@@ -894,11 +1097,11 @@ class hmp:
                     grid, itertools.repeat(step), itertools.repeat(False), itertools.repeat(None),
                     itertools.repeat(False),itertools.repeat(False), itertools.repeat(1), itertools.repeat(tolerance),itertools.repeat(min_iteration))
         with mp.Pool(processes=cpu) as pool:
-            estimates = list(tqdm(pool.imap(self.sliding_event_star, inputs), total=len(grid)))
+            estimates = list(tqdm(pool.imap(self._sliding_event_star, inputs), total=len(grid)))
             
         #topo prep
-        stacked_eeg_data = epoch_data.stack(trial_x_participant=('participant','epochs')).dropna('trial_x_participant',how='all').data.to_numpy() 
-        n_electrodes, _, n_trials = stacked_eeg_data.shape
+        stacked_epoch_data = epoch_data.stack(trial_x_participant=('participant','epochs')).dropna('trial_x_participant',how='all').data.to_numpy() 
+        n_electrodes, _, n_trials = stacked_epoch_data.shape
         shift = int(self.event_width_samples/2)
 
         #collect results
@@ -918,7 +1121,7 @@ class hmp:
             topos = np.zeros((n_electrodes, n_trials, len(est[0])))
             for j, times_per_event in enumerate(est[2]):
                 for trial in range(n_trials):
-                    topos[:,trial,j] = stacked_eeg_data[:, times_per_event[trial] + shift,trial]
+                    topos[:,trial,j] = stacked_epoch_data[:, times_per_event[trial] + shift,trial]
                 
             channels[idx:(idx+len(est[0])), :] = np.nanmean(topos,axis=1).T
 
@@ -933,16 +1136,47 @@ class hmp:
         
         return lkhs, mags, channels, times
 
-    def sliding_event_star(self, args): #for tqdm usage
+    def _sliding_event_star(self, args): #for tqdm usage
         return self.sliding_event(*args)
         
     def sliding_event(self, figsize=(12,3), verbose=True, method=None, magnitudes=None, step=1, show=True, ax=None, fix_mags=False, fix_pars=False, cpus=None, tolerance=1e-4, min_iteration=1):
-        '''
-        This method outputs the likelihood and estimated parameters of a 1 event model with each sample, from 0 to the mean 
-        epoch duration. The parameters and likelihoods that are returned are 
-        Take the highest likelihood, place a event by excluding event width space around it, follow with the next one
-        '''
-             
+        """
+        This method outputs the likelihood and estimates of a 1 event HMP model with each sample, from 0 to the mean epoch duration, as starting point for the first stage.
+         
+        parameters
+        ----------
+             figsize: tuple
+                Size of the figure in inches.
+         	 verbose: bool
+                If True the method will be printed to standard output.
+         	 method: str
+                The method to use for fitting the model.
+         	 magnitudes: ndarray
+                The starting point(s) for the magnitudes
+         	 step: float
+                The step size for the slide between 0 and mean duration (step 2 = test every other sample)
+         	 show: bool
+                If True the plot will be shown.
+         	 ax: plt.subplots
+                The axis to plot to.
+         	 fix_mags: bool
+                If True the magnitudes will be fixed in the EM()
+         	 fix_pars: bool
+                If True the scale will be fixed in the EM()
+         	 cpus: int
+                The number of CPUs to use for the fitting process.
+             tolerance: float
+                Tolerance criterion for the EM
+             min_iteration: int
+                minimum iteration for the EM
+         
+        Returns
+        -------
+            lkhs: ndarray
+                likelihoods for each sliding_event with different magnitudes
+            mags: ndarray
+                magnitudes values
+        """       
         parameters = self._grid_search(2, verbose=verbose, step=step)#Looking for all possibilities with one event
         if method is None or magnitudes is None:
             magnitudes = np.zeros((len(parameters),1, self.n_dims), dtype=np.float64)
@@ -967,7 +1201,7 @@ class hmp:
         else: 
             pars_to_fix = []
             ls = 'o'
-        lkhs_init, mags_init, pars_init, times_init = self.estimate_single_event(magnitudes, parameters, pars_to_fix, mags_to_fix, maximization, cpus, tolerance=tolerance,min_iteration=min_iteration)
+        lkhs_init, mags_init, pars_init, times_init = self._estimate_single_event(magnitudes, parameters, pars_to_fix, mags_to_fix, maximization, cpus, tolerance=tolerance,min_iteration=min_iteration)
         
         if verbose:
             if ax is None:
@@ -983,7 +1217,7 @@ class hmp:
         else:
             return lkhs_init, mags_init, times_init
         
-    def estimate_single_event(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, maximization, cpus, max_iteration=1e2, tolerance=1e-4,min_iteration=1):
+    def _estimate_single_event(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, maximization, cpus, max_iteration=1e2, tolerance=1e-4,min_iteration=1):
         filterwarnings('ignore', 'Convergence failed, estimation hitted the maximum ', )#will be the case but for a subset only hence ignore
         if cpus is None:
             cpus = self.cpus
@@ -1011,7 +1245,45 @@ class hmp:
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
     def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=False, max_iterations=1e3, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None):
+        """
+         Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
+         Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
+         As soon as a starting points reaches the convergence criterion, the function fits an n+1 event model and uses the next samples in the RT as starting point for the following event
+         
+        parameters
+        ----------
+         	 step: float
+                The size of the step from 0 to the mean RT
+         	 verbose: bool 
+                If True print information about the fit
+         	 end: int
+                The maximum number of samples to explore within each trial
+         	 trace: bool 
+                If True keep the scale and magnitudes parameters for each iteration
+         	 fix_iter: bool 
+                If True fix magnitudes and scale parameters for the previously found events
+         	 max_iterations: int
+                The maximum number of iteration in the EM() function
+         	 tolerance: float
+                The tolerance used for the convergence in the EM() function
+         	 grid_points: int
+                The number of grid points to use when testing for different magnitudes
+         	 cpus: int
+                The number of CPUs to use
+         	 diagnostic: bool
+                If True print a diagnostic plot of the EM traces for each iteration
+         	 min_iteration: int 
+                The minimum number of iterations for the EM() function
+         	 decimate: int 
+                If not None, decimate the grid search on magnitudes by the int provided
+         
+         Returns: 
+         	 A tuple containing the fitted parameters and the fitted
+        """
         '''
+
+        parameters
+        ----------
         Cumulative fit method.
         step = size of steps across samples
         end = max explored duration
@@ -1033,9 +1305,9 @@ class hmp:
             all_pars, all_mags, all_mags_prop, all_pars_prop, all_diffs = [],[],[],[],[]
         #Init pars
         pars = np.zeros((int(end),2))
-        pars[:,0] = self.shape #parameters during estimation, shape x scale
+        pars[:,0] = self.shape #gamma parameters during estimation, shape x scale
         pars_prop = pars[:n_events+2].copy()
-        pars_prop[0,1] = 1/self.shape#initialize scale
+        pars_prop[0,1] = 1/self.shape#initialize gamma_parameters
         pars_prop[n_events+1,1] = last_stage = (end-1)/self.shape 
         pars_accepted = pars.copy()
         #Init mags
