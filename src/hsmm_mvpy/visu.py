@@ -15,7 +15,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
                 sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange',
                 colorbar=True, topo_size_scaling=False):
     '''
-    Plotting the event topologies at the average time of the end of the previous stage.
+    Plotting the event topologies at the average time of the onset of the next stage.
     
     Parameters
     ----------
@@ -32,6 +32,8 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     time_step : float
         What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
         1/sf or 1000/sf where sf is the sampling frequency of the data
+    ydim: str
+        name for the extra dimensions (e.g. iteration)
     figsize : list | tuple | ndarray
         Length and heigth of the matplotlib plot
     dpi : float
@@ -62,6 +64,8 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         outside of this function
     sensors : bool
         Whether to plot the sensors on the topologies
+    skip_channel_contribution: bool
+        if True assumes that the provided channel argument is already topologies for each channel
     contours : int / array_like
         The number of contour lines to draw (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
     event_lines : bool / color
@@ -200,6 +204,16 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
 
 
 def plot_components_sensor(hmp_data, positions):
+    """
+      This function is used to visualize the topomap of the HMP principal components.
+     
+     Parameters
+     ----------
+     	 hmp_data: xr.Dataset
+            Data returned from the function hmp.utils.transform_data()
+     	 positions: mne.info | ndarray 
+            List of x and y positions to plot channels on head model OR MNE info object
+    """
     from mne.viz import plot_topomap
     fig, ax = plt.subplots(1,len(hmp_data.attrs['components'].component))
     for comp in hmp_data.attrs['components'].component:
@@ -226,12 +240,12 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     ax : matplotlib.pyplot.ax
         Matplotlib object on which to draw the plot, can be useful if you want to control specific aspects of the plots
         outside of this function
+    mean: bool
+        Return the mean
 
     Returns
     -------
-    ax : matplotlib.pyplot.aiptions: ['BAD_', 'BAD_breaks']
-(array([[     0,      0,      2],
-       [     0,      0,      2],x
+    ax : matplotlib.pyplot.ax
         if ax was specified otherwise returns the plot
     '''
     if pvals:
@@ -297,9 +311,6 @@ def plot_latencies_average(times, time_step=1, labels=[], colors=default_colors,
     ----------
     times : ndarray
         2D or 3D numpy array, Either trials * events or conditions * trials * events
-    event_width : float
-        Display size of the event in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
-        can provide the event_width_sample of fitted hmp (e.g. init.event_width_sample)
     time_step : float
         What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
         1/sf or 1000/sf where sf is the sampling frequency of the data
@@ -311,10 +322,10 @@ def plot_latencies_average(times, time_step=1, labels=[], colors=default_colors,
         Length and heigth of the matplotlib plot
     errs : str
         Whether to display 95% confidence interval ('ci') or standard deviation (std)
-    times_to_display : ndarray
-        Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
     max_time : float
         limit of the x (time) axe
+    times_to_display : ndarray
+        Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
     '''
     from seaborn.algorithms import bootstrap #might be too much to ask for seaborn install?
    
@@ -553,6 +564,9 @@ def plot_latencies(times, time_step=1, labels=[], colors=default_colors,
     return axs
 
 def plot_iterations(iterations, eeg_data, init, positions, dims=['magnitudes','parameters'], alpha=1, ax=None):
+    """
+    Currently DEPRECATED
+    """
     from hsmm_mvpy.models import hmp
     if 'iteration' not in iterations.dims:
         try:
@@ -570,6 +584,21 @@ def plot_iterations(iterations, eeg_data, init, positions, dims=['magnitudes','p
     
 
 def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoch_data=None):
+    """
+     Plot bootstrapped time courses. This is a wrapper around plot_topo_timecourse to make it easier to use in other functions
+     
+     Parameters
+     ----------
+     	 bootstrapped: xr.Dataset 
+            The resulting data from a call to hmp.resample.bootstrapping()
+     	 info: 
+            The MNE info/electrode positions
+     	 init: 
+            The initialized HMP model
+     	 model_to_compare: 
+            If None ( default ) the model to compare is taken as the maximal n_event model among the bootstrapped models 
+     	 epoch_data: If None ( default
+    """
     from hsmm_mvpy.resample import percent_event_occurence
     maxboot_model, labels, counts, event_number, label_event_num = percent_event_occurence(bootstrapped, model_to_compare)
     fig, axes = plt.subplot_mosaic([['a', 'a'], ['b', 'c'], ['b', 'c']],
