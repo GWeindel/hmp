@@ -203,6 +203,223 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
 
 
 
+def plot_topo_timecourse_conds(channels, estimated_conds, conds, channel_position, init, time_step=1,
+                figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
+                clabels=[], xlabel = None, max_time = None, vmin=None, vmax=None, title=False, ax=None, 
+                sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange',
+                colorbar=True, topo_size_scaling=False):
+    '''
+    Plotting the event topologies at the average time of the onset of the next stage.
+    
+    Parameters
+    ----------
+    channels : ndarray | xr.Dataarray 
+        a 2D or 3D matrix of channel activity with channels and event as dimension (+ eventually a varying dimension) OR
+        the original EEG data in HMP format
+    estimated_conds : list
+        list of condition fits from fit_single_conds() 
+    conds : ndarray
+        1D array with condition per epoch
+    channel_position : ndarray
+        Either a 2D array with dimension channel and [x,y] storing channel location in meters or an info object from
+        the mne package containning digit. points for channel location
+    init : float
+        initialized HMP object
+    time_step : float
+        What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
+        1/sf or 1000/sf where sf is the sampling frequency of the data
+    ydim: str
+        name for the extra dimensions (e.g. iteration)
+    figsize : list | tuple | ndarray
+        Length and heigth of the matplotlib plot
+    dpi : float
+        DPI of the  matplotlib plot
+    magnify : float
+        How much should the events be enlarged, useful to zoom on topologies, providing any other value than 1 will 
+        however change the displayed size of the event
+    times_to_display : ndarray
+        Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
+    cmap : str
+        Colormap of matplotlib
+    xlabel : str
+        label of x-axis, default = None, which give "Time (samples)" or "Time" in case time_step != 1
+    clabels : list
+        list of condition names
+    max_time : float
+        limit of the x (time) axe
+    vmin : float
+        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html). If not explicitly
+        set, uses min across all topos while keeping colormap symmetric.
+    vmax : float
+        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html). If not explicitly
+        set, uses max across all topos while keeping colormap symmetric.
+    title : str
+        title of the plot
+    ax : matplotlib.pyplot.ax
+        Matplotlib object on which to draw the plot, can be useful if you want to control specific aspects of the plots
+        outside of this function
+    sensors : bool
+        Whether to plot the sensors on the topologies
+    skip_channel_contribution: bool
+        if True assumes that the provided channel argument is already topologies for each channel
+    contours : int / array_like
+        The number of contour lines to draw (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
+    event_lines : bool / color
+        Whether to plot lines and shading to indicate the moment of the event. If True uses tab:orange, if
+        set as color, uses the color
+    colorbar : bool
+        Whether a colorbar is plotted.
+    topo_size_scaling : bool
+        Whether to scale the size of the topologies with the event size. If True, size of topologies depends
+        on total plotted time interval, if False it is only dependent on magnify.
+        
+    Returns
+    -------
+    ax : matplotlib.pyplot.ax
+        if ax was specified otherwise returns the plot
+    '''
+
+    from mne.viz import plot_brain_colorbar, plot_topomap
+    from mne.io.meas_info import Info
+    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+    #make sure conds start at 0
+    for ci, c in enumerate(np.unique(conds)):
+        conds[conds == c] = ci
+    assert len(np.unique(conds)) == len(estimated_conds), 'number of unique conditions should correspond to number of estimated models'
+    n_cond = len(estimated_conds)
+
+    return_ax = True
+
+    #make times_to_display in list with lines per condition
+    if times_to_display is None:
+        times_to_display = [np.mean(init.durations[conds==c]) for c in range(n_cond)]
+    elif len(times_to_display) == 1: #only one set of times
+        if isinstance(times_to_display, np.ndarray):
+            times_to_display = [times_to_display] * n_cond
+        elif isinstance(times_to_display, list):
+            times_to_display = times_to_display * n_cond
+    elif len(times_to_display) > 1 and len(times_to_display) != n_cond:
+        print('times_to_display should either be a list of length n_cond or an ndarray which will be repeated across conditions')
+        times_to_display = [np.mean(init.durations[conds==c]) for c in range(n_cond)] # default to RTs
+    
+    if xlabel is None:
+        if time_step == 1:
+            xlabel = 'Time (in samples)'
+        else:
+            xlabel = 'Time'
+    if event_lines == True:
+        event_color='tab:orange'
+    else:
+        event_color=event_lines
+
+    if not skip_channels_computation:
+        epoch_data = channels
+        channels = []
+        times = []
+        for c in range(n_cond):
+            channels.append(init.compute_topologies(epoch_data, estimated_conds[c], init.event_width_samples))
+            times.append(init.compute_times(init, estimated_conds[c], mean=True).data)
+            channels[-1][times[-1] == 0] = np.nan #removes the empty topologies, e.g. in the case of mutliple varying number of events
+
+    n_iter = n_cond
+    if ax is None:
+        if figsize == None:
+            if n_iter == 1:
+                figsize = (12, .7 * np.max([magnify,1.8])) #make sure they don't get too flat
+            else:
+                figsize = (12, n_iter*.7) #make sure they don't get too flat
+        _, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+        return_ax = False
+    
+    event_size = init.event_width_samples * time_step
+    if topo_size_scaling: #does topo width scale with time interval of plot?
+        topo_size = event_size * magnify
+    else:
+        timescale = (max_time if max_time else (np.max(times_to_display) * time_step * 1.05)) + time_step
+        topo_size = .08 * timescale * magnify #8% of time scale
+
+    axes = []
+
+    #fix vmin/vmax across topos, while keeping symmetric
+    if vmax == None: #vmax = absolute max, unless no positive values
+        vmax=[]
+        for c in range(n_cond):
+            vmax.append(np.nanmax(np.abs(channels[c].data)) if np.nanmax(channels[c].data) >= 0 else 0)
+        vmax = np.max(vmax)
+    if vmin == None: #vmin = absolute max, unless no negative values
+        vmin=[]
+        for c in range(n_cond):
+            vmin.append(-np.nanmax(np.abs(channels[c].data)) if np.nanmin(channels[c].data) < 0 else 0)
+        vmin = np.min(vmin)
+        
+    rowheight = 1/n_iter 
+    
+    for iteration in np.arange(n_iter):
+        times_iteration = times[iteration]*time_step
+        channels_ = channels[iteration]
+        n_event = int(sum(np.isfinite(channels_[:,0])))
+        channels_ = channels_[:n_event,:]
+
+        ylow = iteration * rowheight
+        
+        for event in np.arange(n_event):
+            axes.append(ax.inset_axes([times_iteration[event] + event_size/2 - topo_size / 2, ylow+.1*rowheight,
+                                topo_size, rowheight*.8], transform=ax.get_xaxis_transform())) 
+            plot_topomap(channels_[event,:], channel_position, axes=axes[-1], show=False,
+                         cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours)
+
+            if event_lines:
+                #bottom of row + 5% if n_iter > 1
+                ylow = iteration * rowheight if n_iter == 1 else iteration * rowheight + .05 * rowheight
+                #top of row - 5% if n_iter > 1
+                yhigh = (iteration + 1) * rowheight if n_iter == 1 else (iteration + 1) * rowheight - .05 * rowheight
+
+                ax.vlines(times_iteration[event],ylow,yhigh, linestyles='dotted',color=event_color,alpha=.5,transform=ax.get_xaxis_transform())
+                ax.vlines(times_iteration[event]+event_size,ylow, yhigh, linestyles='dotted',color=event_color,alpha=.5, transform=ax.get_xaxis_transform())
+                ax.fill_between(np.array([times_iteration[event],times_iteration[event]+event_size]), ylow, yhigh, alpha=0.15,color=event_color, transform=ax.get_xaxis_transform(),edgecolor=None)
+        if times_to_display[iteration]:
+            #bottom of row + 5% if n_iter > 1
+            ylow = iteration * rowheight if n_iter == 1 else iteration * rowheight + .05 * rowheight
+            #top of row - 5% if n_iter > 1
+            yhigh = (iteration + 1) * rowheight if n_iter == 1 else (iteration + 1) * rowheight - .05 * rowheight
+            ax.vlines(times_to_display[iteration] * time_step,ylow,yhigh, linestyles='--',transform=ax.get_xaxis_transform())
+  
+    if colorbar:
+        cheight = "100%" if n_iter == 1 else f"{200/n_iter}%" 
+        axins = inset_axes(ax, width="0.5%", height=cheight, loc="lower left", bbox_to_anchor=(1.025, 0, 2, 1), bbox_transform=ax.transAxes, borderpad=0)
+        if isinstance(channel_position, Info):
+            lab = 'Voltage' if channel_position['chs'][0]['unit'] == 107 else channel_position['chs'][0]['unit']._name
+        else:
+            lab = 'Voltage'
+        plot_brain_colorbar(axins, dict(kind='value', lims = [vmin,0,vmax]),colormap=cmap, label = lab, bgcolor='.5', transparent=None)
+    if clabels:
+        ax.set_yticks(np.arange(len(clabels))+.5, clabels)
+        ax.set_ylabel('Condition')
+    else:
+        ax.set_yticks([])
+        ax.spines['left'].set_visible(False)
+  
+    if not return_ax:
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.set_ylim(0, n_iter) #-1
+        ax.set_xlabel(xlabel)
+        if title:
+            ax.set_title(title)
+        if np.any(max_time) == None and np.any(times_to_display) == None:
+            ax.set_xlim(0, np.nanmax(times)+np.nanmax(times)/10)
+    if plt.get_backend()[0:2] == 'Qt' or plt.get_backend() == 'nbAgg': #fixes issue with yscaling
+        plt.tight_layout()
+    if return_ax:
+        ax.set_ylim(0, n_iter) #-1
+        return ax
+    else:
+        plt.show() 
+
+
+
 def plot_components_sensor(hmp_data, positions):
     """
       This function is used to visualize the topomap of the HMP principal components.
