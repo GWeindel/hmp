@@ -146,7 +146,7 @@ def cluster_events(init, lkhs, mags, channels, times, method='time_x_lkh_mags', 
     for cl in range(best_n_clust):
         outliers = maha_distances[kmeans.labels_ == cl,1] < p_outlier if calc_outliers else np.repeat(False, np.sum(kmeans.labels_ == cl))
         cl_times[cl] = np.median(times[kmeans.labels_ == cl][~outliers])
-        cl_mags[cl,:] = np.median(mags[kmeans.labels_ == cl,:][~outliers,:])
+        cl_mags[cl,:] = np.median(mags[kmeans.labels_ == cl,:][~outliers,:], axis=0)
 
     #calc mags and params based on nclust, get max likelihood in each
     mags = cl_mags[np.argsort(cl_times), :] #mags are easy, just sort by time
