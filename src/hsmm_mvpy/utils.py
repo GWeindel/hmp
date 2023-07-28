@@ -528,6 +528,8 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         raise ValueError('Expected a xarray Dataset with data and event as DataArrays, check the data format')
     if not apply_zscore in ['all', 'participant', 'trial'] and not isinstance(apply_zscore,bool):
         raise ValueError('apply_zscore should be either a boolean or one of [\'all\', \'participant\', \'trial\']')
+    assert np.sum(np.isnan(data.groupby('participant').mean(['epochs','samples']).data.values)) == 0,\
+        'at least one participant has an empty channel'
     sfreq = data.sfreq
     if apply_zscore == True:
         apply_zscore = 'trial' #defaults to trial
@@ -538,6 +540,8 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
             mean_std = data.groupby(participants_variable).std(dim=...).data.mean()
             data = data.assign(mean_std=mean_std.data)
             data = data.groupby(participants_variable).map(standardize)
+
+
     if method == 'pca':
         from sklearn.decomposition import PCA
         var_cov_matrices = []
@@ -564,30 +568,28 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
             plt.tight_layout()
             plt.show()
             n_comp = int(input(f'How many PCs (90 and 99% explained variance at component n{np.where(np.cumsum(var/np.sum(var)) >= .90)[0][0]+1} and n{np.where(np.cumsum(var/np.sum(var)) >= .99)[0][0]+1})?'))
-
         pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
 
         pca_data = pca.fit_transform(var_cov_matrix)/pca.explained_variance_ # divided by explained var for compatibility with matlab's PCA
-        
         #Rebuilding pca PCs as xarray to ease computation
         coords = dict(channels=("channels", data.coords["channels"].values),
                      component=("component", np.arange(n_comp)))
         pca_data = xr.DataArray(pca_data, dims=("channels","component"), coords=coords)
         means = data.groupby('channels').mean(...)
         data = data @ pca_data
-
     elif method is None:
         data = data.rename({'channels':'component'})
         data['component'] = np.arange(len(data.component ))
-    
     # zscore either across all data, by participant (preferred), or by trial
-    match apply_zscore:
-        case 'all':
-            data = data.stack(comp=['component']).groupby('comp').map(zscore).unstack()
-        case 'participant':
-            data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore).unstack()
-        case 'trial':
-            data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
+    if apply_zscore:
+        match apply_zscore:
+            case 'all':
+                data = data.stack(comp=['component']).groupby('comp').map(zscore).unstack()
+            case 'participant':
+                data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore).unstack()
+            case 'trial':
+                data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
+
     data.attrs['components'] = pca_data
     data.attrs['sfreq'] = sfreq
     if stack_data:
