@@ -641,7 +641,7 @@ def LOOCV(data, participant, n_events, initial_fit, sfreq, event_width=50):
     #Extracting data of left out participant
     stacked_left_out = stack_data(data.sel(participant=participant, drop=False))
     model_left_out = hmp(stacked_left_out, sfreq=sfreq, event_width=event_width)
-    likelihood = model_left_out.estim_probs(fit.magnitudes.dropna('event').values, fit.parameters, n_events,True)
+    likelihood = model_left_out.estim_probs(fit.magnitudes.dropna('event').values, fit.parameters, n_events, None, True)
     return likelihood, participant
 
 def loocv_estimation(data, participant, sfreq, event_width):
