@@ -271,7 +271,7 @@ class hmp:
                 else:
                     parameters = np.tile(parameters, (len(magnitudes),1,1))
             if cpus>1: 
-                inputs = zip(itertools.repeat(n_events), magnitudes, parameters, itertools.repeat(maximization),
+                inputs = zip(magnitudes, parameters, itertools.repeat(maximization),
                         itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(min_iteration))
                 with mp.Pool(processes=cpus) as pool:
                     if starting_points > 1:
@@ -282,7 +282,7 @@ class hmp:
             else:#avoids problems if called in an already parallel function
                 estimates = []
                 for pars, mags in zip(parameters, magnitudes):
-                    estimates.append(self.EM(n_events, mags, pars, maximization,\
+                    estimates.append(self.EM(mags, pars, maximization,\
                     magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration))
                 resetwarnings()
             lkhs_sp = [x[0] for x in estimates]
@@ -307,7 +307,7 @@ class hmp:
                     traces[i, :len(_i)] = _i
             
         elif starting_points==1:#informed starting point
-            lkh, mags, pars, eventprobs, traces = self.EM(n_events, initial_m, initial_p,\
+            lkh, mags, pars, eventprobs, traces = self.EM(initial_m, initial_p,\
                                         maximization, magnitudes_to_fix, parameters_to_fix, \
                                          max_iteration, tolerance, min_iteration)
 
@@ -318,7 +318,7 @@ class hmp:
             initial_p = parameters
             if np.any(magnitudes)== None:
                 magnitudes = np.zeros((n_events, self.n_dims), dtype=np.float64)
-            lkh, mags, pars, eventprobs, traces = self.EM(n_events, magnitudes, parameters, maximization, magnitudes_to_fix, parameters_to_fix,\
+            lkh, mags, pars, eventprobs, traces = self.EM(magnitudes, parameters, maximization, magnitudes_to_fix, parameters_to_fix,\
                                         max_iteration, tolerance, min_iteration)
         if len(np.shape(eventprobs)) == 3:
             n_event_xr = n_event_xreventprobs = len(mags)
@@ -508,21 +508,22 @@ class hmp:
             else:
                 raise ValueError('Unknown starting point method requested, use "random" ')
             
-
             if cpus > 1: 
-                inputs = zip(magnitudes, parameters, itertools.repeat(mags_map), itertools.repeat(pars_map), itertools.repeat(conds), itertools.repeat(maximization),
-                        itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(min_iteration), itertools.repeat(1))
+                inputs = zip(magnitudes, parameters, itertools.repeat(maximization),
+                        itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(min_iteration),
+                        itertools.repeat(mags_map), itertools.repeat(pars_map), itertools.repeat(conds),itertools.repeat(1))
                 with mp.Pool(processes=cpus) as pool:
                     if starting_points > 1:
-                        estimates = list(tqdm(pool.imap(self._EM_conds_star, inputs), total=len(magnitudes)))
+                        estimates = list(tqdm(pool.imap(self._EM_star, inputs), total=len(magnitudes)))
                     else:
-                        estimates = pool.starmap(self.EM_conds, inputs)
+                        estimates = pool.starmap(self.EM, inputs)
  
             else:#avoids problems if called in an already parallel function
                 estimates = []
                 for pars, mags in zip(parameters, magnitudes):
-                    estimates.append(self.EM_conds(mags, pars, mags_map, pars_map, conds, maximization,\
-                    magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration, cpus))
+                    estimates.append(self.EM(mags, maximization,\
+                    magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration,
+                     pars, mags_map, pars_map, conds, cpus))
                 resetwarnings()
             
             lkhs_sp = [x[0] for x in estimates]
@@ -547,9 +548,10 @@ class hmp:
                     traces[i, :len(_i)] = _i
             
         elif starting_points == 1:#informed starting point
-            lkh, mags, pars, eventprobs, traces = self.EM_conds(initial_m, initial_p, mags_map, pars_map, conds,\
+            lkh, mags, pars, eventprobs, traces = self.EM(initial_m, initial_p, \
                                         maximization, magnitudes_to_fix, parameters_to_fix, \
-                                         max_iteration, tolerance, min_iteration, cpus)
+                                         max_iteration, tolerance, min_iteration, 
+                                         mags_map, pars_map, conds, cpus)
 
         else:#uninitialized    
             if np.any(parameters)== None:
@@ -561,7 +563,7 @@ class hmp:
                 magnitudes = np.zeros((n_events,self.n_dims), dtype=np.float64)
                 magnitudes = np.tile(magnitudes, (n_conds, 1, 1)) #broadcast across conditions
 
-            lkh, mags, pars, eventprobs, traces = self.EM_conds(magnitudes, parameters, mags_map, pars_map, conds, maximization, magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration, cpus)
+            lkh, mags, pars, eventprobs, traces = self.EM(magnitudes, parameters, maximization, magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration, mags_map, pars_map, conds, cpus)
         
         xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
         xrtraces = xr.DataArray(traces, dims=("em_iteration"), name="traces", coords={'em_iteration':range(len(traces))})
@@ -600,7 +602,7 @@ class hmp:
     def _EM_star(self, args): #for tqdm usage
         return self.EM(*args)
     
-    def EM(self, n_events, magnitudes, parameters,  maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1):  
+    def EM(self, magnitudes, parameters, maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1, mags_map=None, pars_map=None,conds=None, cpus=1):  
         '''
         Expectation maximization function underlying fit
 
@@ -642,135 +644,36 @@ class hmp:
         traces: ndarray
             Values of the log-likelihood for each EM iteration
         ''' 
-        if not isinstance(maximization, bool):#Backward compatibility with previous versions
-            warn('Deprecated use of the threshold function, use maximization and tolerance arguments. Setting tolerance at 1 for compatibility')
-            maximization = {1:True, 0:False}[maximization]
-            if maximization:#Backward compatibility, equivalent to previous threshold = 1
-                tolerance = 1
-        null_stages = np.where(parameters[:,1]<0)[0]
-        wrong_shape = np.where(parameters[:,0]!=self.shape)[0]
-        if len(null_stages)>0:
-            raise ValueError(f'Wrong scale parameter input, provided scale parameter(s) {null_stages} should be positive but have value {parameters[null_stages,:].prod(axis=1)}')
-        if len(wrong_shape)>0:
-            raise ValueError(f'Wrong shape parameter input, provided parameter(s) {wrong_shape} shape is {parameters[wrong_shape,0]} but expected  expected {self.shape}')
-        initial_parameters =  np.copy(parameters)
-        initial_magnitudes = np.copy(magnitudes)
+
+        if mags_map is not None or pars_map is not None or conds is not None: #condition version
+            assert mags_map is not None and pars_map is not None and conds is not None, 'Both magnitude and parameter maps need to be provided when doing EM based on conditions, as well as conditions.'
+            assert mags_map.shape[0] == pars_map.shape[0], 'Both maps need to indicate the same number of conditions.'
+            n_cond = mags_map.shape[0]
+        else:
+            n_cond = None
         
-        lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
-        traces = []
-        i = 0
-        if not maximization or n_events==0:
-            lkh_prev = lkh
-            magnitudes_prev = initial_magnitudes
-            parameters_prev = initial_parameters
-            eventprobs_prev = eventprobs
-        else:
-            lkh_prev = -np.inf
-            while i < max_iteration :#Expectation-Maximization algorithm
-                if i > min_iteration and tolerance > lkh - lkh_prev:
-                    break
-                    #As long as new run gives better likelihood, go on  
-                lkh_prev = lkh.copy()
-                magnitudes_prev = magnitudes.copy()
-                parameters_prev = parameters.copy()
-                eventprobs_prev = eventprobs.copy()
-                #Magnitudes from Expectation
-                if self.em_method == "max": 
-                    event_times = np.zeros((n_events+1, self.n_trials))
-                    event_times[-1,:] = self.mean_d
-                for event in range(n_events):
-                    if self.em_method == "max":
-                        #Take time point at maximum p() for each trial
-                        #Average channel activity at those points
-                        event_values = np.zeros((self.n_trials, self.n_dims))
-                        for trial in range(self.n_trials):
-                            event_times[event,trial]  = np.argmax(eventprobs[:, trial, event])
-                            event_values[trial] = self.events[self.starts[trial] + int(event_times[event,trial])]
-                        magnitudes[event] = np.mean(event_values, axis=0)
-                    elif self.em_method == "mean":
-                        for comp in range(self.n_dims):
-                            magnitudes[event,comp] = np.mean(np.sum( \
-                                eventprobs[:,:,event]*self.data_matrix[:,:,comp], axis=0))
-                        # scale cross-correlation with likelihood of the transition
-                        # sum by-trial these scaled activation for each transition events
-                        # average across trials
-                magnitudes[magnitudes_to_fix,:] = initial_magnitudes[magnitudes_to_fix,:].copy()
-                #Gamma parameters from Expectation
-                if self.em_method == "max":
-                    parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=np.mean(event_times,axis=1))
-                elif self.em_method == "mean":
-                    parameters = self.scale_parameters(eventprobs, n_events)
-                parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
-                lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
-                traces.append(lkh)
-                i += 1
-        if i == max_iteration:
-            warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
-        return lkh_prev, magnitudes_prev, parameters_prev, eventprobs_prev, np.array(traces)
-
-    def _EM_conds_star(self, args): #for tqdm usage
-        return self.EM_conds(*args)
-
-    def EM_conds(self, magnitudes, parameters, mags_map, pars_map, conds, maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1,cpus=1):  
-        '''
-        Expectation maximization function underlying fit
-
-        parameters
-        ----------
-        n_events : int
-            how many events are estimated
-        magnitudes : ndarray
-            2D ndarray n_events * components (or 3D iteration * n_events * n_components), initial conditions for events magnitudes. If magnitudes are estimated, the list provided is used as starting point,
-            if magnitudes are fixed, magnitudes estimated will be the same as the one provided. When providing a list, magnitudes need to be in the same order
-            _n_th magnitudes parameter is  used for the _n_th event
-        parameters : list
-            list of initial conditions for Gamma distribution parameters parameter (2D stage * parameter or 3D iteration * n_events * n_components). If parameters are estimated, the list provided is used as starting point,
-            if parameters are fixed, parameters estimated will be the same as the one provided. When providing a list, stage need to be in the same order
-            _n_th gamma parameter is  used for the _n_th stage
-        maximization: bool
-            If True (Default) perform the maximization phase in EM() otherwhise skip
-        magnitudes_to_fix: bool
-            To fix (True) or to estimate (False, default) the magnitudes of the channel contribution to the events
-        parameters_to_fix : bool
-            To fix (True) or to estimate (False, default) the parameters of the gammas
-        max_iteration: int
-            Maximum number of iteration for the expectation maximization
-        tolerance: float
-            Tolerance applied to the expectation maximization
-        min_iteration: int
-            Minimum number of iteration for the expectation maximization in the EM() function
-
-        Returns
-        -------
-        lkh_prev : float
-            Summed log probabilities
-        magnitudes_prev : ndarray
-            Magnitudes of the channel contribution to each event
-        parameters_prev: ndarray
-            parameterss for the gammas of each stage
-        eventprobs_prev: ndarray
-            Probabilities with shape max_samples*n_trials*n_events
-        traces: ndarray
-            Values of the log-likelihood for each EM iteration
-        ''' 
         if not isinstance(maximization, bool):#Backward compatibility with previous versions
             warn('Deprecated use of the threshold function, use maximization and tolerance arguments. Setting tolerance at 1 for compatibility')
             maximization = {1:True, 0:False}[maximization]
             if maximization:#Backward compatibility, equivalent to previous threshold = 1
                 tolerance = 1
-        null_stages = np.where(parameters[:,:,1]<0)[0]
-        wrong_shape = np.where(parameters[:,:,0]!=self.shape)[0]
+        
+        null_stages = np.where(parameters[...,-1].flatten()<0)[0]
+        wrong_shape = np.where(parameters[...,-2]!=self.shape)[0]
         if len(null_stages)>0:
-            raise ValueError(f'Wrong scale parameter input, provided scale parameter(s) {null_stages} should be positive but have value {parameters[null_stages,:].prod(axis=1)}')
+            raise ValueError(f'Wrong scale parameter input, provided scale parameter(s) {null_stages} should be positive but have value {parameters[...,-1].flatten()[null_stages]}')
         if len(wrong_shape)>0:
-            raise ValueError(f'Wrong shape parameter input, provided parameter(s) {wrong_shape} shape is {parameters[wrong_shape,0]} but expected  expected {self.shape}')
+            raise ValueError(f'Wrong shape parameter input, provided parameter(s) {wrong_shape} shape is {parameters[...,-2][wrong_shape]} but expected {self.shape}')
+        
         initial_parameters =  np.copy(parameters)
         initial_magnitudes = np.copy(magnitudes)
-        n_conds = mags_map.shape[0]
-        n_events = mags_map.shape[1] #nstates matlab
-        n_stages = n_events + 1
 
-        lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
+        n_events = magnitudes.shape[magnitudes.ndim-2]
+        
+        if n_cond is not None:
+            lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
+        else:
+            lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
 
         traces = []
         i = 0
@@ -789,70 +692,90 @@ class hmp:
                 magnitudes_prev = magnitudes.copy()
                 parameters_prev = parameters.copy()
                 eventprobs_prev = eventprobs.copy()
-                
-                #Magnitudes from Expectation
-                for c in range(n_conds):
-                    mags_cond = np.where(mags_map[c,:]>=0)[0]
-                    pars_cond = np.where(pars_map[c,:]>=0)[0]
-                    n_events_cond = len(mags_cond)
-                    trials_cond = np.where(conds == c)[0]
-                    n_trials_cond = len(trials_cond)
-                    mean_d_cond = np.mean(self.durations[trials_cond])
-                    if self.em_method == "max": 
-                        event_times = np.zeros((n_events+1,n_trials_cond))
-                        event_times[-1,:] = mean_d_cond
-                    for event in mags_cond:
-                        if self.em_method == "max":
-                            #Take time point at maximum p() for each trial
-                            #Average channel activity at those points
-                            event_values = np.zeros((n_trials_cond, self.n_dims))
-                            for trial in range(n_trials_cond):
-                                event_times[event,trial] = np.argmax(eventprobs[:, trials_cond[trial], event])
-                                event_values[trial] = self.events[self.starts[trials_cond[trial]] + int(event_times[event,trial])]
-                            magnitudes[c, event, :] = np.mean(event_values, axis=0)
-                        elif self.em_method == "mean":
-                            for comp in range(self.n_dims):
-                                magnitudes[c,event,comp] = np.mean(np.sum( \
-                                    eventprobs[:,trials_cond,event]*self.data_matrix[:,trials_cond,comp], axis=0))
-                            # scale cross-correlation with likelihood of the transition
-                            # sum by-trial these scaled activation for each transition events
-                            # average across trials
 
-                    magnitudes[c,magnitudes_to_fix,:] = initial_magnitudes[c,magnitudes_to_fix,:].copy()
-                
-                    #Gamma parameters from Expectation
-                    if self.em_method == "max":
-                        parameters[c,pars_cond,:] = self.scale_parameters(eventprobs=None, n_events=n_events_cond, averagepos=np.mean(event_times[pars_cond,:],axis=1))
-                    elif self.em_method == "mean":
-                        #have to calc averagepos here as mean_d is condition dependent
-                        event_times_mean = np.concatenate([np.arange(1,self.max_d+1) @ eventprobs[np.ix_(range(self.max_d),trials_cond, mags_cond)].mean(axis=1), [mean_d_cond]])
-                        parameters[c,pars_cond,:] = self.scale_parameters(eventprobs=None, n_events=n_events_cond, averagepos=event_times_mean)                            
-                            
-                    parameters[c,parameters_to_fix, :] = initial_parameters[c,parameters_to_fix,:].copy()
-                
-                #set mags to mean if requested in map
-                for m in range(n_events):
-                    mag_sets = np.unique(mags_map[:,m])
-                    for m_set in mag_sets:
-                        if m_set >= 0:
-                            magnitudes[mags_map[:,m] == m_set,m,:] = np.mean(magnitudes[mags_map[:,m] == m_set,m,:],axis=0)
+                if n_cond is not None: #condition dependent
+                    for c in range(n_cond): #get params/mags
 
-                #set params to mean if requested in map
-                for p in range(n_stages):
-                    par_sets = np.unique(pars_map[:,p])
-                    for p_set in par_sets:
-                        parameters[pars_map[:,p] == p_set,p,:] = np.mean(parameters[pars_map[:,p] == p_set,p,:],axis=0)
+                        mags_map_cond = np.where(mags_map[c,:]>=0)[0]
+                        pars_map_cond = np.where(pars_map[c,:]>=0)[0]
+                        epochs_cond = np.where(conds == c)[0]
+                        
+                        #get mags/pars by condition
+                        magnitudes[c,mags_map_cond,:], parameters[c,pars_map_cond,:] = self.get_magnitudes_parameters_expectation(eventprobs[np.ix_(range(self.max_d),epochs_cond, mags_map_cond)], subset_epochs=epochs_cond)
 
-                lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
+                        magnitudes[c,magnitudes_to_fix,:] = initial_magnitudes[c,magnitudes_to_fix,:].copy()
+                        parameters[c,parameters_to_fix,:] = initial_parameters[c,parameters_to_fix,:].copy()
+                    
+                    #set mags to mean if requested in map
+                    for m in range(n_events):
+                        for m_set in np.unique(mags_map[:,m]):
+                            if m_set >= 0:
+                                magnitudes[mags_map[:,m] == m_set,m,:] = np.mean(magnitudes[mags_map[:,m] == m_set,m,:],axis=0)
+
+                    #set params to mean if requested in map
+                    for p in range(n_events+1):
+                        for p_set in np.unique(pars_map[:,p]):
+                            if p_set >= 0:
+                                parameters[pars_map[:,p] == p_set,p,:] = np.mean(parameters[pars_map[:,p] == p_set,p,:],axis=0)
+
+                else: #general
+                    magnitudes, parameters = self.get_magnitudes_parameters_expectation(eventprobs)
+                    magnitudes[magnitudes_to_fix,:] = initial_magnitudes[magnitudes_to_fix,:].copy()
+                    parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
+
+                if n_cond is not None:
+                    lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
+                else:
+                    lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
+        
                 traces.append(lkh)
                 i += 1
 
         if i == max_iteration:
             warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
         return lkh_prev, magnitudes_prev, parameters_prev, eventprobs_prev, np.array(traces)
-    
 
-    def estim_probs(self, magnitudes, parameters, n_events, lkh_only=False):
+    def get_magnitudes_parameters_expectation(self,eventprobs,subset_epochs=None):
+        
+        n_events = eventprobs.shape[2]
+        n_trials = eventprobs.shape[1]
+        if subset_epochs is None: #all trials
+            subset_epochs = range(n_trials)
+
+        magnitudes = np.zeros((n_events, self.n_dims))
+
+        #Magnitudes from Expectation
+        if self.em_method == "max": 
+            event_times = np.zeros((n_events+1, n_trials))
+            event_times[-1,:] = self.durations[subset_epochs]
+        for event in range(n_events):
+            if self.em_method == "max":
+                #Take time point at maximum p() for each trial
+                #Average channel activity at those points
+                event_values = np.zeros((n_trials, self.n_dims))
+                for trial in range(n_trials):
+                    event_times[event,trial]  = np.argmax(eventprobs[:, trial, event])
+                    event_values[trial] = self.events[self.starts[subset_epochs][trial] + int(event_times[event,trial])]
+                magnitudes[event] = np.mean(event_values, axis=0)
+            elif self.em_method == "mean":
+                for comp in range(self.n_dims):
+                    magnitudes[event,comp] = np.mean(np.sum( \
+                        eventprobs[:,:,event]*self.data_matrix[:,subset_epochs,comp], axis=0))
+                # scale cross-correlation with likelihood of the transition
+                # sum by-trial these scaled activation for each transition events
+                # average across trials
+        
+        #Gamma parameters from Expectation
+        if self.em_method == "max":
+            parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=np.mean(event_times,axis=1))
+        elif self.em_method == "mean":
+            #calc averagepos here as mean_d can be condition dependent, whereas scale_parameters() assumes it's general
+            event_times_mean = np.concatenate([np.arange(1,self.max_d+1) @ eventprobs.mean(axis=1), [np.mean(self.durations[subset_epochs])]])
+            parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=event_times_mean)                            
+
+        return [magnitudes, parameters]
+
+    def estim_probs(self, magnitudes, parameters, n_events=None, subset_epochs=None, lkh_only=False):
         '''
         parameters
         ----------
@@ -876,23 +799,39 @@ class hmp:
         eventprobs : ndarray
             Probabilities with shape max_samples*n_trials*n_events
         '''
+        if n_events is None:
+            n_events = magnitudes.shape[0]
         n_stages = n_events+1
+
+        if subset_epochs is not None:
+            if len(subset_epochs) == self.n_trials: #boolean indices
+                subset_epochs = np.where(subset_epochs)[0]
+            n_trials = len(subset_epochs)
+            durations = self.durations[subset_epochs]
+            starts = self.starts[subset_epochs]
+            ends = self.ends[subset_epochs]
+        else:
+            n_trials = self.n_trials
+            durations = self.durations
+            starts = self.starts
+            ends = self.ends
+
         gains = np.zeros((self.n_samples, n_events), dtype=np.float64)
         for i in range(self.n_dims):
             # computes the gains, i.e. congruence between the pattern shape
             # and the data given the magnitudes of the sensors
             gains = gains + self.events[:,i][np.newaxis].T * magnitudes[:,i]
         gains = np.exp(gains)
-        probs = np.zeros([self.max_d,self.n_trials,n_events], dtype=np.float64) # prob per trial
-        probs_b = np.zeros([self.max_d,self.n_trials,n_events], dtype=np.float64)# Sample and state reversed
-        for trial in np.arange(self.n_trials):
+        probs = np.zeros([self.max_d, n_trials,n_events], dtype=np.float64) # prob per trial
+        probs_b = np.zeros([self.max_d, n_trials,n_events], dtype=np.float64)# Sample and state reversed
+        for trial in np.arange(n_trials):
             # Following assigns gain per trial to variable probs 
-            probs[:self.durations[trial],trial,:] = \
-                gains[self.starts[trial]:self.ends[trial]+1,:] 
+            probs[:durations[trial],trial,:] = \
+                gains[starts[trial]:ends[trial]+1,:] 
             # Same but samples and events are reversed, this allows to compute
             # fwd and bwd in the same way in the following steps
-            probs_b[:self.durations[trial],trial,:] = \
-                gains[self.starts[trial]:self.ends[trial]+1,:][::-1,::-1]
+            probs_b[:durations[trial],trial,:] = \
+                gains[starts[trial]:ends[trial]+1,:][::-1,::-1]
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage scale
         locations = np.concatenate([[0], np.repeat(self.location, n_events)])#all stages except first stage have a location (mainly to avoid overlap in cross-correlated signal)
@@ -901,18 +840,18 @@ class hmp:
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
 
         if n_events > 0:
-            forward = np.zeros((self.max_d, self.n_trials, n_events), dtype=np.float64)
-            backward = np.zeros((self.max_d, self.n_trials, n_events), dtype=np.float64)
+            forward = np.zeros((self.max_d, n_trials, n_events), dtype=np.float64)
+            backward = np.zeros((self.max_d, n_trials, n_events), dtype=np.float64)
             # Computing forward and backward helper variable
             #  when stage = 0:
             forward[:,:,0] = np.tile(pmf[:,0][np.newaxis].T,\
-                (1,self.n_trials))*probs[:,:,0] #first stage transition is p(B) * p(d)
+                (1,n_trials))*probs[:,:,0] #first stage transition is p(B) * p(d)
             backward[:,:,0] = np.tile(pmf_b[:,0][np.newaxis].T,\
-                        (1,self.n_trials)) #Reversed gamma (i.e. last stage) without probs as last event ends at time T
+                        (1,n_trials)) #Reversed gamma (i.e. last stage) without probs as last event ends at time T
 
             for event in np.arange(1,n_events):#Following stage transitions integrate previous transitions
                 add_b = backward[:,:,event-1]*probs_b[:,:,event-1]#Next stage in back
-                for trial in np.arange(self.n_trials):
+                for trial in np.arange(n_trials):
                     # convolution between gamma * gains at previous event and event
                     forward[:,trial,event] = self.convolution(forward[:,trial,event-1], pmf[:,event])[:self.max_d]
                     # same but backwards
@@ -920,9 +859,9 @@ class hmp:
                 forward[:,:,event] = forward[:,:,event]*probs[:,:,event]
             #re-arranging backward to the expected variable
             backward = backward[:,:,::-1]#undoes stage inversion
-            for trial in np.arange(self.n_trials):#Undoes sample inversion
-                backward[:self.durations[trial],trial,:] = \
-                    backward[:self.durations[trial],trial,:][::-1]
+            for trial in np.arange(n_trials):#Undoes sample inversion
+                backward[:durations[trial],trial,:] = \
+                    backward[:durations[trial],trial,:][::-1]
             
             eventprobs = forward * backward
             eventprobs = np.clip(eventprobs, 0, None) #floating point precision error
@@ -953,15 +892,15 @@ class hmp:
             #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
             
         else:
-            forward = np.zeros((self.max_d, self.n_trials), dtype=np.float64)
-            backward = np.zeros((self.max_d, self.n_trials), dtype=np.float64)
+            forward = np.zeros((self.max_d, n_trials), dtype=np.float64)
+            backward = np.zeros((self.max_d, n_trials), dtype=np.float64)
             forward[:,:] = np.tile(pmf[:,0][np.newaxis].T,\
-                (1,self.n_trials))
+                (1,n_trials))
             backward[:,:] = np.tile(pmf_b[:,0][np.newaxis].T,\
-                        (1,self.n_trials))
-            for trial in np.arange(self.n_trials):#Undoes sample inversion
-                backward[:self.durations[trial],trial] = \
-                    backward[:self.durations[trial],trial][::-1]
+                        (1,n_trials))
+            for trial in np.arange(n_trials):#Undoes sample inversion
+                backward[:durations[trial],trial] = \
+                    backward[:durations[trial],trial][::-1]
             eventprobs = forward * backward
             likelihood = np.sum(np.log(eventprobs[:,:].sum(axis=0)))#sum over max_samples to avoid 0s in log
             eventprobs = eventprobs / eventprobs.sum(axis=0)
@@ -1001,11 +940,14 @@ class hmp:
 
         if cpus > 1:
             with mp.Pool(processes=cpus) as pool:
-                likes_events_cond = pool.starmap(self._estim_probs_maps, 
-                    zip(magnitudes, parameters, [conds == c for c in range(n_conds)], mags_map, pars_map))
+                likes_events_cond = pool.starmap(self.estim_probs, 
+                    zip([magnitudes[c, mags_map[c,:]>=0, :] for c in range(n_conds)], [parameters[c, pars_map[c,:]>=0, :] for c in range(n_conds)], itertools.repeat(None),
+                        [conds == c for c in range(n_conds)], itertools.repeat(False)))
         else:
             for c in range(n_conds):
-                likes_events_cond.append(self._estim_probs_maps(magnitudes[c,:], parameters[c,:], conds == c, mags_map[c,:], pars_map[c,:]))
+                magnitudes_cond = magnitudes[c, mags_map[c,:]>=0, :] #select existing magnitudes
+                parameters_cond = parameters[c, pars_map[c,:]>=0, :] #select existing params
+                likes_events_cond.append(self.estim_probs(magnitudes_cond, parameters_cond, subset_epochs = (conds == c)))
 
         likelihood = np.sum([x[0] for x in likes_events_cond])
         eventprobs = np.zeros((self.max_d, len(conds), mags_map.shape[1]))
@@ -1016,114 +958,6 @@ class hmp:
             return likelihood
         else:
             return [likelihood, eventprobs]
-
-
-    def _estim_probs_maps(self, magnitudes_cond, parameters_cond, epochs_cond, mags_map_cond, pars_map_cond):
-    
-        magnitudes = magnitudes_cond[mags_map_cond>=0, :] #select existing magnitudes
-        parameters = parameters_cond[pars_map_cond>=0, :] #select existing params
-
-        n_events = magnitudes.shape[0] #nstates matlab
-        n_stages = n_events + 1
-        
-        #lens matlab = self.durations #but should be by condition
-        #ndims matlab = self.n_dims
-        #nsamples matlab = self.n_samples
-        n_trials_cond = sum(epochs_cond)
-        durations_cond = self.durations[epochs_cond]
-        starts_cond = self.starts[epochs_cond]
-        ends_cond = self.ends[epochs_cond]
-
-        gains = np.zeros((self.n_samples, n_events), dtype=np.float64) #samples not by condition! magnitudes are by cond
-        for i in range(self.n_dims):
-            # computes the gains, i.e. congruence between the pattern shape
-            # and the data given the magnitudes of the sensors
-            gains = gains + self.events[:,i][np.newaxis].T * magnitudes[:,i]
-        gains = np.exp(gains)
-        probs = np.zeros([self.max_d, n_trials_cond, n_events], dtype=np.float64) # prob per trial
-        probs_b = np.zeros([self.max_d, n_trials_cond, n_events], dtype=np.float64)# Sample and state reversed
-        for trial in np.arange(n_trials_cond):
-            # Following assigns gain per trial to variable probs 
-            probs[:durations_cond[trial],trial,:] = \
-                gains[starts_cond[trial]:ends_cond[trial]+1,:]
-            # Same but samples and events are reversed, this allows to compute
-            # fwd and bwd in the same way in the following steps
-            probs_b[:durations_cond[trial],trial,:] = \
-                gains[starts_cond[trial]:ends_cond[trial]+1,:][::-1,::-1]
-
-        pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage scale
-        locations = np.concatenate([[0], np.repeat(self.location, n_events)])#all stages except first stage have a location (mainly to avoid overlap in cross-correlated signal)
-        for stage in range(n_stages):
-            pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1], locations[stage])
-        pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
-
-        if n_events > 0:
-            forward = np.zeros((self.max_d, n_trials_cond, n_events), dtype=np.float64)
-            backward = np.zeros((self.max_d, n_trials_cond, n_events), dtype=np.float64)
-            # Computing forward and backward helper variable
-            #  when stage = 0:
-            forward[:,:,0] = np.tile(pmf[:,0][np.newaxis].T,\
-                (1,n_trials_cond))*probs[:,:,0] #first stage transition is p(B) * p(d)
-            backward[:,:,0] = np.tile(pmf_b[:,0][np.newaxis].T,\
-                        (1,n_trials_cond)) #Reversed gamma (i.e. last stage) without probs as last event ends at time T
-
-            for event in np.arange(1,n_events):#Following stage transitions integrate previous transitions
-                add_b = backward[:,:,event-1]*probs_b[:,:,event-1]#Next stage in back
-                for trial in np.arange(n_trials_cond):
-                    # convolution between gamma * gains at previous event and event
-                    forward[:,trial,event] = self.convolution(forward[:,trial,event-1], pmf[:,event])[:self.max_d]
-                    # same but backwards
-                    backward[:,trial,event] = self.convolution(add_b[:,trial], pmf_b[:, event])[:self.max_d]
-                forward[:,:,event] = forward[:,:,event]*probs[:,:,event]
-            #re-arranging backward to the expected variable
-            backward = backward[:,:,::-1]#undoes stage inversion
-            for trial in np.arange(n_trials_cond):#Undoes sample inversion
-                backward[:durations_cond[trial],trial,:] = \
-                    backward[:durations_cond[trial],trial,:][::-1]
-            
-            eventprobs = forward * backward
-            eventprobs = np.clip(eventprobs, 0, None) #floating point precision error
-            
-            #eventprobs can be so low as to be 0, avoid dividing by 0
-            #this only happens when magnitudes are 0 and gammas are randomly determined
-            if (eventprobs.sum(axis=0) == 0).any() or (eventprobs[:,:,0].sum(axis=0) == 0).any(): 
-
-                #set likelihood
-                eventsums = eventprobs[:,:,0].sum(axis=0)
-                eventsums[eventsums != 0] = np.log(eventsums[eventsums != 0])
-                eventsums[eventsums == 0] = -np.inf
-                likelihood = np.sum(eventsums)
-
-                #set eventprobs, check if any are 0   
-                eventsums = eventprobs.sum(axis=0)
-                if (eventsums == 0).any():
-                    for i in range(eventprobs.shape[0]):
-                        eventprobs[i,:,:][eventsums == 0] = 0
-                        eventprobs[i,:,:][eventsums != 0] = eventprobs[i,:,:][eventsums != 0] / eventsums[eventsums != 0]
-                else:
-                    eventprobs = eventprobs / eventprobs.sum(axis=0)
-
-            else:
-
-                likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
-                eventprobs = eventprobs / eventprobs.sum(axis=0)
-            #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
-            
-        else:
-            forward = np.zeros((self.max_d, n_trials_cond), dtype=np.float64)
-            backward = np.zeros((self.max_d, n_trials_cond), dtype=np.float64)
-            forward[:,:] = np.tile(pmf[:,0][np.newaxis].T,\
-                (1,n_trials_cond))
-            backward[:,:] = np.tile(pmf_b[:,0][np.newaxis].T,\
-                        (1,n_trials_cond))
-            for trial in np.arange(n_trials_cond):#Undoes sample inversion
-                backward[:durations_cond[trial],trial] = \
-                    backward[:durations_cond[trial],trial][::-1]
-            eventprobs = forward * backward
-            likelihood = np.sum(np.log(eventprobs[:,:].sum(axis=0)))#sum over max_samples to avoid 0s in log
-            eventprobs = eventprobs / eventprobs.sum(axis=0)
-        
-        return [likelihood, eventprobs]
 
     def distribution_pmf(self, shape, scale, location):
         '''
@@ -1748,14 +1582,14 @@ class hmp:
                 magnitudes = np.tile(magnitudes, (len(parameters), 1, 1))
             with mp.Pool(processes=self.cpus) as pool:
                 estimates = pool.starmap(self.EM, 
-                    zip(itertools.repeat(1), magnitudes, parameters, 
+                    zip(magnitudes, parameters, 
                         itertools.repeat(maximization), itertools.repeat(magnitudes_to_fix), 
                         itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration),
                         itertools.repeat(tolerance), itertools.repeat(min_iteration)))
         else:
             estimates = []
             for pars, mags in zip(parameters, magnitudes):
-                estimates.append(self.EM(1, mags, pars, maximization, magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration=min_iteration))
+                estimates.append(self.EM(mags, pars, maximization, magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration=min_iteration))
         lkhs_sp = np.array([x[0] for x in estimates])
         mags_sp = np.array([x[1] for x in estimates])
         pars_sp = np.array([x[2] for x in estimates])
