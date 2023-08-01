@@ -1,0 +1,5 @@
+{
+    "docify.commentService.inlineComments": false,
+    "docify.translateService.docstringFormat": "Doxygen",
+    "docify.commentService.docstringFormat": "Google"
+}
