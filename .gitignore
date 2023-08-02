@@ -19,3 +19,4 @@ __pycache__/
 !tutorials/sample_data/sample_data.nc
 *.mat
 .DS_Store
+.vscode
