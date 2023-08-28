@@ -1636,15 +1636,6 @@ class hmp:
          Returns: 
          	 A tuple containing the fitted parameters and the fitted
         """
-        '''
-
-        parameters
-        ----------
-        Cumulative fit method.
-        step = size of steps across samples
-        end = max explored duration
-        threshold = 
-        '''
         if cpus is None:
             cpus = self.cpus
         if end is None:
