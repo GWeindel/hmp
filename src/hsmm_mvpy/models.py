@@ -1208,37 +1208,34 @@ class hmp:
         n_events = estimated.event.count().values
         n_trials = estimated.trial_x_participant.count().values
         n_channels = channels.channels.count().values
+
+        channels = channels.sel(trial_x_participant=estimated.trial_x_participant) #subset to estimated
+
         if not extra_dim:
-            event_values = np.zeros((n_trials, n_events, n_channels))*np.nan
-            for event in range(n_events):
-                #Take time point at maximum p() for each trial
-                #Average channel activity at those points            
-                for t, trial in enumerate(estimated.trial_x_participant):
-                    time = estimated.sel(trial_x_participant=trial, event=event).argmax('samples')
-                    event_values[t, event, :] = channels.sel(trial_x_participant=trial, samples=time+shift).values
+            event_values = channels.sel(samples=estimated.argmax('samples') + shift).values
             event_values = xr.DataArray(event_values, 
-                        dims = ["trial_x_participant","event","channels"],
+                        dims = ["channels","trial_x_participant","event",],
                         coords={"trial_x_participant":estimated.trial_x_participant,
                                 "event": estimated.event,
                                 "channels":channels.channels
                         })
+            event_values = event_values.transpose("trial_x_participant","event","channels") #to maintain previous behavior
+
         else:
             n_dim = estimated[extra_dim].count().values
-            event_values = np.zeros((n_dim, n_trials, n_events, n_channels))*np.nan
+            event_values = np.zeros((n_dim, n_channels, n_trials, n_events))*np.nan
             for x in range(n_dim):
-                for event in range(n_events):
-                    #Take time point at maximum p() for each trial
-                    #Average channel activity at those points     
-                    for t, trial in enumerate(estimated[x].trial_x_participant):
-                        time = estimated[x].sel(trial_x_participant=trial, event=event).argmax('samples')
-                        event_values[x, t, event, :] = channels.sel(trial_x_participant=trial, samples=time+shift).values
+                event_values[x,:,:,:] = channels.sel(samples=estimated[x].argmax('samples') + shift).values
+                
             event_values = xr.DataArray(event_values, 
-                    dims = [extra_dim, "trial_x_participant","event","channels"],
+                    dims = [extra_dim, "channels", "trial_x_participant","event"],
                     coords={extra_dim:estimated[extra_dim],
                             "trial_x_participant":estimated.trial_x_participant,
                             "event": estimated.event,
                             "channels":channels.channels
                     })
+            event_values = event_values.transpose(extra_dim, "trial_x_participant","event","channels") #to maintain previous behavior
+
         if mean:
             return event_values.mean('trial_x_participant')
         else:

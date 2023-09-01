@@ -86,38 +86,62 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     from mne.viz import plot_brain_colorbar, plot_topomap
     from mne.io.meas_info import Info
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    #from mpl_toolkits.axes_grid1 import make_axes_locatable
 
     return_ax = True
+    #if not times specified, plot average RT
     if times_to_display is None:
         times_to_display = init.mean_d
+    
+    #set xlabel depending on time_step
     if xlabel is None:
         if time_step == 1:
             xlabel = 'Time (in samples)'
         else:
             xlabel = 'Time'
+
+    #set color of event_lines 
     if event_lines == True:
         event_color='tab:orange'
     else:
         event_color=event_lines
 
-    
+    #if estimated is an fitted HMP instance
     if isinstance(estimated, (xr.DataArray, xr.Dataset)) and 'event' in estimated:
-        if ydim is None and 'n_events' in estimated.dims:
-            if estimated.n_events.count() > 1:
-                ydim = 'n_events'
-        if ydim is not None and not skip_channels_computation:
-            channels = init.compute_topologies(channels, estimated, init.event_width_samples, ydim).data
-        elif not skip_channels_computation:
-            channels = init.compute_topologies(channels, estimated, init.event_width_samples).data
-        times = init.compute_times(init, estimated, mean=True).data
-        channels[times == 0] = np.nan#removes the empty topologies, e.g. in the case of mutliple varying number of events
-
-    else:#assumes times already computed
+        if ydim is None and 'n_events' in estimated.dims: #and there are multiple different fits (eg backward estimation)
+            if estimated.n_events.count() > 1: #and we really have more than a singel fit
+                ydim = 'n_events' #set ydim to 'n_events'
+        if not skip_channels_computation:
+            channels = init.compute_topologies(channels, estimated, init.event_width_samples, ydim).data #compute topologies
+        times = init.compute_times(init, estimated, mean=True).data #compute corresponding times
+        channels[times == 0] = np.nan #removes the empty topologies, e.g. in the case of multiple varying number of events
+    else:#assumes times/topologies already computed
         times = estimated
+
+    
     if len(np.shape(channels)) == 2:
         channels = channels[np.newaxis]
-    n_iter = np.shape(channels)[0]
+    n_iter = np.shape(channels)[0] #number of rows
+    if n_iter == 1:
+        times = [times]
+    times = np.array(times, dtype=object)
+
+    event_size = init.event_width_samples * time_step
+    
+    #based the size of the topologies on event_size and magnify or only on magnify
+    if topo_size_scaling: #does topo width scale with time interval of plot?
+        topo_size = event_size * magnify
+    else:
+        timescale = (max_time if max_time else (np.max(times_to_display) * time_step * 1.05)) + time_step
+        topo_size = .08 * timescale * magnify #8% of time scale
+
+    #fix vmin/vmax across topos, while keeping symmetric
+    if vmax == None: #vmax = absolute max, unless no positive values
+        vmax = np.nanmax(np.abs(channels[:])) if np.nanmax(channels[:]) >= 0 else 0
+    if vmin == None: #vmin = absolute max, unless no negative values
+        vmin = -np.nanmax(np.abs(channels[:])) if np.nanmin(channels[:]) < 0 else 0
+ 
+    #make axis
     if ax is None:
         if figsize == None:
             if n_iter == 1:
@@ -127,37 +151,29 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
 
         _, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
         return_ax = False
-    event_size = init.event_width_samples * time_step
-    if topo_size_scaling: #does topo width scale with time interval of plot?
-        topo_size = event_size * magnify
-    else:
-        timescale = (max_time if max_time else (np.max(times_to_display) * time_step * 1.05)) + time_step
-        topo_size = .08 * timescale * magnify #8% of time scale
+
     axes = []
-    if n_iter == 1:
-        times = [times]
-    times = np.array(times, dtype=object)
-    #fix vmin/vmax across topos, while keeping symmetric
-    if vmax == None: #vmax = absolute max, unless no positive values
-        vmax = np.nanmax(np.abs(channels[:])) if np.nanmax(channels[:]) >= 0 else 0
-    if vmin == None: #vmin = absolute max, unless no negative values
-        vmin = -np.nanmax(np.abs(channels[:])) if np.nanmin(channels[:]) < 0 else 0
- 
+
+    #plot row by row
     for iteration in np.arange(n_iter):
         times_iteration = times[iteration]*time_step
-
         channels_ = channels[iteration,:,:]
         n_event = int(sum(np.isfinite(channels_[:,0])))
         channels_ = channels_[:n_event,:]
+
+        #plot topology per event
         for event in np.arange(n_event):
 
             rowheight = 1/n_iter 
             ylow = iteration * rowheight
+            
+            #topology
             axes.append(ax.inset_axes([times_iteration[event] + event_size/2 - topo_size / 2, ylow+.1*rowheight,
                                 topo_size, rowheight*.8], transform=ax.get_xaxis_transform())) 
             plot_topomap(channels_[event,:], channel_position, axes=axes[-1], show=False,
                          cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours)
 
+            #lines/fill of detected event
             if event_lines:
                 #bottom of row + 5% if n_iter > 1
                 ylow = iteration * rowheight if n_iter == 1 else iteration * rowheight + .05 * rowheight
@@ -168,6 +184,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
                 ax.vlines(times_iteration[event]+event_size,ylow, yhigh, linestyles='dotted',color=event_color,alpha=.5, transform=ax.get_xaxis_transform())
                 ax.fill_between(np.array([times_iteration[event],times_iteration[event]+event_size]), ylow, yhigh, alpha=0.15,color=event_color, transform=ax.get_xaxis_transform(),edgecolor=None)
 
+    #legend
     if colorbar:
         cheight = "100%" if n_iter == 1 else f"{200/n_iter}%" 
         axins = inset_axes(ax, width="0.5%", height=cheight, loc="lower left", bbox_to_anchor=(1.025, 0, 2, 1), bbox_transform=ax.transAxes, borderpad=0)
@@ -176,6 +193,8 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         else:
             lab = 'Voltage'
         plot_brain_colorbar(axins, dict(kind='value', lims = [vmin,0,vmax]),colormap=cmap, label = lab, bgcolor='.5', transparent=None)
+
+    #plot ylabels
     if isinstance(ylabels, dict):
         ax.set_yticks(np.arange(len(list(ylabels.values())[0]))+.5,
                       [str(x) for x in list(ylabels.values())[0]])
@@ -183,7 +202,10 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     else:
         ax.set_yticks([])
         ax.spines['left'].set_visible(False)
+    
+    #add vlines across all rows
     __display_times(ax, times_to_display, 0, time_step, max_time, times, n_iter)
+
     if not return_ax:
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
