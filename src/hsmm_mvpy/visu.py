@@ -22,7 +22,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, conds=None
     channels : ndarray | xr.Dataarray 
         a 2D or 3D matrix of channel activity with channels and event as dimension (+ eventually a varying dimension) OR
         the original EEG data in HMP format
-    estimated : ndarray / hmp object / list
+    estimated : ndarray | hmp object | list
         a 1D or 2D matrix of times with event as dimension OR directly the results from a fitted hmp OR list of condition fits from fit_single_conds() 
     channel_position : ndarray
         Either a 2D array with dimension channel and [x,y] storing channel location in meters or an info object from
