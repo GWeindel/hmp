@@ -9,7 +9,7 @@ from itertools import cycle
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold']
 
 
-def plot_topo_timecourse(channels, estimated, channel_position, init, conds=None, time_step=1, ydim=None,
+def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=1, ydim=None,
                 figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
                 ylabels=[], xlabel = None, max_time = None, vmin=None, vmax=None, title=False, ax=None, 
                 sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange',
@@ -22,15 +22,13 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, conds=None
     channels : ndarray | xr.Dataarray 
         a 2D or 3D matrix of channel activity with channels and event as dimension (+ eventually a varying dimension) OR
         the original EEG data in HMP format
-    estimated : ndarray | hmp object | list
-        a 1D or 2D matrix of times with event as dimension OR directly the results from a fitted hmp OR list of condition fits from fit_single_conds() 
+    estimated : ndarray | hmp object
+        a 1D or 2D matrix of times with event as dimension OR directly the results from a fitted hmp (either from fit_single or fit_single_conds)
     channel_position : ndarray
         Either a 2D array with dimension channel and [x,y] storing channel location in meters or an info object from
         the mne package containning digit. points for channel location
     init : float
         initialized HMP object
-    conds : ndarray
-        1D array with condition per epoch, required if estimated is a list of condition fits
     time_step : float
         What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
         1/sf or 1000/sf where sf is the sampling frequency of the data
@@ -91,15 +89,11 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, conds=None
 
     cond_plot = False
 
-    #if estimated is a list, check conds is provided, prep conds
-    if isinstance(estimated, list):
-        assert conds is not None, 'conds need to be provided if estimated is a list'
-        #make sure conds start at 0
-        for ci, c in enumerate(np.unique(conds)):
-            conds[conds == c] = ci
-        assert len(np.unique(conds)) == len(estimated), 'number of unique conditions should correspond to number of estimated models'
-        n_cond = len(estimated)
+    #if estimated is a list, prep conds
+    if isinstance(estimated, xr.Dataset) and 'condition' in estimated.dims:
         cond_plot = True
+        conds = estimated.condition_trial.values
+        n_cond = len(estimated.condition.values)
 
         #make times_to_display in list with lines per condition
         if times_to_display is None:
@@ -132,30 +126,23 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, conds=None
     else:
         event_color=event_lines
 
-    #if estimated is an fitted HMP instance
+    #if estimated is an fitted HMP instance with 
     if isinstance(estimated, (xr.DataArray, xr.Dataset)) and 'event' in estimated:
-        if ydim is None and 'n_events' in estimated.dims: #and there are multiple different fits (eg backward estimation)
-            if estimated.n_events.count() > 1: #and we really have more than a singel fit
+        if ydim is None:
+            if 'n_events' in estimated.dims and estimated.n_events.count() > 1: #and there are multiple different fits (eg backward estimation)
                 ydim = 'n_events' #set ydim to 'n_events'
+            elif 'condition' in estimated.dims:
+                ydim = 'condition'
         if not skip_channels_computation:
             channels = init.compute_topologies(channels, estimated, init.event_width_samples, ydim).data #compute topologies
         times = init.compute_times(init, estimated, mean=True).data #compute corresponding times
         channels[times == 0] = np.nan #removes the empty topologies, e.g. in the case of multiple varying number of events
         if len(np.shape(channels)) == 2:
             channels = channels[np.newaxis]
-    #elif estimated is a list of condition fits
-    elif isinstance(estimated, list): 
-        epoch_data = channels
-        channels = []
-        times = []
-        for c in range(n_cond):
-            channels.append(init.compute_topologies(epoch_data, estimated[c], init.event_width_samples).data)
-            times.append(init.compute_times(init, estimated[c], mean=True).data)
-            channels[-1][times[-1] == 0] = np.nan #removes the empty topologies, e.g. in the case of multiple varying number of events
     else:#assumes times/topologies already computed
         times = estimated
 
-    n_iter = np.shape(channels)[0] if not cond_plot else n_cond
+    n_iter = np.shape(channels)[0]
 
     if n_iter == 1:
         times = [times]
@@ -171,11 +158,10 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, conds=None
         topo_size = .08 * timescale * magnify #8% of time scale
 
     #fix vmin/vmax across topos, while keeping symmetric
-    vals = channels[:] if not cond_plot else np.concatenate(channels)
     if vmax == None: #vmax = absolute max, unless no positive values
-        vmax = np.nanmax(np.abs(vals)) 
-        vmin = -vmax if np.nanmin(vals) < 0 else 0
-        if np.nanmax(vals) < 0: vmax = 0
+        vmax = np.nanmax(np.abs(channels[:])) 
+        vmin = -vmax if np.nanmin(channels[:]) < 0 else 0
+        if np.nanmax(channels[:]) < 0: vmax = 0
 
     #make axis
     if ax is None:
@@ -194,7 +180,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, conds=None
     rowheight = 1/n_iter 
     for iteration in np.arange(n_iter):
         times_iteration = times[iteration]*time_step
-        channels_ = channels[iteration,:,:] if not cond_plot else channels[iteration]
+        channels_ = channels[iteration,:,:]
         n_event = int(sum(np.isfinite(channels_[:,0])))
         channels_ = channels_[:n_event,:]
         ylow = iteration * rowheight

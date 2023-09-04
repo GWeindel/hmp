@@ -594,6 +594,12 @@ class hmp:
         
             estimated.append(xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrtraces)))
 
+        #make into hmp object
+        estimated = xr.concat(estimated, dim='condition')
+        estimated.coords['condition_trial'] = conds
+        estimated.attrs['mags_map'] = mags_map
+        estimated.attrs['pars_map'] = pars_map
+
         if verbose:
             print(f"parameters estimated for {n_events} events model")
         return estimated
@@ -1123,7 +1129,7 @@ class hmp:
             return onsets
 
     @staticmethod        
-    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, cumulative=False, add_rt=False):
+    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, cumulative=False, add_rt=False, extra_dim=None):
         '''
         Compute the likeliest onset times for each event
 
@@ -1143,6 +1149,8 @@ class hmp:
             Outputs stage duration (False) or time of onset of stages (True)
         add_rt : bool
             whether to append the last stage up to the RT
+        extra_dim : str
+            if string the times are averaged within that dimension
         
         Returns
         -------
@@ -1175,11 +1183,14 @@ class hmp:
             if not cumulative:
                 times = times.diff(dim='stage')
         if mean:
-            times = times.mean('trial_x_participant')
+            if extra_dim == 'condition':
+                times = times.mean('trial_x_participant')
+            else:
+                times = times.mean('trial_x_participant')
         return times
    
     @staticmethod
-    def compute_topologies(channels, estimated, event_width_samples, extra_dim=False, mean=True):
+    def compute_topologies(channels, estimated, event_width_samples, extra_dim=None, mean=True):
         """
         Compute topologies for each trial. 
          
@@ -1191,7 +1202,7 @@ class hmp:
                 estimated model parameters and event probabilities
          	 event_width_samples: float 
                 number of samples to shift to the peak of the event
-         	 extra_dim: bool 
+         	 extra_dim: str 
                 if True the topology is computed in the extra dimension
          	 mean: bool 
                 if True mean will be computed instead of single-trial channel activities
@@ -1237,7 +1248,11 @@ class hmp:
             event_values = event_values.transpose(extra_dim, "trial_x_participant","event","channels") #to maintain previous behavior
 
         if mean:
-            return event_values.mean('trial_x_participant')
+            if extra_dim == 'condition':
+                return event_values.mean('trial_x_participant')
+            else:
+                return event_values.mean('trial_x_participant')
+
         else:
             return event_values
 
