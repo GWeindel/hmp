@@ -1222,7 +1222,8 @@ class hmp:
         shift = event_width_samples//2+1#Shifts to compute channel topology at the peak of the event
         channels = channels.rename({'epochs':'trials'}).\
                           stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant')
-        condition_trial = estimated.condition_trial.values
+        if extra_dim == 'condition':
+            condition_trial = estimated.condition_trial.values
         estimated = estimated.eventprobs.fillna(0).copy()
         n_events = estimated.event.count().values
         n_trials = estimated.trial_x_participant.count().values
