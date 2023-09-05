@@ -137,11 +137,12 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             channels = init.compute_topologies(channels, estimated, init.event_width_samples, ydim).data #compute topologies
         times = init.compute_times(init, estimated, mean=True, extra_dim=ydim).data #compute corresponding times
         channels[times == 0] = np.nan #removes the empty topologies, e.g. in the case of multiple varying number of events
-        if len(np.shape(channels)) == 2:
-            channels = channels[np.newaxis]
     else:#assumes times/topologies already computed
         times = estimated
-
+        
+    if len(np.shape(channels)) == 2:
+        channels = channels[np.newaxis]
+    
     n_iter = np.shape(channels)[0]
 
     if n_iter == 1:
