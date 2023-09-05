@@ -691,7 +691,7 @@ class hmp:
         else:
             lkh_prev = -np.inf
             while i < max_iteration :#Expectation-Maximization algorithm
-                if i > min_iteration and tolerance > lkh - lkh_prev:
+                if i > min_iteration and tolerance > (lkh-lkh_prev)/np.abs(lkh_prev):
                     break
                     #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
@@ -1624,7 +1624,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=False, max_iterations=1e3, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None):
+    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=True, max_iterations=1e3, tolerance=1e-4, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -1689,8 +1689,7 @@ class hmp:
             prev_time = time
             if fix_iter:
                 to_fix = [range(n_events)]
-            else:
-                to_fix = []
+            else: to_fix = []
             #Generate a grid of magnitudes as proposition 
             if decimate is None:
                 mags_props = self.gen_mags(n_events+1, n_samples=grid_points, verbose=False)
@@ -1700,13 +1699,13 @@ class hmp:
             mags_props[:,:n_events,:] = np.tile(mags_accepted[:n_events,:], (len(mags_props), 1, 1))
             #estimate all grid_points models while fixing previous found events
             solutions = self.fit_single(n_events+1, mags_props, pars_prop, to_fix, to_fix,\
-                            return_max=False, verbose=False, cpus=cpus, min_iteration=min_iteration, tolerance=tolerance)
+                            return_max=False, verbose=False, cpus=cpus,\
+                            min_iteration=min_iteration, tolerance=tolerance)
             if diagnostic:#Diagnostic plot
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
             #Exclude non-converged models (negative EM LL curve)
             solutions = utils.filter_non_converged(solutions)
             if len(solutions.iteration) > 0:#Success
-
                 ##Average among the converged solutions and store as future starting points
                 # mags[:n_events+1], pars[:n_events+2] = solutions.magnitudes.mean('iteration').values, solutions.parameters.mean('iteration').values
                 # #OR take the nearest converged solution
@@ -1718,12 +1717,9 @@ class hmp:
                     plt.plot(nearest_solution.traces.T, c='k', label=f'Iteration {i}')
                 mags[:n_events+1], pars[:n_events+2] = nearest_solution.magnitudes.values,\
                     nearest_solution.parameters.values
-                pars[n_events+1,1] -= 1
-                recalibrated = self.fit_single(n_events+1, mags[:n_events+1], pars[:n_events+2], [], [],\
-                            return_max=False, verbose=False, cpus=cpus, min_iteration=min_iteration, tolerance=tolerance)
                 n_events += 1
-                pars_accepted[:n_events+1] = recalibrated.parameters.values#pars[:n_events+1].copy()###
-                mags_accepted[:n_events] = recalibrated.magnitudes.values#mags[:n_events].copy()###
+                pars_accepted[:n_events+1] = pars[:n_events+1].copy()
+                mags_accepted[:n_events] = mags[:n_events].copy()
                 j = 0
                 if verbose:
                     print(f'Transition event {n_events} found around sample {int(np.round(np.sum(pars_accepted[:n_events,:].prod(axis=1))))}')
@@ -1751,7 +1747,6 @@ class hmp:
             plt.show()
         mags = mags_accepted[:n_events, :]
         pars = pars_accepted[:n_events+1, :]
-        # pars[-1,1] += 1#corrects for the absence of a following one
         if n_events > 1: 
             fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose)
         else:
