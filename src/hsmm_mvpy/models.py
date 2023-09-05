@@ -1182,9 +1182,16 @@ class hmp:
             times = times.rename({'event':'stage'})
             if not cumulative:
                 times = times.diff(dim='stage')
-        if mean:
-            if extra_dim == 'condition':
-                times = times.mean('trial_x_participant')
+        if mean: 
+            if extra_dim == 'condition': #calculate mean only in trials of specific condition
+                tmp = []
+                for c in np.unique(estimates.condition):
+                    tmp.append(times.isel(condition = c, trial_x_participant = estimates.condition_trial.values == c).mean('trial_x_participant'))
+                times = xr.concat(tmp, dim='condition')
+               # times_cond = np.zeros(estimates.mags_map.shape) * np.nan
+               # for c in np.unique(estimates.condition):
+               #     times_cond[c,:] = np.mean(times.values[c,estimates.condition_trial==c,:],axis=0)
+                #times = times_cond
             else:
                 times = times.mean('trial_x_participant')
         return times
@@ -1215,6 +1222,7 @@ class hmp:
         shift = event_width_samples//2+1#Shifts to compute channel topology at the peak of the event
         channels = channels.rename({'epochs':'trials'}).\
                           stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant')
+        condition_trial = estimated.condition_trial.values
         estimated = estimated.eventprobs.fillna(0).copy()
         n_events = estimated.event.count().values
         n_trials = estimated.trial_x_participant.count().values
@@ -1248,8 +1256,11 @@ class hmp:
             event_values = event_values.transpose(extra_dim, "trial_x_participant","event","channels") #to maintain previous behavior
 
         if mean:
-            if extra_dim == 'condition':
-                return event_values.mean('trial_x_participant')
+            if extra_dim == 'condition': #calculate mean within condition trials
+                tmp = []
+                for c in np.unique(estimated.condition):
+                    tmp.append(event_values.isel(condition = c, trial_x_participant = condition_trial == c).mean('trial_x_participant'))
+                return xr.concat(tmp, dim='condition')
             else:
                 return event_values.mean('trial_x_participant')
 
