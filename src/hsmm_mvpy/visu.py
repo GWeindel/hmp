@@ -651,8 +651,8 @@ def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoc
             If None ( default ) the model to compare is taken as the maximal n_event model among the bootstrapped models 
      	 epoch_data: If None ( default
     """
-    from hsmm_mvpy.resample import percent_event_occurence
-    maxboot_model, labels, counts, event_number, label_event_num = percent_event_occurence(bootstrapped, model_to_compare)
+    from hsmm_mvpy.resample import event_occurence
+    maxboot_model, labels, counts, event_number, label_event_num = event_occurence(bootstrapped, model_to_compare)
     fig, axes = plt.subplot_mosaic([['a', 'a'], ['b', 'c'], ['b', 'c']],
                               layout='constrained')
     if model_to_compare is None: 

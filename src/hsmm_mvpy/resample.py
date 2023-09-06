@@ -93,7 +93,7 @@ def bootstrapping(data, dim, n_iterations, init, positions, sfreq, tolerance=1e-
     #     plot_topo_timecourse(boot.channels, boot.event_times, positions, init_boot, title='iteration = '+str(n_iter), skip_electodes_computation=True)
     return boot
 
-def percent_event_occurence(iterations,  model_to_compare=None, count=False):
+def event_occurence(iterations,  model_to_compare=None, count=False):
     from scipy.spatial import distance_matrix
     if model_to_compare is None:
         max_n_bump_model_index = np.where(np.sum(np.isnan(iterations.magnitudes.values[:,:,0]), axis=(1)) == 0)[0][0]
