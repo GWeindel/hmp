@@ -89,7 +89,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
 
     cond_plot = False
 
-    #if estimated is a list, prep conds
+    #if condition estimates, prep conds
     if isinstance(estimated, xr.Dataset) and 'condition' in estimated.dims:
         cond_plot = True
         conds = estimated.condition_trial.values
@@ -107,6 +107,9 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             print('times_to_display should either be a list of length n_cond or an ndarray which will be repeated across conditions')
             times_to_display = [np.mean(init.durations[conds==c]) for c in range(n_cond)] # default to RTs
             
+        #set ylabels to conditions
+        if ylabels == []:
+            ylabels = estimated.clabels
 
     return_ax = True
     #if not times specified, plot average RT
