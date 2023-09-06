@@ -98,6 +98,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         #make times_to_display in list with lines per condition
         if times_to_display is None:
             times_to_display = [np.mean(init.durations[conds==c]) for c in range(n_cond)]
+            times_to_display.reverse()
         elif len(times_to_display) == 1: #only one set of times
             if isinstance(times_to_display, np.ndarray):
                 times_to_display = [times_to_display] * n_cond
@@ -105,8 +106,9 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
                 times_to_display = times_to_display * n_cond
         elif len(times_to_display) > 1 and len(times_to_display) != n_cond:
             print('times_to_display should either be a list of length n_cond or an ndarray which will be repeated across conditions')
-            times_to_display = [np.mean(init.durations[conds==c]) for c in range(n_cond)] # default to RTs
-            
+            times_to_display = [np.mean(init.durations[conds==c]) for c in range(n_cond)].reverse() # default to RTs
+            times_to_display.reverse()
+
         #set ylabels to conditions
         if ylabels == []:
             ylabels = estimated.clabels
@@ -146,6 +148,10 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     if len(np.shape(channels)) == 2:
         channels = channels[np.newaxis]
     
+    if cond_plot: #reverse order, to make correspond to condition maps
+        channels = np.flipud(channels)
+        times = np.flipud(times)
+
     n_iter = np.shape(channels)[0]
 
     if n_iter == 1:
@@ -229,8 +235,10 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
 
     #plot ylabels
     if isinstance(ylabels, dict):
+        tick_labels = [str(x) for x in list(ylabels.values())[0]]
+        if cond_plot: tick_labels.reverse() 
         ax.set_yticks(np.arange(len(list(ylabels.values())[0]))+.5,
-                      [str(x) for x in list(ylabels.values())[0]])
+                      tick_labels)
         ax.set_ylabel(str(list(ylabels.keys())[0]))
     else:
         ax.set_yticks([])
