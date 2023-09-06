@@ -12,7 +12,7 @@ from scipy.stats import gamma as sp_gamma
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from hsmm_mvpy import utils
-from itertools import cycle
+from itertools import cycle, product
 
 
 try:
@@ -32,8 +32,8 @@ class hmp:
 
         parameters
         ----------
-        data : ndarray
-            2D ndarray with n_samples * components obtained dthrough the hmp.utils.transform_data() function
+        data : xr.Dataset
+            xr.Dataset obtained dthrough the hmp.utils.transform_data() function
         epoch_data: xr.Dataset
             Xarray dataset with the EEG/MEG data
         sfreq : float
@@ -125,6 +125,8 @@ class hmp:
             self.convolution = fftconvolve
         else:
             self.convolution = np.convolve
+        self.trial_coords = data.unstack().sel(component=0,samples=0).rename({'epochs':'trials'}).\
+            stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",how="all").coords
     
     def _event_shape(self):
         '''
@@ -413,37 +415,76 @@ class hmp:
             number of cores to use in the multiprocessing functions
         mags_map: 2D nd_array n_cond * n_events indicating which magnitudes are shared between conditions.
         pars_map: 2D nd_array n_cond * n_stages indicating which parameters are shared between conditions.
-        conds: 1D array of condition per sample
-
+        conds: dict | list
+            if one condition, use a dict with the name in the metadata and a list of the levels in the same
+            order as the rows of the map(s). E.g., {'cue': ['SP', 'AC']}
+            if multiple conditions need to be crossed, use a list of dictionaries per condition. E.g.,
+            [{'cue': ['SP', 'AC',]}, {'resp': ['left', 'right']}]. These are crossed by repeating
+            the first condition as many times as there are levels in the second condition. E.g., SP-left, 
+            SP-right, AC-left, AC-right.
         '''
         #Conditions
         assert mags_map is not None or pars_map is not None, 'fit_single_conds() requires a magnitude and/or parameter map'
-        assert conds is not None, 'fit_single_conds() requires conditions per epoch'
+        assert conds is not None, 'fit_single_conds() requires conditions argument'
+        assert isinstance(conds, dict) or isinstance(conds[0], dict), 'conditions have to be specified as a dictionary, or list of dictionaries'
+        if isinstance(conds, dict): conds = [conds]
+
+        #collect condition names, levels, and trial coding
+        cond_names = []
+        cond_levels = []
+        cond_trials = []
+        for cond in conds:
+            assert len(cond) == 1, 'Each condition dictionary can only contain one condition (e.g. {\'cue\': [\'SP\', \'AC\']})'
+            cond_names.append(list(cond.keys())[0])
+            cond_levels.append(cond[cond_names[-1]])
+            cond_trials.append(self.trial_coords[cond_names[-1]].data.copy())
+            print('Condition \"' + cond_names[-1] + '\" analyzed, with levels:', cond_levels[-1])
+
+        cond_levels = list(product(*cond_levels))
+        n_conds = len(cond_levels)
+
+        #build condition array with digit indicating the combined levels
+        cond_trials = np.vstack(cond_trials).T
+        conds = np.zeros((cond_trials.shape[0])) * np.nan
+        print('\nCoded as follows: ')
+        for i, level in enumerate(cond_levels):
+            conds[np.where((cond_trials == level).all(axis=1))] = i
+            print(str(i) + ': ' + str(level))
+        conds=np.int8(conds)
+
+        clabels = {'Condition ' + str(cond_names): cond_levels}
+
+        #check maps
         n_conds_mags = 0 if mags_map is None else mags_map.shape[0]
         n_conds_pars = 0 if pars_map is None else pars_map.shape[0]
-        if n_conds_mags > 0 and n_conds_pars > 0: #either both of them should have the same number of conds, or 0
+        if n_conds_mags > 0 and n_conds_pars > 0: #either both maps should have the same number of conds, or 0
             assert n_conds_mags == n_conds_pars, 'magnitude and parameters maps have to indicate the same number of conditions'
-            n_conds = n_conds_mags
         else: #if 0, copy n_conds as zero map
-            n_conds = np.max([n_conds_mags,n_conds_pars])
             if n_conds_mags == 0:
                 mags_map = np.zeros((n_conds, pars_map.shape[1]-1), dtype=int)
             else:
                 pars_map = np.zeros((n_conds, mags_map.shape[1] + 1), dtype=int)
 
-        #make sure conds start at 0
-        for ci, c in enumerate(np.unique(conds)):
-            conds[conds == c] = ci
-        assert len(np.unique(conds)) == n_conds, 'number of unique conditions should correspond to number of rows in map(s)'
+        #print maps to check level/row mathcing
+        print('\nMagnitudes map:')
+        for cnt in range(n_conds):
+            print(str(cnt) + ': ', mags_map[cnt,:])
+
+        print('\nParameters map:')
+        for cnt in range(n_conds):
+            print(str(cnt) + ': ', pars_map[cnt,:])
+
+        #at this point, all should indicate the same number of conditions
+        assert n_conds == mags_map.shape[0] == pars_map.shape[0], 'number of unique conditions should correspond to number of rows in map(s)'
 
         n_events = mags_map.shape[1]
         assert self.location*(n_events) < min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
         assert conds.shape[0] == self.durations.shape[0], 'Conds parameter should contain the condition per epoch.'
         if verbose:
             if parameters is None:
-                print(f'Estimating {n_events} events model with {starting_points} starting point(s)')
+                print(f'\nEstimating {n_events} events model with {starting_points} starting point(s)')
             else:
-                print(f'Estimating {n_events} events model')
+                print(f'\nEstimating {n_events} events model')
         if cpus is None:
             cpus = self.cpus
      
@@ -464,7 +505,6 @@ class hmp:
         if parameters_to_fix is None: parameters_to_fix=[]
         if magnitudes_to_fix is None: magnitudes_to_fix=[]
         
-
         if parameters is not None:
             if len(np.shape(parameters)) == 2: #broadcast parameters across conditions
                 parameters = np.tile(parameters, (n_conds, 1, 1))
@@ -599,6 +639,7 @@ class hmp:
         estimated.coords['condition_trial'] = conds
         estimated.attrs['mags_map'] = mags_map
         estimated.attrs['pars_map'] = pars_map
+        estimated.attrs['clabels'] = clabels
 
         if verbose:
             print(f"parameters estimated for {n_events} events model")
