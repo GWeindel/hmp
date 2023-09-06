@@ -1678,8 +1678,8 @@ class hmp:
         pars = np.zeros((int(end),2))
         pars[:,0] = self.shape #gamma parameters during estimation, shape x scale
         pars_prop = pars[:n_events+2].copy()
-        pars_prop[0,1] = 1/self.shape#initialize gamma_parameters
-        pars_prop[n_events+1,1] = last_stage = (end-1)/self.shape 
+        pars_prop[0,1] = 2/self.shape#initialize gamma_parameters #starting at 1 generates an empty event
+        pars_prop[n_events+1,1] = last_stage = end/self.shape 
         pars_accepted = pars.copy()
         #Init mags
         mags = np.zeros((int(end), self.n_dims)) #mags during estimation
@@ -1734,7 +1734,7 @@ class hmp:
             #New parameter proposition
             pars_prop = pars[:n_events+2].copy()
             pars_prop[n_events,1] = step*j/self.shape
-            last_stage = end/self.shape - np.sum(pars_prop[:n_events+1,1])
+            last_stage = (end+1)/self.shape - np.sum(pars_prop[:n_events+1,1])
             pars_prop[n_events+1,1] = last_stage
             time = np.sum(pars_prop[:n_events+1,1])*self.shape 
             pbar.update(int(np.round(time-prev_time)))
@@ -1747,7 +1747,7 @@ class hmp:
             plt.show()
         mags = mags_accepted[:n_events, :]
         pars = pars_accepted[:n_events+1, :]
-        if n_events > 1: 
+        if n_events > 0: 
             fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose)
         else:
             warn('Failed to find more than two stages, returning 2 stage model with default starting values')
