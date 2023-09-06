@@ -459,11 +459,19 @@ class hmp:
         n_conds_pars = 0 if pars_map is None else pars_map.shape[0]
         if n_conds_mags > 0 and n_conds_pars > 0: #either both maps should have the same number of conds, or 0
             assert n_conds_mags == n_conds_pars, 'magnitude and parameters maps have to indicate the same number of conditions'
+            #make sure nr of events correspond per row
+            for c in range(n_conds):
+                assert sum(mags_map[c,:] >= 0) + 1 == sum(pars_map[c,:] >= 0), 'nr of events in magnitudes map and parameters map do not correspond on row ' + str(c)
         else: #if 0, copy n_conds as zero map
             if n_conds_mags == 0:
+                assert not (pars_map < 0).any(), 'If negative parameters are provided, magnitude map is required.'
                 mags_map = np.zeros((n_conds, pars_map.shape[1]-1), dtype=int)
             else:
                 pars_map = np.zeros((n_conds, mags_map.shape[1] + 1), dtype=int)
+                if (mags_map < 0).any():
+                    for c in range(n_conds):
+                        pars_map[c, np.where(mags_map[c,:] < 0)[0]] = -1
+                        pars_map[c, np.where(mags_map[c,:] < 0)[0]+1] = 1
 
         #print maps to check level/row mathcing
         print('\nMagnitudes map:')
@@ -474,6 +482,24 @@ class hmp:
         for cnt in range(n_conds):
             print(str(cnt) + ': ', pars_map[cnt,:])
 
+        #give explanation if negative parameters:
+        if (pars_map < 0).any():
+            print('\n-----')
+            print('Negative parameters. Note that this stage is left out, while the parameters')
+            print('of the other stages are compared column by column. In this parameter map example:')
+            print(np.array([[0, 0, 0, 0],
+                            [0, -1, 0, 0]]))
+            print('the parameters of stage 1 are shared, as well as the parameters of stage 3 of')
+            print('condition 1 with stage 2 (column 3) of condition 2 and the last stage of both')
+            print('conditions.')
+            print('Given that event 2 is probably missing in condition 2, it would typically')
+            print('make more sense to let both stages around event 2 in condition 1 vary as')
+            print('compared to condition 2:')
+            print(np.array([[0, 0, 0, 0],
+                            [0, -1, 1, 0]]))
+            print('-----')
+
+                
         #at this point, all should indicate the same number of conditions
         assert n_conds == mags_map.shape[0] == pars_map.shape[0], 'number of unique conditions should correspond to number of rows in map(s)'
 
@@ -712,7 +738,7 @@ class hmp:
         if len(wrong_shape)>0:
             raise ValueError(f'Wrong shape parameter input, provided parameter(s) {wrong_shape} shape is {parameters[...,-2][wrong_shape]} but expected {self.shape}')
         
-        initial_parameters =  np.copy(parameters)
+        initial_parameters = np.copy(parameters)
         initial_magnitudes = np.copy(magnitudes)
 
         n_events = magnitudes.shape[magnitudes.ndim-2]
