@@ -131,7 +131,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     else:
         event_color=event_lines
 
-    #if estimated is an fitted HMP instance with 
+    #if estimated is an fitted HMP instance, calculate topos and times 
     if isinstance(estimated, (xr.DataArray, xr.Dataset)) and 'event' in estimated:
         if ydim is None:
             if 'n_events' in estimated.dims and estimated.n_events.count() > 1: #and there are multiple different fits (eg backward estimation)
@@ -551,15 +551,18 @@ def plot_latencies_gamma(gammas, event_width=0, time_step=1, labels=[''], colors
         axs.legend()
     return axs
 
-def plot_latencies(times, time_step=1, labels=[], colors=default_colors,
-    figsize=False, errs='ci', kind='bar', legend=False):
+def plot_latencies(times, init=None, time_step=1, labels=[], colors=default_colors,
+    figsize=False, errs='ci', kind='bar', legend=False, max_time=None, as_time=True):
     '''
     Plots the average of stage latencies with choosen errors bars
 
     Parameters
     ----------
-    times : ndarray
-        2D or 3D numpy array, Either trials * events or conditions * trials * events
+    times : ndarray | hmp results object
+        2D or 3D numpy array, either trials * events or conditions * trials * events
+        hmp results object either of fit_single or fit_single_conds
+    init : hmp object
+        Initialized hmp object, required if times is an hmp results object
     event_width : float
         Display size of the event in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
         can provide the event_width_sample of fitted hmp (e.g. init.event_width_sample)
@@ -578,43 +581,128 @@ def plot_latencies(times, time_step=1, labels=[], colors=default_colors,
         Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
     max_time : float
         limit of the x (time) axe
+    kind : str
+        bar or point
+    as_time : bool
+        if true, plot time (ms) instead of samples (time_step takes precedence). Ignored if times are provided as array.
     '''
+
     from seaborn.algorithms import bootstrap #might be too much to ask for seaborn install?
        
-    if len(np.shape(times)) == 2:
-        times = [times]
+    if as_time and time_step != 1:
+        print('time_step takes precedence over as_time')
+        as_time = False
+
+    #if hmp estimates are provided, calculate time
+    hmp_obj = False
+    if isinstance(times, (xr.DataArray, xr.Dataset)):
+        assert init is not None, 'If hmp results object provided, init is a required parameter.'
+        hmp_obj = True
+        ydim = None
+        if 'n_events' in times.dims and times.n_events.count() > 1: #and there are multiple different fits (eg backward estimation)
+            ydim = 'n_events' 
+        elif 'condition' in times.dims:
+            ydim = 'condition'
+        avg_durations = init.compute_times(init, times, mean=True, duration=True,add_rt=True, extra_dim=ydim, as_time=as_time).data #compute corresponding times
+        avg_times = init.compute_times(init, times, mean=True, duration=False,add_rt=True, extra_dim=ydim, as_time=as_time).data #compute corresponding times
+        if len(avg_times.shape) == 1:
+            avg_durations = np.expand_dims(avg_durations, axis=0)
+            avg_times = np.expand_dims(avg_times, axis=0)
+        avg_durations = avg_durations * time_step
+        avg_times = avg_times * time_step
+
+        if ydim == 'condition': #reverse order, to make correspond to condition maps
+            avg_durations = np.flipud(avg_durations)
+            avg_times = np.flipud(avg_times)
+
+        n_model = avg_times.shape[0]
+    else: 
+        if len(np.shape(times)) == 2:
+            times = [times]
+        times = [time * time_step for time in times]
+        n_model = len(times)
+
+    if labels == []:
+        if hmp_obj and ydim == 'condition':
+            labels = [str(x) for x in reversed(list(times.clabels.values())[0])] 
+        else:
+            labels = np.arange(n_model)
 
     if not figsize:
-        figsize = (8, 1*len(times)+2)
+        figsize = (8, 1*n_model+2)
     f, axs = plt.subplots(1,1, figsize=figsize, dpi=100)
-    cycol = cycle(colors)
-    colors = [next(cycol) for x in np.arange(len(times))]
-    for j, time in enumerate(times):
-        time = time*time_step
-        time = np.diff(time, axis=1, prepend=0)
-        n_stages = len(time[-1])
-        if errs == 'ci':
-            errorbars = np.nanpercentile(bootstrap(time, axis=0), q=[2.5,97.5], axis=0)
-            errorbars = np.abs(errorbars-np.mean(time, axis=0))
-        elif errs == 'std':
-            errorbars = np.std(time, axis=0)
-        else:
-            print('Unknown errorbar type')
-            errorbars = np.repeat(0,2)
-        if kind == 'bar':
-            plt.bar(np.arange(n_stages)+1, np.mean(time, axis=0), color='w', edgecolor=colors[j])
-            plt.errorbar(np.arange(n_stages)+1, np.mean(time, axis=0), yerr=errorbars, 
-                     color=colors[j], fmt='none', capsize=10)
-        elif kind == 'point':
-            plt.errorbar(np.arange(n_stages)+1, np.mean(time, axis=0), 
-                yerr=errorbars, color=colors[j], fmt='o-', capsize=10, label=labels[j])
 
-    plt.xlim(1-.5, n_stages+.5)
-    if time_step == 1:
-        plt.ylabel('Stage durations (samples)')
-    else:
-        plt.ylabel('Stage durations (ms)')
-    plt.xlabel('Stage')
+    cycol = cycle(colors)
+    cur_colors = [next(cycol) for x in np.arange(len(times))] #color per condition/model (line plot)
+
+    for j in range(n_model): #per condition/model
+        if hmp_obj: #all calcs have been done
+            avg_time = np.hstack((0,avg_times[j,:]))
+            avg_duration = avg_durations[j,:]
+            n_stages = len(avg_duration)
+            errorbars = np.zeros((2, n_stages))
+        else: #call error bars etc
+            time = times[j]
+            duration = np.diff(time, axis=1, prepend=0) #time per trial, duration per trial
+            avg_time = np.hstack((0, np.mean(time, axis=0)))
+            avg_duration = np.mean(duration, axis=0)
+            n_stages = len(avg_duration)
+            errorbars = np.zeros((2, n_stages))
+            if errs == 'ci':
+                for st in range(n_stages):
+                    errorbars[:, st] = np.squeeze([np.nanpercentile(bootstrap(duration[:,st]), q=[2.5,97.5])])
+                    errorbars[:, st] = np.abs(errorbars[:, st]-avg_duration[st])
+            elif errs == 'std':
+                errorbars = np.tile(np.std(duration, axis=0), (2,1))
+            else:
+                print('Unknown errorbar type')
+
+        if kind == 'bar':
+            cycol = cycle(colors) #get a color per stage
+            cur_colors = [next(cycol) for x in np.arange(n_stages)]
+
+            #remove 0 stages and associated color
+            if np.any(avg_duration == 0):
+                missing_evts = np.where(avg_duration==0)[0]
+                avg_duration = np.delete(avg_duration,missing_evts)
+                avg_time = np.delete(avg_time, missing_evts + 1)
+                cur_colors = np.delete(cur_colors, missing_evts)
+                n_stages = n_stages - len(missing_evts)
+
+            for st in reversed(range(n_stages)): #can't deal with colors in one call
+                plt.barh(j, avg_duration[st],left=avg_time[st], color='w', edgecolor=cur_colors[st])
+                plt.errorbar(np.repeat(avg_time[st+1],2), np.repeat(j,2), xerr=errorbars[:,st], color=cur_colors[st], fmt='none', capsize=10)
+
+            plt.yticks(np.arange(len(labels)),labels)
+            plt.ylim(0-1,j+1)
+            #__display_times(axs, times_to_display, np.arange(n_model), time_step, max_time, times)
+            if not max_time:
+                max_time = np.max(avg_times) * 1.05
+               
+            axs.set_xlim(0, max_time)
+            if time_step == 1 and not as_time:
+                plt.xlabel('Cumulative stage durations from stimulus onset (samples)')
+            else:
+                plt.xlabel('Cumulative stage durations from stimulus onset (ms)')
+
+        elif kind == 'point':
+
+            #nan zero stages
+            avg_duration[avg_duration == 0] = np.nan
+            plt.errorbar(np.arange(n_stages)+1, avg_duration, 
+                    yerr=errorbars, color=cur_colors[j], fmt='o-', capsize=10, label=labels[j])
+                
+            plt.xlim(1-.5, n_stages+.5)
+            axs.set_ylim(0, np.nanmax(avg_durations)*1.05)
+
+            if time_step == 1:
+                plt.ylabel('Stage durations (samples)')
+            else:
+                plt.ylabel('Stage durations (ms)')
+            plt.xlabel('Stage')
+        else:
+            raise ValueError('Unknown \'kind\'')
+    
     plt.tight_layout()
     # Hide the right and top spines
     axs.spines.right.set_visible(False)
@@ -625,6 +713,9 @@ def plot_latencies(times, time_step=1, labels=[], colors=default_colors,
     if legend:
         axs.legend()
     return axs
+
+
+
 
 def plot_iterations(iterations, eeg_data, init, positions, dims=['magnitudes','parameters'], alpha=1, ax=None):
     """
