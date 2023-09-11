@@ -206,7 +206,7 @@ class hmp:
             number of cores to use in the multiprocessing functions
         '''
         assert n_events is not None, 'The fit_single() function needs to be provided with a number of expected transition events'
-        assert self.location*(n_events) < min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
+        assert self.location*(n_events-2) < min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
         if verbose:
             if parameters is None:
                 print(f'Estimating {n_events} events model with {starting_points} starting point(s)')
@@ -252,15 +252,15 @@ class hmp:
             filterwarnings('ignore', 'Convergence failed, estimation hitted the maximum ', )#will be the case but for a subset only hence ignore
             if len(np.shape(initial_m)) == 2:
                 parameters = [initial_p]
-                magnitudes = [initial_m]
+                magnitudes = np.zeros((starting_points, n_events, self.n_dims))
+                magnitudes[0] = initial_m
                 if method == 'random':
                     for _ in np.arange(starting_points):
                         proposal_p = self.gen_random_stages(n_events)
                         proposal_p[parameters_to_fix] = initial_p[parameters_to_fix]
                         parameters.append(proposal_p)
-                    magnitudes = self.gen_mags(n_events, starting_points, method='random', verbose=False)
+                    magnitudes[1:] = self.gen_mags(n_events, starting_points-1, method='random', verbose=False)
                     magnitudes[:,magnitudes_to_fix,:] = np.tile(initial_m[magnitudes_to_fix], (len(magnitudes), 1, 1))
-
                 elif method == 'grid':
                     parameters = self._grid_search(n_events+1, iter_limit=starting_points, method='grid')
                     magnitudes = np.zeros((len(parameters), n_events, self.n_dims), dtype=np.float64)#Grid search is not yet done for mags
@@ -292,8 +292,14 @@ class hmp:
             pars_sp = [x[2] for x in estimates]
             eventprobs_sp = [x[3] for x in estimates]
             traces_sp = [x[4] for x in estimates]
+            for iteration in range(len(estimates)):
+                #Filters out non-converged models
+                if np.diff(estimates[iteration][4][-2:]) < 0:
+                    lkhs_sp[iteration] = -np.inf
             if return_max:
+                print(lkhs_sp)
                 max_lkhs = np.argmax(lkhs_sp)
+                print(max_lkhs)
                 lkh = lkhs_sp[max_lkhs]
                 mags = mags_sp[max_lkhs]
                 pars = pars_sp[max_lkhs]
@@ -350,8 +356,8 @@ class hmp:
             xreventprobs = xreventprobs.transpose('trial_x_participant','samples','event')
         else: 
             n_event_xr = len(mags[0])
-            # if traces[-1] - traces[-2] < 0:
-            #     warn(f'Last iteration of the estimation procedure lead to a decrease in log-likelihood, convergence ', RuntimeWarning)
+            if verbose and traces[0, -1] - traces[0, -2] < 0:
+                warn(f'Last iteration of the estimation procedure lead to a decrease in log-likelihood, convergence issue. The resulting fit likely contains a duplicated event', RuntimeWarning)
             xrlikelihoods = xr.DataArray(lkh , dims=("iteration"), name="likelihoods", coords={'iteration':range(len(lkh))})
             xrtraces = xr.DataArray(traces, dims=("iteration","em_iteration"), name="traces", coords={'iteration':range(len(lkh)), 'em_iteration':range(len(traces[0]))})
             xrparams = xr.DataArray(pars, dims=("iteration","stage",'parameter'), name="parameters", 
@@ -1161,7 +1167,7 @@ class hmp:
         '''
         Compute the maximum possible number of events given event width and mean or minimum reaction time
         '''
-        return int(np.rint(np.min(self.durations)//(self.location)))-1
+        return int(np.rint(np.min(self.durations)//(self.location)))+1
 
     def event_times(self, eventprobs, mean=True):
         '''
@@ -1773,7 +1779,7 @@ class hmp:
         mags = np.zeros((int(end), self.n_dims)) #mags during estimation
         mags_accepted = mags.copy()
         i = 0
-        while last_stage*self.shape > self.location and n_events+1 < max_event_n:
+        while last_stage*self.shape > self.location and n_events-3 < max_event_n:
             prev_time = time
             if fix_iter:
                 to_fix = [range(n_events)]
