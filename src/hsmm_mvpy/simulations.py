@@ -137,7 +137,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
     elif data_type == 'meg':
         picked_type = mne.pick_types(info, meg=True, eeg=False)
     elif data_type == 'eeg/meg':
-        picked_type = mne.pick_types(info, meg=True, eeg=False)
+        picked_type = mne.pick_types(info, meg=True, eeg=True)
     else:
         raise ValueError(f'Invalid data type {data_type}, expected "eeg", "meg" or "eeg/meg"')
     info = mne.pick_info(info, picked_type)
