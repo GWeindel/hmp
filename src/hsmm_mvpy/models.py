@@ -1196,7 +1196,7 @@ class hmp:
             return onsets
 
     @staticmethod        
-    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, cumulative=False, add_rt=False, extra_dim=None):
+    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, cumulative=False, add_rt=False, extra_dim=None, as_time=False):
         '''
         Compute the likeliest onset times for each event
 
@@ -1218,6 +1218,8 @@ class hmp:
             whether to append the last stage up to the RT
         extra_dim : str
             if string the times are averaged within that dimension
+        as_time : bool
+            if true, return time (ms) instead of samples
         
         Returns
         -------
@@ -1230,7 +1232,8 @@ class hmp:
             times = eventprobs.argmax('samples')#Most likely event location
         else:
             times = xr.dot(eventprobs, eventprobs.samples, dims='samples')
-        n = len(times[0,:].values[np.isfinite(times[0,:].values)])
+        if as_time:
+            times = times * 1000/init.sfreq
         if duration:
             fill_value=0
         if fill_value != None:            
@@ -1241,24 +1244,42 @@ class hmp:
             times = times.combine_first(added)
         if add_rt:             
             rts = init.named_durations
+            if as_time:
+                rts = rts * 1000/init.sfreq
             rts = rts.assign_coords(event=int(times.event.max().values+1))
             rts = rts.expand_dims(dim="event")
             times = xr.concat([times, rts], dim='event')
-        if duration:
-            #adding reaction time and treating it as the last event
+        if duration: #taking into account missing events, hence the ugly code
             times = times.rename({'event':'stage'})
             if not cumulative:
-                times = times.diff(dim='stage')
+                if not extra_dim:
+                    times = times.diff(dim='stage')
+                elif extra_dim == 'condition': #by dim, ignore missing events
+                    for c in times['condition'].values:
+                        tmp = times.isel(condition = c, trial_x_participant = estimates.condition_trial.values == c).values
+                        #identify 0 columns == missing events
+                        missing_evts = np.where(np.mean(tmp,axis=0) == 0)[0]
+                        missing_evts = missing_evts[missing_evts != 0] #remove first column in case 0s were filled
+                        tmp = np.diff(np.delete(tmp, missing_evts, axis=1)) #remove 0 columns, calc difference
+                        tmp = np.hstack((np.insert(tmp, missing_evts-1, 0, axis=1),np.tile(np.nan,(tmp.shape[0],1)))) #insert 0 column (to maintain shape), add extra column to match shape
+                        times[c,estimates.condition_trial.values == c, :] = tmp
+                    times = times[:,:,:-1] #remove extra column
+                elif extra_dim == 'n_event':
+                    for e in times['n_event'].values:
+                        tmp = times.isel(n_event = e).values
+                        #identify 0 columns == missing events
+                        missing_evts = np.where(np.mean(tmp,axis=0) == 0)[0]
+                        missing_evts = missing_evts[missing_evts != 0] #remove first column in case 0s were filled
+                        tmp = np.diff(np.delete(tmp, missing_evts, axis=1)) #remove 0 columns, calc difference
+                        tmp = np.hstack((np.insert(tmp, missing_evts-1, 0, axis=1),np.tile(np.nan,(tmp.shape[0],1)))) #insert 0 column (to maintain shape), add extra column to match shape
+                        times[e,:, :] = tmp
+                    times = times[:,:,:-1] #remove extra column
         if mean: 
             if extra_dim == 'condition': #calculate mean only in trials of specific condition
                 tmp = []
                 for c in np.unique(estimates.condition):
                     tmp.append(times.isel(condition = c, trial_x_participant = estimates.condition_trial.values == c).mean('trial_x_participant'))
                 times = xr.concat(tmp, dim='condition')
-               # times_cond = np.zeros(estimates.mags_map.shape) * np.nan
-               # for c in np.unique(estimates.condition):
-               #     times_cond[c,:] = np.mean(times.values[c,estimates.condition_trial==c,:],axis=0)
-                #times = times_cond
             else:
                 times = times.mean('trial_x_participant')
         return times
