@@ -292,14 +292,17 @@ class hmp:
             pars_sp = [x[2] for x in estimates]
             eventprobs_sp = [x[3] for x in estimates]
             traces_sp = [x[4] for x in estimates]
+            non_converged = 0
             for iteration in range(len(estimates)):
                 #Filters out non-converged models
                 if np.diff(estimates[iteration][4][-2:]) < 0:
                     lkhs_sp[iteration] = -np.inf
+                    non_converged += 1
+                    
+            if verbose and non_converged > 0:
+                warn(f'{non_converged}/{starting_points} starting points ended up not converging', RuntimeWarning)
             if return_max:
-                print(lkhs_sp)
                 max_lkhs = np.argmax(lkhs_sp)
-                print(max_lkhs)
                 lkh = lkhs_sp[max_lkhs]
                 mags = mags_sp[max_lkhs]
                 pars = pars_sp[max_lkhs]
