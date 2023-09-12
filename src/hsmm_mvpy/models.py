@@ -6,6 +6,7 @@ import numpy as np
 import xarray as xr
 import multiprocessing as mp
 import itertools
+from math import gamma as gamma_func
 from pandas import MultiIndex
 from warnings import warn, filterwarnings, resetwarnings
 from scipy.stats import gamma as sp_gamma
@@ -65,12 +66,15 @@ class hmp:
             case 'lognormal':
                 from scipy.stats import lognorm as sp_dist
                 self.scale_to_mean = lambda scale, shape : np.exp(scale+(shape**2/2))
-                # mean_to_scale = lambda mean, shape: np.log(
+                self.mean_to_scale =  lambda mean, shape: np.log(mean)-(shape**2/2)
             case 'wald':
                 from scipy.stats import invgauss as sp_dist
-                # mean_to_scale = 
+                self.scale_to_mean = lambda scale, shape : scale
+                self.mean_to_scale = lambda mean, shape : mean
             case 'weibull':
                 from scipy.stats import weibull_min as sp_dist
+                self.scale_to_mean = lambda scale, shape : scale*gamma_func(1+1/shape)
+                self.mean_to_scale = lambda mean, shape : mean/gamma_func(1+1/shape)
             case _:
                 raise ValueError(f'Unknown Distribution {distribution}')
         self.cdf = sp_dist.cdf
@@ -1099,7 +1103,7 @@ class hmp:
         params[:,1] = np.diff(averagepos, prepend=0)
         params[:-1,1] += .5
         params[-1,1] -= 1
-        params[:,1] = self.mean_to_scale(params[:,1],params[:,0])
+        params[:,1] = [self.mean_to_scale(x[1],x[0]) for x in params]
         return params
 
 
