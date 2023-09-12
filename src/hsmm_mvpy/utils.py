@@ -487,7 +487,7 @@ def stack_data(data, subjects_variable='participant', channel_variable='componen
     data = data.stack(all_samples=['participant','epochs',"samples"]).dropna(dim="all_samples")
     return data
 
-def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', n_comp=None, return_weights=False):
+def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', n_comp=None, pca_weights=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -512,12 +512,14 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     n_comp : int
         How many components to select from the PC space, if None plots the scree plot and a prompt requires user
         to specify how many PCs should be retained
+    pca_weigths : xarray
+        Weights of a PCA to apply to the data (e.g. in the resample function)
 
     Returns
     -------
     data : xarray.Dataset
         xarray dataset [n_samples * n_comp] data expressed in the PC space, ready for hsMM fit
-    pca_data : xarray.Dataset
+    pca_weigths : xarray.Dataset
         loadings of the PCA, used to retrieve channel space
     pca.explained_variance_ : ndarray
         explained variance for each component
@@ -543,43 +545,45 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
 
 
     if method == 'pca':
-        from sklearn.decomposition import PCA
-        var_cov_matrices = []
         if isinstance(data, xr.Dataset):
             data = data.data
-        for i,trial_dat in data.stack(trial=("participant", "epochs")).drop_duplicates('trial').groupby('trial'):
-            var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
-        var_cov_matrix = np.mean(var_cov_matrices,axis=0)
-        # Performing spatial PCA on the average var-cov matrix
-        if n_comp == None:
-            import matplotlib.pyplot as plt
-            n_comp = np.shape(var_cov_matrix)[0]-1
-            fig, ax = plt.subplots(1,2, figsize=(.2*n_comp, 4))
+        if pca_weights is None:
+            from sklearn.decomposition import PCA
+            var_cov_matrices = []
+            for i,trial_dat in data.stack(trial=("participant", "epochs")).drop_duplicates('trial').groupby('trial'):
+                var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
+            var_cov_matrix = np.mean(var_cov_matrices,axis=0)
+            # Performing spatial PCA on the average var-cov matrix
+            if n_comp == None:
+                import matplotlib.pyplot as plt
+                n_comp = np.shape(var_cov_matrix)[0]-1
+                fig, ax = plt.subplots(1,2, figsize=(.2*n_comp, 4))
+                pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
+                pca_weights = pca.fit_transform(var_cov_matrix.T)
+                var = pca.transform(var_cov_matrix)
+                var = np.var(var, axis=0)
+                ax[0].plot(np.arange(pca.n_components)+1, var/np.sum(var),'.-')
+                ax[0].set_ylabel('Normalized explained variance')
+                ax[0].set_xlabel('Component')
+                ax[1].plot(np.arange(pca.n_components)+1, np.cumsum(var/np.sum(var)),'.-')
+                ax[1].set_ylabel('Cumulative normalized explained variance')
+                ax[1].set_xlabel('Component')
+                plt.tight_layout()
+                plt.show()
+                n_comp = int(input(f'How many PCs (90 and 99% explained variance at component n{np.where(np.cumsum(var/np.sum(var)) >= .90)[0][0]+1} and n{np.where(np.cumsum(var/np.sum(var)) >= .99)[0][0]+1})?'))
             pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
-            pca_data = pca.fit_transform(var_cov_matrix.T)
-            var = pca.transform(var_cov_matrix)
-            var = np.var(var, axis=0)
-            ax[0].plot(np.arange(pca.n_components)+1, var/np.sum(var),'.-')
-            ax[0].set_ylabel('Normalized explained variance')
-            ax[0].set_xlabel('Component')
-            ax[1].plot(np.arange(pca.n_components)+1, np.cumsum(var/np.sum(var)),'.-')
-            ax[1].set_ylabel('Cumulative normalized explained variance')
-            ax[1].set_xlabel('Component')
-            plt.tight_layout()
-            plt.show()
-            n_comp = int(input(f'How many PCs (90 and 99% explained variance at component n{np.where(np.cumsum(var/np.sum(var)) >= .90)[0][0]+1} and n{np.where(np.cumsum(var/np.sum(var)) >= .99)[0][0]+1})?'))
-        pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
 
-        pca_data = pca.fit_transform(var_cov_matrix)/pca.explained_variance_ # divided by explained var for compatibility with matlab's PCA
-        #Rebuilding pca PCs as xarray to ease computation
-        coords = dict(channels=("channels", data.coords["channels"].values),
-                     component=("component", np.arange(n_comp)))
-        pca_data = xr.DataArray(pca_data, dims=("channels","component"), coords=coords)
-        means = data.groupby('channels').mean(...)
-        data = data @ pca_data
+            pca_weights = pca.fit_transform(var_cov_matrix)/pca.explained_variance_ # divided by explained var for compatibility with matlab's PCA
+            #Rebuilding pca PCs as xarray to ease computation
+            coords = dict(channels=("channels", data.coords["channels"].values),
+                         component=("component", np.arange(n_comp)))
+            pca_weights = xr.DataArray(pca_weights, dims=("channels","component"), coords=coords)
+            means = data.groupby('channels').mean(...)
+        data = data @ pca_weights
     elif method is None:
         data = data.rename({'channels':'component'})
-        data['component'] = np.arange(len(data.component ))
+        data['component'] = np.arange(len(data.component))
+        pca_weigths = np.identity(len(data.component))
     # zscore either across all data, by participant (preferred), or by trial
     if apply_zscore:
         match apply_zscore:
@@ -590,14 +594,11 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
             case 'trial':
                 data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
 
-    data.attrs['components'] = pca_data
+    data.attrs['pca_weights'] = pca_weights
     data.attrs['sfreq'] = sfreq
     if stack_data:
         data = stack_data(data)
-    if return_weights:
-        return data, pca_data, pca.explained_variance_, means
-    else:
-        return data
+    return data
     
 
 def LOOCV(data, participant, n_events, initial_fit, sfreq, event_width=50):
