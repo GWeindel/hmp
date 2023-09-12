@@ -757,6 +757,7 @@ def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoc
     maxboot_model, labels, counts, event_number, label_event_num = event_occurence(bootstrapped, model_to_compare)
     fig, axes = plt.subplot_mosaic([['a', 'a'], ['b', 'c'], ['b', 'c']],
                               layout='constrained')
+    n_events = int(maxboot_model.event.max())
     if model_to_compare is None: 
         plot_topo_timecourse(maxboot_model.channels_activity.values, maxboot_model.event_times.values, info, init,ax=axes['a'])
         times = maxboot_model.event_times#init.compute_times(init, maxboot_model, mean=True)#computing predicted event times
@@ -764,12 +765,14 @@ def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoc
         plot_topo_timecourse(epoch_data, model_to_compare, info, init,ax=axes['a'])
         times = init.compute_times(init, model_to_compare, mean=True)
         maxboot_model = model_to_compare
-    counts_adjusted = np.zeros(int(maxboot_model.event.max()+1))
+    counts_adjusted = np.zeros(n_events+1)
     counts_adjusted[:len(counts)] = counts
+    for event in times.event.values:
+        axes['a'].text(times.sel(event=event).values+init.event_width_samples/2.5, .7, event)
     axes['a'].set_xlabel('Time (samples)')
-    axes['b'].bar(maxboot_model.event+1,counts_adjusted)
+    axes['b'].bar(maxboot_model.event,counts_adjusted)
     axes['b'].set_xlabel('Event number')
-    axes['b'].set_xticks(maxboot_model.event+1)
+    axes['b'].set_xticks(maxboot_model.event)
     axes['b'].set_ylabel('Frequency')
     axes['b'].set_ylim(0,1)
     
