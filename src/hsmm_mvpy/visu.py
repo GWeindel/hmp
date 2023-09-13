@@ -788,4 +788,32 @@ def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoc
     # plt.tight_layout()
     plt.show()
     
-                             
+def plot_distribution(distribution, mean, shape, location=0, xmax=300, xmin=0, num=100, label='distribution', color=None, ax=None):
+    '''
+    Plot available distribution with a scale and shape parameter
+    '''
+    match distribution:
+        case 'gamma':
+            from scipy.stats import gamma as sp_dist
+            from hsmm_mvpy.utils import gamma_scale,gamma_mean
+            scale_to_mean, mean_to_scale = gamma_scale,gamma_mean
+        case 'lognormal':
+            from scipy.stats import lognorm as sp_dist
+            from hsmm_mvpy.utils import logn_scale,logn_mean
+            scale_to_mean, mean_to_scale = logn_scale,logn_mean
+        case 'wald':
+            from scipy.stats import invgauss as sp_dist
+            from hsmm_mvpy.utils import wald_scale,wald_mean
+            scale_to_mean, mean_to_scale = wald_scale,wald_mean
+        case 'weibull':
+            from scipy.stats import weibull_min as sp_dist
+            from hsmm_mvpy.utils import weibull_scale,weibull_mean
+            scale_to_mean, mean_to_scale = weibull_scale,weibull_mean
+        case _:
+            raise ValueError(f'Unknown Distribution {distribution}')
+    if ax is None:
+        ax = plt
+    x = np.linspace(xmin, xmax, num=num)
+    y = sp_dist.cdf(np.linspace(xmin, xmax, num=num), shape, scale=mean_to_scale(mean, shape), loc=location)
+    y = np.diff(y, prepend=0)#going to pmf
+    ax.plot(x, y, label=label, color=color)
