@@ -6,7 +6,6 @@ import numpy as np
 import xarray as xr
 import multiprocessing as mp
 import itertools
-from math import gamma as gamma_func
 from pandas import MultiIndex
 from warnings import warn, filterwarnings, resetwarnings
 from scipy.stats import gamma as sp_gamma
@@ -61,20 +60,20 @@ class hmp:
         match distribution:
             case 'gamma':
                 from scipy.stats import gamma as sp_dist
-                self.scale_to_mean = lambda scale, shape : scale*shape
-                self.mean_to_scale = lambda mean, shape : mean/shape
+                from hsmm_mvpy.utils import gamma_scale,gamma_mean
+                self.scale_to_mean, self.mean_to_scale = gamma_scale, gamma_mean
             case 'lognormal':
                 from scipy.stats import lognorm as sp_dist
-                self.scale_to_mean = lambda scale, shape : np.exp(scale+(shape**2/2))
-                self.mean_to_scale =  lambda mean, shape: np.log(mean)-(shape**2/2)
+                from hsmm_mvpy.utils import logn_scale,logn_mean
+                self.scale_to_mean, self.mean_to_scale = logn_scale, logn_mean
             case 'wald':
                 from scipy.stats import invgauss as sp_dist
-                self.scale_to_mean = lambda scale, shape : scale
-                self.mean_to_scale = lambda mean, shape : mean
+                from hsmm_mvpy.utils import wald_scale,wald_mean
+                self.scale_to_mean, self.mean_to_scale = wald_scale, wald_mean
             case 'weibull':
                 from scipy.stats import weibull_min as sp_dist
-                self.scale_to_mean = lambda scale, shape : scale*gamma_func(1+1/shape)
-                self.mean_to_scale = lambda mean, shape : mean/gamma_func(1+1/shape)
+                from hsmm_mvpy.utils import weibull_scale,weibull_mean
+                self.scale_to_mean, self.mean_to_scale = weibull_scale, weibull_mean
             case _:
                 raise ValueError(f'Unknown Distribution {distribution}')
         self.cdf = sp_dist.cdf

@@ -13,6 +13,28 @@ from warnings import warn, filterwarnings
 
 filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later 
 
+def gamma_scale(scale, shape): 
+    return scale*shape
+def gamma_mean(mean, shape): 
+    return mean/shape
+
+def logn_scale(scale, shape): 
+    return np.exp(scale+(shape**2/2))
+def logn_mean(mean, shape): 
+    return np.log(mean)-(shape**2/2)
+
+def wald_scale(scale, shape): 
+    return scale
+def wald_mean(mean, shape): 
+    return mean
+
+def weibull_scale(scale, shape):
+    from math import gamma as gamma_func
+    return scale*gamma_func(1+1/shape)
+def weibull_mean(mean, shape): 
+    from math import gamma as gamma_func
+    return mean/gamma_func(1+1/shape)
+
 def read_mne_EEG(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None, 
                  subj_idx=None, metadata = None, events_provided=None, rt_col='response',
                  verbose=True, tmin=-.2, tmax=5, offset_after_resp = 0, 
