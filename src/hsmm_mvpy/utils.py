@@ -3,7 +3,8 @@
 '''
 
 import numpy as np
-import scipy.stats as stats
+from scipy.special import gamma as gamma_func
+from scipy.stats import lognorm
 import xarray as xr
 import multiprocessing as mp
 import itertools
@@ -21,7 +22,7 @@ def gamma_mean(mean, shape):
 def logn_scale(scale, shape): 
     return np.exp(scale+(shape**2/2))
 def logn_mean(mean, shape): 
-    return np.log(mean)-(shape**2/2)
+    return mean-(shape**2/2)
 
 def wald_scale(scale, shape): 
     return scale
@@ -29,10 +30,8 @@ def wald_mean(mean, shape):
     return mean
 
 def weibull_scale(scale, shape):
-    from math import gamma as gamma_func
     return scale*gamma_func(1+1/shape)
 def weibull_mean(mean, shape): 
-    from math import gamma as gamma_func
     return mean/gamma_func(1+1/shape)
 
 def read_mne_EEG(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None, 
