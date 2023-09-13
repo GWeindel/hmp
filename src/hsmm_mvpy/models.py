@@ -1819,7 +1819,7 @@ class hmp:
                 mags_accepted[:n_events] = mags[:n_events].copy()
                 j = 0
                 if verbose:
-                    print(f'Transition event {n_events} found around sample {int(np.round(np.sum(pars_accepted[:n_events,:].prod(axis=1))))}')
+                    print(f'Transition event {n_events} found around sample {int(np.round(self.scale_to_mean(np.sum(pars_accepted[:n_events,:]), self.shape)))}')
                 if trace:#keep trace of algo
                     all_mags_prop.append(mags[:n_events].copy())
                     all_pars_prop.append(pars[:n_events+1].copy())
