@@ -20,7 +20,7 @@ def gamma_mean(mean, shape):
     return mean/shape
 
 def logn_scale(scale, shape): 
-    return np.exp(scale+(shape**2/2))
+    return scale+(shape**2/2)
 def logn_mean(mean, shape): 
     return mean-(shape**2/2)
 
