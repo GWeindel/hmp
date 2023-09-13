@@ -759,17 +759,17 @@ def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoc
                               layout='constrained')
     n_events = int(maxboot_model.event.max())
     if model_to_compare is None: 
-        plot_topo_timecourse(maxboot_model.channels_activity.values, maxboot_model.event_times.values, info, init,ax=axes['a'])
+        plot_topo_timecourse(maxboot_model.channels_activity.values, maxboot_model.event_times.values, info, init,ax=axes['a'],event_lines=False, colorbar=False, times_to_display=None)
         times = maxboot_model.event_times#init.compute_times(init, maxboot_model, mean=True)#computing predicted event times
     else:
-        plot_topo_timecourse(epoch_data, model_to_compare, info, init,ax=axes['a'])
+        plot_topo_timecourse(epoch_data, model_to_compare, info, init,ax=axes['a'], event_lines=False, colorbar=False, times_to_display=None)
         times = init.compute_times(init, model_to_compare, mean=True)
         maxboot_model = model_to_compare
     counts_adjusted = np.zeros(n_events+1)
     counts_adjusted[:len(counts)] = counts
     for event in times.event.values:
         axes['a'].text(times.sel(event=event).values+init.event_width_samples/2.5, .7, event)
-    axes['a'].set_xlabel('Time (samples)')
+    # axes['a'].set_xlabel('Time (samples)')
     axes['b'].bar(maxboot_model.event,counts_adjusted)
     axes['b'].set_xlabel('Event number')
     axes['b'].set_xticks(maxboot_model.event)
@@ -781,7 +781,8 @@ def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoc
     
     axes['c'].set_ylabel('Frequency')
     axes['c'].set_ylim(0,1)
-    axes['a'].spines[['right', 'top']].set_visible(False)
+    axes['a'].set_xticks([])
+    axes['a'].spines[['right', 'top', 'bottom']].set_visible(False)
     axes['b'].spines[['right', 'top']].set_visible(False)
     axes['c'].spines[['right', 'top']].set_visible(False)
     # plt.tight_layout()
