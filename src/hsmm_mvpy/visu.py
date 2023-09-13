@@ -814,6 +814,6 @@ def plot_distribution(distribution, mean, shape, location=0, xmax=300, xmin=0, n
     if ax is None:
         ax = plt
     x = np.linspace(xmin, xmax, num=num)
-    y = sp_dist.cdf(np.linspace(xmin, xmax, num=num), shape, scale=mean_to_scale(mean, shape), loc=location)
+    y = sp_dist.cdf(x, shape, scale=mean_to_scale(mean, shape), loc=location)
     y = np.diff(y, prepend=0)#going to pmf
     ax.plot(x, y, label=label, color=color)
