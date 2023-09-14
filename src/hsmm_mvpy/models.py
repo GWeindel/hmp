@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from hsmm_mvpy import utils
 from itertools import cycle, product
-
+from scipy.stats import sem
 
 try:
     __IPYTHON__
@@ -536,20 +536,36 @@ class hmp:
                 parameters = np.tile(parameters, (n_conds, 1, 1))
             assert parameters.shape[1] == n_events + 1, 'Provided parameters should match number of stages in parameters map'
 
+            #set params missing stages to nan to make it obvious in the results
+            if (pars_map < 0).any():
+                for c in range(n_conds):
+                    parameters[c, np.where(pars_map[c,:]<0)[0],:] = np.nan
+            
         if magnitudes is not None:
             if len(np.shape(magnitudes)) == 2: #broadcast magnitudes across conditions
                 magnitudes = np.tile(magnitudes, (n_conds, 1, 1))
             assert magnitudes.shape[1] == n_events, 'Provided magnitudes should match number of events in magnitudes map'
 
+            #set mags missing events to nan to make it obvious in the results
+            if (mags_map < 0).any():
+                for c in range(n_conds):
+                    magnitudes[c, np.where(mags_map[c,:]<0)[0],:] = np.nan
+
         if starting_points > 0:#Initialize with equally spaced option
             if parameters is None:
-                parameters = np.tile([self.shape, ((np.mean(self.durations))/(n_events+1)-self.location)/self.shape], (n_events+1,1))
-                parameters[0,1] = np.mean(self.durations)/(n_events+1)/self.shape #first stage has no location
-                parameters = np.tile(parameters, (n_conds, 1, 1))  #broadcast across conditions
+                parameters = np.zeros((n_conds,n_events + 1, 2)) * np.nan #by default nan for missing stages
+                for c in range(n_conds):
+                    pars_cond = np.where(pars_map[c,:]>=0)[0]
+                    n_stage_cond = len(pars_cond)
+                    parameters[c,pars_cond,:] = np.tile([self.shape, ((np.mean(self.durations[conds==c]))/(n_stage_cond)-self.location)/self.shape], (n_stage_cond,1))
+                    parameters[c,0,1] = np.mean(self.durations[conds==c])/(n_stage_cond)/self.shape #first stage has no location
             initial_p = parameters
             if magnitudes is None:
                 magnitudes = np.zeros((n_events,self.n_dims), dtype=np.float64)
                 magnitudes = np.tile(magnitudes, (n_conds, 1, 1)) #broadcast across conditions
+                if (mags_map < 0).any(): #set missing mags to nan
+                    for c in range(n_conds):
+                        magnitudes[c, np.where(mags_map[c,:]<0)[0],:] = np.nan
             initial_m = magnitudes
 
         if starting_points > 1: #use multiple starting points
@@ -558,9 +574,11 @@ class hmp:
             magnitudes = np.tile(initial_m, (starting_points+1, 1, 1, 1))
             if method == 'random':
                 for _ in np.arange(starting_points):
-                    proposal_p = self.gen_random_stages(n_events)
-                    proposal_p = np.tile(proposal_p, (n_conds, 1,1))
-                    for i in range(n_conds):
+                    proposal_p = np.zeros((n_conds,n_events + 1, 2)) * np.nan #by default nan for missing stages
+                    for c in range(n_conds):
+                        pars_cond = np.where(pars_map[c,:]>=0)[0]
+                        n_stage_cond = len(pars_cond)
+                        proposal_p[c,pars_cond,:] = self.gen_random_stages(n_stage_cond-1)
                         proposal_p[i][parameters_to_fix] = initial_p[0][parameters_to_fix]
                     parameters.append(proposal_p)
                 
@@ -569,6 +587,8 @@ class hmp:
                     proposal_m = proposals_m[i]
                     proposal_m = np.tile(proposal_m, (n_conds, 1,1))
                     for j in range(n_conds):
+                        if (mags_map < 0).any(): #set missing mags to nan
+                            proposal_m[c, np.where(mags_map[c,:]<0)[0],:] = np.nan
                         proposal_m[j][magnitudes_to_fix,:] = initial_m[0][magnitudes_to_fix,:]
                     magnitudes[i+1,:,:,:] = proposal_m
             else:
@@ -615,7 +635,7 @@ class hmp:
             
         elif starting_points == 1:#informed starting point
             lkh, mags, pars, eventprobs, traces = self.EM(initial_m, initial_p, \
-                                        maximization, magnitudes_to_fix, parameters_to_fix, \
+                                         maximization, magnitudes_to_fix, parameters_to_fix, \
                                          max_iteration, tolerance, min_iteration, 
                                          mags_map, pars_map, conds, cpus)
 
@@ -631,42 +651,32 @@ class hmp:
 
             lkh, mags, pars, eventprobs, traces = self.EM(magnitudes, parameters, maximization, magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration, mags_map, pars_map, conds, cpus)
         
+        #make output object
         xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
         xrtraces = xr.DataArray(traces, dims=("em_iteration"), name="traces", coords={'em_iteration':range(len(traces))})
         
-        estimated = []
-        for c in range(n_conds):
+        xrparams = xr.DataArray(pars, dims=("condition","stage",'parameter'), name="parameters", 
+                                 coords ={'condition':range(n_conds), 'stage':range(n_events+1), 'parameter':['shape','scale']})
+        xrmags = xr.DataArray(mags, dims=("condition", "event", "component"), name="magnitudes",
+                     coords={'condition':range(n_conds), 'event':range(n_events), "component":range(self.n_dims)})
+        part, trial = self.coords['participant'].values, self.coords['trials'].values
 
-            mags_cond = np.where(mags_map[c,:]>=0)[0]
-            pars_cond = np.where(pars_map[c,:]>=0)[0]
-            n_events_cond = len(mags_cond)
-            n_stage_cond = n_events_cond + 1
-            trials_cond = np.where(conds == c)[0]
+        xreventprobs = xr.Dataset({'eventprobs': (('event', 'trial_x_participant','samples'),
+                                             eventprobs.T)},
+                                {'event': ('event', range(n_events)),
+                                 'samples': ('samples', range(np.shape(eventprobs)[0])),
+                                 'trial_x_participant':  ('trial_x_participant', MultiIndex.from_arrays([part,trial],
+                                 names=('participant','trials'))),
+                                 'cond_x_participant': ('trial_x_participant', MultiIndex.from_arrays([part,conds],
+                                 names=('participant','cond'))),
+                                 'cond':('trial_x_participant',conds)})
+        xreventprobs = xreventprobs.transpose('trial_x_participant','samples','event')
 
-            xrparams = xr.DataArray(pars[c,pars_cond,:], dims=("stage",'parameter'), name="parameters", 
-                        coords = [range(n_stage_cond), ['shape','scale']])
-            xrmags = xr.DataArray(mags[c,mags_cond,:], dims=("event","component"), name="magnitudes",
-                    coords={'event':range(n_events_cond),
-                            "component":range(self.n_dims)})
-            part, trial = self.coords['participant'].values[trials_cond], self.coords['trials'].values[trials_cond]
-
-            xreventprobs = xr.Dataset({'eventprobs': (('event', 'trial_x_participant','samples'), 
-                                            eventprobs[np.ix_(range(self.max_d),trials_cond, mags_cond)].T)},
-                            {'event':range(n_events_cond),
-                            'samples':range(np.shape(eventprobs)[0]),
-                            'trial_x_participant':  MultiIndex.from_arrays([part,trial],
-                                names=('participant','trials'))})
-            xreventprobs = xreventprobs.transpose('trial_x_participant','samples','event')
-        
-            estimated.append(xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrtraces)))
-
-        #make into hmp object
-        estimated = xr.concat(estimated, dim='condition')
-        estimated.coords['condition_trial'] = conds
+        estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrtraces))
         estimated.attrs['mags_map'] = mags_map
         estimated.attrs['pars_map'] = pars_map
         estimated.attrs['clabels'] = clabels
-
+        
         if verbose:
             print(f"parameters estimated for {n_events} events model")
         return estimated
@@ -733,9 +743,9 @@ class hmp:
         
         null_stages = np.where(parameters[...,-1].flatten()<0)[0]
         wrong_shape = np.where(parameters[...,-2]!=self.shape)[0]
-        if len(null_stages)>0:
+        if n_cond is None and len(null_stages)>0:
             raise ValueError(f'Wrong scale parameter input, provided scale parameter(s) {null_stages} should be positive but have value {parameters[...,-1].flatten()[null_stages]}')
-        if len(wrong_shape)>0:
+        if n_cond is None and len(wrong_shape)>0:
             raise ValueError(f'Wrong shape parameter input, provided parameter(s) {wrong_shape} shape is {parameters[...,-2][wrong_shape]} but expected {self.shape}')
         
         initial_parameters = np.copy(parameters)
@@ -1196,7 +1206,7 @@ class hmp:
             return onsets
 
     @staticmethod        
-    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, cumulative=False, add_rt=False, extra_dim=None, as_time=False):
+    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=False, extra_dim=None, as_time=False, errorbars=None):
         '''
         Compute the likeliest onset times for each event
 
@@ -1212,6 +1222,9 @@ class hmp:
             What value to fill for the first onset/duration.
         mean : bool 
             Whether to compute the mean (True) or return the single trial estimates
+            Note that mean and errorbars cannot both be true.
+        mean_in_partipant : bool
+            Whether the mean is first computed within participant before calculating the overall mean.
         cumulative : bool
             Outputs stage duration (False) or time of onset of stages (True)
         add_rt : bool
@@ -1220,18 +1233,44 @@ class hmp:
             if string the times are averaged within that dimension
         as_time : bool
             if true, return time (ms) instead of samples
+        errorbars : str
+            calculate 95% confidence interval ('ci'), standard deviation ('std'),
+            standard error ('se') on the times or durations, or None.
+            Note that mean and errorbars cannot both be true.
         
         Returns
         -------
         times : xr.DataArray
             Transition event onset or stage duration with trial_x_participant*event dimensions or only event dimension if mean = True
+            Contains nans for missing stages.
         '''
+
+        assert not(mean and errorbars is not None), 'Only one of mean and errorbars can be set.'
 
         eventprobs = estimates.eventprobs.fillna(0).copy()
         if init.em_method == "max":
             times = eventprobs.argmax('samples')#Most likely event location
         else:
             times = xr.dot(eventprobs, eventprobs.samples, dims='samples')
+
+        #in case there is a single model, but there are empty stages at the end
+        #this happens with selected model from backward estimation
+        if 'n_events' in times.coords and len(times.shape) == 2:
+            tmp = times.mean('trial_x_participant').values
+            if tmp[-1] == 0:
+                filled_stages = np.where(tmp != 0)[0]
+                times = times[:, filled_stages]
+
+        #set to nan if stage missing
+        if extra_dim == 'condition':
+            times_cond = times.groupby('cond').mean('trial_x_participant').values #take average to make sure it's not just 0 on the trial-level
+            for c, e in np.argwhere(times_cond == 0):
+                times[times['cond']==c, e] = np.nan
+        elif extra_dim == 'n_events':
+            times_n_events = times.mean('trial_x_participant').values
+            for x, e in np.argwhere(times_n_events == 0):
+                times[x,:,e] = np.nan
+
         if as_time:
             times = times * 1000/init.sfreq
         if duration:
@@ -1249,69 +1288,130 @@ class hmp:
             rts = rts.assign_coords(event=int(times.event.max().values+1))
             rts = rts.expand_dims(dim="event")
             times = xr.concat([times, rts], dim='event')
+            if extra_dim == 'n_events': #move rts inside the nans of the missing stages
+                for e in times['n_events'].values:
+                    tmp = np.squeeze(times.isel(n_events = times['n_events'] == e).values) #seems overly complicated, but is necessary
+                    #identify first nan column
+                    first_nan = np.where(np.isnan(np.mean(tmp,axis=0)))[0]
+                    if len(first_nan) > 0:
+                        first_nan = first_nan[0]
+                        tmp[:,first_nan] = tmp[:,-1]
+                        tmp[:,-1] = np.nan
+                        times[times['n_events'] == e,:, :] = tmp
         if duration: #taking into account missing events, hence the ugly code
             times = times.rename({'event':'stage'})
             if not cumulative:
                 if not extra_dim:
                     times = times.diff(dim='stage')
-                elif extra_dim == 'condition': #by dim, ignore missing events
-                    for c in times['condition'].values:
-                        tmp = times.isel(condition = c, trial_x_participant = estimates.condition_trial.values == c).values
-                        #identify 0 columns == missing events
-                        missing_evts = np.where(np.mean(tmp,axis=0) == 0)[0]
-                        missing_evts = missing_evts[missing_evts != 0] #remove first column in case 0s were filled
+                elif extra_dim == 'condition': #by cond, ignore missing events
+                    for c in np.unique(times['cond'].values):
+                        tmp = times.isel(trial_x_participant = estimates['cond'] == c).values
+                        #identify nan columns == missing events
+                        missing_evts = np.where(np.isnan(np.mean(tmp,axis=0)))[0]
                         tmp = np.diff(np.delete(tmp, missing_evts, axis=1)) #remove 0 columns, calc difference
-                        tmp = np.hstack((np.insert(tmp, missing_evts-1, 0, axis=1),np.tile(np.nan,(tmp.shape[0],1)))) #insert 0 column (to maintain shape), add extra column to match shape
-                        times[c,estimates.condition_trial.values == c, :] = tmp
-                    times = times[:,:,:-1] #remove extra column
-                elif extra_dim == 'n_event':
-                    for e in times['n_event'].values:
-                        tmp = times.isel(n_event = e).values
-                        #identify 0 columns == missing events
-                        missing_evts = np.where(np.mean(tmp,axis=0) == 0)[0]
-                        missing_evts = missing_evts[missing_evts != 0] #remove first column in case 0s were filled
+                        #insert nan columns (to maintain shape), 
+                        for missing in missing_evts:
+                            tmp = np.insert(tmp, missing-1, np.nan, axis=1)
+                        #add extra column to match shape
+                        tmp = np.hstack((tmp,np.tile(np.nan,(tmp.shape[0],1)))) 
+                        times[estimates['cond'] == c, :] = tmp
+                    times = times[:,:-1] #remove extra column
+                elif extra_dim == 'n_events':
+                    for e in times['n_events'].values:
+                        tmp = np.squeeze(times.isel(n_events = times['n_events'] == e).values) #seems overly complicated, but is necessary
+                        #identify nan columns == missing events
+                        missing_evts = np.where(np.isnan(np.mean(tmp,axis=0)))[0]
                         tmp = np.diff(np.delete(tmp, missing_evts, axis=1)) #remove 0 columns, calc difference
-                        tmp = np.hstack((np.insert(tmp, missing_evts-1, 0, axis=1),np.tile(np.nan,(tmp.shape[0],1)))) #insert 0 column (to maintain shape), add extra column to match shape
-                        times[e,:, :] = tmp
+                        #insert nan columns (to maintain shape), in contrast to above,
+                        #here add columns at the end, as no actually 'missing' events
+                        tmp = np.hstack((tmp,np.tile(np.nan,(tmp.shape[0],len(missing_evts))))) 
+                        #add extra column to match shape
+                        tmp = np.hstack((tmp,np.tile(np.nan,(tmp.shape[0],1)))) 
+                        times[times['n_events'] == e,:, :] = tmp
                     times = times[:,:,:-1] #remove extra column
-        if mean: 
+        
+        if mean:
             if extra_dim == 'condition': #calculate mean only in trials of specific condition
-                tmp = []
-                for c in np.unique(estimates.condition):
-                    tmp.append(times.isel(condition = c, trial_x_participant = estimates.condition_trial.values == c).mean('trial_x_participant'))
-                times = xr.concat(tmp, dim='condition')
+                if mean_in_participant:
+                    times = times.groupby('cond_x_participant').mean('trial_x_participant')
+                    times = times.groupby('cond').mean('cond_x_participant')       
+                else:
+                    times = times.groupby('cond').mean('trial_x_participant')
             else:
-                times = times.mean('trial_x_participant')
+                if mean_in_participant:
+                    times = times.groupby('participant').mean('trial_x_participant').mean('participant')
+                else:
+                    times = times.mean('trial_x_participant')
+        elif errorbars:
+            if extra_dim == 'condition':
+                errorbars_model = np.zeros((len(np.unique(times['cond'])), 2,times.shape[1]))
+                if errorbars == 'ci':
+                    for c in np.unique(times['cond']):
+                        for st in range(times.shape[1]):
+                            errorbars_model[c, :, st] = utils.compute_ci(times[times['cond'] == c, st].values)
+                elif errorbars == 'std':
+                    std_errs = times.groupby('cond').reduce(np.std, dim='trial_x_participant').values
+                    for c in np.unique(times['cond']):
+                        errorbars_model[c,:,:] = np.tile(std_errs[c,:], (2,1))
+                elif errorbars == 'se':
+                    se_errs = times.groupby('cond_x_participant').mean('trial_x_participant').groupby('cond').reduce(sem, dim='cond_x_participant').values
+                    for c in np.unique(times['cond']):
+                        errorbars_model[c,:,:] = np.tile(se_errs[c,:], (2,1))
+            elif extra_dim == 'n_events':
+                errorbars_model = np.zeros((times.shape[0], 2, times.shape[2]))
+                if errorbars == 'ci':
+                    for e in np.unique(times['n_events']):
+                        for st in range(times.shape[2]):
+                            errorbars_model[times['n_events']==e, :, st] = utils.compute_ci(np.squeeze(times[times['n_events']==e,:, st].values))
+                elif errorbars == 'std':
+                    std_errs = times.reduce(np.std, dim='trial_x_participant').values
+                    for e in np.unique(times['n_events']):
+                        errorbars_model[times['n_events']==e,:,:] = np.tile(std_errs[times['n_events']==e,:], (2,1))
+                elif errorbars == 'se':
+                    se_errs = times.groupby('participant').mean('trial_x_participant').groupby('n_events').reduce(sem, dim='participant', axis=0).values
+                    for c in np.unique(times['cond']):
+                        errorbars_model[c,:,:] = np.tile(se_errs[c,:], (2,1))
+            else:
+                if errorbars == 'ci':
+                    errorbars_model = np.zeros((2,times.shape[1]))
+                    for st in range(times.shape[1]):
+                        errorbars_model[:, st] = utils.compute_ci(times[:,st].values)
+                elif errorbars == 'std':
+                    errorbars_model = np.tile(times.reduce(np.std, dim='trial_x_participant').values, (2,1))
+                elif errorbars == 'se':
+                    errorbars_model = np.tile(times.groupby('participant').mean('trial_x_participant').reduce(sem, dim='participant').values, (2,1))
+            times = errorbars_model
         return times
    
     @staticmethod
-    def compute_topologies(channels, estimated, event_width_samples, extra_dim=None, mean=True):
+    def compute_topologies(channels, estimated, init, extra_dim=None, mean=True, mean_in_participant=True):
         """
         Compute topologies for each trial. 
          
         parameters
         ----------
-         	 channels: xr.Dataset 
+         	channels: xr.Dataset 
                 Epoched data
-         	 estimated: xr.Dataset 
+         	estimated: xr.Dataset 
                 estimated model parameters and event probabilities
-         	 event_width_samples: float 
-                number of samples to shift to the peak of the event
-         	 extra_dim: str 
+         	init : 
+                Initialized HMP object 
+         	extra_dim: str 
                 if True the topology is computed in the extra dimension
-         	 mean: bool 
+         	mean: bool 
                 if True mean will be computed instead of single-trial channel activities
+            mean_in_partipant : bool
+                Whether the mean is first computed within participant before calculating the overall mean.
          
          Returns
          -------
          	event_values: xr.DataArray
                 array containing the values of each electrode at the most likely transition time
+                contains nans for missing events
         """
-        shift = event_width_samples//2+1#Shifts to compute channel topology at the peak of the event
+        shift = init.event_width_samples//2+1#Shifts to compute channel topology at the peak of the event
         channels = channels.rename({'epochs':'trials'}).\
                           stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant')
-        if extra_dim == 'condition':
-            condition_trial = estimated.condition_trial.values
         estimated = estimated.eventprobs.fillna(0).copy()
         n_events = estimated.event.count().values
         n_trials = estimated.trial_x_participant.count().values
@@ -1319,8 +1419,13 @@ class hmp:
 
         channels = channels.sel(trial_x_participant=estimated.trial_x_participant) #subset to estimated
 
-        if not extra_dim:
-            event_values = channels.sel(samples=estimated.argmax('samples') + shift).values
+        if not extra_dim or extra_dim == 'condition': #also in the condition case, only one fit per trial
+            if init.em_method == "max":
+                times = estimated.argmax('samples') #Most likely event location
+            else:
+                times = np.round(xr.dot(estimated, estimated.samples, dims='samples'))
+        
+            event_values = channels.sel(samples=times + shift).values
             event_values = xr.DataArray(event_values, 
                         dims = ["channels","trial_x_participant","event",],
                         coords={"trial_x_participant":estimated.trial_x_participant,
@@ -1329,11 +1434,30 @@ class hmp:
                         })
             event_values = event_values.transpose("trial_x_participant","event","channels") #to maintain previous behavior
 
-        else:
+            if extra_dim == 'condition':
+                #add coords
+                event_values = event_values.assign_coords({'cond_x_participant': ('trial_x_participant', channels['cond_x_participant'].values),
+                                            'cond': ('trial_x_participant', channels['cond'].values)})
+
+                #set to nan if stage missing
+                times = times.groupby('cond').mean('trial_x_participant').values
+                for c, e in np.argwhere(times==0):
+                    event_values[event_values['cond']==c,e,:] = np.nan
+
+        elif extra_dim == 'n_events': #here we need values per fit
             n_dim = estimated[extra_dim].count().values
             event_values = np.zeros((n_dim, n_channels, n_trials, n_events))*np.nan
             for x in range(n_dim):
-                event_values[x,:,:,:] = channels.sel(samples=estimated[x].argmax('samples') + shift).values
+                if init.em_method == "max":
+                    times = estimated[x].argmax('samples')
+                else:
+                    times = np.round(xr.dot(estimated[x], estimated.samples, dims='samples'))
+                event_values[x,:,:,:] = channels.sel(samples=times + shift).values
+
+                #set to nan if missing
+                times = times.mean('trial_x_participant').values
+                for e in np.argwhere(times==0):
+                    event_values[x,:,:,e] = np.nan
                 
             event_values = xr.DataArray(event_values, 
                     dims = [extra_dim, "channels", "trial_x_participant","event"],
@@ -1343,16 +1467,22 @@ class hmp:
                             "channels":channels.channels
                     })
             event_values = event_values.transpose(extra_dim, "trial_x_participant","event","channels") #to maintain previous behavior
+        else:
+            print('Unknown extra dimension')
 
         if mean:
             if extra_dim == 'condition': #calculate mean within condition trials
-                tmp = []
-                for c in np.unique(estimated.condition):
-                    tmp.append(event_values.isel(condition = c, trial_x_participant = condition_trial == c).mean('trial_x_participant'))
-                return xr.concat(tmp, dim='condition')
+                if mean_in_participant:
+                    tmp = event_values.groupby('cond_x_participant').mean('trial_x_participant')
+                    tmp = tmp.assign_coords({'cond': ('cond_x_participant', [x[1] for x in tmp['cond_x_participant'].data])})
+                    return tmp.groupby('cond').mean('cond_x_participant')
+                else:
+                    return event_values.groupby('cond').mean('trial_x_participant')
             else:
-                return event_values.mean('trial_x_participant')
-
+                if mean_in_participant:
+                    return event_values.groupby('participant').mean('trial_x_participant').mean('participant')
+                else:
+                    return event_values.mean('trial_x_participant')
         else:
             return event_values
 
@@ -1563,7 +1693,8 @@ class hmp:
         #calculate estimates, returns lkhs, mags, times
         inputs = zip(itertools.repeat((12,3)), itertools.repeat(False), itertools.repeat('search'), 
                     grid, itertools.repeat(step), itertools.repeat(False), itertools.repeat(None),
-                    itertools.repeat(False),itertools.repeat(False), itertools.repeat(1), itertools.repeat(tolerance),itertools.repeat(min_iteration))
+                    itertools.repeat(False),itertools.repeat(False), itertools.repeat(1), itertools.repeat(tolerance),
+                    itertools.repeat(min_iteration),itertools.repeat(self.em_method))
         with mp.Pool(processes=cpu) as pool:
             estimates = list(tqdm(pool.imap(self._sliding_event_star, inputs), total=len(grid)))
             
@@ -1589,7 +1720,7 @@ class hmp:
             topos = np.zeros((n_electrodes, n_trials, len(est[0])))
             for j, times_per_event in enumerate(est[2]):
                 for trial in range(n_trials):
-                    topos[:,trial,j] = stacked_epoch_data[:, times_per_event[trial] + shift,trial]
+                    topos[:,trial,j] = stacked_epoch_data[:, int(times_per_event[trial]) + shift, trial]
                 
             channels[idx:(idx+len(est[0])), :] = np.nanmean(topos,axis=1).T
 
@@ -1607,7 +1738,7 @@ class hmp:
     def _sliding_event_star(self, args): #for tqdm usage
         return self.sliding_event(*args)
         
-    def sliding_event(self, figsize=(12,3), verbose=True, method=None, magnitudes=None, step=1, show=True, ax=None, fix_mags=False, fix_pars=False, cpus=None, tolerance=1e-4, min_iteration=1):
+    def sliding_event(self, figsize=(12,3), verbose=True, method=None, magnitudes=None, step=1, show=True, ax=None, fix_mags=False, fix_pars=False, cpus=None, tolerance=1e-4, min_iteration=1,em_method='mean'):
         """
         This method outputs the likelihood and estimates of a 1 event HMP model with each sample, from 0 to the mean epoch duration, as starting point for the first stage.
          
@@ -1669,7 +1800,7 @@ class hmp:
         else: 
             pars_to_fix = []
             ls = 'o'
-        lkhs_init, mags_init, pars_init, times_init = self._estimate_single_event(magnitudes, parameters, pars_to_fix, mags_to_fix, maximization, cpus, tolerance=tolerance,min_iteration=min_iteration)
+        lkhs_init, mags_init, pars_init, times_init = self._estimate_single_event(magnitudes, parameters, pars_to_fix, mags_to_fix, maximization, cpus, tolerance=tolerance,min_iteration=min_iteration,em_method=em_method)
         
         if verbose:
             if ax is None:
@@ -1685,7 +1816,7 @@ class hmp:
         else:
             return lkhs_init, mags_init, times_init
         
-    def _estimate_single_event(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, maximization, cpus, max_iteration=1e2, tolerance=1e-4,min_iteration=1):
+    def _estimate_single_event(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, maximization, cpus, max_iteration=1e2, tolerance=1e-4,min_iteration=1,em_method='mean'):
         filterwarnings('ignore', 'Convergence failed, estimation hitted the maximum ', )#will be the case but for a subset only hence ignore
         if cpus is None:
             cpus = self.cpus
@@ -1706,8 +1837,11 @@ class hmp:
         mags_sp = np.array([x[1] for x in estimates])
         pars_sp = np.array([x[2] for x in estimates])
 
-        #take max prob times from eventprobs, to reduce memory usage
-        times_sp = np.array([np.argmax(np.squeeze(x[3]),axis=0) for x in estimates])
+        #calc expected time
+        if True: #em_method == "max":
+            times_sp = np.array([np.argmax(np.squeeze(x[3]),axis=0) for x in estimates])
+        else:
+            times_sp = np.array([np.rint(np.dot(np.squeeze(x[3]).T, np.arange(x[3].shape[0]))) for x in estimates])
 
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp

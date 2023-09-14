@@ -57,7 +57,7 @@ def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter,
     if summarize:
         times = init_boot.compute_times(init_boot, estimates_boot, mean=True)
         channels = init_boot.compute_topologies(resampled_data, estimates_boot, 
-                                                init_boot.event_width_samples, mean=True)
+                                                init_boot, mean=True)
         boot_results = xr.combine_by_coords([estimates_boot.magnitudes.to_dataset(name='magnitudes'),
                                          estimates_boot.parameters.to_dataset(name='parameters'), 
                                          times.to_dataset(name='event_times'),

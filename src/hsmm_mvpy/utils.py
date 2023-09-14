@@ -10,6 +10,7 @@ import itertools
 import pandas as pd
 import warnings
 from warnings import warn, filterwarnings
+from seaborn.algorithms import bootstrap
 
 filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later 
 
@@ -457,6 +458,12 @@ def zscore(data):
     zscore of the data
     '''
     return (data - data.mean()) / data.std()
+
+def compute_ci(times):
+    '''
+    Compute confidence intervals
+    '''
+    return np.abs(np.squeeze([np.nanpercentile(bootstrap(times), q=[2.5,97.5])]) - np.mean(times))
 
 
 def stack_data(data, subjects_variable='participant', channel_variable='component', single=False):
