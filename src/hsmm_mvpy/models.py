@@ -74,8 +74,28 @@ class hmp:
                 from scipy.stats import weibull_min as sp_dist
                 from hsmm_mvpy.utils import weibull_scale,weibull_mean
                 self.scale_to_mean, self.mean_to_scale = weibull_scale, weibull_mean
+            case 'log-logistic':
+                from scipy.stats import fisk as sp_dist
+                from hsmm_mvpy.utils import fisk_scale,fisk_mean
+                self.scale_to_mean, self.mean_to_scale = fisk_scale,fisk_mean
+            case 'maxwell-boltzmann':
+                from scipy.stats import chi as sp_dist
+                from hsmm_mvpy.utils import maxb_scale,maxb_mean
+                shape = 3
+                self.scale_to_mean, self.mean_to_scale = maxb_scale,maxb_mean
+            case 'rayleigh':
+                from scipy.stats import chi as sp_dist
+                from hsmm_mvpy.utils import ray_scale,ray_mean
+                shape = 2
+                self.scale_to_mean, self.mean_to_scale = ray_scale,ray_mean
+            case 'half-normal':
+                from scipy.stats import chi as sp_dist
+                from hsmm_mvpy.utils import halfn_scale,halfn_mean
+                shape = 1
+                self.scale_to_mean, self.mean_to_scale = halfn_scale,halfn_mean
             case _:
                 raise ValueError(f'Unknown Distribution {distribution}')
+        self.distribution = distribution
         self.cdf = sp_dist.cdf
             
         if sfreq is None:
@@ -1317,7 +1337,7 @@ class hmp:
          	event_values: xr.DataArray
                 array containing the values of each electrode at the most likely transition time
         """
-        shift = event_width_samples//2+1#Shifts to compute channel topology at the peak of the event
+        shift = event_width_samples//2#Shifts to compute channel topology at the peak of the event
         channels = channels.rename({'epochs':'trials'}).\
                           stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant')
         if extra_dim == 'condition':
@@ -1722,7 +1742,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=True, max_iterations=1e3, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None):
+    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=True, max_iterations=1e3, tolerance=1e-4, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -1783,7 +1803,7 @@ class hmp:
         mags = np.zeros((int(end), self.n_dims)) #mags during estimation
         mags_accepted = mags.copy()
         i = 0
-        while self.scale_to_mean(last_stage,self.shape) > self.location and n_events-3 < max_event_n:
+        while self.scale_to_mean(last_stage,self.shape) > self.location and n_events < max_event_n:
             prev_time = time
             if fix_iter:
                 to_fix = [range(n_events)]

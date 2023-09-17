@@ -34,6 +34,26 @@ def weibull_scale(scale, shape):
 def weibull_mean(mean, shape): 
     return mean/gamma_func(1+1/shape)
 
+def maxb_scale(scale, shape):
+    return 2*scale*np.sqrt(2/np.pi)
+def maxb_mean(mean, shape): 
+    return mean/2/np.sqrt(2/np.pi)
+
+def ray_scale(scale, shape):
+    return scale*np.sqrt(2/np.pi)
+def ray_mean(mean, shape): 
+    return mean/np.sqrt(2/np.pi)
+
+def halfn_scale(scale, shape):
+    return (scale*np.sqrt(2))/np.sqrt(np.pi)
+def halfn_mean(mean, shape): 
+    return mean/np.sqrt(2/np.pi)
+
+def fisk_scale(scale, shape):
+    return  (scale*np.pi/shape)/np.sin(np.pi/shape)
+def fisk_mean(mean, shape): 
+    return  shape*(mean*np.sin(np.pi/shape))/np.pi
+
 def read_mne_EEG(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None, 
                  subj_idx=None, metadata = None, events_provided=None, rt_col='response',
                  verbose=True, tmin=-.2, tmax=5, offset_after_resp = 0, 
@@ -48,7 +68,7 @@ def read_mne_EEG(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None,
 
 def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None, 
                  subj_idx=None, metadata=None, events_provided=None, rt_col='rt', rts=None,
-                 verbose=True, tmin=-.2, tmax=5, offset_after_resp = 0, 
+                 verbose=True, tmin=-.2, tmax=10, offset_after_resp = 0, 
                  high_pass=.5, low_pass = None, pick_channels = 'eeg', baseline=(None, 0),
                  upper_limit_RT=np.inf, lower_limit_RT=0, reject_threshold=None, scale=1):
     ''' 

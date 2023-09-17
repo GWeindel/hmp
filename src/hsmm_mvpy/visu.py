@@ -809,8 +809,27 @@ def plot_distribution(distribution, mean, shape, location=0, xmax=300, xmin=0, n
             from scipy.stats import weibull_min as sp_dist
             from hsmm_mvpy.utils import weibull_scale,weibull_mean
             scale_to_mean, mean_to_scale = weibull_scale,weibull_mean
+        case 'maxwell-boltzmann':
+            from scipy.stats import chi as sp_dist
+            from hsmm_mvpy.utils import maxb_scale,maxb_mean
+            shape = 3
+            scale_to_mean, mean_to_scale = maxb_scale,maxb_mean
+        case 'log-logistic':
+            from scipy.stats import fisk as sp_dist
+            from hsmm_mvpy.utils import fisk_scale,fisk_mean
+            scale_to_mean, mean_to_scale = fisk_scale,fisk_mean
+        case 'rayleigh':
+            from scipy.stats import chi as sp_dist
+            from hsmm_mvpy.utils import ray_scale,ray_mean
+            shape = 2
+            scale_to_mean, mean_to_scale = ray_scale,ray_mean
+        case 'half-normal':
+            from scipy.stats import chi as sp_dist
+            from hsmm_mvpy.utils import halfn_scale,halfn_mean
+            shape = 1
+            scale_to_mean, mean_to_scale = halfn_scale,halfn_mean
         case _:
-            raise ValueError(f'Unknown Distribution {distribution}')
+                raise ValueError(f'Unknown Distribution {distribution}')
     if ax is None:
         ax = plt
     x = np.linspace(xmin, xmax, num=num)
