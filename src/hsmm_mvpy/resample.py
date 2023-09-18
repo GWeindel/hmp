@@ -22,8 +22,12 @@ def _gen_idx(data, dim, iterations=1):
     return  indexes[0]#corresponding_indexes,
 
 def _gen_dataset(data, dim, n_iterations):   
-    original_dim_order = list(data.dims.keys())
-    original_dim_order_data = list(data.data.dims)
+    try: 
+        original_dim_order = list(data.dims.keys())
+        original_dim_order_data = list(data.data.dims)
+    except: #Data Array
+        original_dim_order = list(data.dims)
+        original_dim_order_data = list(data.dims)
     if isinstance(dim, list):
         if len(dim) == 2:
             data = data.stack({str(dim[0])+'_x_'+str(dim[1]):dim}).dropna(str(dim[0])+'_x_'+str(dim[1]), how='all')
@@ -36,7 +40,7 @@ def _gen_dataset(data, dim, n_iterations):
         named_index.append(_gen_idx(data, dim))
     return named_index, data, dim, original_dim_order_data
 
-def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter, tolerance, decimate, summarize, verbose, plots=True, cpus=1,
+def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter, tolerance, rerun_pca, pca_weights, decimate, summarize, verbose, plots=True, cpus=1,
                       trace=False, path='./'):
     resampled_data = data.loc[{dim:list(indexes)}].unstack().transpose(*order)
     if '_x_' in dim:
@@ -47,14 +51,17 @@ def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter,
     else:
         resampled_data = resampled_data.assign_coords({dim: np.arange(len(resampled_data[dim]))})
     if 'channels' in resampled_data.dims:
-        hmp_data_boot = transform_data(resampled_data, n_comp=init.n_dims)
+        if rerun_pca:
+            hmp_data_boot = transform_data(resampled_data, n_comp=init.n_dims)
+        else:
+            hmp_data_boot = transform_data(resampled_data, pca_weights=pca_weights)
     else:
-        hmp_data_boot = resampled_data
+        hmp_data_boot = stack_data(resampled_data)
     init_boot = hmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1)
     estimates_boot = init_boot.fit(verbose=verbose, tolerance=tolerance, decimate=decimate)
     if trace:
         save_eventprobs(estimates_boot.eventprobs, path+str(n_iter)+'.nc')
-    if summarize:
+    if summarize and 'channels' in resampled_data.dims:
         times = init_boot.compute_times(init_boot, estimates_boot, mean=True)
         channels = init_boot.compute_topologies(resampled_data, estimates_boot, 
                                                 init_boot, mean=True)
@@ -69,11 +76,13 @@ def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter,
     return boot_results
 
 def bootstrapping(data, dim, n_iterations, init, positions, sfreq, tolerance=1e-4,
-                  decimate=None, summarize=True, verbose=False,
-                  plots=True, cpus=1, trace=False, path='./'):
+                  rerun_pca=False, pca_weights=None, decimate=None, summarize=True,
+                  verbose=False, plots=True, cpus=1, trace=False, path='./'):
     import itertools
     if 'channels' in data.dims:
         data_type = 'raw'
+        if not rerun_pca:
+            assert pca_weights is not None, 'If PCA is not re-computed, PC weights from the HMP initial data should be provided through the pca_weights argument'
     else:
         data_type = 'transformed'
     if verbose:
@@ -83,7 +92,8 @@ def bootstrapping(data, dim, n_iterations, init, positions, sfreq, tolerance=1e-
     inputs = zip(itertools.repeat(data), itertools.repeat(dim), data_views, itertools.repeat(order), 
                 itertools.repeat(init), 
                 itertools.repeat(positions), itertools.repeat(init.sfreq), np.arange(n_iterations),
-                itertools.repeat(tolerance), itertools.repeat(decimate), itertools.repeat(summarize), itertools.repeat(verbose),
+                itertools.repeat(tolerance), itertools.repeat(rerun_pca), itertools.repeat(pca_weights),
+                itertools.repeat(decimate), itertools.repeat(summarize), itertools.repeat(verbose),
                 itertools.repeat(plots),itertools.repeat(cpus), itertools.repeat(trace), itertools.repeat(path))
     with mp.Pool(processes=cpus) as pool:
             boot = list(tqdm(pool.imap(_boot_star, inputs), total=n_iterations))
@@ -93,7 +103,7 @@ def bootstrapping(data, dim, n_iterations, init, positions, sfreq, tolerance=1e-
     #     plot_topo_timecourse(boot.channels, boot.event_times, positions, init_boot, title='iteration = '+str(n_iter), skip_electodes_computation=True)
     return boot
 
-def event_occurence(iterations,  model_to_compare=None, count=False):
+def event_occurence(iterations,  model_to_compare=None, frequency=True, return_mags=None):
     from scipy.spatial import distance_matrix
     if model_to_compare is None:
         max_n_bump_model_index = np.where(np.sum(np.isnan(iterations.magnitudes.values[:,:,0]), axis=(1)) == 0)[0][0]
@@ -101,27 +111,46 @@ def event_occurence(iterations,  model_to_compare=None, count=False):
         model_to_compare = iterations.sel(iteration=max_n_bump_model_index)
     else:
         max_mags = model_to_compare.magnitudes
-    all_diffs = []
+        max_n_bump_model_index = 99999
+    all_diffs = np.zeros(len(max_mags.event))
+    aggregated_mags = np.zeros((len(iterations.iteration), len(max_mags), len(iterations.component)))*np.nan
+    aggregated_pars = np.zeros((len(iterations.iteration), len(max_mags)+1))*np.nan
+    
     all_n = np.zeros(len(iterations.iteration))
     for iteration in iterations.iteration:
         n_events_iter = int(np.sum(np.isfinite(iterations.sel(iteration=iteration).magnitudes.values[:,0])))
         if iteration != max_n_bump_model_index:
             diffs = distance_matrix(iterations.sel(iteration=iteration).magnitudes.squeeze(),
-                        max_mags)
+                        max_mags)[:n_events_iter]
             index_event = diffs.argmin(axis=1)
-            index_event[n_events_iter:] = 9999
-
-            all_diffs.append(index_event)
+            i = 0
+            for event in index_event:
+                if i > 0 and event != index_event[i-1] or i < 1:#Only keeps first encounter
+                    all_diffs[event] += 1
+                    aggregated_mags[iteration, event] = iterations.sel(iteration=iteration, event=i).magnitudes
+                i += 1
+                
         all_n[iteration] = n_events_iter
-    labels, counts = np.unique(all_diffs, return_counts=True)
+    labels, counts = np.arange(len(max_mags.event)), all_diffs
     n_event_labels, n_event_count = np.unique(all_n, return_counts=True)
-    n_events_per_iter = [int(np.sum(np.isfinite(iterations.sel(iteration=i).magnitudes.values[:,0]))) for i in iterations.iteration]
-    if np.any(np.diff(n_events_per_iter) != 0):
-        labels, counts = labels[:-1], counts[:-1]
-    if not count:
+
+    if frequency:
         labels, counts = labels, counts/iterations.iteration.max().values
         n_event_count = n_event_count/iterations.iteration.max().values
-    return model_to_compare, labels, counts, n_event_count, n_event_labels
+    if return_mags is not None:
+        return aggregated_mags[:, return_mags, :]
+    else:    
+        return model_to_compare, labels, counts, n_event_count, n_event_labels
 
 def _boot_star(args): #for tqdm usage
     return _bootstrapped_run(*args)
+
+def select_events(iterations, model_to_compare, selected_events=None, criterion=.65):
+    if selected_events is not None:
+        boot_mags = event_occurence(iterations, model_to_compare, return_mags=selected_events)
+    else:
+        _, labels, counts, _, _ = event_occurence(iterations, model_to_compare, frequency=True)
+        selected_events = labels[counts>criterion]
+        boot_mags = event_occurence(iterations, model_to_compare, frequency=False, return_mags=selected_events)
+    mean_mags = np.nanmean(boot_mags, axis=0)
+    return mean_mags

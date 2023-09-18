@@ -721,19 +721,22 @@ def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoc
     maxboot_model, labels, counts, event_number, label_event_num = event_occurence(bootstrapped, model_to_compare)
     fig, axes = plt.subplot_mosaic([['a', 'a'], ['b', 'c'], ['b', 'c']],
                               layout='constrained')
+    n_events = int(maxboot_model.event.max())
     if model_to_compare is None: 
-        plot_topo_timecourse(maxboot_model.channels_activity.values, maxboot_model.event_times.values, info, init,ax=axes['a'])
+        plot_topo_timecourse(maxboot_model.channels_activity.values, maxboot_model.event_times.values, info, init,ax=axes['a'],event_lines=False, colorbar=False, times_to_display=None)
         times = maxboot_model.event_times#init.compute_times(init, maxboot_model, mean=True)#computing predicted event times
     else:
-        plot_topo_timecourse(epoch_data, model_to_compare, info, init,ax=axes['a'])
+        plot_topo_timecourse(epoch_data, model_to_compare, info, init,ax=axes['a'], event_lines=False, colorbar=False, times_to_display=None)
         times = init.compute_times(init, model_to_compare, mean=True)
         maxboot_model = model_to_compare
-    counts_adjusted = np.zeros(int(maxboot_model.event.max()+1))
+    counts_adjusted = np.zeros(n_events+1)
     counts_adjusted[:len(counts)] = counts
-    axes['a'].set_xlabel('Time (samples)')
-    axes['b'].bar(maxboot_model.event+1,counts_adjusted)
+    for event in times.event.values:
+        axes['a'].text(times.sel(event=event).values+init.event_width_samples/2.5, .7, event)
+    # axes['a'].set_xlabel('Time (samples)')
+    axes['b'].bar(maxboot_model.event,counts_adjusted)
     axes['b'].set_xlabel('Event number')
-    axes['b'].set_xticks(maxboot_model.event+1)
+    axes['b'].set_xticks(maxboot_model.event)
     axes['b'].set_ylabel('Frequency')
     axes['b'].set_ylim(0,1)
     
@@ -742,10 +745,58 @@ def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoc
     
     axes['c'].set_ylabel('Frequency')
     axes['c'].set_ylim(0,1)
-    axes['a'].spines[['right', 'top']].set_visible(False)
+    axes['a'].set_xticks([])
+    axes['a'].spines[['right', 'top', 'bottom']].set_visible(False)
     axes['b'].spines[['right', 'top']].set_visible(False)
     axes['c'].spines[['right', 'top']].set_visible(False)
     # plt.tight_layout()
     plt.show()
     
-                             
+def plot_distribution(distribution, mean, shape, location=0, xmax=300, xmin=0, num=100, label='distribution', color=None, ax=None):
+    '''
+    Plot available distribution with a scale and shape parameter
+    '''
+    match distribution:
+        case 'gamma':
+            from scipy.stats import gamma as sp_dist
+            from hsmm_mvpy.utils import gamma_scale,gamma_mean
+            scale_to_mean, mean_to_scale = gamma_scale,gamma_mean
+        case 'lognormal':
+            from scipy.stats import lognorm as sp_dist
+            from hsmm_mvpy.utils import logn_scale,logn_mean
+            scale_to_mean, mean_to_scale = logn_scale,logn_mean
+        case 'wald':
+            from scipy.stats import invgauss as sp_dist
+            from hsmm_mvpy.utils import wald_scale,wald_mean
+            scale_to_mean, mean_to_scale = wald_scale,wald_mean
+        case 'weibull':
+            from scipy.stats import weibull_min as sp_dist
+            from hsmm_mvpy.utils import weibull_scale,weibull_mean
+            scale_to_mean, mean_to_scale = weibull_scale,weibull_mean
+        case 'maxwell-boltzmann':
+            from scipy.stats import chi as sp_dist
+            from hsmm_mvpy.utils import maxb_scale,maxb_mean
+            shape = 3
+            scale_to_mean, mean_to_scale = maxb_scale,maxb_mean
+        case 'log-logistic':
+            from scipy.stats import fisk as sp_dist
+            from hsmm_mvpy.utils import fisk_scale,fisk_mean
+            scale_to_mean, mean_to_scale = fisk_scale,fisk_mean
+        case 'rayleigh':
+            from scipy.stats import chi as sp_dist
+            from hsmm_mvpy.utils import ray_scale,ray_mean
+            shape = 2
+            scale_to_mean, mean_to_scale = ray_scale,ray_mean
+        case 'half-normal':
+            from scipy.stats import chi as sp_dist
+            from hsmm_mvpy.utils import halfn_scale,halfn_mean
+            shape = 1
+            scale_to_mean, mean_to_scale = halfn_scale,halfn_mean
+        case _:
+                raise ValueError(f'Unknown Distribution {distribution}')
+    if ax is None:
+        ax = plt
+    x = np.linspace(xmin, xmax, num=num)
+    y = sp_dist.cdf(x, shape, scale=mean_to_scale(mean, shape), loc=location)
+    y = np.diff(y, prepend=0)#going to pmf
+    ax.plot(x, y, label=label, color=color)

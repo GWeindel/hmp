@@ -121,7 +121,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             percentiles[source] = np.percentile(stage_dur_fun.rvs(size=n_trials), q=99)
         else:
             percentiles[source] = np.max(times[:,source])
-    max_trial_length = np.sum(percentiles)+1000
+    max_trial_length = np.sum(percentiles)+3000
     # Following code and comments largely comes from MNE examples (e.g. \
     # https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html)
     # It loads the data, info structure and forward solution for one example subject,
@@ -137,7 +137,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
     elif data_type == 'meg':
         picked_type = mne.pick_types(info, meg=True, eeg=False)
     elif data_type == 'eeg/meg':
-        picked_type = mne.pick_types(info, meg=True, eeg=False)
+        picked_type = mne.pick_types(info, meg=True, eeg=True)
     else:
         raise ValueError(f'Invalid data type {data_type}, expected "eeg", "meg" or "eeg/meg"')
     info = mne.pick_info(info, picked_type)
@@ -201,7 +201,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
                     rand_i = np.round(source[-1].rvs(size=n_trials, random_state=random_state)/(tstep*1000),decimals=0)
                 else:
                     rand_i = times[:,trigger-2]
-                if len(sources_subj)+1 > trigger > 2:
+                if trigger > 2:
                     rand_i += location/(tstep*1000)
                 else:
                     rand_i += 1
@@ -295,3 +295,45 @@ def demo(cpus, n_events, seed=9999):
     chan_list.pop(52)#Bad elec
     positions = mne.pick_info(positions, sel=chan_list)
     return eeg_dat, random_source_times, positions
+
+def classification_true(test, true, sfreq, resampling_freq=None):
+    '''
+    '''
+    from scipy.spatial import distance_matrix
+    if resampling_freq is None:
+        resampling_freq = sfreq
+    n_events_iter = int(np.sum(np.isfinite(test.magnitudes.values[:,0])))
+    diffs = distance_matrix(test.magnitudes, true.magnitudes.squeeze())[:n_events_iter]
+    index_event = dict((i,j) for i,j in enumerate(diffs.argmin(axis=1)))
+    true_events_in = list(set(list(index_event.values())))
+    unique_index_event = []
+    for event in true.magnitudes.event[true_events_in]:
+        unique_index_event.append(np.argmin(diffs[:,event]))
+    return list(set(list(index_event.values()))),unique_index_event
+
+def random_source_times_to_pars(generating_events, init, sfreq, resampling_freq=None):
+    if resampling_freq is None:
+        resampling_freq = sfreq
+    number_of_sources = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
+
+    #Recover the actual time of the simulated events
+    random_source_times = np.zeros((int(len(generating_events)/(number_of_sources+1)), number_of_sources))
+    i,x = 1,0                  
+    while x < len(random_source_times):
+        for j in np.arange(number_of_sources):#recovering the individual duration- of event onset
+            random_source_times[x,j] = generating_events[i,0] - generating_events[i-1,0]
+            i += 1
+        i += 1
+        x += 1
+    ## Recover parameters
+    true_parameters = np.tile(init.shape, (np.shape(random_source_times)[-1], 2))
+    true_parameters[:,1] = init.mean_to_scale(np.mean(random_source_times,axis=0),2)
+    random_source_times = random_source_times*(1000/sfreq)/(1000/resampling_freq)
+    ## Recover magnitudes
+    sample_times = np.zeros((init.n_trials, number_of_sources-1), dtype=int)
+    for event in range(number_of_sources-1):
+        sample_times[:,event] = init.starts+np.sum(random_source_times[:,:event+1], axis=1)-1
+    true_activities = init.events[sample_times[:,:]]
+    true_magnitudes = np.mean(true_activities, axis=0)
+    return random_source_times, true_parameters, true_magnitudes, true_activities
+    
