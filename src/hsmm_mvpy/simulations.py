@@ -303,7 +303,7 @@ def classification_true(test, true, sfreq, resampling_freq=None):
     if resampling_freq is None:
         resampling_freq = sfreq
     n_events_iter = int(np.sum(np.isfinite(test.magnitudes.values[:,0])))
-    diffs = distance_matrix(test.magnitudes, true.magnitudes.squeeze())[:n_events_iter]
+    diffs = distance_matrix(test.magnitudes, true.magnitudes)[:n_events_iter]
     index_event = dict((i,j) for i,j in enumerate(diffs.argmin(axis=1)))
     true_events_in = list(set(list(index_event.values())))
     unique_index_event = []
