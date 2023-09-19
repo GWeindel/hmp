@@ -21,14 +21,14 @@ def gamma_mean(mean, shape):
     return mean/shape
 
 def logn_scale(scale, shape): 
-    return scale+(shape**2/2)
+    return scale+shape**2/2
 def logn_mean(mean, shape): 
-    return mean-(shape**2/2)
+    return mean-shape**2/2
 
 def wald_scale(scale, shape): 
-    return scale
+    return scale*shape
 def wald_mean(mean, shape): 
-    return mean
+    return mean/shape
 
 def weibull_scale(scale, shape):
     return scale*gamma_func(1+1/shape)
@@ -41,9 +41,9 @@ def maxb_mean(mean, shape):
     return mean/2/np.sqrt(2/np.pi)
 
 def ray_scale(scale, shape):
-    return scale*np.sqrt(2/np.pi)
+    return scale*np.sqrt(np.pi/2)
 def ray_mean(mean, shape): 
-    return mean/np.sqrt(2/np.pi)
+    return mean/np.sqrt(np.pi/2)
 
 def halfn_scale(scale, shape):
     return (scale*np.sqrt(2))/np.sqrt(np.pi)
