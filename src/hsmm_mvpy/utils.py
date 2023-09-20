@@ -498,7 +498,13 @@ def zscore(data):
     '''
     zscore of the data
     '''
-    return (data - data.mean()) / data.std()
+    if np.isnan(data[:,0]).any(): #if any epochs are completely nan (indicated by the first sample)
+        non_nan_epochs = np.where(~np.isnan(data[:,0]))[0]
+        non_nan_data = data[non_nan_epochs,:]
+        data[non_nan_epochs,:] = (non_nan_data - non_nan_data.mean()) / non_nan_data.std()
+    else:
+        data = (data - data.mean()) / data.std()
+    return data
 
 def compute_ci(times):
     '''
@@ -641,6 +647,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
                 data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore).unstack()
             case 'trial':
                 data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
+        data = data.transpose('participant','epochs','samples','component')
 
     data.attrs['pca_weights'] = pca_weights
     data.attrs['sfreq'] = sfreq
