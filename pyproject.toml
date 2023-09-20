@@ -21,7 +21,7 @@ classifiers = [
 ]
 dependencies=["mne >=1.0.0",
 "numpy",
-"xarray",
+"xarray >= 2023.8.0",
 "scikit-learn",
 "statsmodels",
 "seaborn",
