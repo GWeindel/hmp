@@ -498,12 +498,15 @@ def zscore(data):
     '''
     zscore of the data
     '''
-    if np.isnan(data[:,0]).any(): #if any epochs are completely nan (indicated by the first sample)
-        non_nan_epochs = np.where(~np.isnan(data[:,0]))[0]
-        non_nan_data = data[non_nan_epochs,:]
-        data[non_nan_epochs,:] = (non_nan_data - non_nan_data.mean()) / non_nan_data.std()
-    else:
-        data = (data - data.mean()) / data.std()
+    return (data - data.mean()) / data.std()
+
+def zscore_xarray(data):
+    '''
+    zscore of the data in an xarray, avoiding any nans
+    '''
+    non_nan_mask = ~np.isnan(data.values)
+    if non_nan_mask.any(): #if not everything is nan, calc zscore
+        data.values[non_nan_mask] = (data.values[non_nan_mask] - data.values[non_nan_mask].mean()) / data.values[non_nan_mask].std()
     return data
 
 def compute_ci(times):
@@ -642,13 +645,13 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     if apply_zscore:
         match apply_zscore:
             case 'all':
-                data = data.stack(comp=['component']).groupby('comp').map(zscore).unstack()
+                data = data.stack(comp=['component']).groupby('comp').map(zscore_xarray).unstack()
             case 'participant':
-                data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore).unstack()
+                data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore_xarray).unstack()
             case 'trial':
-                data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
+                data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
         data = data.transpose('participant','epochs','samples','component')
-
+    
     data.attrs['pca_weights'] = pca_weights
     data.attrs['sfreq'] = sfreq
     if stack_data:
