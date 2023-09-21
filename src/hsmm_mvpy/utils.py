@@ -500,6 +500,15 @@ def zscore(data):
     '''
     return (data - data.mean()) / data.std()
 
+def zscore_xarray(data):
+    '''
+    zscore of the data in an xarray, avoiding any nans
+    '''
+    non_nan_mask = ~np.isnan(data.values)
+    if non_nan_mask.any(): #if not everything is nan, calc zscore
+        data.values[non_nan_mask] = (data.values[non_nan_mask] - data.values[non_nan_mask].mean()) / data.values[non_nan_mask].std()
+    return data
+
 def compute_ci(times):
     '''
     Compute confidence intervals
@@ -636,12 +645,13 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     if apply_zscore:
         match apply_zscore:
             case 'all':
-                data = data.stack(comp=['component']).groupby('comp').map(zscore).unstack()
+                data = data.stack(comp=['component']).groupby('comp').map(zscore_xarray).unstack()
             case 'participant':
-                data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore).unstack()
+                data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore_xarray).unstack()
             case 'trial':
-                data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore).unstack()
-
+                data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
+        data = data.transpose('participant','epochs','samples','component')
+    
     data.attrs['pca_weights'] = pca_weights
     data.attrs['sfreq'] = sfreq
     if stack_data:
