@@ -205,8 +205,8 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
                 low_pass = obtained_sfreq / 3.1
             else: 
                 decim = 1
-                if sfreq > data.info['sfreq']:
-                    warn(f'Requested higher frequency {sfreq} than found in the EEG data {data.info['sfreq']}, no resampling is performed')
+                if sfreq > data.info['sfreq']+1:
+                    warn(f'Requested higher frequency {sfreq} than found in the EEG data, no resampling is performed')
             data.filter(high_pass, low_pass, fir_design='firwin', verbose=verbose)
 
             combined =  {**event_id, **resp_id}#event_id | resp_id 
