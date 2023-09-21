@@ -61,7 +61,7 @@ def event_shape(event_width, event_width_samples, steps):
     return template
 
 
-def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, location=1, seed=None): 
+def simulate(sources, n_trials, n_jobs, file, sfreq=None, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, location=1, seed=None): 
     '''
     Simulates n_trials of EEG and/or MEG using MNE's tools based on the specified sources
     
@@ -141,7 +141,9 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
     else:
         raise ValueError(f'Invalid data type {data_type}, expected "eeg", "meg" or "eeg/meg"')
     info = mne.pick_info(info, picked_type)
-    tstep = 1. / info['sfreq']
+    if sfreq is None:
+        sfreq = info['sfreq']
+    tstep = 1. / sfreq
     # To simulate sources, we also need a source space. It can be obtained from the
     # forward solution of the sample subject.
     fwd_fname = op.join(data_path, 'MEG', subject,'sample_audvis-meg-eeg-oct-6-fwd.fif')
@@ -192,8 +194,8 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
                 #last two parameters ensure sources that are different enough
                 # Define the time course of the activity for each source of the region to
                 # activate
-                event_duration = int(((1/source[1])/2)*info['sfreq'])
-                source_time_series = event_shape(((1000/source[1])/2),event_duration,1000/info['sfreq'])*source[2]
+                event_duration = int(((1/source[1])/2)*sfreq
+                source_time_series = event_shape(((1000/source[1])/2),event_duration,1000/sfreq)*source[2]
 
                 #adding source event
                 events = events.copy()
