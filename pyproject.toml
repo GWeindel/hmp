@@ -27,7 +27,8 @@ dependencies=["mne >=1.0.0",
 "seaborn",
 "scipy",
 "netcdf4",
-"more_itertools"]
+"more_itertools",
+"ipywidgets"]
 
 [project.urls]
 "Homepage" = "https://github.com/GWeindel/hsmm_mvpy"
