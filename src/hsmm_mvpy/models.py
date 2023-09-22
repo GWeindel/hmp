@@ -952,7 +952,7 @@ class hmp:
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage scale
         for stage in range(n_stages):
             pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1])
-            if n_stages-1 > stage > 0:#all stages except first and last stage are censored on half a pattern (because of padding from cross-correlated signal)
+            if n_stages-1 > stage > 0:#all stages except first stage are censored on half a pattern (because of padding from cross-correlated signal)
                 pmf[:int(self.location),stage] = 0
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
 
@@ -1093,8 +1093,9 @@ class hmp:
         '''
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
-        p = self.cdf(np.arange(self.max_d)-1, shape, scale=scale)
-
+        p = self.cdf(np.arange(self.max_d), shape, scale=scale)
+        
+        # # p = np.diff(p, prepend=0)#going to pmf
         return p
     
     def scale_parameters(self, eventprobs=None, n_events=None, averagepos=None):
