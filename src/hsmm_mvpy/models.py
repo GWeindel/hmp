@@ -96,7 +96,7 @@ class hmp:
             case _:
                 raise ValueError(f'Unknown Distribution {distribution}')
         self.distribution = distribution
-        self.cdf = sp_dist.pdf
+        self.cdf = sp_dist.cdf
             
         if sfreq is None:
             sfreq = epoch_data.sfreq
