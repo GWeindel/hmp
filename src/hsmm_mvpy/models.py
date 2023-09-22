@@ -478,6 +478,7 @@ class hmp:
             print('Condition \"' + cond_names[-1] + '\" analyzed, with levels:', cond_levels[-1])
 
         cond_levels = list(product(*cond_levels))
+        cond_levels = np.array(cond_levels, dtype=object) #otherwise comparison below can fail
         n_conds = len(cond_levels)
 
         #build condition array with digit indicating the combined levels
@@ -485,6 +486,7 @@ class hmp:
         conds = np.zeros((cond_trials.shape[0])) * np.nan
         print('\nCoded as follows: ')
         for i, level in enumerate(cond_levels):
+            assert len(np.where((cond_trials == level).all(axis=1))[0]) > 0, f'condition level {level} does not occur in the data'
             conds[np.where((cond_trials == level).all(axis=1))] = i
             print(str(i) + ': ' + str(level))
         conds=np.int8(conds)
