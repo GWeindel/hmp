@@ -1125,6 +1125,8 @@ class hmp:
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
+        params[0,1] -= .5
+        params[1:,1] += .5
         params[:,1] = [self.mean_to_scale(x[1],x[0]) for x in params]
         return params
 
