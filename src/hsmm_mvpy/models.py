@@ -950,10 +950,10 @@ class hmp:
                 gains[starts[trial]:ends[trial]+1,:][::-1,::-1]
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage scale
+        locations = np.concatenate([[0], np.repeat(self.location, n_events)])#all stages except first stage have a location (mainly to avoid overlap in cross-correlated signal)
+        locations[-1] = 0
         for stage in range(n_stages):
-            pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1])
-            if n_stages-1 > stage > 0:#all stages except first stage are censored on half a pattern (because of padding from cross-correlated signal)
-                pmf[:int(self.location),stage] = 0
+            pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1], locations[stage])
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
 
         if n_events > 0:
@@ -1076,7 +1076,7 @@ class hmp:
         else:
             return [likelihood, eventprobs]
 
-    def distribution_pmf(self, shape, scale):
+    def distribution_pmf(self, shape, scale, location):
         '''
         Returns PMF for a provided scipy disttribution with shape and scale, on a range from 0 to max_length 
         
@@ -1093,7 +1093,8 @@ class hmp:
         '''
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
-        p = self.cdf(np.arange(self.max_d)+.5, shape, scale=scale)
+        p = self.cdf(np.arange(self.max_d), shape, scale=scale)
+        p[:location] = 0
         p = np.diff(p, prepend=0)#going to pmf
         return p
     
