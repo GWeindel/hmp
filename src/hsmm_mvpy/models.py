@@ -1094,8 +1094,8 @@ class hmp:
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
         p = self.cdf(np.arange(self.max_d), shape, scale=scale)
-        p[:location] = 0
         p = np.diff(p, prepend=0)#going to pmf
+        p[:location] = 0
         return p
     
     def scale_parameters(self, eventprobs=None, n_events=None, averagepos=None):
@@ -1126,6 +1126,7 @@ class hmp:
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
         params[0,1] -= 1
+        params[-1,1] += .5
         params[:,1] = [self.mean_to_scale(x[1],x[0]) for x in params]
         return params
 
