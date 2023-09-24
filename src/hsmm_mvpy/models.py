@@ -1124,7 +1124,7 @@ class hmp:
                                          [self.mean_d]]) #Durations
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
-        averagepos -= 1
+        averagepos -= .5
         params[:,1] = np.diff(averagepos, prepend=0)
         params[:,1] = [self.mean_to_scale(x[1],x[0]) for x in params]
         return params
