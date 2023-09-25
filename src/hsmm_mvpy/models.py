@@ -160,7 +160,7 @@ class hmp:
         '''
         Computes the template of a half-sine (event) with given frequency f and sampling frequency
         '''
-        event_idx = np.arange(self.event_width_samples)*self.steps+self.steps/2
+        event_idx = np.arange(self.event_width_samples)*self.steps+self.steps
         event_frequency = 1000/(self.event_width*2)#gives event frequency given that events are defined as half-sines
         template = np.sin(2*np.pi*event_idx/1000*event_frequency)#event morph based on a half sine with given event width and sampling frequency
         template = template/np.sum(template**2)#Weight normalized
@@ -1093,7 +1093,7 @@ class hmp:
         '''
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
-        p = self.cdf(np.arange(self.max_d), shape, scale=scale)
+        p = self.cdf(np.arange(self.max_d)-1, shape, scale=scale+.5)
         p[:location] = 0
         return p
     
@@ -1124,7 +1124,6 @@ class hmp:
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
-        params[:,1] += 1
         params[:,1] = [self.mean_to_scale(x[1],x[0]) for x in params]
         return params
 
