@@ -886,7 +886,7 @@ class hmp:
             parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=np.mean(event_times,axis=1))
         elif self.em_method == "mean":
             #calc averagepos here as mean_d can be condition dependent, whereas scale_parameters() assumes it's general
-            event_times_mean = np.concatenate([np.arange(self.max_d) @ eventprobs.mean(axis=1), [np.mean(self.durations[subset_epochs])]])
+            event_times_mean = np.concatenate([np.arange(self.max_d) @ eventprobs.mean(axis=1), [np.mean(self.durations[subset_epochs])-1]])
             parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=event_times_mean)                            
 
         return [magnitudes, parameters]
@@ -1093,7 +1093,7 @@ class hmp:
         '''
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
-        p = self.cdf(np.arange(self.max_d)+1, shape, scale=scale+.5)
+        p = self.cdf(np.arange(self.max_d), shape, scale=scale)
         p = np.diff(p, prepend=0)#going to pmf
         p[:location] = 0
         return p
@@ -1114,6 +1114,7 @@ class hmp:
             2D ndarray components * nTransition events, initial conditions for events magnitudes
         shape : float
             shape parameter for the gamma, defaults to 2  
+        
         Returns
         -------
         params : ndarray
@@ -1121,11 +1122,10 @@ class hmp:
         '''
         if eventprobs is not None:
             averagepos = np.concatenate([np.arange(self.max_d)@eventprobs.mean(axis=1),
-                                         [self.mean_d]]) #Durations
+                                         [self.mean_d-1]]) #Durations
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
-        params[-1,1] -= 1
         params[:,1] = [self.mean_to_scale(x[1],x[0]) for x in params]
         return params
 
