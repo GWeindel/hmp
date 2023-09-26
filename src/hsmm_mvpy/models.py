@@ -96,7 +96,7 @@ class hmp:
             case _:
                 raise ValueError(f'Unknown Distribution {distribution}')
         self.distribution = distribution
-        self.cdf = sp_dist.cdf
+        self.cdf = sp_dist.pdf
             
         if sfreq is None:
             sfreq = epoch_data.sfreq
@@ -1093,8 +1093,8 @@ class hmp:
         '''
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
-        p = self.cdf(np.arange(self.max_d), shape, scale=scale)
-        p = np.diff(p, prepend=0)#going to pmf
+        p = self.cdf(np.arange(self.max_d)+1, shape, scale=scale)
+        # p = np.diff(p, prepend=0)#going to pmf
         p[:location] = 0
         return p
     
@@ -1125,7 +1125,7 @@ class hmp:
                                          [self.mean_d-1]]) #Durations
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
-        params[:,1] = np.diff(averagepos, prepend=0)+1
+        params[:,1] = np.diff(averagepos, prepend=0)
         params[:,1] = [self.mean_to_scale(x[1],x[0]) for x in params]
         return params
 
@@ -1433,7 +1433,7 @@ class hmp:
                 array containing the values of each electrode at the most likely transition time
                 contains nans for missing events
         """
-        shift = init.event_width_samples//2+1#Shifts to compute channel topology at the peak of the event
+        shift = init.event_width_samples//2#Shifts to compute channel topology at the peak of the event
         channels = channels.rename({'epochs':'trials'}).\
                           stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant')
         estimated = estimated.eventprobs.fillna(0).copy()
@@ -1930,7 +1930,7 @@ class hmp:
         mags = np.zeros((int(end), self.n_dims)) #mags during estimation
         mags_accepted = mags.copy()
         i = 0
-        while self.scale_to_mean(last_stage,self.shape) > self.location and n_events < max_event_n:
+        while self.scale_to_mean(last_stage,self.shape) > 1 and n_events < max_event_n:
             prev_time = time
             if fix_iter:
                 to_fix = [range(n_events)]
