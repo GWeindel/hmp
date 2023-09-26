@@ -188,8 +188,7 @@ class hmp:
             for dim in np.arange(self.n_dims):
                 events[self.starts[trial]:self.ends[trial]+1,dim] = \
                     fftconvolve(data[self.starts[trial]:self.ends[trial]+1, dim], \
-                        self.template, mode='full')\
-                        [len(self.template)-1:self.durations[trial]+len(self.template)+1]
+                        self.template, mode='full')[len(self.template)-1:]
         return events
 
     def fit_single(self, n_events=None, magnitudes=None, parameters=None, parameters_to_fix=None, 
@@ -783,7 +782,6 @@ class hmp:
         
         initial_parameters = np.copy(parameters)
         initial_magnitudes = np.copy(magnitudes)
-
         n_events = magnitudes.shape[magnitudes.ndim-2]
         
         if n_cond is not None:
@@ -886,7 +884,7 @@ class hmp:
             parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=np.mean(event_times,axis=1))
         elif self.em_method == "mean":
             #calc averagepos here as mean_d can be condition dependent, whereas scale_parameters() assumes it's general
-            event_times_mean = np.concatenate([np.arange(self.max_d) @ eventprobs.mean(axis=1), [np.mean(self.durations[subset_epochs])-1]])
+            event_times_mean = np.concatenate([np.arange(self.max_d) @ eventprobs.mean(axis=1), [np.mean(self.durations[subset_epochs])]])
             parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=event_times_mean)                            
 
         return [magnitudes, parameters]
@@ -950,8 +948,7 @@ class hmp:
                 gains[starts[trial]:ends[trial]+1,:][::-1,::-1]
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage scale
-        locations = np.concatenate([[0], np.repeat(self.location, n_events)])#all stages except first stage have a location (mainly to avoid overlap in cross-correlated signal)
-        locations[-1] = 0
+        locations = np.concatenate([[0], np.repeat(self.location, n_events-1), [0]])#all stages except first and last stages have a location (mainly to avoid overlap in cross-correlated signal)
         for stage in range(n_stages):
             pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1], locations[stage])
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
@@ -961,7 +958,7 @@ class hmp:
             backward = np.zeros((self.max_d, n_trials, n_events), dtype=np.float64)
             # Computing forward and backward helper variable
             #  when stage = 0:
-            forward[:,:,0] = np.tile(pmf[:,0][np.newaxis].T,\
+            forward[:,:,0] = np.tile(np.concatenate([[0],pmf[:-1,0]])[np.newaxis].T,\
                 (1,n_trials))*probs[:,:,0] #first stage transition is p(B) * p(d)
             backward[:,:,0] = np.tile(pmf_b[:,0][np.newaxis].T,\
                         (1,n_trials)) #Reversed gamma (i.e. last stage) without probs as last event ends at time T
@@ -1120,9 +1117,6 @@ class hmp:
         params : ndarray
             shape and scale for the gamma distributions
         '''
-        if eventprobs is not None:
-            averagepos = np.concatenate([np.arange(self.max_d)@eventprobs.mean(axis=1),
-                                         [self.mean_d-1]]) #Durations
         params = np.zeros((n_events+1,2), dtype=np.float64)
         params[:,0] = self.shape
         params[:,1] = np.diff(averagepos, prepend=0)
@@ -1924,13 +1918,11 @@ class hmp:
         pars[:,0] = self.shape #gamma parameters during estimation, shape x scale
         pars_prop = pars[:n_events+2].copy()
         pars_prop[0,1] = self.mean_to_scale(1,self.shape)#initialize gamma_parameters
-        pars_prop[n_events+1,1] = last_stage = self.mean_to_scale(end-1,self.shape)
-        pars_accepted = pars.copy()
+        pars_prop[n_events+1,1] = last_stage = self.mean_to_scale(end,self.shape)
         #Init mags
         mags = np.zeros((int(end), self.n_dims)) #mags during estimation
-        mags_accepted = mags.copy()
         i = 0
-        while self.scale_to_mean(last_stage,self.shape) > 1 and n_events < max_event_n:
+        while self.scale_to_mean(last_stage,self.shape) > self.location and n_events < max_event_n:
             prev_time = time
             if fix_iter:
                 to_fix = [range(n_events)]
@@ -1941,7 +1933,7 @@ class hmp:
             else:
                 mags_props = self.gen_mags(n_events+1, decimate=decimate, verbose=False)
             #replave eventual event already found
-            mags_props[:,:n_events,:] = np.tile(mags_accepted[:n_events,:], (len(mags_props), 1, 1))
+            mags_props[:,:n_events,:] = np.tile(mags[:n_events,:], (len(mags_props), 1, 1))
             #estimate all grid_points models while fixing previous found events
             solutions = self.fit_single(n_events+1, mags_props, pars_prop, to_fix, to_fix,\
                             return_max=False, verbose=False, cpus=cpus,\
@@ -1951,9 +1943,7 @@ class hmp:
             #Exclude non-converged models (negative EM LL curve)
             solutions = utils.filter_non_converged(solutions)
             if len(solutions.iteration) > 0:#Success
-                ##Average among the converged solutions and store as future starting points
-                # mags[:n_events+1], pars[:n_events+2] = solutions.magnitudes.mean('iteration').values, solutions.parameters.mean('iteration').values
-                # #OR take the nearest converged solution
+                #OR take the nearest converged solution
                 nearest_solution = solutions.sel(iteration=solutions.parameters.sel(parameter="scale", \
                     stage=n_events).argmin('iteration').values)
                 if diagnostic:#Diagnostic plot
@@ -1962,29 +1952,27 @@ class hmp:
                 mags[:n_events+1], pars[:n_events+2] = nearest_solution.magnitudes.values,\
                     nearest_solution.parameters.values
                 n_events += 1
-                pars_accepted[:n_events+1] = pars[:n_events+1].copy()
-                mags_accepted[:n_events] = mags[:n_events].copy()
                 j = 0
                 if verbose:
-                    print(f'Transition event {n_events} found around sample {int(np.round(np.sum(self.scale_to_mean(pars_accepted[:n_events,:], self.shape))))}')
+                    print(f'Transition event {n_events} found around sample {int(np.round(self.scale_to_mean(np.sum(pars[:n_events,:]), self.shape)))}')
 
             j += 1
             i += 1
             #New parameter proposition
             pars_prop = pars[:n_events+2].copy()
             pars_prop[n_events,1] = self.mean_to_scale(step*j, self.shape)
-            last_stage = self.mean_to_scale(end - np.sum(self.scale_to_mean(pars_prop[:n_events+1,1],self.shape)),self.shape)
+            last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:n_events+1,1])
             pars_prop[n_events+1,1] = last_stage
-            time = self.scale_to_mean(np.sum(pars_prop[:n_events+1,1]),self.shape)
-            pbar.update(int(np.round(time-prev_time)))
+            time = int(np.round(self.scale_to_mean(np.sum(pars[:n_events,:]), self.shape)))#self.scale_to_mean(np.sum(pars_prop[:n_events+1,1]),self.shape)
+            pbar.update(int(np.rint(time-prev_time)))
         pbar.update(int(np.round(np.rint(end))-np.rint(time)))
         if diagnostic:
             plt.ylabel('Log-likelihood')
             plt.xlabel('EM iteration')
             plt.legend()
             plt.show()
-        mags = mags_accepted[:n_events, :]
-        pars = pars_accepted[:n_events+1, :]
+        mags = mags[:n_events, :]
+        pars = pars[:n_events+1, :]
         if n_events > 0: 
             fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose)
         else:
