@@ -1445,7 +1445,8 @@ class hmp:
             for ev in range(n_events):
                 for tr in range(n_trials):
                     samp = int(times.values[tr,ev])
-                    event_values[:,tr,ev] = np.dot(channels.values[:,samp:samp+init.event_width_samples,tr], init.template)            
+                    vals = channels.values[:,samp:samp+init.event_width_samples,tr]
+                    event_values[:,tr,ev] = np.dot(vals, init.template[:vals.shape[1]])            
                     
             event_values = xr.DataArray(event_values, 
                         dims = ["channels","trial_x_participant","event",],
@@ -1476,7 +1477,8 @@ class hmp:
                 for ev in range(n_events):
                     for tr in range(n_trials):
                         samp = int(times.values[tr,ev])
-                        event_values[x,:,tr,ev] = np.dot(channels.values[:,samp:samp+init.event_width_samples,tr],init.template)
+                        vals = channels.values[:,samp:samp+init.event_width_samples,tr]
+                        event_values[x,:,tr,ev] = np.dot(vals, init.template[:vals.shape[1]])       
 
                 #set to nan if missing
                 times = times.mean('trial_x_participant').values
