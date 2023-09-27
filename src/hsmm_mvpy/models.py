@@ -186,9 +186,7 @@ class hmp:
         events = np.zeros(data.shape)
         for trial in range(self.n_trials):#avoids confusion of gains between trials
             for dim in np.arange(self.n_dims):
-                events[self.starts[trial]:self.ends[trial]+1,dim] = \
-                    fftconvolve(data[self.starts[trial]:self.ends[trial]+1, dim], \
-                        self.template, mode='full')[len(self.template)-1:]
+                events[self.starts[trial]:self.ends[trial]+1,dim] = np.concatenate((fftconvolve(data[self.starts[trial]:self.ends[trial]+1, dim], self.template, mode='full')[len(self.template):], [0]))
         return events
 
     def fit_single(self, n_events=None, magnitudes=None, parameters=None, parameters_to_fix=None, 
