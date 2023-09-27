@@ -60,43 +60,43 @@ class hmp:
         match distribution:
             case 'gamma':
                 from scipy.stats import gamma as sp_dist
-                from hsmm_mvpy.utils import gamma_scale,gamma_mean
-                self.scale_to_mean, self.mean_to_scale = gamma_scale, gamma_mean
+                from hsmm_mvpy.utils import gamma_scale_to_mean, gamma_mean_to_scale
+                self.scale_to_mean, self.mean_to_scale = gamma_scale_to_mean, gamma_mean_to_scale
             case 'lognormal':
                 from scipy.stats import lognorm as sp_dist
-                from hsmm_mvpy.utils import logn_scale,logn_mean
-                self.scale_to_mean, self.mean_to_scale = logn_scale, logn_mean
+                from hsmm_mvpy.utils import logn_scale_to_mean,logn_mean_to_scale
+                self.scale_to_mean, self.mean_to_scale = logn_scale_to_mean, logn_mean_to_scale
             case 'wald':
                 from scipy.stats import invgauss as sp_dist
-                from hsmm_mvpy.utils import wald_scale,wald_mean
-                self.scale_to_mean, self.mean_to_scale = wald_scale, wald_mean
+                from hsmm_mvpy.utils import wald_scale_to_mean,wald_mean_to_scale
+                self.scale_to_mean, self.mean_to_scale = wald_scale_to_mean, wald_mean_to_scale
             case 'weibull':
                 from scipy.stats import weibull_min as sp_dist
-                from hsmm_mvpy.utils import weibull_scale,weibull_mean
-                self.scale_to_mean, self.mean_to_scale = weibull_scale, weibull_mean
+                from hsmm_mvpy.utils import weibull_scale_to_mean,weibull_mean_to_scale
+                self.scale_to_mean, self.mean_to_scale = weibull_scale_to_mean, weibull_mean_to_scale
             case 'log-logistic':
                 from scipy.stats import fisk as sp_dist
-                from hsmm_mvpy.utils import fisk_scale,fisk_mean
-                self.scale_to_mean, self.mean_to_scale = fisk_scale,fisk_mean
+                from hsmm_mvpy.utils import fisk_scale_to_mean,fisk_mean_to_scale
+                self.scale_to_mean, self.mean_to_scale = fisk_scale_to_mean,fisk_mean_to_scale
             case 'maxwell-boltzmann':
                 from scipy.stats import chi as sp_dist
-                from hsmm_mvpy.utils import maxb_scale,maxb_mean
+                from hsmm_mvpy.utils import maxb_scale_to_mean,maxb_mean_to_scale
                 shape = 3
-                self.scale_to_mean, self.mean_to_scale = maxb_scale,maxb_mean
+                self.scale_to_mean, self.mean_to_scale = maxb_scale_to_mean,maxb_mean_to_scale
             case 'rayleigh':
                 from scipy.stats import chi as sp_dist
-                from hsmm_mvpy.utils import ray_scale,ray_mean
+                from hsmm_mvpy.utils import ray_scale_to_mean,ray_mean_to_scale
                 shape = 2
-                self.scale_to_mean, self.mean_to_scale = ray_scale,ray_mean
+                self.scale_to_mean, self.mean_to_scale = ray_scale_to_mean,ray_mean_to_scale
             case 'half-normal':
                 from scipy.stats import chi as sp_dist
-                from hsmm_mvpy.utils import halfn_scale,halfn_mean
+                from hsmm_mvpy.utils import halfn_scale_to_mean,halfn_mean_to_scale
                 shape = 1
-                self.scale_to_mean, self.mean_to_scale = halfn_scale,halfn_mean
+                self.scale_to_mean, self.mean_to_scale = halfn_scale_to_mean,halfn_mean_to_scale
             case _:
                 raise ValueError(f'Unknown Distribution {distribution}')
         self.distribution = distribution
-        self.cdf = sp_dist.pdf
+        self.pdf = sp_dist.pdf
             
         if sfreq is None:
             sfreq = epoch_data.sfreq
@@ -160,7 +160,7 @@ class hmp:
         '''
         Computes the template of a half-sine (event) with given frequency f and sampling frequency
         '''
-        event_idx = np.arange(self.event_width_samples)*self.steps+self.steps
+        event_idx = np.arange(self.event_width_samples)*self.steps + self.steps / 2
         event_frequency = 1000/(self.event_width*2)#gives event frequency given that events are defined as half-sines
         template = np.sin(2*np.pi*event_idx/1000*event_frequency)#event morph based on a half sine with given event width and sampling frequency
         template = template/np.sum(template**2)#Weight normalized
@@ -475,6 +475,7 @@ class hmp:
             print('Condition \"' + cond_names[-1] + '\" analyzed, with levels:', cond_levels[-1])
 
         cond_levels = list(product(*cond_levels))
+        cond_levels = np.array(cond_levels, dtype=object)
         n_conds = len(cond_levels)
 
         #build condition array with digit indicating the combined levels
@@ -482,6 +483,7 @@ class hmp:
         conds = np.zeros((cond_trials.shape[0])) * np.nan
         print('\nCoded as follows: ')
         for i, level in enumerate(cond_levels):
+            assert len(np.where((cond_trials == level).all(axis=1))[0]) > 0, f'condition level {level} does not occur in the data'
             conds[np.where((cond_trials == level).all(axis=1))] = i
             print(str(i) + ': ' + str(level))
         conds=np.int8(conds)
@@ -1090,8 +1092,7 @@ class hmp:
         '''
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
-        p = self.cdf(np.arange(self.max_d)+1, shape, scale=scale)
-        # p = np.diff(p, prepend=0)#going to pmf
+        p = self.pdf(np.arange(self.max_d)+1, shape, scale=scale)
         p[:location] = 0
         return p
     
@@ -1427,7 +1428,6 @@ class hmp:
                 array containing the values of each electrode at the most likely transition time
                 contains nans for missing events
         """
-        shift = init.event_width_samples//2#Shifts to compute channel topology at the peak of the event
         channels = channels.rename({'epochs':'trials'}).\
                           stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant')
         estimated = estimated.eventprobs.fillna(0).copy()
@@ -1443,7 +1443,12 @@ class hmp:
             else:
                 times = np.round(xr.dot(estimated, estimated.samples, dims='samples'))
         
-            event_values = channels.sel(samples=times + shift).values
+            event_values = np.zeros((n_channels,n_trials,n_events))
+            for ev in range(n_events):
+                for tr in range(n_trials):
+                    samp = int(times.values[tr,ev])
+                    event_values[:,tr,ev] = np.dot(channels.values[:,samp:samp+init.event_width_samples,tr], init.template)            
+                    
             event_values = xr.DataArray(event_values, 
                         dims = ["channels","trial_x_participant","event",],
                         coords={"trial_x_participant":estimated.trial_x_participant,
@@ -1470,7 +1475,10 @@ class hmp:
                     times = estimated[x].argmax('samples')
                 else:
                     times = np.round(xr.dot(estimated[x], estimated.samples, dims='samples'))
-                event_values[x,:,:,:] = channels.sel(samples=times + shift).values
+                for ev in range(n_events):
+                    for tr in range(n_trials):
+                        samp = int(times.values[tr,ev])
+                        event_values[x,:,tr,ev] = np.dot(channels.values[:,samp:samp+init.event_width_samples,tr],init.template)
 
                 #set to nan if missing
                 times = times.mean('trial_x_participant').values

@@ -18,44 +18,44 @@ import os
 
 filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later 
 
-def gamma_scale(scale, shape): 
+def gamma_scale_to_mean(scale, shape): 
     return scale*shape
-def gamma_mean(mean, shape): 
+def gamma_mean_to_scale(mean, shape): 
     return mean/shape
 
-def logn_scale(scale, shape): 
+def logn_scale_to_mean(scale, shape): 
     return scale+shape**2/2
-def logn_mean(mean, shape): 
+def logn_mean_to_scale(mean, shape): 
     return mean-shape**2/2
 
-def wald_scale(scale, shape): 
+def wald_scale_to_mean(scale, shape): 
     return scale*shape
-def wald_mean(mean, shape): 
+def wald_mean_to_scale(mean, shape): 
     return mean/shape
 
-def weibull_scale(scale, shape):
+def weibull_scale_to_mean(scale, shape):
     return scale*gamma_func(1+1/shape)
-def weibull_mean(mean, shape): 
+def weibull_mean_to_scale(mean, shape): 
     return mean/gamma_func(1+1/shape)
 
-def maxb_scale(scale, shape):
+def maxb_scale_to_mean(scale, shape):
     return 2*scale*np.sqrt(2/np.pi)
-def maxb_mean(mean, shape): 
+def maxb_mean_to_scale(mean, shape): 
     return mean/2/np.sqrt(2/np.pi)
 
-def ray_scale(scale, shape):
+def ray_scale_to_mean(scale, shape):
     return scale*np.sqrt(np.pi/2)
-def ray_mean(mean, shape): 
+def ray_mean_to_scale(mean, shape): 
     return mean/np.sqrt(np.pi/2)
 
-def halfn_scale(scale, shape):
+def halfn_scale_to_mean(scale, shape):
     return (scale*np.sqrt(2))/np.sqrt(np.pi)
-def halfn_mean(mean, shape): 
+def halfn_mean_to_scale(mean, shape): 
     return mean/np.sqrt(2/np.pi)
 
-def fisk_scale(scale, shape):
+def fisk_scale_to_mean(scale, shape):
     return  (scale*np.pi/shape)/np.sin(np.pi/shape)
-def fisk_mean(mean, shape): 
+def fisk_mean_to_scale(mean, shape): 
     return  shape*(mean*np.sin(np.pi/shape))/np.pi
 
 def read_mne_EEG(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None, 
