@@ -318,7 +318,8 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     mean : bool
         Whether to plot the mean
     additional_points : 
-        Additional likelihood points to be plotted. Should be provided as...
+        Additional likelihood points to be plotted. Should be provided as a list of tuples 
+        containing the x coordinate and loocv estimates with a single event, e.g. [(5,estimates)].
     return_pvals : bool 
         Whether to return the pvalues
 
@@ -327,6 +328,7 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     ax : matplotlib.pyplot.ax
         if ax was specified otherwise returns the plot
     '''
+    ax=None
     if return_pvals:
         pvals = True
     if pvals:
@@ -342,40 +344,70 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     else:
         return_ax = True
     loocv_estimates = loocv_estimates.dropna('n_event', how='all')
-    if mean:
-        alpha = .2#for the indiv plot
-        means = np.nanmean(loocv_estimates.data,axis=1)
-        ax[0].errorbar(x=np.arange(len(means))+1, y=means, \
-                 yerr= np.nanstd(loocv_estimates.data,axis=1)/np.sqrt(len(loocv_estimates.participant))*1.96, marker='o', color='k')
-    else:
-        alpha=1
-    if indiv:
-        for loo in loocv_estimates.T:
-            ax[0].plot(loocv_estimates.n_event,loo, alpha=alpha)
-    ax[0].set_ylabel('LOOCV Loglikelihood')
-    ax[0].set_xlabel('Number of events')
-    ax[0].set_xticks(ticks=loocv_estimates.n_event)
-    total_sub = len(loocv_estimates.participant)
+    
+    #stats
     diffs, diff_bin, labels = [],[],[]
+    pvalues = []
     for n_event in np.arange(2,loocv_estimates.n_event.max()+1):
-        diffs.append(loocv_estimates.sel(n_event=n_event).data - loocv_estimates.sel(n_event=n_event-1).data)
-        diff_bin.append([1 for x in diffs[-1] if x > 0])
+        diffs.append(loocv_estimates.sel(n_event=n_event).data - loocv_estimates.sel(n_event=n_event-1).data) #differences
+        diff_bin.append([1 for x in diffs[-1] if x > 0]) #nr of positive differences
         labels.append(str(n_event-1)+'->'+str(n_event))
+
         if pvals:
-            pvalues = []
             if test == 'sign':
                 diff_tmp = np.array(diffs)
                 diff_tmp[np.isnan(diff_tmp)] = -np.inf 
                 pvalues.append((sign_test(diff_tmp[-1])))
             elif test == 't-test':
                 pvalues.append((ttest_1samp(diffs[-1], 0, alternative='greater')))
-            mean = np.nanmean(loocv_estimates.sel(n_event=n_event).data)
-            ax[1].text(x=n_event-2, y=0, s=str(int(np.nansum(diff_bin[-1])))+'/'+str(len(diffs[-1]))+':'+str(np.around(pvalues[-1][-1],3)))
-    ax[1].plot(diffs,'.-', alpha=.3)
+
+     
+    #first plot
+    if mean:
+        alpha = .4#for the indiv plot
+        marker_indiv = '.'
+        means = np.nanmean(loocv_estimates.data,axis=1)[::-1]
+        errs = (np.nanstd(loocv_estimates.data,axis=1)/np.sqrt(len(loocv_estimates.participant)))[::-1]
+        ax[0].errorbar(x=np.arange(len(means))+1, y=means, \
+                 yerr= errs, marker='o', color='k')
+        if pvals:
+            for n_event in np.arange(2,loocv_estimates.n_event.max()+1):       
+                mean = means[n_event-1] * 1.1
+                ax[0].text(x=n_event-.25, y=mean, s=str(int(np.nansum(diff_bin[n_event-2])))+'/'+ str(len(diffs[-1])) + ': ' + str(np.around(pvalues[n_event-2][-1],3)), ha='right')
+    else:
+        alpha=1
+        marker_indiv='o'
+    if indiv:
+        for loo in loocv_estimates.T:
+            ax[0].plot(loocv_estimates.n_event,loo, alpha=alpha,marker=marker_indiv)
+    ax[0].set_ylabel('LOOCV Loglikelihood')
+    ax[0].set_xlabel('Number of events')
+    ax[0].set_xticks(ticks=loocv_estimates.n_event)
+
+    if additional_points: #only plot average for now
+        if not isinstance(additional_points,list):
+            additional_points = [additional_points]
+        for ap in additional_points:
+            xap = ap[0]
+            meanap = np.mean(ap[1].values)
+            err = np.nanstd(ap[1].values)/np.sqrt(len(ap[1].values))
+        ax[0].errorbar(x=xap,y=meanap, yerr=err, marker='o')
+      
+    #second plot
+    ax[1].plot(diffs,'.-', alpha=.6)
     ax[1].set_xticks(ticks=np.arange(0,loocv_estimates.n_event.max()-1), labels=labels)
-    ax[1].hlines(0,0,len(np.arange(2,loocv_estimates.n_event.max())),color='k')
+    ax[1].hlines(0,0,len(np.arange(2,loocv_estimates.n_event.max())),color='lightgrey',ls='--')
     ax[1].set_ylabel('Change in likelihood')
     ax[1].set_xlabel('')
+        
+    if pvals:
+        ymin = np.min(diffs[:])
+        ymintext = ymin - (np.max(diffs[:]) - ymin) * .05
+        ymin = ymin - (np.max(diffs[:]) - ymin) * .1
+        ax[1].set_ylim(bottom=ymin)
+        for n_event in np.arange(2,loocv_estimates.n_event.max()+1):       
+            ax[1].text(x=n_event-2, y=ymintext, s=str(int(np.nansum(diff_bin[n_event-2])))+'/'+ str(len(diffs[-1])) + ': ' + str(np.around(pvalues[n_event-2][-1],3)), ha='center')
+    
     if return_ax:
         if return_pvals:
             return [ax, pvalues]
