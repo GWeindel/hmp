@@ -14,6 +14,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from hsmm_mvpy import utils
 from itertools import cycle, product
 from scipy.stats import sem
+import gc
 
 try:
     __IPYTHON__
@@ -99,7 +100,7 @@ class hmp:
         self.pdf = sp_dist.pdf
             
         if sfreq is None:
-            sfreq = epoch_data.sfreq
+            sfreq = data.sfreq
         self.sfreq = sfreq
         self.steps = 1000/self.sfreq
         self.shape = float(shape)
@@ -182,11 +183,12 @@ class hmp:
             a 2D ndarray with samples * PC components where cell values have
             been correlated with event morphology
         '''
-        from scipy.signal import fftconvolve
+        from scipy.signal import correlate
         events = np.zeros(data.shape)
         for trial in range(self.n_trials):#avoids confusion of gains between trials
             for dim in np.arange(self.n_dims):
-                events[self.starts[trial]:self.ends[trial]+1,dim] = np.concatenate((fftconvolve(data[self.starts[trial]:self.ends[trial]+1, dim], self.template, mode='full')[len(self.template):], [0]))
+                dat = data[self.starts[trial]:self.ends[trial]+1, dim]
+                events[self.starts[trial]:self.ends[trial]+1,dim] = correlate(dat, self.template, mode='full', method='direct')[-len(dat):]
         return events
 
     def fit_single(self, n_events=None, magnitudes=None, parameters=None, parameters_to_fix=None, 
@@ -460,6 +462,7 @@ class hmp:
         assert conds is not None, 'fit_single_conds() requires conditions argument'
         assert isinstance(conds, dict) or isinstance(conds[0], dict), 'conditions have to be specified as a dictionary, or list of dictionaries'
         if isinstance(conds, dict): conds = [conds]
+        conds_dict = conds
 
         #collect condition names, levels, and trial coding
         cond_names = []
@@ -470,7 +473,8 @@ class hmp:
             cond_names.append(list(cond.keys())[0])
             cond_levels.append(cond[cond_names[-1]])
             cond_trials.append(self.trial_coords[cond_names[-1]].data.copy())
-            print('Condition \"' + cond_names[-1] + '\" analyzed, with levels:', cond_levels[-1])
+            if verbose:
+                print('Condition \"' + cond_names[-1] + '\" analyzed, with levels:', cond_levels[-1])
 
         cond_levels = list(product(*cond_levels))
         cond_levels = np.array(cond_levels, dtype=object)
@@ -479,11 +483,13 @@ class hmp:
         #build condition array with digit indicating the combined levels
         cond_trials = np.vstack(cond_trials).T
         conds = np.zeros((cond_trials.shape[0])) * np.nan
-        print('\nCoded as follows: ')
+        if verbose:
+            print('\nCoded as follows: ')
         for i, level in enumerate(cond_levels):
             assert len(np.where((cond_trials == level).all(axis=1))[0]) > 0, f'condition level {level} does not occur in the data'
             conds[np.where((cond_trials == level).all(axis=1))] = i
-            print(str(i) + ': ' + str(level))
+            if verbose:
+                print(str(i) + ': ' + str(level))
         conds=np.int8(conds)
 
         clabels = {'Condition ' + str(cond_names): cond_levels}
@@ -508,30 +514,31 @@ class hmp:
                         pars_map[c, np.where(mags_map[c,:] < 0)[0]+1] = 1
 
         #print maps to check level/row mathcing
-        print('\nMagnitudes map:')
-        for cnt in range(n_conds):
-            print(str(cnt) + ': ', mags_map[cnt,:])
+        if verbose:
+            print('\nMagnitudes map:')
+            for cnt in range(n_conds):
+                print(str(cnt) + ': ', mags_map[cnt,:])
 
-        print('\nParameters map:')
-        for cnt in range(n_conds):
-            print(str(cnt) + ': ', pars_map[cnt,:])
+            print('\nParameters map:')
+            for cnt in range(n_conds):
+                print(str(cnt) + ': ', pars_map[cnt,:])
 
-        #give explanation if negative parameters:
-        if (pars_map < 0).any():
-            print('\n-----')
-            print('Negative parameters. Note that this stage is left out, while the parameters')
-            print('of the other stages are compared column by column. In this parameter map example:')
-            print(np.array([[0, 0, 0, 0],
-                            [0, -1, 0, 0]]))
-            print('the parameters of stage 1 are shared, as well as the parameters of stage 3 of')
-            print('condition 1 with stage 2 (column 3) of condition 2 and the last stage of both')
-            print('conditions.')
-            print('Given that event 2 is probably missing in condition 2, it would typically')
-            print('make more sense to let both stages around event 2 in condition 1 vary as')
-            print('compared to condition 2:')
-            print(np.array([[0, 0, 0, 0],
-                            [0, -1, 1, 0]]))
-            print('-----')
+            #give explanation if negative parameters:
+            if (pars_map < 0).any():
+                print('\n-----')
+                print('Negative parameters. Note that this stage is left out, while the parameters')
+                print('of the other stages are compared column by column. In this parameter map example:')
+                print(np.array([[0, 0, 0, 0],
+                                [0, -1, 0, 0]]))
+                print('the parameters of stage 1 are shared, as well as the parameters of stage 3 of')
+                print('condition 1 with stage 2 (column 3) of condition 2 and the last stage of both')
+                print('conditions.')
+                print('Given that event 2 is probably missing in condition 2, it would typically')
+                print('make more sense to let both stages around event 2 in condition 1 vary as')
+                print('compared to condition 2:')
+                print(np.array([[0, 0, 0, 0],
+                                [0, -1, 1, 0]]))
+                print('-----')
 
                 
         #at this point, all should indicate the same number of conditions
@@ -568,7 +575,7 @@ class hmp:
         if parameters is not None:
             if len(np.shape(parameters)) == 2: #broadcast parameters across conditions
                 parameters = np.tile(parameters, (n_conds, 1, 1))
-            assert parameters.shape[1] == n_events + 1, 'Provided parameters should match number of stages in parameters map'
+            assert parameters.shape[1] == n_events + 1, f'Provided parameters ({ parameters.shape[1]} should match number of stages {n_events + 1} in parameters map'
 
             #set params missing stages to nan to make it obvious in the results
             if (pars_map < 0).any():
@@ -708,6 +715,7 @@ class hmp:
         estimated.attrs['mags_map'] = mags_map
         estimated.attrs['pars_map'] = pars_map
         estimated.attrs['clabels'] = clabels
+        estimated.attrs['conds_dict'] = conds_dict
         
         if verbose:
             print(f"parameters estimated for {n_events} events model")
@@ -799,7 +807,7 @@ class hmp:
         else:
             lkh_prev = -np.inf
             while i < max_iteration :#Expectation-Maximization algorithm
-                if i > min_iteration and tolerance > (lkh-lkh_prev)/np.abs(lkh_prev):
+                if i >= min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
                     break
                     #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
@@ -1092,6 +1100,7 @@ class hmp:
             warn('Convergence failed: one stage has been found to be null')
         p = self.pdf(np.arange(self.max_d)+1, shape, scale=scale)
         p[:location] = 0
+        p[np.isnan(p)] = 0 #remove potential nans
         return p
     
     def scale_parameters(self, eventprobs=None, n_events=None, averagepos=None):
@@ -1158,22 +1167,23 @@ class hmp:
         else:
             event_loo_results = [max_fit]
         max_events = event_loo_results[0].event.max().values+1
-        i = 0
+
         for n_events in np.arange(max_events-1,min_events,-1):
             print(f'Estimating all solutions for {n_events} number of events')
-            temp_best = event_loo_results[i]#previous event solution
-            temp_best = temp_best.dropna('event')
-            temp_best = temp_best.dropna('stage')
-            n_events_list = np.arange(n_events+1)#all events from previous solution
-            flats = temp_best.parameters.values
-            events_temp,pars_temp = [],[]
-            for event in np.arange(n_events+1):#creating all possible solutions
-                events_temp.append(temp_best.magnitudes.sel(event = np.array(list(set(n_events_list) - set([event])))).values)
-                flat = event + 1 #one more flat than events
-                temp = np.copy(flats[:,1])
-                temp[flat-1] = temp[flat-1] + temp[flat]
-                temp = np.delete(temp, flat)
-                pars_temp.append(np.reshape(np.concatenate([np.repeat(self.shape, len(temp)), temp]), (2, len(temp))).T)
+                      
+            flats_prev = event_loo_results[-1].dropna('stage').parameters.values
+            mags_prev = event_loo_results[-1].dropna('event').magnitudes.values
+            events_temp, pars_temp = [],[]
+            
+            for event in np.arange(n_events + 1):#creating all possible solutions
+                
+                events_temp.append(mags_prev[np.arange(n_events+1) != event,])
+                
+                temp_flat = np.copy(flats_prev)
+                temp_flat[event,1] = temp_flat[event,1] + temp_flat[event+1,1] #combine two stages into one
+                temp_flat = np.delete(temp_flat, event+1, axis=0)
+                pars_temp.append(temp_flat)
+            
             inputs = zip(itertools.repeat(n_events), events_temp, pars_temp,\
                         itertools.repeat([]), itertools.repeat([]),\
                         itertools.repeat(tolerance), itertools.repeat(max_iteration), \
@@ -1183,13 +1193,17 @@ class hmp:
             with mp.Pool(processes=self.cpus) as pool:
                 event_loo_likelihood_temp = pool.starmap(self.fit_single, inputs)
 
-            models = xr.concat(event_loo_likelihood_temp, dim="iteration")
-            event_loo_results.append(models.sel(iteration=[np.where(models.likelihoods == models.likelihoods.max())[0][0]]).squeeze('iteration'))
-            i+=1
-        bests = xr.concat(event_loo_results, dim="n_events")
-        bests = bests.assign_coords({"n_events": np.arange(max_events,min_events,-1)})
-        #bests = bests.squeeze('iteration')
-        return bests
+            lkhs = [x.likelihoods.values for x in event_loo_likelihood_temp]
+            event_loo_results.append(event_loo_likelihood_temp[np.nanargmax(lkhs)])
+
+            #remove event_loo_likelihood
+            del event_loo_likelihood_temp
+            # Force garbage collection
+            gc.collect()
+
+        event_loo_results = xr.concat(event_loo_results, dim="n_events")
+        event_loo_results = event_loo_results.assign_coords({"n_events": np.arange(max_events,min_events,-1)})
+        return event_loo_results
 
     def compute_max_events(self):
         '''

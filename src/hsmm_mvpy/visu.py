@@ -296,7 +296,7 @@ def plot_components_sensor(hmp_data, positions):
     plt.show()
 
 
-def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=None, mean=False):
+def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=None, mean=False, additional_points=None, return_pvals=False):
     '''
     Plotting the LOOCV results
     
@@ -315,14 +315,20 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     ax : matplotlib.pyplot.ax
         Matplotlib object on which to draw the plot, can be useful if you want to control specific aspects of the plots
         outside of this function
-    mean: bool
-        Return the mean
+    mean : bool
+        Whether to plot the mean
+    additional_points : 
+        Additional likelihood points to be plotted. Should be provided as...
+    return_pvals : bool 
+        Whether to return the pvalues
 
     Returns
     -------
     ax : matplotlib.pyplot.ax
         if ax was specified otherwise returns the plot
     '''
+    if return_pvals:
+        pvals = True
     if pvals:
         if test == 'sign':
             from statsmodels.stats.descriptivestats import sign_test 
@@ -340,7 +346,7 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
         alpha = .2#for the indiv plot
         means = np.nanmean(loocv_estimates.data,axis=1)
         ax[0].errorbar(x=np.arange(len(means))+1, y=means, \
-                 yerr= np.nanstd(loocv_estimates.data,axis=1)/np.sqrt(len(loocv_estimates.participants))*1.96, marker='o', color='k')
+                 yerr= np.nanstd(loocv_estimates.data,axis=1)/np.sqrt(len(loocv_estimates.participant))*1.96, marker='o', color='k')
     else:
         alpha=1
     if indiv:
@@ -349,7 +355,7 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     ax[0].set_ylabel('LOOCV Loglikelihood')
     ax[0].set_xlabel('Number of events')
     ax[0].set_xticks(ticks=loocv_estimates.n_event)
-    total_sub = len(loocv_estimates.participants)
+    total_sub = len(loocv_estimates.participant)
     diffs, diff_bin, labels = [],[],[]
     for n_event in np.arange(2,loocv_estimates.n_event.max()+1):
         diffs.append(loocv_estimates.sel(n_event=n_event).data - loocv_estimates.sel(n_event=n_event-1).data)
@@ -371,10 +377,16 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     ax[1].set_ylabel('Change in likelihood')
     ax[1].set_xlabel('')
     if return_ax:
-        return ax
+        if return_pvals:
+            return [ax, pvalues]
+        else:
+            return ax
     else:
         plt.tight_layout()
         plt.show()
+        if return_pvals:
+            return pvalues
+        
 
 def plot_latencies_average(times, time_step=1, labels=[], colors=default_colors,
     figsize=None, errs='ci', max_time=None, times_to_display=None):
