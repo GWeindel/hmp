@@ -60,7 +60,6 @@ def event_shape(event_width, event_width_samples, steps):
     template = template/np.sum(template**2)#Weight normalized
     return template
 
-
 def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, location=1, seed=None): 
     '''
     Simulates n_trials of EEG and/or MEG using MNE's tools based on the specified sources
@@ -258,27 +257,32 @@ def demo(cpus, n_events, seed=9999):
     #Storing electrode position, specific to the simulations
     positions = simulation_info()#Electrode position
     sfreq = simulation_sfreq()#sampling freqency of the simulated data
-    resample_freq = sfreq/np.round(sfreq / 100).astype(int)#Resampling at 100Hz to make processing faster and less demanding
+    resample_freq = sfreq / np.round(sfreq / 100).astype(int)#Resampling at 100Hz to make processing faster and less demanding
     all_source_names = available_sources()#all brain sources you can play with
     n_trials = 50 #Number of trials to simulate
     
     # Randomly specify the transition events
     name_sources = random_gen.choice(all_source_names,n_events+1, replace=False)#randomly pick source without replacement
 
-    times = random_gen.uniform(25,300,n_events+1)/shape#randomly pick average times in millisecond between the events
+    times = random_gen.uniform(25,300,n_events+1)/shape #randomly pick average times in millisecond between the events, divided by shape
 
     sources = []
     for source in range(len(name_sources)):
         sources.append([name_sources[source], frequency, amplitude, \
-                          gamma(shape, scale=times[source])])
+                          gamma(shape, scale=times[source])]) #gamma returns times in ms
 
     file = 'dataset_tutorial2' #Name of the file to save
 
     #Simulating and recover information on electrode location and true time onset of the simulated events
-    files = simulate(sources, n_trials, cpus,file, overwrite=False, location=25, seed=seed)
+    files = simulate(sources, n_trials, cpus,file, overwrite=False, location=25, seed=seed, noise=True)
+    
     generating_events = np.load(files[1])
+    events_resamp = generating_events.copy()
+    events_resamp[:, 0] = events_resamp[:, 0] * float(resample_freq) / sfreq
     number_of_sources = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
-    random_source_times = np.reshape(np.diff(generating_events[:,0], prepend=0),(n_trials,number_of_sources+1))[:,1:]/(sfreq/resample_freq)#By-trial generated event times
+    random_source_times = np.reshape(np.diff(events_resamp[:,0], prepend=0),(n_trials,number_of_sources+1))[:,1:]
+    #By-trial generated event times
+
 
     #Reading the necessary info to read the EEG data
     resp_trigger = int(np.max(np.unique(generating_events[:,2])))#Resp trigger is the last source in each trial
