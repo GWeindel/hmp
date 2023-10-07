@@ -60,7 +60,7 @@ def event_shape(event_width, event_width_samples, steps):
     template = template/np.sum(template**2)#Weight normalized
     return template
 
-def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, location=1, seed=None): 
+def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, seed=None, sfreq=None): 
     '''
     Simulates n_trials of EEG and/or MEG using MNE's tools based on the specified sources
     
@@ -120,7 +120,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             percentiles[source] = np.percentile(stage_dur_fun.rvs(size=n_trials), q=99)
         else:
             percentiles[source] = np.max(times[:,source])
-    max_trial_length = np.sum(percentiles)+3000
+    max_trial_length = np.sum(percentiles)+20000
     # Following code and comments largely comes from MNE examples (e.g. \
     # https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html)
     # It loads the data, info structure and forward solution for one example subject,
@@ -130,7 +130,10 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
     subject = 'sample'
     # First, we get an info structure from the test subject.
     evoked_fname = op.join(data_path, 'MEG', subject, 'sample_audvis-ave.fif')
+    #mne read raw
     info = mne.io.read_info(evoked_fname, verbose=verbose)
+    with info._unlock():
+     info['sfreq'] = sfreq
     if data_type == 'eeg':
         picked_type = mne.pick_types(info, meg=False, eeg=True)
     elif data_type == 'meg':
@@ -169,7 +172,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             sources_subj = sources[subj]
             # stim_onset occurs every x samples.
             events = np.zeros((n_trials, 3), int)
-            stim_onsets =  2000+max_trial_length * np.arange(n_trials)#2000 = offset of first stim
+            stim_onsets =  2000 + max_trial_length * np.arange(n_trials) * tstep #2000 = offset of first stim / in samples!
             events[:,0] = stim_onsets#last event 
             events[:,2] = 1#trigger 1 = stimulus 
 
@@ -199,13 +202,8 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
                 if times is None:
                     rand_i = np.round(source[-1].rvs(size=n_trials, random_state=random_state)/(tstep*1000),decimals=0)
                 else:
-                    rand_i = times[:,trigger-2]
-                if trigger > 2:
-                    rand_i += location/(tstep*1000)
-                else:
-                    rand_i += 1
-                if 0 in rand_i:
-                    warn("0 stage duration found, add a location parameter to avoid this case", UserWarning)
+                    rand_i = times[:,trigger-2]/(tstep*1000)
+
                 random_source_times.append(rand_i) #varying event 
                 events[:, 0] = events[:,0] + random_source_times[-1] # Events sample.
                 events[:, 2] = trigger  # All events have the sample id.
@@ -251,19 +249,17 @@ def demo(cpus, n_events, seed=9999):
     random_gen =  np.random.default_rng(seed=seed)
 
     ## Parameters for the simulations
-    frequency, amplitude = 10., .3e-6 #Frequency of the transition event and its amplitude in Volt
+    frequency, amplitude = 10., .6e-6 #Frequency of the transition event and its amplitude in Volt
     shape = 2#shape of the gamma distribution
 
     #Storing electrode position, specific to the simulations
     positions = simulation_info()#Electrode position
-    sfreq = simulation_sfreq()#sampling freqency of the simulated data
-    resample_freq = sfreq / np.round(sfreq / 100).astype(int)#Resampling at 100Hz to make processing faster and less demanding
+    sfreq = 100
     all_source_names = available_sources()#all brain sources you can play with
     n_trials = 50 #Number of trials to simulate
     
     # Randomly specify the transition events
     name_sources = random_gen.choice(all_source_names,n_events+1, replace=False)#randomly pick source without replacement
-
     times = random_gen.uniform(25,300,n_events+1)/shape #randomly pick average times in millisecond between the events, divided by shape
 
     sources = []
@@ -274,15 +270,14 @@ def demo(cpus, n_events, seed=9999):
     file = 'dataset_tutorial2' #Name of the file to save
 
     #Simulating and recover information on electrode location and true time onset of the simulated events
-    files = simulate(sources, n_trials, cpus,file, overwrite=False, location=25, seed=seed, noise=True)
+    files = simulate(sources, n_trials, cpus,file, overwrite=False, seed=seed, noise=True, sfreq=sfreq)
     
     generating_events = np.load(files[1])
-    events_resamp = generating_events.copy()
-    events_resamp[:, 0] = events_resamp[:, 0] * float(resample_freq) / sfreq
-    number_of_sources = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
-    random_source_times = np.reshape(np.diff(events_resamp[:,0], prepend=0),(n_trials,number_of_sources+1))[:,1:]
-    #By-trial generated event times
+    #events_resamp = generating_events.copy()
+    #events_resamp[:, 0] = events_resamp[:, 0] * float(resample_freq) / sfreq
 
+    number_of_sources = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
+    random_source_times = np.reshape(np.diff(generating_events[:,0], prepend=0),(n_trials,number_of_sources+1))[:,1:] #By-trial generated event times
 
     #Reading the necessary info to read the EEG data
     resp_trigger = int(np.max(np.unique(generating_events[:,2])))#Resp trigger is the last source in each trial
@@ -291,7 +286,7 @@ def demo(cpus, n_events, seed=9999):
     events = generating_events[(generating_events[:,2] == 1) | (generating_events[:,2] == resp_trigger)]#only retain stimulus and response triggers
 
     # Reading the data
-    eeg_dat = read_mne_data(files[0], event_id, resp_id, sfreq=resample_freq, events_provided=events, verbose=False)
+    eeg_dat = read_mne_data(files[0], event_id, resp_id, events_provided=events, verbose=False)
     
     all_other_chans = range(len(positions.ch_names[:-61]))#non-eeg
     chan_list = list(np.arange(len(positions.ch_names)))

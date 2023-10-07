@@ -88,7 +88,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
     if data not already epoched:
         0.1) the data is filtered with filters specified in low_pass and high_pass. Parameters of the filter are
         determined by MNE's filter function.
-        0.2) if no events is provided, detect events in stumulus channel and keep events with id in event_id and resp_id.
+        0.2) if no events is provided, detect events in stimulus channel and keep events with id in event_id and resp_id.
         0.3) eventual downsampling is performed if sfreq is lower than the data's sampling frequency. The event structure is
         passed at the resample() function of MNE to ensure that events are approriately timed after downsampling.
         0.4) epochs are created based on stimulus onsets (event_id) and tmin and tmax. Epoching removes any epoch where a 
