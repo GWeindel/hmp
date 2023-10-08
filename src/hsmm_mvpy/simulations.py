@@ -120,7 +120,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             percentiles[source] = np.percentile(stage_dur_fun.rvs(size=n_trials), q=99)
         else:
             percentiles[source] = np.max(times[:,source])
-    max_trial_length = np.sum(percentiles)+20000
+    max_trial_length = np.sum(percentiles)+2000 #add 2000 ms between trials
     # Following code and comments largely comes from MNE examples (e.g. \
     # https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html)
     # It loads the data, info structure and forward solution for one example subject,
@@ -143,7 +143,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
     else:
         raise ValueError(f'Invalid data type {data_type}, expected "eeg", "meg" or "eeg/meg"')
     info = mne.pick_info(info, picked_type)
-    tstep = 1. / info['sfreq']
+    tstep = 1. / info['sfreq'] #sample duration
     # To simulate sources, we also need a source space. It can be obtained from the
     # forward solution of the sample subject.
     fwd_fname = op.join(data_path, 'MEG', subject,'sample_audvis-meg-eeg-oct-6-fwd.fif')
@@ -172,8 +172,8 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             sources_subj = sources[subj]
             # stim_onset occurs every x samples.
             events = np.zeros((n_trials, 3), int)
-            stim_onsets =  2000 + max_trial_length * np.arange(n_trials) * tstep #2000 = offset of first stim / in samples!
-            events[:,0] = stim_onsets#last event 
+            stim_onsets =  2000 + max_trial_length * np.arange(n_trials) / (tstep*1000) #2000 = offset of first stim / in samples!
+            events[:,0] = stim_onsets#last event #maybe round?
             events[:,2] = 1#trigger 1 = stimulus 
 
             #Fake source, actually stimulus onset
@@ -185,7 +185,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             source_simulator.add_data(label, source_time_series, events)
 
             trigger = 2
-            random_source_times = []
+            #random_source_times = []
             generating_events = events
             for source in sources_subj:
                 selected_label = mne.read_labels_from_annot(
@@ -195,7 +195,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
                 # Define the time course of the activity for each source of the region to
                 # activate
                 event_duration = int(((1/source[1])/2)*info['sfreq'])
-                source_time_series = event_shape(((1000/source[1])/2),event_duration,1000/info['sfreq'])*source[2]
+                source_time_series = event_shape(((1000/source[1])/2),event_duration,1000/info['sfreq']) * source[2]
 
                 #adding source event
                 events = events.copy()
@@ -204,8 +204,8 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
                 else:
                     rand_i = times[:,trigger-2]/(tstep*1000)
 
-                random_source_times.append(rand_i) #varying event 
-                events[:, 0] = events[:,0] + random_source_times[-1] # Events sample.
+                #random_source_times.append(rand_i) #varying event 
+                events[:, 0] = events[:,0] + rand_i # Events sample.
                 events[:, 2] = trigger  # All events have the sample id.
                 trigger += 1
                 generating_events = np.concatenate([generating_events, events])
