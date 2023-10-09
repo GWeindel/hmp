@@ -665,7 +665,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     return data
     
 
-def LOOCV(data, init, participant, initial_fit, cpus=None, verbose=False):
+def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
     '''
     Fits model based on init settings and initial_fit parameters to data of 
     n - 1 (participant) participants, and calculates likelihood on the left-out
@@ -812,10 +812,10 @@ def loocv(init, data, estimate, cpus=1, verbose=True):
             loocv = []
             if cpus == 1: #not mp            
                 for participant in participants_idx:
-                    loocv.append(LOOCV(data, init, participant, model, verbose=verbose))
+                    loocv.append(loocv_calcs(data, init, participant, model, verbose=verbose))
             else: #mp
                 with mp.Pool(processes=cpus) as pool:
-                    loocv = pool.starmap(LOOCV,
+                    loocv = pool.starmap(loocv_calcs,
                                         zip(itertools.repeat(data), itertools.repeat(init),participants_idx,
                                             itertools.repeat(model),itertools.repeat(1),itertools.repeat(verbose)))
             
@@ -835,10 +835,10 @@ def loocv(init, data, estimate, cpus=1, verbose=True):
                 loocv = []
                 if cpus == 1: #not mp            
                     for participant in participants_idx:
-                        loocv.append(LOOCV(data, init, participant, model.sel(n_events=n_eve).dropna('event'), verbose=verbose))
+                        loocv.append(loocv_calcs(data, init, participant, model.sel(n_events=n_eve).dropna('event'), verbose=verbose))
                 else: #mp
                     with mp.Pool(processes=cpus) as pool:
-                        loocv = pool.starmap(LOOCV,
+                        loocv = pool.starmap(loocv_calcs,
                                             zip(itertools.repeat(data), itertools.repeat(init),participants_idx,
                                                 itertools.repeat(model.sel(n_events=n_eve).dropna('event')),itertools.repeat(1),itertools.repeat(verbose)))
 
@@ -856,7 +856,7 @@ def loocv(init, data, estimate, cpus=1, verbose=True):
     return likelihoods
 
 
-def loocv_mp(init, stacked_data, bests, func=LOOCV, cpus=2, verbose=True):
+def loocv_mp(init, stacked_data, bests, func=loocv_calcs, cpus=2, verbose=True):
     '''
     Deprecated, use loocv instead.
     '''
@@ -907,12 +907,12 @@ def example_complex_fit_func(hmp_model, max_events=None, n_events=1, mags_map=No
     return [backward_model, cond_model]
 
 
-def LOOCV_estimate_func(data, init, participant, func_estimate, func_args=None, cpus=None, verbose=False):
+def loocv_estimate_func(data, init, participant, func_estimate, func_args=None, cpus=None, verbose=False):
     '''
     Applies func_estimate with func_args to data of n - 1 (participant) participants.
     func_estimate should return an estimated hmp model; either a single model, 
     a condition model, or a backward estimation model. This model is then used 
-    to calculate the fit on the left out participant with LOOCV_likelihood.
+    to calculate the fit on the left out participant with loocv_likelihood.
 
     Parameters
     ----------
@@ -966,7 +966,7 @@ def LOOCV_estimate_func(data, init, participant, func_estimate, func_args=None, 
     return estimates
 
 
-def LOOCV_likelihood(data, init, participant, estimate, cpus=None, verbose=False):
+def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False):
     '''
     Calculate likelihood of fit on participant participant using parameters from estimate,
     either using single model or condition based model.
@@ -1101,10 +1101,10 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
     estimates = []
     if cpus == 1: #not mp            
         for participant in participants_idx:
-            estimates.append(LOOCV_estimate_func(data, init, participant, func_estimate, func_args=func_args, verbose=verbose))
+            estimates.append(loocv_estimate_func(data, init, participant, func_estimate, func_args=func_args, verbose=verbose))
     else: #mp
         with mp.Pool(processes=cpus) as pool:
-            loocv = pool.starmap(LOOCV_estimate_func,
+            loocv = pool.starmap(loocv_estimate_func,
                         zip(itertools.repeat(data), itertools.repeat(init),participants_idx,
                             itertools.repeat(func_estimate),itertools.repeat(func_args),
                             itertools.repeat(1), itertools.repeat(verbose)))
@@ -1134,10 +1134,10 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
             loocv = []
             if cpus == 1: #not mp            
                 for pidx, participant in enumerate(participants_idx):
-                    loocv.append(LOOCV_likelihood(data, init, participant, estimates[pidx], verbose=verbose))
+                    loocv.append(loocv_likelihood(data, init, participant, estimates[pidx], verbose=verbose))
             else: #mp
                 with mp.Pool(processes=cpus) as pool:
-                    loocv = pool.starmap(LOOCV_likelihood,
+                    loocv = pool.starmap(loocv_likelihood,
                                         zip(itertools.repeat(data), itertools.repeat(init),participants_idx,
                                             estimates, itertools.repeat(1),itertools.repeat(verbose)))
             
@@ -1157,10 +1157,10 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
                 loocv = []
                 if cpus == 1: #not mp            
                     for pidx, participant in enumerate(participants_idx):
-                        loocv.append(LOOCV_likelihood(data, init, participant, estimates[pidx].sel(n_events=n_eve).dropna('event'), verbose=verbose))
+                        loocv.append(loocv_likelihood(data, init, participant, estimates[pidx].sel(n_events=n_eve).dropna('event'), verbose=verbose))
                 else: #mp
                     with mp.Pool(processes=cpus) as pool:
-                        loocv = pool.starmap(LOOCV_likelihood,
+                        loocv = pool.starmap(loocv_likelihood,
                                             zip(itertools.repeat(data), itertools.repeat(init),participants_idx,
                                                 [estimates[x].sel(n_events=n_eve).dropna('event') for x in range(len(participants_idx))],itertools.repeat(1),itertools.repeat(verbose)))
 

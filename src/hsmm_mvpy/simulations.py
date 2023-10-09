@@ -60,7 +60,7 @@ def event_shape(event_width, event_width_samples, steps):
     template = template/np.sum(template**2)#Weight normalized
     return template
 
-def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, seed=None, sfreq=None): 
+def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, seed=None, sfreq=100): 
     '''
     Simulates n_trials of EEG and/or MEG using MNE's tools based on the specified sources
     
@@ -173,7 +173,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             # stim_onset occurs every x samples.
             events = np.zeros((n_trials, 3), int)
             stim_onsets =  2000 + max_trial_length * np.arange(n_trials) / (tstep*1000) #2000 = offset of first stim / in samples!
-            events[:,0] = stim_onsets#last event #maybe round?
+            events[:,0] = stim_onsets#last event 
             events[:,2] = 1#trigger 1 = stimulus 
 
             #Fake source, actually stimulus onset
