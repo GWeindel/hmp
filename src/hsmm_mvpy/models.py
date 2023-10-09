@@ -374,13 +374,14 @@ class hmp:
                         coords={'event':range(n_event_xr),
                                 "component":range(self.n_dims)})
             part, trial = self.coords['participant'].values, self.coords['trials'].values
-
+            trial_x_part = xr.Coordinates.from_pandas_multiindex(MultiIndex.from_arrays([part,trial],
+                                    names=('participant','trials')),'trial_x_participant')
             xreventprobs = xr.Dataset({'eventprobs': (('event', 'trial_x_participant','samples'), 
                                              eventprobs.T)},
                              {'event':range(n_event_xreventprobs),
-                              'samples':range(np.shape(eventprobs)[0]),
-                            'trial_x_participant':  MultiIndex.from_arrays([part,trial],
-                                    names=('participant','trials'))})
+                              'samples':range(np.shape(eventprobs)[0])})
+            xreventprobs = xreventprobs.assign_coords(trial_x_part)
+            
             xreventprobs = xreventprobs.transpose('trial_x_participant','samples','event')
         else: 
             n_event_xr = len(mags[0])
@@ -394,14 +395,14 @@ class hmp:
                         coords={'iteration':range(len(lkh)), 'event':range(n_event_xr),
                                 "component":range(self.n_dims)})
             part, trial = self.coords['participant'].values, self.coords['trials'].values
-
+            trial_x_part = xr.Coordinates.from_pandas_multiindex(MultiIndex.from_arrays([part,trial],
+                                    names=('participant','trials')),'trial_x_participant')
             xreventprobs = xr.Dataset({'eventprobs': (('iteration','event', \
                                     'trial_x_participant','samples'), [x.T for x in eventprobs])},
                              {'iteration':range(len(lkh)),
                               'event':np.arange(n_event_xr),
-                              'samples':np.arange(np.shape(eventprobs)[1]),
-                              'trial_x_participant':  MultiIndex.from_arrays([part,trial],
-                                    names=('participant','trials'))})
+                              'samples':np.arange(np.shape(eventprobs)[1])})
+            xreventprobs = xreventprobs.assign_coords(trial_x_part)
             xreventprobs = xreventprobs.transpose('iteration','trial_x_participant','samples','event')
         estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrtraces))
 
@@ -699,16 +700,17 @@ class hmp:
         xrmags = xr.DataArray(mags, dims=("condition", "event", "component"), name="magnitudes",
                      coords={'condition':range(n_conds), 'event':range(n_events), "component":range(self.n_dims)})
         part, trial = self.coords['participant'].values, self.coords['trials'].values
-
+        trial_x_part = xr.Coordinates.from_pandas_multiindex(MultiIndex.from_arrays([part,trial],
+                                    names=('participant','trials')),'trial_x_participant')
+        
         xreventprobs = xr.Dataset({'eventprobs': (('event', 'trial_x_participant','samples'),
                                              eventprobs.T)},
                                 {'event': ('event', range(n_events)),
                                  'samples': ('samples', range(np.shape(eventprobs)[0])),
-                                 'trial_x_participant':  ('trial_x_participant', MultiIndex.from_arrays([part,trial],
-                                 names=('participant','trials'))),
                                  'cond_x_participant': ('trial_x_participant', MultiIndex.from_arrays([part,conds],
                                  names=('participant','cond'))),
                                  'cond':('trial_x_participant',conds)})
+        xreventprobs = xreventprobs.assign_coords(trial_x_part)
         xreventprobs = xreventprobs.transpose('trial_x_participant','samples','event')
 
         estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrtraces))
