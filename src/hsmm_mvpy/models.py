@@ -894,7 +894,7 @@ class hmp:
             parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=np.mean(event_times,axis=1))
         elif self.em_method == "mean":
             #calc averagepos here as mean_d can be condition dependent, whereas scale_parameters() assumes it's general
-            event_times_mean = np.concatenate([np.arange(self.max_d) @ eventprobs.mean(axis=1), [np.mean(self.durations[subset_epochs])]])
+            event_times_mean = np.concatenate([np.arange(self.max_d) @ eventprobs.mean(axis=1), [np.mean(self.durations[subset_epochs])-1]])
             parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=event_times_mean)                            
 
         return [magnitudes, parameters]
@@ -958,9 +958,9 @@ class hmp:
                 gains[starts[trial]:ends[trial]+1,:][::-1,::-1]
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage scale
-        locations = np.concatenate([[0], np.repeat(self.location, n_events-1), [0]])#all stages except first and last stages have a location (mainly to avoid overlap in cross-correlated signal)
         for stage in range(n_stages):
-            pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1], locations[stage])
+            pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1])
+        pmf[:,1:-1] = np.concatenate([np.tile([0],(self.location,n_events-1)),pmf[self.location:,1:-1]])#all stages except first and last stages have a location (mainly to avoid overlap in cross-correlated signal)
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
 
         if n_events > 0:
@@ -968,7 +968,7 @@ class hmp:
             backward = np.zeros((self.max_d, n_trials, n_events), dtype=np.float64)
             # Computing forward and backward helper variable
             #  when stage = 0:
-            forward[:,:,0] = np.tile(np.concatenate([[0],pmf[:-1,0]])[np.newaxis].T,\
+            forward[:,:,0] = np.tile(pmf[:,0][np.newaxis].T,\
                 (1,n_trials))*probs[:,:,0] #first stage transition is p(B) * p(d)
             backward[:,:,0] = np.tile(pmf_b[:,0][np.newaxis].T,\
                         (1,n_trials)) #Reversed gamma (i.e. last stage) without probs as last event ends at time T
@@ -1083,7 +1083,7 @@ class hmp:
         else:
             return [likelihood, eventprobs]
 
-    def distribution_pmf(self, shape, scale, location):
+    def distribution_pmf(self, shape, scale):
         '''
         Returns PMF for a provided scipy disttribution with shape and scale, on a range from 0 to max_length 
         
@@ -1100,8 +1100,8 @@ class hmp:
         '''
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
-        p = self.pdf(np.arange(self.max_d)+1, shape, scale=scale)
-        p[:location] = 0
+        p = self.pdf(np.arange(self.max_d), shape, scale=scale)
+        p = p/np.sum(p)
         p[np.isnan(p)] = 0 #remove potential nans
         return p
     
