@@ -809,7 +809,7 @@ class hmp:
         else:
             lkh_prev = -np.inf
             while i < max_iteration :#Expectation-Maximization algorithm
-                if i >= min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
+                if i > min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
                     break
                     #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
@@ -857,7 +857,7 @@ class hmp:
 
         if i == max_iteration:
             warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
-        return lkh_prev, magnitudes_prev, parameters_prev, eventprobs_prev, np.array(traces)
+        return lkh, magnitudes, parameters, eventprobs, np.array(traces)
 
     def get_magnitudes_parameters_expectation(self,eventprobs,subset_epochs=None):
         
@@ -1927,7 +1927,7 @@ class hmp:
         if cpus is None:
             cpus = self.cpus
         if end is None:
-            end = self.mean_d
+            end = self.mean_d-1
         if verbose and decimate is not None:#Just for printing the info
              self.gen_mags(1, decimate=decimate, verbose=True)
         max_event_n = self.compute_max_events()
@@ -1938,15 +1938,16 @@ class hmp:
         n_events, j, time = 0,1,0
 
         #Init pars
-        pars = np.zeros((int(end),2))
+        pars = np.zeros((max_event_n+1,2))
         pars[:,0] = self.shape #gamma parameters during estimation, shape x scale
         pars_prop = pars[:n_events+2].copy()
         pars_prop[0,1] = self.mean_to_scale(1,self.shape)#initialize gamma_parameters
         pars_prop[n_events+1,1] = last_stage = self.mean_to_scale(end,self.shape)
         #Init mags
-        mags = np.zeros((int(end), self.n_dims)) #mags during estimation
+        mags = np.zeros((max_event_n, self.n_dims)) #mags during estimation
         i = 0
-        while self.scale_to_mean(last_stage,self.shape) > self.location and n_events < max_event_n:
+        lkh_prev = -np.inf
+        while self.scale_to_mean(last_stage,self.shape) > self.event_width_samples and n_events < max_event_n:
             prev_time = time
             if fix_iter:
                 to_fix = [range(n_events)]
@@ -1960,26 +1961,26 @@ class hmp:
             mags_props[:,:n_events,:] = np.tile(mags[:n_events,:], (len(mags_props), 1, 1))
             #estimate all grid_points models while fixing previous found events
             solutions = self.fit_single(n_events+1, mags_props, pars_prop, to_fix, to_fix,\
-                            return_max=False, verbose=False, cpus=cpus,\
+                            return_max=True, verbose=False, cpus=cpus,\
                             min_iteration=min_iteration, tolerance=tolerance)
             if diagnostic:#Diagnostic plot
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
             #Exclude non-converged models (negative EM LL curve)
-            solutions = utils.filter_non_converged(solutions)
-            if len(solutions.iteration) > 0:#Success
+            # solutions = utils.filter_non_converged(solutions)
+            if solutions.likelihoods > lkh_prev:#Success
+                lkh_prev = solutions.likelihoods
                 #OR take the nearest converged solution
-                nearest_solution = solutions.sel(iteration=solutions.parameters.sel(parameter="scale", \
-                    stage=n_events).argmin('iteration').values)
+                # nearest_solution = solutions.sel(iteration=solutions.parameters.sel(parameter="scale", \
+                #     stage=n_events).argmin('iteration').values)
                 if diagnostic:#Diagnostic plot
                     color = next(cycol)
-                    plt.plot(nearest_solution.traces.T, c=color, label=f'Iteration {i}')
-                mags[:n_events+1], pars[:n_events+2] = nearest_solution.magnitudes.values,\
-                    nearest_solution.parameters.values
+                    plt.plot(solutions.traces.T, c=color, label=f'Iteration {i}')
+                mags[:n_events+1], pars[:n_events+2] = solutions.magnitudes.values,\
+                    solutions.parameters.values
                 n_events += 1
                 j = 0
                 if verbose:
-                    print(f'Transition event {n_events} found around sample {int(np.round(self.scale_to_mean(np.sum(pars[:n_events,:]), self.shape)))}')
-
+                    print(f'Transition event {n_events} found around sample {int(np.round(self.scale_to_mean(np.sum(pars[:n_events,1]), self.shape)))}')
             j += 1
             i += 1
             #New parameter proposition
@@ -1987,7 +1988,7 @@ class hmp:
             pars_prop[n_events,1] = self.mean_to_scale(step*j, self.shape)
             last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:n_events+1,1])
             pars_prop[n_events+1,1] = last_stage
-            time = int(np.round(self.scale_to_mean(np.sum(pars[:n_events,:]), self.shape)))#self.scale_to_mean(np.sum(pars_prop[:n_events+1,1]),self.shape)
+            time = int(np.round(self.scale_to_mean(np.sum(pars[:n_events,1]), self.shape)))
             pbar.update(int(np.rint(time-prev_time)))
         pbar.update(int(np.round(np.rint(end))-np.rint(time)))
         if diagnostic:
