@@ -165,7 +165,7 @@ class hmp:
         event_idx = np.arange(self.event_width_samples)*self.steps + self.steps / 2
         event_frequency = 1000/(self.event_width*2)#gives event frequency given that events are defined as half-sines
         template = np.sin(2*np.pi*event_idx/1000*event_frequency)#event morph based on a half sine with given event width and sampling frequency
-        template = template/np.sum(template**2)#Weight normalized
+        template = template/np.sum(template)#Weight normalized
         return template
             
     def cross_correlation(self,data):
@@ -810,7 +810,7 @@ class hmp:
         else:
             lkh_prev = -np.inf
             while i < max_iteration :#Expectation-Maximization algorithm
-                if i >= min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
+                if i > min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
                     break
                     #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
@@ -945,7 +945,7 @@ class hmp:
         for i in range(self.n_dims):
             # computes the gains, i.e. congruence between the pattern shape
             # and the data given the magnitudes of the sensors
-            gains = gains + self.events[:,i][np.newaxis].T * magnitudes[:,i]
+            gains = gains + self.events[:,i][np.newaxis].T * magnitudes[:,i]-magnitudes[:,i]**2/2
         gains = np.exp(gains)
         probs = np.zeros([self.max_d, n_trials,n_events], dtype=np.float64) # prob per trial
         probs_b = np.zeros([self.max_d, n_trials,n_events], dtype=np.float64)# Sample and state reversed
@@ -1889,7 +1889,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=None, verbose=True, end=None, trace=False, fix_iter=True, max_iterations=1e3, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None):
+    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=False, max_iterations=1e3, tolerance=1e-4, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -1931,8 +1931,6 @@ class hmp:
             end = self.mean_d
         if verbose and decimate is not None:#Just for printing the info
              self.gen_mags(1, decimate=decimate, verbose=True)
-        if step is None:
-            step = self.event_width_samples
         max_event_n = self.compute_max_events()
         n_points = int(np.rint(end)//step)
         if diagnostic:
@@ -1945,15 +1943,15 @@ class hmp:
         pars[:,0] = self.shape #gamma parameters during estimation, shape x scale
         pars_prop = pars[:n_events+2].copy()
         pars_prop[0,1] = self.mean_to_scale(j,self.shape)#initialize gamma_parameters
-        pars_prop[n_events+1,1] = last_stage = self.mean_to_scale(end-j+1,self.shape)
+        pars_prop[n_events+1,1] = last_stage = self.mean_to_scale(end-j,self.shape)
         #Init mags
         mags = np.zeros((max_event_n, self.n_dims)) #mags during estimation
         i = 0
         lkh_prev = -np.inf
-        while self.scale_to_mean(last_stage,self.shape) > step and n_events < max_event_n:
+        while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events < max_event_n:
             prev_time = time
             if fix_iter:
-                to_fix = [range(n_events)]
+                to_fix = [range(n_events-1)]
             else: to_fix = []
             #Generate a grid of magnitudes as proposition 
             if decimate is None:
@@ -1963,7 +1961,7 @@ class hmp:
             #replave eventual event already found
             mags_props[:,:n_events,:] = np.tile(mags[:n_events,:], (len(mags_props), 1, 1))
             #estimate all grid_points models while fixing previous found events
-            solutions = self.fit_single(n_events+1, mags_props, pars_prop, to_fix, to_fix,\
+            solutions = self.fit_single(n_events+1, mags_props, pars_prop, to_fix, to_fix[:-1],\
                             return_max=True, verbose=False, cpus=cpus,\
                             min_iteration=min_iteration, tolerance=tolerance)
             if diagnostic:#Diagnostic plot
@@ -1976,20 +1974,18 @@ class hmp:
                     plt.plot(solutions.traces.T, c=color, label=f'Iteration {i}')
                 mags[:n_events+1], pars[:n_events+2] = solutions.magnitudes.values,\
                     solutions.parameters.values
-                pars[n_events,1] -= self.mean_to_scale(1, self.shape)
-                recal = self.fit_single(n_events+1, mags[:n_events+1], pars[:n_events+2], [], [], verbose=False, cpus=cpus,\
-                            min_iteration=min_iteration, tolerance=tolerance**2)
-                mags[:n_events+1], pars[:n_events+2] = recal.magnitudes.values, recal.parameters.values
                 n_events += 1
-                j = 0
+                j = 1
                 if verbose:
                     print(f'Transition event {n_events} found around sample {int(np.round(self.scale_to_mean(np.sum(pars[:n_events,1]), self.shape)))}')
             j += 1
+            i += 1
             #New parameter proposition
             pars_prop = pars[:n_events+2].copy()
             pars_prop[n_events,1] = self.mean_to_scale(step*j, self.shape)
+            # pars_prop[1:-1,1] += 2.5
             last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:n_events+1,1])
-            pars_prop[n_events+1,1] = last_stage+1
+            pars_prop[n_events+1,1] = last_stage
             time = int(np.round(self.scale_to_mean(np.sum(pars[:n_events,1]), self.shape)))
             pbar.update(int(np.rint(time-prev_time)))
         pbar.update(int(np.round(np.rint(end))-np.rint(time)))
