@@ -108,7 +108,8 @@ class hmp:
         self.event_width_samples = int(np.round(self.event_width / self.steps))
         if location is None:
             self.location = int(self.event_width / self.steps//2)+1
-        else: self.location =  int(np.rint(location / self.steps))
+        else:
+            self.location = location
         durations = data.unstack().sel(component=0).rename({'epochs':'trials'})\
             .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
             how="all").groupby('trial_x_participant').count(dim="samples").cumsum().squeeze()
@@ -1211,7 +1212,7 @@ class hmp:
         '''
         Compute the maximum possible number of events given event width and mean or minimum reaction time
         '''
-        return int(np.rint(np.min(self.durations)//(self.location)))+1
+        return int(np.rint(np.min(self.durations)//(self.location)))
 
     def event_times(self, eventprobs, mean=True):
         '''
