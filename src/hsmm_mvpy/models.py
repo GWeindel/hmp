@@ -109,7 +109,7 @@ class hmp:
         if location is None:
             self.location = int(self.event_width / self.steps//2)+1
         else:
-            self.location = location
+            self.location = int(np.rint(location))
         durations = data.unstack().sel(component=0).rename({'epochs':'trials'})\
             .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
             how="all").groupby('trial_x_participant').count(dim="samples").cumsum().squeeze()
