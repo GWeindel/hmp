@@ -771,6 +771,7 @@ def loocv(init, data, estimate, cpus=1, verbose=True):
     '''
 
     if verbose:
+        print()
         print("IMPORTANT:  This loocv procedure is incorrect in the sense that an initial estimate")
         print("is used to inform both the fit of the left-out participant and the other participants.")
         print("This means that they are not fully independent, unless the initial estimate is")
@@ -780,6 +781,7 @@ def loocv(init, data, estimate, cpus=1, verbose=True):
         print("\nTo do loocv correctly, use loocv_backward, loocv_fit, or the general loocv_func,")
         print("which all three also calculate the initial estimate for every fold by applying")
         print("backward estimation, the fit function, or your own function, respectively.")
+        print()
 
     if cpus is None:
         cpus = init.cpus
@@ -861,7 +863,8 @@ def loocv_mp(init, stacked_data, bests, func=loocv_calcs, cpus=2, verbose=True):
     Deprecated, use loocv instead.
     '''
     warn('This method is deprecated, use loocv() instead', DeprecationWarning, stacklevel=2) 
-    loocv(init, stacked_data, bests, cpus=cpus, verbose=verbose)
+    
+    return loocv(init, stacked_data, bests, cpus=cpus, verbose=verbose)
 
 
 def example_fit_single_func(hmp_model, n_events, magnitudes=None, parameters=None, verbose=False):
