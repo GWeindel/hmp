@@ -810,7 +810,7 @@ class hmp:
         else:
             lkh_prev = -np.inf
             while i < max_iteration :#Expectation-Maximization algorithm
-                if i > min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
+                if i >= min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
                     break
                     #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
@@ -1889,7 +1889,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=True, max_iterations=1e3, tolerance=1e-4, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None):
+    def fit(self, step=None, verbose=True, end=None, trace=False, fix_iter=True, max_iterations=1e3, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -1928,9 +1928,11 @@ class hmp:
         if cpus is None:
             cpus = self.cpus
         if end is None:
-            end = self.mean_d-1
+            end = self.mean_d
         if verbose and decimate is not None:#Just for printing the info
              self.gen_mags(1, decimate=decimate, verbose=True)
+        if step is None:
+            step = self.event_width_samples
         max_event_n = self.compute_max_events()
         n_points = int(np.rint(end)//step)
         if diagnostic:
@@ -1942,13 +1944,13 @@ class hmp:
         pars = np.zeros((max_event_n+1,2))
         pars[:,0] = self.shape #gamma parameters during estimation, shape x scale
         pars_prop = pars[:n_events+2].copy()
-        pars_prop[0,1] = self.mean_to_scale(1,self.shape)#initialize gamma_parameters
-        pars_prop[n_events+1,1] = last_stage = self.mean_to_scale(end,self.shape)
+        pars_prop[0,1] = self.mean_to_scale(j,self.shape)#initialize gamma_parameters
+        pars_prop[n_events+1,1] = last_stage = self.mean_to_scale(end-j+1,self.shape)
         #Init mags
         mags = np.zeros((max_event_n, self.n_dims)) #mags during estimation
         i = 0
         lkh_prev = -np.inf
-        while self.scale_to_mean(last_stage,self.shape) > self.event_width_samples and n_events < max_event_n:
+        while self.scale_to_mean(last_stage,self.shape) > step and n_events < max_event_n:
             prev_time = time
             if fix_iter:
                 to_fix = [range(n_events)]
@@ -1966,29 +1968,28 @@ class hmp:
                             min_iteration=min_iteration, tolerance=tolerance)
             if diagnostic:#Diagnostic plot
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
-            #Exclude non-converged models (negative EM LL curve)
-            # solutions = utils.filter_non_converged(solutions)
-            if solutions.likelihoods > lkh_prev:#Success
-                lkh_prev = solutions.likelihoods
-                #OR take the nearest converged solution
-                # nearest_solution = solutions.sel(iteration=solutions.parameters.sel(parameter="scale", \
-                #     stage=n_events).argmin('iteration').values)
+            if solutions.likelihoods > lkh_prev and np.diff(solutions.traces[-2:]) > 0:#Success
+                    
+                lkh_prev = solutions.likelihoods.values
                 if diagnostic:#Diagnostic plot
                     color = next(cycol)
                     plt.plot(solutions.traces.T, c=color, label=f'Iteration {i}')
                 mags[:n_events+1], pars[:n_events+2] = solutions.magnitudes.values,\
                     solutions.parameters.values
+                pars[n_events,1] -= self.mean_to_scale(1, self.shape)
+                recal = self.fit_single(n_events+1, mags[:n_events+1], pars[:n_events+2], [], [], verbose=False, cpus=cpus,\
+                            min_iteration=min_iteration, tolerance=tolerance**2)
+                mags[:n_events+1], pars[:n_events+2] = recal.magnitudes.values, recal.parameters.values
                 n_events += 1
                 j = 0
                 if verbose:
                     print(f'Transition event {n_events} found around sample {int(np.round(self.scale_to_mean(np.sum(pars[:n_events,1]), self.shape)))}')
             j += 1
-            i += 1
             #New parameter proposition
             pars_prop = pars[:n_events+2].copy()
             pars_prop[n_events,1] = self.mean_to_scale(step*j, self.shape)
             last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:n_events+1,1])
-            pars_prop[n_events+1,1] = last_stage
+            pars_prop[n_events+1,1] = last_stage+1
             time = int(np.round(self.scale_to_mean(np.sum(pars[:n_events,1]), self.shape)))
             pbar.update(int(np.rint(time-prev_time)))
         pbar.update(int(np.round(np.rint(end))-np.rint(time)))
