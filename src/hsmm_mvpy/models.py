@@ -808,9 +808,9 @@ class hmp:
             parameters_prev = initial_parameters
             eventprobs_prev = eventprobs
         else:
-            lkh_prev = -np.inf
+            lkh_prev = lkh
             while i < max_iteration :#Expectation-Maximization algorithm
-                if i > min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
+                if i >= min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
                     break
                     #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()

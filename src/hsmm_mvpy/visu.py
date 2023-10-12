@@ -370,10 +370,10 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
         errs = (np.nanstd(loocv_estimates.data,axis=1)/np.sqrt(len(loocv_estimates.participant)))[::-1]
         ax[0].errorbar(x=np.arange(len(means))+1, y=means, \
                  yerr= errs, marker='o', color='k')
-        if pvals:
-            for n_event in np.arange(2,loocv_estimates.n_event.max()+1):       
-                mean = means[n_event-1] * 1.1
-                ax[0].text(x=n_event-.25, y=mean, s=str(int(np.nansum(diff_bin[n_event-2])))+'/'+ str(len(diffs[-1])) + ': ' + str(np.around(pvalues[n_event-2][-1],3)), ha='right')
+        #if pvals:
+        #    for n_event in np.arange(2,loocv_estimates.n_event.max()+1):       
+        #        mean = means[n_event-1] * 1.1
+        #        ax[0].text(x=n_event-.25, y=mean, s=str(int(np.nansum(diff_bin[n_event-2])))+'/'+ str(len(diffs[-1])) + ': ' + str(np.around(pvalues[n_event-2][-1],3)), ha='right')
     else:
         alpha=1
         marker_indiv='o'
