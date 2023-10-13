@@ -794,6 +794,8 @@ def loocv(init, data, estimate, cpus=1, verbose=True):
 
     if not isinstance(estimate, list):
         models = [estimate]
+    else:
+        models = estimate
 
     n_models = len(models)
     if verbose:

@@ -165,7 +165,7 @@ class hmp:
         event_idx = np.arange(self.event_width_samples)*self.steps + self.steps / 2
         event_frequency = 1000/(self.event_width*2)#gives event frequency given that events are defined as half-sines
         template = np.sin(2*np.pi*event_idx/1000*event_frequency)#event morph based on a half sine with given event width and sampling frequency
-        template = template/np.sum(template)#Weight normalized
+        template = template/np.sum(template**2)#Weight normalized
         return template
             
     def cross_correlation(self,data):
@@ -189,7 +189,7 @@ class hmp:
         for trial in range(self.n_trials):#avoids confusion of gains between trials
             for dim in np.arange(self.n_dims):
                 dat = data[self.starts[trial]:self.ends[trial]+1, dim]
-                events[self.starts[trial]:self.ends[trial]+1,dim] = correlate(dat, self.template, mode='full', method='direct')[-len(dat):]
+                events[self.starts[trial]:self.ends[trial]+1,dim] = correlate(dat, self.template, mode='same', method='direct')
         return events
 
     def fit_single(self, n_events=None, magnitudes=None, parameters=None, parameters_to_fix=None, 
@@ -1214,31 +1214,6 @@ class hmp:
         '''
         return int(np.rint(np.min(self.durations)//(self.location)))
 
-    def event_times(self, eventprobs, mean=True):
-        '''
-        Compute event onset times based on event probabilities
-        This function is mainly kept for compatibility with previous matlab applications
-
-        parameters
-        ----------
-   
-        Returns
-        -------
-
-        '''
-        eventprobs = eventprobs.dropna('event', how="all")
-        eventprobs = eventprobs.dropna('trial_x_participant', how="all")
-        onsets = np.empty((len(eventprobs.trial_x_participant),len(eventprobs.event)+1))*np.nan
-        i = 0
-        for trial in eventprobs.trial_x_participant.dropna('trial_x_participant', how="all").values:
-            onsets[i, :len(eventprobs.event)] = np.arange(self.max_d) @ eventprobs.sel(trial_x_participant=trial).data
-            onsets[i, -1] = self.ends[i] - self.starts[i]
-            i += 1
-        if mean:
-            return np.mean(onsets, axis=0)
-        else:
-            return onsets
-
     @staticmethod        
     def compute_times(init, estimates, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=False, extra_dim=None, as_time=False, errorbars=None):
         '''
@@ -1281,28 +1256,29 @@ class hmp:
 
         assert not(mean and errorbars is not None), 'Only one of mean and errorbars can be set.'
 
+        event_shift = init.event_width_samples//2
         eventprobs = estimates.eventprobs.fillna(0).copy()
         if init.em_method == "max":
-            times = eventprobs.argmax('samples')#Most likely event location
+            times = eventprobs.argmax('samples') - event_shift #Most likely event location
         else:
-            times = xr.dot(eventprobs, eventprobs.samples, dims='samples')
+            times = xr.dot(eventprobs, eventprobs.samples, dims='samples') - event_shift
 
         #in case there is a single model, but there are empty stages at the end
         #this happens with selected model from backward estimation
         if 'n_events' in times.coords and len(times.shape) == 2:
             tmp = times.mean('trial_x_participant').values
-            if tmp[-1] == 0:
-                filled_stages = np.where(tmp != 0)[0]
+            if tmp[-1] == -event_shift:
+                filled_stages = np.where(tmp != -event_shift)[0]
                 times = times[:, filled_stages]
 
         #set to nan if stage missing
         if extra_dim == 'condition':
             times_cond = times.groupby('cond').mean('trial_x_participant').values #take average to make sure it's not just 0 on the trial-level
-            for c, e in np.argwhere(times_cond == 0):
+            for c, e in np.argwhere(times_cond == -event_shift):
                 times[times['cond']==c, e] = np.nan
         elif extra_dim == 'n_events':
             times_n_events = times.mean('trial_x_participant').values
-            for x, e in np.argwhere(times_n_events == 0):
+            for x, e in np.argwhere(times_n_events == -event_shift):
                 times[x,:,e] = np.nan
 
         if as_time:
@@ -1418,7 +1394,7 @@ class hmp:
         return times
    
     @staticmethod
-    def compute_topologies(channels, estimated, init, extra_dim=None, mean=True, mean_in_participant=True):
+    def compute_topologies(channels, estimated, init, extra_dim=None, mean=True, mean_in_participant=True, peak=True):
         """
         Compute topologies for each trial. 
          
@@ -1436,6 +1412,8 @@ class hmp:
                 if True mean will be computed instead of single-trial channel activities
             mean_in_partipant : bool
                 Whether the mean is first computed within participant before calculating the overall mean.
+            peak : bool
+                if true, return topology at peak of the event. If false, return topologies weighted by a normalized template.
          
          Returns
          -------
@@ -1452,18 +1430,27 @@ class hmp:
 
         channels = channels.sel(trial_x_participant=estimated.trial_x_participant) #subset to estimated
 
+        if peak:
+            peak_shift = np.argmax(init.template)
+        else:
+            normed_template = init.template/np.sum(init.template)
+
+        event_shift = init.event_width_samples // 2
         if not extra_dim or extra_dim == 'condition': #also in the condition case, only one fit per trial
             if init.em_method == "max":
-                times = estimated.argmax('samples') #Most likely event location
+                times = estimated.argmax('samples') - event_shift #Most likely event location
             else:
-                times = np.round(xr.dot(estimated, estimated.samples, dims='samples'))
+                times = np.round(xr.dot(estimated, estimated.samples, dims='samples')) - event_shift
         
             event_values = np.zeros((n_channels,n_trials,n_events))
             for ev in range(n_events):
                 for tr in range(n_trials):
                     samp = int(times.values[tr,ev])
-                    vals = channels.values[:,samp:samp+init.event_width_samples,tr]
-                    event_values[:,tr,ev] = np.dot(vals, init.template[:vals.shape[1]])            
+                    if peak:
+                        event_values[:,tr,ev] = channels.values[:,samp+peak_shift,tr]
+                    else:
+                        vals = channels.values[:,samp:samp+init.event_width_samples,tr]
+                        event_values[:,tr,ev] = np.dot(vals, normed_template[:vals.shape[1]])          
                     
             event_values = xr.DataArray(event_values, 
                         dims = ["channels","trial_x_participant","event",],
@@ -1480,7 +1467,7 @@ class hmp:
 
                 #set to nan if stage missing
                 times = times.groupby('cond').mean('trial_x_participant').values
-                for c, e in np.argwhere(times==0):
+                for c, e in np.argwhere(times == -event_shift):
                     event_values[event_values['cond']==c,e,:] = np.nan
 
         elif extra_dim == 'n_events': #here we need values per fit
@@ -1488,18 +1475,21 @@ class hmp:
             event_values = np.zeros((n_dim, n_channels, n_trials, n_events))*np.nan
             for x in range(n_dim):
                 if init.em_method == "max":
-                    times = estimated[x].argmax('samples')
+                    times = estimated[x].argmax('samples') - init.event_width_samples//2
                 else:
-                    times = np.round(xr.dot(estimated[x], estimated.samples, dims='samples'))
+                    times = np.round(xr.dot(estimated[x], estimated.samples, dims='samples')) - init.event_width_samples//2
                 for ev in range(n_events):
                     for tr in range(n_trials):
                         samp = int(times.values[tr,ev])
-                        vals = channels.values[:,samp:samp+init.event_width_samples,tr]
-                        event_values[x,:,tr,ev] = np.dot(vals, init.template[:vals.shape[1]])       
+                        if peak:
+                            event_values[x,:,tr,ev] = channels.values[:,samp+peak_shift,tr]  
+                        else:
+                            vals = channels.values[:,samp:samp+init.event_width_samples,tr]
+                            event_values[x,:,tr,ev] = np.dot(vals, normed_template[:vals.shape[1]]) 
 
                 #set to nan if missing
                 times = times.mean('trial_x_participant').values
-                for e in np.argwhere(times==0):
+                for e in np.argwhere(times == -event_shift):
                     event_values[x,:,:,e] = np.nan
                 
             event_values = xr.DataArray(event_values, 
@@ -1881,10 +1871,10 @@ class hmp:
         pars_sp = np.array([x[2] for x in estimates])
 
         #calc expected time
-        if True: #em_method == "max":
-            times_sp = np.array([np.argmax(np.squeeze(x[3]),axis=0) for x in estimates])
+        if em_method == "max":
+            times_sp = np.array([np.argmax(np.squeeze(x[3]),axis=0) for x in estimates]) - self.event_width_samples//2
         else:
-            times_sp = np.array([np.rint(np.dot(np.squeeze(x[3]).T, np.arange(x[3].shape[0]))) for x in estimates])
+            times_sp = np.array([np.rint(np.dot(np.squeeze(x[3]).T, np.arange(x[3].shape[0]))) for x in estimates]) - self.event_width_samples//2
 
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
