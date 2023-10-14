@@ -290,9 +290,9 @@ def plot_components_sensor(hmp_data, positions):
             List of x and y positions to plot channels on head model OR MNE info object
     """
     from mne.viz import plot_topomap
-    fig, ax = plt.subplots(1,len(hmp_data.attrs['components'].component))
-    for comp in hmp_data.attrs['components'].component:
-        plot_topomap(hmp_data.attrs['components'].values[:,comp], positions, axes=ax[comp], show=False, cmap='Spectral_r')
+    fig, ax = plt.subplots(1,len(hmp_data.attrs['pca_weights'].component))
+    for comp in hmp_data.attrs['pca_weights'].component:
+        plot_topomap(hmp_data.attrs['pca_weights'].values[:,comp], positions, axes=ax[comp], show=False, cmap='Spectral_r')
     plt.show()
 
 
