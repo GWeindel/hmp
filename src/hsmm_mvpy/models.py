@@ -804,9 +804,6 @@ class hmp:
         i = 0
         if not maximization or n_events==0:
             lkh_prev = lkh
-            magnitudes_prev = initial_magnitudes
-            parameters_prev = initial_parameters
-            eventprobs_prev = eventprobs
         else:
             lkh_prev = lkh
             while i < max_iteration :#Expectation-Maximization algorithm
@@ -814,10 +811,7 @@ class hmp:
                     break
                     #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
-                magnitudes_prev = magnitudes.copy()
-                parameters_prev = parameters.copy()
-                eventprobs_prev = eventprobs.copy()
-
+                
                 if n_cond is not None: #condition dependent
                     for c in range(n_cond): #get params/mags
 
