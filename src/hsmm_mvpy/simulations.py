@@ -133,7 +133,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
     #mne read raw
     info = mne.io.read_info(evoked_fname, verbose=verbose)
     with info._unlock():
-     info['sfreq'] = sfreq
+        info['sfreq'] = sfreq
     if data_type == 'eeg':
         picked_type = mne.pick_types(info, meg=False, eeg=True)
     elif data_type == 'meg':
@@ -188,6 +188,8 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             #random_source_times = []
             generating_events = events
             for source in sources_subj:
+                if trigger == len(sources_subj)+1:
+                    source[2] = 1e-20#Last source defines RT and is not an event per se
                 selected_label = mne.read_labels_from_annot(
                     subject, regexp=source[0], subjects_dir=subjects_dir, verbose=verbose)[0]
                 label = mne.label.select_sources(subject, selected_label, subjects_dir=subjects_dir, location=0, grow_outside=False, random_state=random_state)
