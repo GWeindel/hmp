@@ -805,6 +805,7 @@ class hmp:
         if not maximization or n_events==0:
             lkh_prev = lkh
         else:
+            traces.append(lkh)
             lkh_prev = lkh
             while i < max_iteration :#Expectation-Maximization algorithm
                 if i >= min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
@@ -847,7 +848,6 @@ class hmp:
                 else:
                     lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
         
-                traces.append(lkh)
                 i += 1
 
         if i == max_iteration:
@@ -1976,7 +1976,7 @@ class hmp:
                             min_iteration=min_iteration, tolerance=tolerance)
             if diagnostic:#Diagnostic plot
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
-            if solutions.likelihoods > lkh_prev and np.diff(solutions.traces[-2:]) > 0:#Success
+            if solutions.likelihoods > lkh_prev :#and np.diff(solutions.traces[-2:]) > 0:#Success
                     
                 lkh_prev = solutions.likelihoods.values
                 if diagnostic:#Diagnostic plot

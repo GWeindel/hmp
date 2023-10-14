@@ -40,8 +40,8 @@ def _gen_dataset(data, dim, n_iterations):
         named_index.append(_gen_idx(data, dim))
     return named_index, data, dim, original_dim_order_data
 
-def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter, tolerance, rerun_pca, pca_weights, decimate, summarize, verbose, plots=True, cpus=1,
-                      trace=False, path='./'):
+def _bootstrapped_run(fit, data, dim, indexes, order, init, n_iter, rerun_pca, pca_weights, summarize, verbose, cpus, trace, path):
+    sfreq = init.sfreq
     resampled_data = data.loc[{dim:list(indexes)}].unstack().transpose(*order)
     if '_x_' in dim:
         dim = dim.split('_x_')
@@ -57,8 +57,12 @@ def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter,
             hmp_data_boot = transform_data(resampled_data, pca_weights=pca_weights)
     else:
         hmp_data_boot = stack_data(resampled_data)
-    init_boot = hmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1)
-    estimates_boot = init_boot.fit(verbose=verbose, tolerance=tolerance, decimate=decimate)
+    init_boot = hmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1,
+                    shape=init.shape, estimate_magnitudes=init.estimate_magnitudes, 
+                    estimate_parameters=init.estimate_parameters, template=init.template,
+                    location=init.location, distribution=init.distribution, em_method=init.em_method)
+    estimates_boot = init_boot.fit_single(fit.magnitudes.shape[0], verbose=verbose, parameters=fit.parameters,
+                                         magnitudes=fit.magnitudes)
     if trace:
         save_eventprobs(estimates_boot.eventprobs, path+str(n_iter)+'.nc')
     if summarize and 'channels' in resampled_data.dims:
@@ -75,9 +79,42 @@ def _bootstrapped_run(data, dim, indexes, order, init, positions, sfreq, n_iter,
                                          estimates_boot.eventprobs.to_dataset(name='eventprobs')])
     return boot_results
 
-def bootstrapping(data, dim, n_iterations, init, positions, sfreq, tolerance=1e-4,
-                  rerun_pca=False, pca_weights=None, decimate=None, summarize=True,
-                  verbose=False, plots=True, cpus=1, trace=False, path='./'):
+def bootstrapping(fit, data, dim, n_iterations, init, 
+                  rerun_pca=False, pca_weights=None, summarize=True,
+                  verbose=False, cpus=1, trace=False, path='./'):
+    '''
+    Performs bootstrapping on ```data``` by fitting the same model as ```fit```
+
+    parameters
+    ----------
+         fit: hmp fitted model
+            fitted object, should contain the estimated parameters and magnitudes
+         data: xarray.Dataset 
+            epoched raw data
+         dim: str | list
+            on which dimension to perform the bootstrap (e.g. epochs, participant or particiants and epochs (e.g. ['epochs','participant'])
+        n_iterations: int
+            How many bootstrap to perform
+        init: class hmp()
+            initialized hmp object
+        rerun_pca: bool
+            if True re-performs the PCA on the resampled data (not advised as magnitudes would be meaningless). if False pca_weights need to be passed in pca_weights parameter
+        pca_weights: ndarray
+            Matrix from the pca performed on the initial hmp_data (e.g. hmp_data.pca_weights)
+        summarize: bool
+            Whether to keep only channel activity and stage times (True) or wether to store the whole fitted model (False)
+        verbose: bool
+            Display additional informations on the fits
+        trace: bool 
+            If True save the event probabilities in a file with path+number_of_iteration.nc
+        path: bool 
+            where to save the event probabilities of the bootstrapped models
+     
+     Returns:
+     ----------
+        boot: xarray.Dataset
+            The concatenation of all bootstrapped models into an xarray
+    '''
     import itertools
     if 'channels' in data.dims:
         data_type = 'raw'
@@ -89,19 +126,46 @@ def bootstrapping(data, dim, n_iterations, init, positions, sfreq, tolerance=1e-
         print(f'Bootstrapping {data_type} on {n_iterations} iterations')
     data_views, data, dim, order = _gen_dataset(data, dim, n_iterations)
     
-    inputs = zip(itertools.repeat(data), itertools.repeat(dim), data_views, itertools.repeat(order), 
-                itertools.repeat(init), 
-                itertools.repeat(positions), itertools.repeat(init.sfreq), np.arange(n_iterations),
-                itertools.repeat(tolerance), itertools.repeat(rerun_pca), itertools.repeat(pca_weights),
-                itertools.repeat(decimate), itertools.repeat(summarize), itertools.repeat(verbose),
-                itertools.repeat(plots),itertools.repeat(cpus), itertools.repeat(trace), itertools.repeat(path))
+    inputs = zip(itertools.repeat(fit), itertools.repeat(data), itertools.repeat(dim), data_views, itertools.repeat(order), 
+                itertools.repeat(init),  np.arange(n_iterations),
+                itertools.repeat(rerun_pca), itertools.repeat(pca_weights),
+                itertools.repeat(summarize), itertools.repeat(verbose),
+                itertools.repeat(cpus), itertools.repeat(trace), itertools.repeat(path))
     with mp.Pool(processes=cpus) as pool:
             boot = list(tqdm(pool.imap(_boot_star, inputs), total=n_iterations))
         
     boot = xr.concat(boot, dim='iteration')
-    # if plots:
+    # if plots:#Doesn't work with multiprocessing
     #     plot_topo_timecourse(boot.channels, boot.event_times, positions, init_boot, title='iteration = '+str(n_iter), skip_electodes_computation=True)
     return boot
+
+# def _bootstrapping_fit(data, dim, n_iterations, init, positions, tolerance=1e-4,
+#                   rerun_pca=False, pca_weights=None, decimate=None, summarize=True,
+#                   verbose=False, plots=True, cpus=1, trace=False, path='./'):
+#     import itertools
+#     if 'channels' in data.dims:
+#         data_type = 'raw'
+#         if not rerun_pca:
+#             assert pca_weights is not None, 'If PCA is not re-computed, PC weights from the HMP initial data should be provided through the pca_weights argument'
+#     else:
+#         data_type = 'transformed'
+#     if verbose:
+#         print(f'Bootstrapping {data_type} on {n_iterations} iterations')
+#     data_views, data, dim, order = _gen_dataset(data, dim, n_iterations)
+    
+#     inputs = zip(itertools.repeat(data), itertools.repeat(dim), data_views, itertools.repeat(order), 
+#                 itertools.repeat(init), 
+#                 itertools.repeat(positions), itertools.repeat(init.sfreq), np.arange(n_iterations),
+#                 itertools.repeat(tolerance), itertools.repeat(rerun_pca), itertools.repeat(pca_weights),
+#                 itertools.repeat(decimate), itertools.repeat(summarize), itertools.repeat(verbose),
+#                 itertools.repeat(plots),itertools.repeat(cpus), itertools.repeat(trace), itertools.repeat(path))
+#     with mp.Pool(processes=cpus) as pool:
+#             boot = list(tqdm(pool.imap(_boot_star, inputs), total=n_iterations))
+        
+#     boot = xr.concat(boot, dim='iteration')
+#     # if plots:
+#     #     plot_topo_timecourse(boot.channels, boot.event_times, positions, init_boot, title='iteration = '+str(n_iter), skip_electodes_computation=True)
+#     return boot
 
 def event_occurence(iterations,  model_to_compare=None, frequency=True, return_mags=None):
     from scipy.spatial import distance_matrix
