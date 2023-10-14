@@ -800,12 +800,11 @@ class hmp:
         else:
             lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
 
-        traces = []
+        traces = [lkh]
         i = 0
         if not maximization or n_events==0:
             lkh_prev = lkh
         else:
-            traces.append(lkh)
             lkh_prev = lkh
             while i < max_iteration :#Expectation-Maximization algorithm
                 if i >= min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
@@ -847,7 +846,7 @@ class hmp:
                     lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
                 else:
                     lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
-        
+                traces.append(lkh)
                 i += 1
 
         if i == max_iteration:
