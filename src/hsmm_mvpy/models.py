@@ -804,9 +804,6 @@ class hmp:
         i = 0
         if not maximization or n_events==0:
             lkh_prev = lkh
-            magnitudes_prev = initial_magnitudes
-            parameters_prev = initial_parameters
-            eventprobs_prev = eventprobs
         else:
             lkh_prev = lkh
             while i < max_iteration :#Expectation-Maximization algorithm
@@ -814,10 +811,7 @@ class hmp:
                     break
                     #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
-                magnitudes_prev = magnitudes.copy()
-                parameters_prev = parameters.copy()
-                eventprobs_prev = eventprobs.copy()
-
+                
                 if n_cond is not None: #condition dependent
                     for c in range(n_cond): #get params/mags
 
@@ -1213,6 +1207,32 @@ class hmp:
         Compute the maximum possible number of events given event width and mean or minimum reaction time
         '''
         return int(np.rint(np.min(self.durations)//(self.location)))
+
+
+    def event_times(self, eventprobs, mean=True):
+         '''
+         Compute event onset times based on event probabilities
+         This function is mainly kept for compatibility with previous matlab applications
+         parameters
+         ----------
+    
+         Returns
+         -------
+         '''
+         eventprobs = eventprobs.dropna('event', how="all")
+         eventprobs = eventprobs.dropna('trial_x_participant', how="all")
+         onsets = np.empty((len(eventprobs.trial_x_participant),len(eventprobs.event)+1))*np.nan
+         i = 0
+         for trial in eventprobs.trial_x_participant.dropna('trial_x_participant', how="all").values:
+             onsets[i, :len(eventprobs.event)] = np.arange(self.max_d) @ eventprobs.sel(trial_x_participant=trial).data
+             onsets = onsets - self.event_width_samples//2
+             onsets[i, -1] = self.ends[i] - self.starts[i]
+             i += 1
+         if mean:
+             return np.mean(onsets, axis=0)
+         else:
+             return onsets
+
 
     @staticmethod        
     def compute_times(init, estimates, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=False, extra_dim=None, as_time=False, errorbars=None):
