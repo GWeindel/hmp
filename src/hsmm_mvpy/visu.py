@@ -796,7 +796,7 @@ def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoc
     # plt.tight_layout()
     plt.show()
     
-def plot_distribution(distribution, mean, shape, location=0, xmax=300, xmin=0, num=100, label='distribution', color=None, ax=None, display_mean=False):
+def plot_expected_distribution(distribution, mean, shape, location=0, xmax=300, xmin=0, num=100, label='distribution', color=None, ax=None, display_mean=False):
     '''
     Plot available distribution with a scale and shape parameter
     '''
