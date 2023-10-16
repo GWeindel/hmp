@@ -328,20 +328,6 @@ hmp.visu.plot_topo_timecourse(eeg_data, estimates, #Data and estimations
     
 
 
-
-```python
-hmp.visu.plot_topo_timecourse(eeg_data, estimates, #Data and estimations 
-                               positions, init,#position of the electrodes and initialized model
-                               magnify=1, sensors=False, #time_step=1000/init.sfreq,#Display control parameters
-                               times_to_display = np.mean(init.ends - init.starts))#plot reaction times
-```
-
-
-    
-![png](README_files/README_27_0.png)
-    
-
-
 This shows us the electrode activity on the scalp as well as the average time of occurence of the events based on the stage distributions.
 
 As we are estimating the event onsets on a by-trial basis we can look at the by-trial variation in stage duration.
@@ -369,13 +355,6 @@ hmp.visu.plot_distribution(estimates.eventprobs.mean(dim=['trial_x_participant']
 ```
 
 
-
-
-    <Axes: xlabel='Time (in samples)', ylabel='p(event)'>
-
-
-
-
     
 ![png](README_files/README_31_1.png)
     
@@ -395,14 +374,6 @@ As HMP estimated stage onset per trial we can also look at the predicted stage o
 hmp.visu.plot_distribution(estimates.eventprobs.sel(trial_x_participant=('S0', 0)), 
                             xlims=(0,np.percentile(sim_event_times.sum(axis=1), q=90)))
 ```
-
-
-
-
-    <Axes: xlabel='Time (in samples)', ylabel='p(event)'>
-
-
-
 
     
 ![png](README_files/README_33_1.png)
@@ -476,50 +447,6 @@ for event in estimated_times:
 plt.xlim(0,250)
 plt.tight_layout();
 ```
-
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-
-
-
     
 ![png](README_files/README_39_1.png)
     
@@ -555,33 +482,6 @@ plt.ylim(-3e-6,3e-6);
 
 ```
 
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-
-
-
     
 ![png](README_files/README_41_1.png)
     
@@ -611,130 +511,6 @@ for stage in range(n_stages):
     sns.lineplot(x="Time", y="value", data=df,ax=ax[stage], color='darkblue') 
     plt.xlim(0,100)
 ```
-
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1498: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
-      if pd.api.types.is_categorical_dtype(vector):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-    /home/gweindel/anaconda3/envs/mainhmp/lib/python3.11/site-packages/seaborn/_oldcore.py:1119: FutureWarning: use_inf_as_na option is deprecated and will be removed in a future version. Convert inf values to NaN before operating instead.
-      with pd.option_context('mode.use_inf_as_na', True):
-
-
-
     
 ![png](README_files/README_43_1.png)
     
