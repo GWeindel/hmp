@@ -130,9 +130,14 @@ def cluster_events(init, lkhs, mags, channels, times, method='time_x_lkh_mags', 
                                     cmap='Spectral_r', vlim=(vmin, vmax), sensors=False, contours=False)
 
         bottom,_ = ax.get_ylim()
+        ax.set_xlim(0, init.mean_d*time_step)
         ax.set_ylim((bottom, np.max(lkhs) + yrange*.5))
-        ax.set_xlabel('Time (ms)')
-        ax.set_ylabel('Likelihood')
+        
+        ax.tick_params(axis='x', labelsize=16)
+        ax.tick_params(axis='y', labelsize=16)
+
+        ax.set_xlabel('Time (ms)', fontsize=18)
+        ax.set_ylabel('Likelihood', fontsize=18)
         if plt.get_backend()[0:2] == 'Qt': #fixes issue with yscaling
             plt.tight_layout()
         plt.pause(.1)

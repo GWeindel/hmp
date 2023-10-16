@@ -725,7 +725,7 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
     return likelihood
 
 
-def loocv(init, data, estimate, cpus=1, verbose=True):
+def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
     '''
     Performs leave-one-out cross validation. For provided estimate(s), it will perform loocv by 
     leaving out one participant, estimating a fit, and computing the likelihood of the data from 
@@ -764,6 +764,8 @@ def loocv(init, data, estimate, cpus=1, verbose=True):
         We recommend using 1 CPU at this level on a laptop or normal PC. Only use multiple
         CPUs if you have *a lot* of memory available.
     verbose : bool
+    print_warning : bool
+        whether to plot the loocv 'incorrectness' warning
         
     Returns
     -------
@@ -771,17 +773,18 @@ def loocv(init, data, estimate, cpus=1, verbose=True):
     '''
 
     if verbose:
-        print()
-        print("IMPORTANT:  This loocv procedure is incorrect in the sense that an initial estimate")
-        print("is used to inform both the fit of the left-out participant and the other participants.")
-        print("This means that they are not fully independent, unless the initial estimate is")
-        print("based on the literature or another task. However, it does give a very good initial")
-        print("idea of the correct loocv procedure and is relatively quick.")
+        if print_warning:
+            print()
+            print("IMPORTANT:  This loocv procedure is incorrect in the sense that an initial estimate")
+            print("is used to inform both the fit of the left-out participant and the other participants.")
+            print("This means that they are not fully independent, unless the initial estimate is")
+            print("based on the literature or another task. However, it does give a very good initial")
+            print("idea of the correct loocv procedure and is relatively quick.")
 
-        print("\nTo do loocv correctly, use loocv_backward, loocv_fit, or the general loocv_func,")
-        print("which all three also calculate the initial estimate for every fold by applying")
-        print("backward estimation, the fit function, or your own function, respectively.")
-        print()
+            print("\nTo do loocv correctly, use loocv_backward or the general loocv_func,")
+            print("which calculate the initial estimate for every fold by applying")
+            print("backward estimation or your own function, respectively.")
+            print()
 
     if cpus is None:
         cpus = init.cpus

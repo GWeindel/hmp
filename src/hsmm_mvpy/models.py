@@ -1479,6 +1479,12 @@ class hmp:
                         })
             event_values = event_values.transpose("trial_x_participant","event","channels") #to maintain previous behavior
 
+            if not extra_dim:
+                #set to nan if stage missing
+                times = times.mean('trial_x_participant').values
+                for e in np.argwhere(times == -event_shift):
+                    event_values[:,e,:] = np.nan
+                        
             if extra_dim == 'condition':
                 #add coords
                 event_values = event_values.assign_coords({'cond_x_participant': ('trial_x_participant', channels['cond_x_participant'].values),
@@ -1784,6 +1790,7 @@ class hmp:
         if plot:
             _, ax = plt.subplots(1,1,figsize=(20,3))
             ax.plot(times, lkhs, '.', alpha=alpha)
+            ax.set_xlim(0, self.mean_d)
         
         return lkhs, mags, channels, times
 

@@ -2,6 +2,7 @@
 
 '''
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
@@ -277,6 +278,146 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         return ax
     else:
         plt.show()    
+
+def save_model_topos(channels, estimated, channel_position, init, fname='topo', figsize=None, dpi=300, cmap='Spectral_r',
+                vmin=None, vmax=None, sensors=False, contours=6, colorbar=True):
+    '''
+    Saving the event topologies to files, one per topology. Typically used for saving high quality topos.
+    
+    Parameters
+    ----------
+    channels : xr.Dataarray 
+       the original EEG data in HMP format
+    estimated : hmp object
+        a fitted hmp (either from fit_single, fit_single_conds, or backward_estimation)
+    channel_position : ndarray
+        Either a 2D array with dimension channel and [x,y] storing channel location in meters or an info object from
+        the mne package containning digit. points for channel location
+    init : float
+        initialized HMP object
+    fname : str
+        file name, other model specifications will be appended. Should not include extension.
+    figsize : list | tuple | ndarray
+        Length and heigth of the matplotlib plot
+    dpi : float
+        DPI of the  matplotlib plot
+    cmap : str
+        Colormap of matplotlib
+    vmin : float
+        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html). If not explicitly
+        set, uses min across all topos while keeping colormap symmetric.
+    vmax : float
+        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html). If not explicitly
+        set, uses max across all topos while keeping colormap symmetric.
+    sensors : bool
+        Whether to plot the sensors on the topologies
+    contours : int / array_like
+        The number of contour lines to draw (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
+    colorbar : bool
+        Whether a colorbar is saved in a separate file (fname_colorbar)
+      
+    '''
+
+    from mne.viz import plot_brain_colorbar, plot_topomap
+    from mne.io.meas_info import Info
+
+    plot_type = 'default'
+    ydim = None
+
+    #if condition estimates, prep conds
+    if isinstance(estimated, xr.Dataset) and 'condition' in estimated.dims:
+        plot_type = 'cond'
+        conds = estimated['cond'].values
+        n_cond = estimated.parameters.shape[0]
+        cond_names = estimated.clabels
+        ydim = 'condition'
+    elif 'n_events' in estimated.dims and estimated.n_events.count() > 1:
+        plot_type = 'backward'
+        ydim = 'n_events'
+
+    #calculate topos
+    channels = init.compute_topologies(channels, estimated, init, ydim).data #compute topologies
+    
+    #fix vmin/vmax across topos, while keeping symmetric
+    if vmax == None: #vmax = absolute max, unless no positive values
+        vmax = np.nanmax(np.abs(channels[:])) 
+        vmin = -vmax if np.nanmin(channels[:]) < 0 else 0
+        if np.nanmax(channels[:]) < 0: vmax = 0
+
+    #make axis
+    if figsize == None:
+        figsize = (2,2)
+
+    #make sure it doesn't display plots
+    mplint = mpl.is_interactive()
+    if mplint:
+        plt.ioff()
+
+    #plot model by model
+    if plot_type == 'default':
+
+        #remove potential nans
+        nans = np.where(np.isnan(np.mean(channels,axis=1)))[0]
+        channels = np.delete(channels, nans, axis=0)
+        n_event = channels.shape[0]
+
+        for event in range(n_event):
+            plot_name = fname + '_ev' + str(event+1) + '.png'
+            fig, ax = plt.subplots(figsize=figsize)
+            plot_topomap(channels[event,:], channel_position, show=False, cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours, axes=ax)
+            fig.savefig(plot_name,dpi=dpi,transparent=True)    
+
+    elif plot_type == 'cond': #reverse order, to make correspond to condition maps
+        channels = np.flipud(channels)
+        cond_labels = [str(x[0]) for x in list(cond_names.values())[0]]
+        
+        #plot by condition
+        for cond in range(n_cond):
+            cond_name = cond_labels[cond]
+            cond_channels = channels[cond]
+
+            #remove potential nans
+            nans = np.where(np.isnan(np.mean(cond_channels,axis=1)))[0]
+            cond_channels = np.delete(cond_channels, nans, axis=0)
+            n_event = cond_channels.shape[0]
+
+            for event in range(n_event):
+                plot_name = fname + '_cond' + cond_name + '_ev' + str(event+1) + '.png'
+                fig, ax = plt.subplots(figsize=figsize)
+                plot_topomap(cond_channels[event,:], channel_position, show=False, cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours, axes=ax)
+                fig.savefig(plot_name,dpi=dpi,transparent=True)    
+    
+    elif plot_type == 'backward':
+
+        # plot by number of events
+        for n_eve in range(channels.shape[0]):
+            back_channels = channels[n_eve]
+
+            #remove potential nans
+            nans = np.where(np.isnan(np.mean(back_channels,axis=1)))[0]
+            back_channels = np.delete(back_channels, nans, axis=0)
+            n_event = back_channels.shape[0]
+
+            for event in range(n_event):
+                plot_name = fname + '_backward' + str(n_event) + '_ev' + str(event+1) + '.png'
+                fig, ax = plt.subplots(figsize=figsize)
+                plot_topomap(back_channels[event,:], channel_position, show=False, cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours, axes=ax)
+                fig.savefig(plot_name,dpi=dpi,transparent=True)    
+
+    #legend
+    if colorbar:
+        if isinstance(channel_position, Info):
+            lab = 'Voltage' if channel_position['chs'][0]['unit'] == 107 else channel_position['chs'][0]['unit']._name
+        else:
+            lab = 'Voltage'
+        fig, ax = plt.subplots(figsize=(.5,2))
+        plot_brain_colorbar(ax, dict(kind='value', lims = [vmin,0,vmax]),colormap=cmap, label = lab, bgcolor='.5', transparent=None)
+        fig.savefig(fname + '_colorbar.png',dpi=dpi,transparent=True,bbox_inches='tight')    
+
+    #switch plotting back on
+    if mplint:
+        plt.ion()
+
 
 def plot_components_sensor(hmp_data, positions):
     """
