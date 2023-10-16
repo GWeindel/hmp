@@ -341,3 +341,16 @@ def random_source_times_to_pars(generating_events, init, sfreq, resampling_freq=
     true_magnitudes = np.mean(true_activities, axis=0)
     return random_source_times, true_parameters, true_magnitudes, true_activities
     
+def recover_true_parameters(init, sim_source_times):
+    n_sources = sim_source_times.shape[1]-1
+    true_pars = np.reshape(np.concatenate([
+        np.repeat(init.shape, np.shape(sim_source_times)[1]), 
+        np.mean(init.mean_to_scale(sim_source_times,init.shape),axis=0)]),
+                       [2,np.shape(sim_source_times)[1]]).T
+    true_pars[0,1] += init.mean_to_scale(init.event_width_samples/2, init.shape)#adjust the fact that we generated onset but recover peak
+    true_pars[-1,1] -= init.mean_to_scale(init.event_width_samples/2, init.shape)#same
+    sample_times = np.zeros((init.n_trials, n_sources), dtype=int)
+    for event in range(n_sources):
+        sample_times[:,event] = init.starts+np.sum(sim_source_times[:,:event+1], axis=1)+ init.event_width_samples//2
+    true_magnitudes = np.mean(init.events[sample_times[:,:]], axis=0)
+    return true_pars, true_magnitudes
