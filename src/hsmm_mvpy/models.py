@@ -1790,6 +1790,7 @@ class hmp:
         if plot:
             _, ax = plt.subplots(1,1,figsize=(20,3))
             ax.plot(times, lkhs, '.', alpha=alpha)
+            ax.set_xlim(0, self.mean_d)
         
         return lkhs, mags, channels, times
 
