@@ -796,46 +796,46 @@ def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoc
     # plt.tight_layout()
     plt.show()
     
-def plot_distribution(distribution, mean, shape, location=0, xmax=300, xmin=0, num=100, label='distribution', color=None, ax=None):
+def plot_distribution(distribution, mean, shape, location=0, xmax=300, xmin=0, num=100, label='distribution', color=None, ax=None, display_mean=False):
     '''
     Plot available distribution with a scale and shape parameter
     '''
     match distribution:
         case 'gamma':
             from scipy.stats import gamma as sp_dist
-            from hsmm_mvpy.utils import gamma_scale,gamma_mean
-            scale_to_mean, mean_to_scale = gamma_scale,gamma_mean
+            from hsmm_mvpy.utils import gamma_scale_to_mean,gamma_mean_to_scale
+            scale_to_mean, mean_to_scale = gamma_scale_to_mean,gamma_mean_to_scale
         case 'lognormal':
             from scipy.stats import lognorm as sp_dist
-            from hsmm_mvpy.utils import logn_scale,logn_mean
-            scale_to_mean, mean_to_scale = logn_scale,logn_mean
+            from hsmm_mvpy.utils import logn_scale_to_mean,logn_mean_to_scale
+            scale_to_mean, mean_to_scale = logn_scale_to_mean,logn_mean_to_scale
         case 'wald':
             from scipy.stats import invgauss as sp_dist
-            from hsmm_mvpy.utils import wald_scale,wald_mean
-            scale_to_mean, mean_to_scale = wald_scale,wald_mean
+            from hsmm_mvpy.utils import wald_scale_to_mean,wald_mean_to_scale
+            scale_to_mean, mean_to_scale = wald_scale_to_mean,wald_mean_to_scale
         case 'weibull':
             from scipy.stats import weibull_min as sp_dist
-            from hsmm_mvpy.utils import weibull_scale,weibull_mean
-            scale_to_mean, mean_to_scale = weibull_scale,weibull_mean
+            from hsmm_mvpy.utils import weibull_scale_to_mean,weibull_mean_to_scale
+            scale_to_mean, mean_to_scale = weibull_scale_to_mean,weibull_mean_to_scale
         case 'maxwell-boltzmann':
             from scipy.stats import chi as sp_dist
-            from hsmm_mvpy.utils import maxb_scale,maxb_mean
+            from hsmm_mvpy.utils import maxb_scale_to_mean,maxb_mean_to_scale
             shape = 3
-            scale_to_mean, mean_to_scale = maxb_scale,maxb_mean
+            scale_to_mean, mean_to_scale = maxb_scale_to_mean,maxb_mean_to_scale
         case 'log-logistic':
             from scipy.stats import fisk as sp_dist
-            from hsmm_mvpy.utils import fisk_scale,fisk_mean
-            scale_to_mean, mean_to_scale = fisk_scale,fisk_mean
+            from hsmm_mvpy.utils import fisk_scale_to_mean,fisk_mean_to_scale
+            scale_to_mean, mean_to_scale = fisk_scale_to_mean,fisk_mean_to_scale
         case 'rayleigh':
             from scipy.stats import chi as sp_dist
-            from hsmm_mvpy.utils import ray_scale,ray_mean
+            from hsmm_mvpy.utils import ray_scale_to_mean,ray_mean_to_scale
             shape = 2
-            scale_to_mean, mean_to_scale = ray_scale,ray_mean
+            scale_to_mean, mean_to_scale = ray_scale_to_mean,ray_mean_to_scale
         case 'half-normal':
             from scipy.stats import chi as sp_dist
-            from hsmm_mvpy.utils import halfn_scale,halfn_mean
+            from hsmm_mvpy.utils import halfn_scale_to_mean,halfn_mean_to_scale
             shape = 1
-            scale_to_mean, mean_to_scale = halfn_scale,halfn_mean
+            scale_to_mean, mean_to_scale = halfn_scale_to_mean,halfn_mean_to_scale
         case _:
                 raise ValueError(f'Unknown Distribution {distribution}')
     if ax is None:
@@ -844,3 +844,5 @@ def plot_distribution(distribution, mean, shape, location=0, xmax=300, xmin=0, n
     y = sp_dist.cdf(x, shape, scale=mean_to_scale(mean, shape), loc=location)
     y = np.diff(y, prepend=0)#going to pmf
     ax.plot(x, y, label=label, color=color)
+    if display_mean:
+        ax.vlines(sp_dist.mean(shape, scale=mean_to_scale(mean, shape), loc=location), np.min(y), np.max(y), color=color)
