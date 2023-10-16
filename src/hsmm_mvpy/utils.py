@@ -24,9 +24,9 @@ def gamma_mean_to_scale(mean, shape):
     return mean/shape
 
 def logn_scale_to_mean(scale, shape): 
-    return scale+shape**2/2
+    return np.exp(scale)+shape**2/2
 def logn_mean_to_scale(mean, shape): 
-    return mean-shape**2/2
+    return np.exp(np.log(mean)-shape**2/2)
 
 def wald_scale_to_mean(scale, shape): 
     return scale*shape
