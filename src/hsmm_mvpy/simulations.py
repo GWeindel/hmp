@@ -205,7 +205,9 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
                     rand_i = np.round(source[-1].rvs(size=n_trials, random_state=random_state)/(tstep*1000),decimals=0)
                 else:
                     rand_i = times[:,trigger-2]/(tstep*1000)
-
+                if len(rand_i[rand_i<0]) > 0:
+                    warn(f'Negative stage duration were found, 1 is imputed for the {len(rand_i[rand_i<0])} trial(s)', UserWarning)
+                    rand_i[rand_i<0] = 1
                 #random_source_times.append(rand_i) #varying event 
                 events[:, 0] = events[:,0] + rand_i # Events sample.
                 events[:, 2] = trigger  # All events have the sample id.
@@ -235,13 +237,14 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             files_subj.append(subj_file.split('.fif')[0]+'_generating_events.npy')
             files.append(files_subj)
             print(f'{subj_file} simulated')
+            
     if n_subj == 1:
         return files[0]
     else:
         return files
-    
+        
 
-def demo(cpus, n_events, seed=9999):
+def demo(cpus, n_events, seed=123):
     
     ## Imports and code specific to the simulation (see tutorial 3 and 4 for real data)
     from scipy.stats import gamma
@@ -251,7 +254,7 @@ def demo(cpus, n_events, seed=9999):
     random_gen =  np.random.default_rng(seed=seed)
 
     ## Parameters for the simulations
-    frequency, amplitude = 10., .3e-6 #Frequency of the transition event and its amplitude in Volt
+    frequency, amplitude = 10., .1e-6 #Frequency of the transition event and its amplitude in Volt
     shape = 2#shape of the gamma distribution
 
     #Storing electrode position, specific to the simulations
@@ -262,7 +265,7 @@ def demo(cpus, n_events, seed=9999):
     
     # Randomly specify the transition events
     name_sources = random_gen.choice(all_source_names,n_events+1, replace=False)#randomly pick source without replacement
-    times = random_gen.uniform(25,300,n_events+1)/shape #randomly pick average times in millisecond between the events, divided by shape
+    times = np.array([100,150,200,50,50,50,150,200,50])/shape #designed to fail with default starting points
 
     sources = []
     for source in range(len(name_sources)):
