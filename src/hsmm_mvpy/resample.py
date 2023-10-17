@@ -40,7 +40,7 @@ def _gen_dataset(data, dim, n_iterations):
         named_index.append(_gen_idx(data, dim))
     return named_index, data, dim, original_dim_order_data
 
-def _bootstrapped_run(fit, data, dim, indexes, order, init, n_iter, rerun_pca, pca_weights, summarize, verbose, cpus, trace, path):
+def _bootstrapped_run(fit, data, dim, indexes, order, init, n_iter, use_starting_points, rerun_pca, pca_weights, summarize, verbose, cpus, trace, path):
     sfreq = init.sfreq
     resampled_data = data.loc[{dim:list(indexes)}].unstack().transpose(*order)
     if '_x_' in dim:
@@ -57,10 +57,15 @@ def _bootstrapped_run(fit, data, dim, indexes, order, init, n_iter, rerun_pca, p
             hmp_data_boot = transform_data(resampled_data, pca_weights=pca_weights)
     else:
         hmp_data_boot = stack_data(resampled_data)
-    init_boot = hmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1,
-                    shape=init.shape, estimate_magnitudes=init.estimate_magnitudes, 
-                    estimate_parameters=init.estimate_parameters, template=init.template,
-                    location=init.location, distribution=init.distribution, em_method=init.em_method)
+    if use_starting_points:
+        init_boot = hmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1,
+                        shape=init.shape, estimate_magnitudes=init.estimate_magnitudes, 
+                        estimate_parameters=init.estimate_parameters, template=init.template,
+                        location=init.location, distribution=init.distribution, em_method=init.em_method)
+    else:
+        init_boot = hmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1,
+                        shape=init.shape, template=init.template,
+                        location=init.location, distribution=init.distribution, em_method=init.em_method)
     estimates_boot = init_boot.fit_single(fit.magnitudes.shape[0], verbose=verbose, parameters=fit.parameters,
                                          magnitudes=fit.magnitudes)
     if trace:
@@ -79,7 +84,7 @@ def _bootstrapped_run(fit, data, dim, indexes, order, init, n_iter, rerun_pca, p
                                          estimates_boot.eventprobs.to_dataset(name='eventprobs')])
     return boot_results
 
-def bootstrapping(fit, data, dim, n_iterations, init, 
+def bootstrapping(fit, data, dim, n_iterations, init, use_starting_points=True,
                   rerun_pca=False, pca_weights=None, summarize=True,
                   verbose=False, cpus=1, trace=False, path='./'):
     '''
@@ -97,6 +102,8 @@ def bootstrapping(fit, data, dim, n_iterations, init,
             How many bootstrap to perform
         init: class hmp()
             initialized hmp object
+        use_starting_points: bool
+            Whether to use the starting points from the fit (True) or not (False), can be used to check robustness to starting point specification
         rerun_pca: bool
             if True re-performs the PCA on the resampled data (not advised as magnitudes would be meaningless). if False pca_weights need to be passed in pca_weights parameter
         pca_weights: ndarray
@@ -128,6 +135,7 @@ def bootstrapping(fit, data, dim, n_iterations, init,
     
     inputs = zip(itertools.repeat(fit), itertools.repeat(data), itertools.repeat(dim), data_views, itertools.repeat(order), 
                 itertools.repeat(init),  np.arange(n_iterations),
+                itertools.repeat(use_starting_points),
                 itertools.repeat(rerun_pca), itertools.repeat(pca_weights),
                 itertools.repeat(summarize), itertools.repeat(verbose),
                 itertools.repeat(cpus), itertools.repeat(trace), itertools.repeat(path))
