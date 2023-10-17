@@ -315,42 +315,35 @@ def classification_true(test, true, sfreq, resampling_freq=None):
         unique_index_event.append(np.argmin(diffs[:,event]))
     return list(set(list(index_event.values()))),unique_index_event
 
-def random_source_times_to_pars(generating_events, init, sfreq, resampling_freq=None):
+def simulated_times_and_parameters(generating_events, init, resampling_freq=None):
+    sfreq = init.sfreq
+    n_stages = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
+    n_events = n_stages-1 
     if resampling_freq is None:
         resampling_freq = sfreq
-    number_of_sources = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
 
     #Recover the actual time of the simulated events
-    random_source_times = np.zeros((int(len(generating_events)/(number_of_sources+1)), number_of_sources))
+    random_source_times = np.zeros((int(len(generating_events)/(n_stages+1)), n_stages))
     i,x = 1,0                  
     while x < len(random_source_times):
-        for j in np.arange(number_of_sources):#recovering the individual duration- of event onset
+        for j in np.arange(n_stages):#recovering the individual duration- of event onset
             random_source_times[x,j] = generating_events[i,0] - generating_events[i-1,0]
             i += 1
         i += 1
         x += 1
     ## Recover parameters
-    true_parameters = np.tile(init.shape, (np.shape(random_source_times)[-1], 2))
-    true_parameters[:,1] = init.mean_to_scale(np.mean(random_source_times,axis=0),2)
+    true_parameters = np.tile(init.shape, (n_stages, 2))
+    true_parameters[:,1] = init.mean_to_scale(np.mean(random_source_times,axis=0),init.shape)
     random_source_times = random_source_times*(1000/sfreq)/(1000/resampling_freq)
     ## Recover magnitudes
-    sample_times = np.zeros((init.n_trials, number_of_sources-1), dtype=int)
-    for event in range(number_of_sources-1):
-        sample_times[:,event] = init.starts+np.sum(random_source_times[:,:event+1], axis=1)-1
+    sample_times = np.zeros((init.n_trials, n_events), dtype=int)
+    for event in range(n_events):
+        for trial in range(init.n_trials):
+            trial_time = init.starts[trial]+np.sum(random_source_times[trial,:event+1])+ init.event_width_samples//2
+            if init.ends[trial] >= trial_time:#exceeds RT
+                sample_times[trial,event] = trial_time
+            else:
+                sample_times[trial,event] = init.ends[trial]
     true_activities = init.events[sample_times[:,:]]
     true_magnitudes = np.mean(true_activities, axis=0)
-    return random_source_times, true_parameters, true_magnitudes, true_activities
-    
-def recover_true_parameters(init, sim_source_times):
-    n_sources = sim_source_times.shape[1]-1
-    true_pars = np.reshape(np.concatenate([
-        np.repeat(init.shape, np.shape(sim_source_times)[1]), 
-        np.mean(init.mean_to_scale(sim_source_times,init.shape),axis=0)]),
-                       [2,np.shape(sim_source_times)[1]]).T
-    true_pars[0,1] += init.mean_to_scale(init.event_width_samples/2, init.shape)#adjust the fact that we generated onset but recover peak
-    true_pars[-1,1] -= init.mean_to_scale(init.event_width_samples/2, init.shape)#same
-    sample_times = np.zeros((init.n_trials, n_sources), dtype=int)
-    for event in range(n_sources):
-        sample_times[:,event] = init.starts+np.sum(sim_source_times[:,:event+1], axis=1)+ init.event_width_samples//2
-    true_magnitudes = np.mean(init.events[sample_times[:,:]], axis=0)
-    return true_pars, true_magnitudes
+    return random_source_times.astype(int), true_parameters, true_magnitudes, true_activities
