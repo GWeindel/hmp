@@ -336,6 +336,7 @@ def simulated_times_and_parameters(generating_events, init, resampling_freq=None
     true_parameters[:,1] = init.mean_to_scale(np.mean(random_source_times,axis=0),init.shape)
     true_parameters[0,1] += init.mean_to_scale(init.event_width_samples/2, init.shape)#adjust the fact that we generated onset but recover peak
     true_parameters[-1,1] -= init.mean_to_scale(init.event_width_samples/2, init.shape)#same
+    true_parameters[true_parameters[:,1],1] <= 0, 1] = 1e-3#Can happen in corner cases
     random_source_times = random_source_times*(1000/sfreq)/(1000/resampling_freq)
     ## Recover magnitudes
     sample_times = np.zeros((init.n_trials, n_events), dtype=int)
