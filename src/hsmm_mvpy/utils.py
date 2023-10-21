@@ -24,9 +24,9 @@ def gamma_mean_to_scale(mean, shape):
     return mean/shape
 
 def logn_scale_to_mean(scale, shape): 
-    return np.exp(scale)+shape**2/2
+    return scale+shape**2/2
 def logn_mean_to_scale(mean, shape): 
-    return np.exp(np.log(mean)-shape**2/2)
+    return mean-shape**2/2
 
 def wald_scale_to_mean(scale, shape): 
     return scale*shape
@@ -58,22 +58,10 @@ def fisk_scale_to_mean(scale, shape):
 def fisk_mean_to_scale(mean, shape): 
     return  shape*(mean*np.sin(np.pi/shape))/np.pi
 
-def read_mne_EEG(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None, 
-                 subj_idx=None, metadata = None, events_provided=None, rt_col='response',
-                 verbose=True, tmin=-.2, tmax=5, offset_after_resp = 0, 
-                 high_pass=.5, low_pass = None, pick_channels = 'eeg', baseline=(None, 0),
-                 upper_limit_RT=5, lower_limit_RT=0.001, reject_threshold=None):
-    warn('This method is deprecated and will be removed in future version, use read_mne_data instead', DeprecationWarning, stacklevel=2)
-    return read_mne_data(pfiles, event_id, resp_id, epoched, sfreq, 
-                 subj_idx, metadata, events_provided, rt_col,
-                 verbose, tmin, tmax, offset_after_resp, 
-                 high_pass, low_pass, pick_channels, baseline,
-                 upper_limit_RT, lower_limit_RT, reject_threshold)
-
 def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None, 
                  subj_idx=None, metadata=None, events_provided=None, rt_col='rt', rts=None,
-                 verbose=True, tmin=-.2, tmax=10, offset_after_resp = 0, 
-                 high_pass=.5, low_pass = None, pick_channels = 'eeg', baseline=(None, 0),
+                 verbose=True, tmin=-.2, tmax=5, offset_after_resp = 0, 
+                 high_pass=.1, low_pass = None, pick_channels = 'eeg', baseline=(None, 0),
                  upper_limit_RT=np.inf, lower_limit_RT=0, reject_threshold=None, scale=1):
     ''' 
     Reads EEG/MEG data format (.fif or .bdf) using MNE's integrated function .
@@ -309,6 +297,10 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
         y += 1
     epoch_data = xr.concat(epoch_data, dim = xr.DataArray(subj_idx, dims='participant'),
                           fill_value={'event':'', 'data':np.nan})
+    epoch_data = epoch_data.assign_attrs(lowpass=epochs.info['lowpass'], highpass=epochs.info['highpass'],
+                                         lower_limit_RT=lower_limit_RT,  upper_limit_RT=upper_limit_RT, 
+
+)
     return epoch_data
 
 def _pick_channels(pick_channels,data,stim=True):
