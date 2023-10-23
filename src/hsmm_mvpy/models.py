@@ -2016,6 +2016,6 @@ class hmp:
             fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose)
         else:
             warn('Failed to find more than two stages, returning 2 stage model with default starting values')
-            fit = self.fit_single(n_events, verbose=verbose)
+            fit = self.fit_single(n_events+1, verbose=verbose)
         return fit
     
