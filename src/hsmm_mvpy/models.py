@@ -1964,7 +1964,7 @@ class hmp:
         mags = np.zeros((max_event_n, self.n_dims)) #mags during estimation
         i = 0
         lkh_prev = -np.inf
-        while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events < max_event_n:
+        while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events < max_event_n-1:
             prev_time = time
             if fix_iter:
                 to_fix = [range(n_events-1)]
