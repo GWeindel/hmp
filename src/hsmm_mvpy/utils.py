@@ -61,7 +61,7 @@ def fisk_mean_to_scale(mean, shape):
 def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None, 
                  subj_idx=None, metadata=None, events_provided=None, rt_col='rt', rts=None,
                  verbose=True, tmin=-.2, tmax=5, offset_after_resp = 0, 
-                 high_pass=.1, low_pass = None, pick_channels = 'eeg', baseline=(None, 0),
+                 high_pass=None, low_pass = None, pick_channels = 'eeg', baseline=(None, 0),
                  upper_limit_RT=np.inf, lower_limit_RT=0, reject_threshold=None, scale=1):
     ''' 
     Reads EEG/MEG data format (.fif or .bdf) using MNE's integrated function .
@@ -199,7 +199,6 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
                 if sfreq > data.info['sfreq']+1:
                     warn(f'Requested higher frequency {sfreq} than found in the EEG data, no resampling is performed')
             data.filter(high_pass, low_pass, fir_design='firwin', verbose=verbose)
-
             combined =  {**event_id, **resp_id}#event_id | resp_id 
             stim = list(event_id.keys())
             
@@ -223,6 +222,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
         else:
             if '.fif' in participant:
                 epochs = mne.read_epochs(participant, preload=True, verbose=verbose)
+                epochs.filter(high_pass, low_pass, fir_design='firwin', verbose=verbose)
                 if sfreq is None: 
                     sfreq = epochs.info['sfreq']
                 elif sfreq  < epochs.info['sfreq']:
