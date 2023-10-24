@@ -27,7 +27,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
                    
 class hmp:
     
-    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', em_method="mean"):
+    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, template_filter=None, location=None, distribution='gamma', em_method="mean"):
         '''
         This function intializes an HMP model by providing the data, the expected probability distribution for the by-trial variation in stage onset, and the expected duration of the transition event.
 
@@ -51,6 +51,9 @@ class hmp:
             To estimate (True) or not the parameters parameter of the stages
         template: ndarray
             Expected shape for the transition event used in the cross-correlation, should be a vector of values capturing the expected shape over the sampling frequency of the data. If None, the template is created as a half-sine shape with a frequency derived from the event_width argument
+        template_filter: None | (lfreq, hfreq) | 'auto'
+            If none, no filtering is applied before calculating the cross-correlation. If tuple, data is filtered between lfreq-hfreq,
+            if 'auto', filtering is done 5 Hz around the most prominent frequency in the template.
         location : float
             Minimum stage duration in milliseconds. 
         distribution: str
@@ -139,6 +142,7 @@ class hmp:
         if template is None:
             self.template = self._event_shape()
         else: self.template = template
+        self.template_filter = template_filter
         self.events = self.cross_correlation(data.data.T)#adds event morphology
         self.max_d = self.durations.max()
         self.em_method = em_method
@@ -185,11 +189,46 @@ class hmp:
             been correlated with event morphology
         '''
         from scipy.signal import correlate
+
+        if self.template_filter is not None:
+
+            from mne.filter import filter_data, create_filter
+
+            if self.template_filter == 'auto':
+                from scipy.signal import periodogram
+                (f, S) = periodogram(np.tile(self.template,(1,10)), self.sfreq, scaling='density')
+                mid = f[np.argmax(S)]
+                lfreq = mid / 2
+                hfreq = mid * 2
+            else:
+                lfreq, hfreq = self.template_filter
+
+            filter_params = create_filter(None, self.sfreq, l_freq=lfreq, h_freq=hfreq)
+            filter_len = filter_params.shape[0]
+
         events = np.zeros(data.shape)
         for trial in range(self.n_trials):#avoids confusion of gains between trials
+
+            dat = data[self.starts[trial]:self.ends[trial]+1,:]
+
+            if self.template_filter is not None:
+
+                #make sure data is at least length of filter
+                diff = 0
+                if dat.shape[0] < filter_len:
+                    diff = filter_len - dat.shape[0] 
+                    dat = np.pad(dat, ((diff,diff),(0,0)), mode='reflect')
+                #filter
+                dat = filter_data(dat.T, self.sfreq, lfreq, hfreq,verbose=False).T
+
+                #remove padding if necessary
+                if diff > 0:
+                    dat = dat[diff:-diff,:]
+
+            #calc cross correlation
             for dim in np.arange(self.n_dims):
-                dat = data[self.starts[trial]:self.ends[trial]+1, dim]
-                events[self.starts[trial]:self.ends[trial]+1,dim] = correlate(dat, self.template, mode='same', method='direct')
+                events[self.starts[trial]:self.ends[trial]+1,dim] = correlate(dat[:,dim], self.template, mode='same', method='direct')
+
         return events
 
     def fit_single(self, n_events=None, magnitudes=None, parameters=None, parameters_to_fix=None, 

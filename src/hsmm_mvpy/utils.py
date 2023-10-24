@@ -1555,11 +1555,12 @@ def epoch_between_events(raw, events, event_id_from, event_id_to, baseline=None,
 
         #reject based on range
         if reject != None:
-            for k,v in reject.items():
-                ch_types = raw.get_channel_types(picks=picks)
-                for ch in np.where(np.array(ch_types) == k)[0]:
-                    if np.nanmax((dat[i,ch,:ep[2]])) - np.nanmin((dat[i,ch,:ep[2]])) > v:
-                        drop_log[i] = drop_log[i] + (raw.ch_names[ch],)
+            if not np.isnan(dat[i,:,:ep[2]]).all():
+                for k,v in reject.items():
+                    ch_types = raw.get_channel_types(picks=picks)
+                    for ch in np.where(np.array(ch_types) == k)[0]:
+                        if np.nanmax((dat[i,ch,:ep[2]])) - np.nanmin((dat[i,ch,:ep[2]])) > v:
+                            drop_log[i] = drop_log[i] + (raw.ch_names[ch],)
     
     #remove drops  
     dat = np.delete(dat, [True if tmp != () else False for tmp in drop_log], 0)
