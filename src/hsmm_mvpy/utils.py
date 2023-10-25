@@ -542,7 +542,7 @@ def stack_data(data, subjects_variable='participant', channel_variable='componen
     data = data.stack(all_samples=['participant','epochs',"samples"]).dropna(dim="all_samples")
     return data
 
-def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', n_comp=None, pca_weights=None):
+def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', n_comp=None, pca_weights=None, filter=None, filter_template=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -569,6 +569,8 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         to specify how many PCs should be retained
     pca_weigths : xarray
         Weights of a PCA to apply to the data (e.g. in the resample function)
+    filter: None | (lfreq, hfreq) 
+        If none, no filtering is appliedn. If tuple, data is filtered between lfreq-hfreq.
 
     Returns
     -------
@@ -588,6 +590,31 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     assert np.sum(np.isnan(data.groupby('participant').mean(['epochs','samples']).data.values)) == 0,\
         'at least one participant has an empty channel'
     sfreq = data.sfreq
+
+    if filter:
+        from mne.filter import filter_data
+
+        lfreq, hfreq = filter
+        n_participant, n_epochs, _, _ = data.data.values.shape
+        for pp in range(n_participant):
+            for trial in range(n_epochs):
+
+                dat = data.data.values[pp, trial, :, :]
+
+                if not np.isnan(dat).all():
+                    dat = dat[:,~np.isnan(dat[0,:])] #remove nans
+
+                    #pad by reflecting the whole trial twice
+                    trial_len = dat.shape[1] * 2
+                    dat = np.pad(dat, ((0,0),(trial_len,trial_len)), mode='reflect')
+                    
+                    #filter
+                    dat = filter_data(dat, sfreq, lfreq, hfreq, verbose=False)
+                    
+                    #remove padding
+                    dat = dat[:,trial_len:-trial_len]
+                    data.data.values[pp, trial, :, :dat.shape[1]] = dat
+
     if apply_zscore == True:
         apply_zscore = 'trial' #defaults to trial
     if apply_standard:
