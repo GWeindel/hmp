@@ -542,7 +542,7 @@ def stack_data(data, subjects_variable='participant', channel_variable='componen
     data = data.stack(all_samples=['participant','epochs',"samples"]).dropna(dim="all_samples")
     return data
 
-def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', n_comp=None, pca_weights=None, filter=None, filter_template=None):
+def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', n_comp=None, pca_weights=None, filter=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
