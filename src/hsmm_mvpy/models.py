@@ -124,7 +124,7 @@ class hmp:
             ends = np.array([dur_dropped_na.data-1])
         self.starts = starts
         self.ends = ends
-        self.durations =  self.ends-self.starts+1
+        self.durations = self.ends-self.starts+1
         if durations.trial_x_participant.count() > 1:
             self.named_durations =  durations.dropna("trial_x_participant") - durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
             self.coords = durations.reset_index('trial_x_participant').coords
@@ -133,21 +133,14 @@ class hmp:
             self.coords = durations.coords
         self.mean_d = self.durations.mean()
         self.n_trials = durations.trial_x_participant.count().values
-            
         self.cpus = cpus
         self.n_samples, self.n_dims = np.shape(data.data.T)
         if template is None:
             self.template = self._event_shape()
         else: self.template = template
-        self.events = self.cross_correlation(data.data.T)#adds event morphology
         self.max_d = self.durations.max()
+        self.events = self.cross_correlation(data.data.T)#adds event morphology
         self.em_method = em_method
-        if self.em_method == "mean":
-            self.data_matrix = np.zeros((self.max_d, self.n_trials, self.n_dims), dtype=np.float64)
-            for trial in range(self.n_trials):
-                self.data_matrix[:self.durations[trial],trial,:] = \
-                    self.events[self.starts[trial]:self.ends[trial]+1,:]
-                #Reorganize samples crosscorrelated with template on trial basis
         self.estimate_magnitudes = estimate_magnitudes
         self.estimate_parameters = estimate_parameters
         if self.max_d > 500:#FFT conv from scipy faster in this case
@@ -185,12 +178,11 @@ class hmp:
             been correlated with event morphology
         '''
         from scipy.signal import correlate
-        events = np.zeros(data.shape)
+        events = np.zeros((self.max_d, self.n_trials, self.n_dims))
         for trial in range(self.n_trials):#avoids confusion of gains between trials
             #calc cross correlation
             for dim in np.arange(self.n_dims):
-                events[self.starts[trial]:self.ends[trial]+1,dim] = correlate(data[self.starts[trial]:self.ends[trial]+1,dim], self.template, mode='same', method='direct')
-
+                events[:self.durations[trial]-1,trial,dim] = correlate(data[self.starts[trial]:self.ends[trial],dim], self.template, mode='same', method='direct')
         return events
 
     def fit_single(self, n_events=None, magnitudes=None, parameters=None, parameters_to_fix=None, 
@@ -874,12 +866,12 @@ class hmp:
                 event_values = np.zeros((n_trials, self.n_dims))
                 for trial in range(n_trials):
                     event_times[event,trial]  = np.argmax(eventprobs[:, trial, event])
-                    event_values[trial] = self.events[self.starts[subset_epochs][trial] + int(event_times[event,trial])]
+                    event_values[trial] = self.events[int(event_times[event,trial]),trial,:]
                 magnitudes[event] = np.mean(event_values, axis=0)
             elif self.em_method == "mean":
                 for comp in range(self.n_dims):
                     magnitudes[event,comp] = np.mean(np.sum( \
-                        eventprobs[:,:,event]*self.data_matrix[:,subset_epochs,comp], axis=0))
+                        eventprobs[:,:,event]*self.events[:,subset_epochs,comp], axis=0))
                 # scale cross-correlation with likelihood of the transition
                 # sum by-trial these scaled activation for each transition events
                 # average across trials
@@ -927,30 +919,27 @@ class hmp:
                 subset_epochs = np.where(subset_epochs)[0]
             n_trials = len(subset_epochs)
             durations = self.durations[subset_epochs]
-            starts = self.starts[subset_epochs]
-            ends = self.ends[subset_epochs]
         else:
             n_trials = self.n_trials
             durations = self.durations
-            starts = self.starts
-            ends = self.ends
 
-        gains = np.zeros((self.n_samples, n_events), dtype=np.float64)
+        gains = np.zeros((self.max_d, n_trials, n_events), dtype=np.float64)
         for i in range(self.n_dims):
             # computes the gains, i.e. congruence between the pattern shape
             # and the data given the magnitudes of the sensors
-            gains = gains + self.events[:,i][np.newaxis].T * magnitudes[:,i]-magnitudes[:,i]**2/2
+            for tr in range(n_trials):
+                gains[:, tr, :] =  gains[:, tr, :] + self.events[:,tr,i][np.newaxis].T * magnitudes[:,i]-magnitudes[:,i]**2/2
+        
         gains = np.exp(gains)
         probs = np.zeros([self.max_d, n_trials,n_events], dtype=np.float64) # prob per trial
         probs_b = np.zeros([self.max_d, n_trials,n_events], dtype=np.float64)# Sample and state reversed
         for trial in np.arange(n_trials):
             # Following assigns gain per trial to variable probs 
-            probs[:durations[trial],trial,:] = \
-                gains[starts[trial]:ends[trial]+1,:] 
+            probs[:durations[trial],trial,:] = gains[:durations[trial],trial,:] 
             # Same but samples and events are reversed, this allows to compute
             # fwd and bwd in the same way in the following steps
             probs_b[:durations[trial],trial,:] = \
-                gains[starts[trial]:ends[trial]+1,:][::-1,::-1]
+                gains[:durations[trial],trial,:][::-1,::-1]
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage scale
         for stage in range(n_stages):

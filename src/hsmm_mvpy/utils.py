@@ -571,6 +571,8 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         Weights of a PCA to apply to the data (e.g. in the resample function)
     filter: None | (lfreq, hfreq) 
         If none, no filtering is appliedn. If tuple, data is filtered between lfreq-hfreq.
+        NOTE: filtering at this step is suboptimal, filter before epoching if at all possible, see
+              also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
 
     Returns
     -------
@@ -592,6 +594,8 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     sfreq = data.sfreq
 
     if filter:
+        print("NOTE: filtering at this step is suboptimal, filter before epoching if at all possible, see")
+        print("also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html")
         from mne.filter import filter_data
 
         lfreq, hfreq = filter
