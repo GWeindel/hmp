@@ -122,9 +122,7 @@ class hmp:
             dur_dropped_na = durations
             starts = np.array([0])
             ends = np.array([dur_dropped_na.data-1])
-        self.starts = starts
-        self.ends = ends
-        self.durations = self.ends-self.starts+1
+        self.durations = ends-starts+1
         if durations.trial_x_participant.count() > 1:
             self.named_durations =  durations.dropna("trial_x_participant") - durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
             self.coords = durations.reset_index('trial_x_participant').coords
@@ -139,7 +137,7 @@ class hmp:
             self.template = self._event_shape()
         else: self.template = template
         self.max_d = self.durations.max()
-        self.events = self.cross_correlation(data.data.T)#adds event morphology
+        self.events = self.cross_correlation(data.data.T, ends, starts)#adds event morphology
         self.em_method = em_method
         self.estimate_magnitudes = estimate_magnitudes
         self.estimate_parameters = estimate_parameters
@@ -161,7 +159,7 @@ class hmp:
         template = template/np.sum(template**2)#Weight normalized
         return template
             
-    def cross_correlation(self,data):
+    def cross_correlation(self,data,ends,starts):
         '''
         This function puts on each sample the correlation of that sample and the next 
         x samples (depends on sampling frequency and event size) with a half sine on time domain.
@@ -182,7 +180,7 @@ class hmp:
         for trial in range(self.n_trials):#avoids confusion of gains between trials
             #calc cross correlation
             for dim in np.arange(self.n_dims):
-                events[:self.durations[trial]-1,trial,dim] = correlate(data[self.starts[trial]:self.ends[trial],dim], self.template, mode='same', method='direct')
+                events[:self.durations[trial],trial,dim] = correlate(data[starts[trial]:ends[trial]+1,dim], self.template, mode='same', method='direct')
         return events
 
     def fit_single(self, n_events=None, magnitudes=None, parameters=None, parameters_to_fix=None, 
@@ -927,8 +925,7 @@ class hmp:
         for i in range(self.n_dims):
             # computes the gains, i.e. congruence between the pattern shape
             # and the data given the magnitudes of the sensors
-            for tr in range(n_trials):
-                gains[:, tr, :] =  gains[:, tr, :] + self.events[:,tr,i][np.newaxis].T * magnitudes[:,i]-magnitudes[:,i]**2/2
+            gains =  gains + np.transpose((self.events[:,:,i][np.newaxis].T * magnitudes[:,i]-magnitudes[:,i]**2/2), (1,0,2))
         
         gains = np.exp(gains)
         probs = np.zeros([self.max_d, n_trials,n_events], dtype=np.float64) # prob per trial
