@@ -1374,10 +1374,8 @@ def event_times(data, times, channel, stage):
 
     return brp_data    
     
-def condition_selection(hmp_data, epoch_data, condition_string, variable='event'):
-    unstacked = hmp_data.unstack().where(epoch_data[variable].str.contains(condition_string),drop=True)
-    stacked = stack_data(unstacked)
-    return stacked
+def condition_selection(hmp_data, epoch_data=None, condition_string=None, variable='event'):
+    return hmp_data.where(hmp_data[variable] == condition_string, drop=True)
 
 def load_data(path):
     return xr.load_dataset(path)
