@@ -188,8 +188,7 @@ class hmp:
         events = np.zeros(data.shape)
         for trial in range(self.n_trials):#avoids confusion of gains between trials
             for dim in np.arange(self.n_dims):
-                dat = data[self.starts[trial]:self.ends[trial]+1, dim]
-                events[self.starts[trial]:self.ends[trial]+1,dim] = correlate(dat, self.template, mode='same', method='direct')
+                events[self.starts[trial]:self.ends[trial]+1,dim] = correlate(data[self.starts[trial]:self.ends[trial]+1, dim], self.template, mode='same', method='direct')
         return events
 
     def fit_single(self, n_events=None, magnitudes=None, parameters=None, parameters_to_fix=None, 
