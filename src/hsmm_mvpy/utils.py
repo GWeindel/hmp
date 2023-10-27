@@ -1374,8 +1374,38 @@ def event_times(data, times, channel, stage):
 
     return brp_data    
     
-def condition_selection(hmp_data, epoch_data, condition_string, variable='event'):
-    return hmp_data.where(hmp_data[variable] == condition_string, drop=True)
+def condition_selection(hmp_data, epoch_data, condition_string, variable='event', method='equal'):
+    '''
+    condition_selection select a subset from hmp_data. It selects epochs for which
+    'condition_string' is in 'variable' based on 'method'.
+
+    Parameters
+    ----------
+    hmp_data : xr.Dataset
+        transformed EEG data for hmp, from utils.transform_data
+    epoch_data : deprecated
+    condition_string : str | num
+        condition indicator for selection
+    variable : str
+        variable present in hmp_data that is used for condition selection
+    method : str
+        'equal' selects equal trials, 'contains' selects trial in which conditions_string
+        appears in variable
+
+    Returns
+    -------
+    dat : xr.Dataset
+        Subset of hmp_data.
+        
+    '''
+    if method == 'equal':
+        dat = hmp_data.where(hmp_data[variable] == condition_string, drop=True)
+    elif method == 'contains':
+        dat = hmp_data.where(hmp_data[variable].str.contains(condition_string), drop=True)
+    else:
+        print('unknown method, returning original data')
+        dat = hmp_data
+    return dat
 
 
 def load_data(path):
