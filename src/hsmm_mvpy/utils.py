@@ -542,7 +542,7 @@ def stack_data(data, subjects_variable='participant', channel_variable='componen
     data = data.stack(all_samples=['participant','epochs',"samples"]).dropna(dim="all_samples")
     return data
 
-def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', n_comp=None, pca_weights=None):
+def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', n_comp=None, pca_weights=None, filter=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -569,6 +569,10 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         to specify how many PCs should be retained
     pca_weigths : xarray
         Weights of a PCA to apply to the data (e.g. in the resample function)
+    filter: None | (lfreq, hfreq) 
+        If none, no filtering is appliedn. If tuple, data is filtered between lfreq-hfreq.
+        NOTE: filtering at this step is suboptimal, filter before epoching if at all possible, see
+              also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
 
     Returns
     -------
@@ -588,6 +592,33 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     assert np.sum(np.isnan(data.groupby('participant').mean(['epochs','samples']).data.values)) == 0,\
         'at least one participant has an empty channel'
     sfreq = data.sfreq
+
+    if filter:
+        print("NOTE: filtering at this step is suboptimal, filter before epoching if at all possible, see")
+        print("also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html")
+        from mne.filter import filter_data
+
+        lfreq, hfreq = filter
+        n_participant, n_epochs, _, _ = data.data.values.shape
+        for pp in range(n_participant):
+            for trial in range(n_epochs):
+
+                dat = data.data.values[pp, trial, :, :]
+
+                if not np.isnan(dat).all():
+                    dat = dat[:,~np.isnan(dat[0,:])] #remove nans
+
+                    #pad by reflecting the whole trial twice
+                    trial_len = dat.shape[1] * 2
+                    dat = np.pad(dat, ((0,0),(trial_len,trial_len)), mode='reflect')
+
+                    #filter
+                    dat = filter_data(dat, sfreq, lfreq, hfreq, verbose=False)
+
+                    #remove padding
+                    dat = dat[:,trial_len:-trial_len]
+                    data.data.values[pp, trial, :, :dat.shape[1]] = dat
+
     if apply_zscore == True:
         apply_zscore = 'trial' #defaults to trial
     if apply_standard:
@@ -1343,10 +1374,39 @@ def event_times(data, times, channel, stage):
 
     return brp_data    
     
-def condition_selection(hmp_data, epoch_data, condition_string, variable='event'):
-    unstacked = hmp_data.unstack().where(epoch_data[variable].str.contains(condition_string),drop=True)
-    stacked = stack_data(unstacked)
-    return stacked
+def condition_selection(hmp_data, epoch_data, condition_string, variable='event', method='equal'):
+    '''
+    condition_selection select a subset from hmp_data. It selects epochs for which
+    'condition_string' is in 'variable' based on 'method'.
+
+    Parameters
+    ----------
+    hmp_data : xr.Dataset
+        transformed EEG data for hmp, from utils.transform_data
+    epoch_data : deprecated
+    condition_string : str | num
+        condition indicator for selection
+    variable : str
+        variable present in hmp_data that is used for condition selection
+    method : str
+        'equal' selects equal trials, 'contains' selects trial in which conditions_string
+        appears in variable
+
+    Returns
+    -------
+    dat : xr.Dataset
+        Subset of hmp_data.
+        
+    '''
+    if method == 'equal':
+        dat = hmp_data.where(hmp_data[variable] == condition_string, drop=True)
+    elif method == 'contains':
+        dat = hmp_data.where(hmp_data[variable].str.contains(condition_string), drop=True)
+    else:
+        print('unknown method, returning original data')
+        dat = hmp_data
+    return dat
+
 
 def load_data(path):
     return xr.load_dataset(path)
@@ -1555,11 +1615,12 @@ def epoch_between_events(raw, events, event_id_from, event_id_to, baseline=None,
 
         #reject based on range
         if reject != None:
-            for k,v in reject.items():
-                ch_types = raw.get_channel_types(picks=picks)
-                for ch in np.where(np.array(ch_types) == k)[0]:
-                    if np.nanmax((dat[i,ch,:ep[2]])) - np.nanmin((dat[i,ch,:ep[2]])) > v:
-                        drop_log[i] = drop_log[i] + (raw.ch_names[ch],)
+            if not np.isnan(dat[i,:,:ep[2]]).all():
+                for k,v in reject.items():
+                    ch_types = raw.get_channel_types(picks=picks)
+                    for ch in np.where(np.array(ch_types) == k)[0]:
+                        if np.nanmax((dat[i,ch,:ep[2]])) - np.nanmin((dat[i,ch,:ep[2]])) > v:
+                            drop_log[i] = drop_log[i] + (raw.ch_names[ch],)
     
     #remove drops  
     dat = np.delete(dat, [True if tmp != () else False for tmp in drop_log], 0)
