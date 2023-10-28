@@ -63,53 +63,45 @@ class hmp:
                 from scipy.stats import gamma as sp_dist
                 from hsmm_mvpy.utils import gamma_scale_to_mean, gamma_mean_to_scale
                 self.scale_to_mean, self.mean_to_scale = gamma_scale_to_mean, gamma_mean_to_scale
-                self.pdf = sp_dist.pdf
             case 'lognormal':
                 from scipy.stats import lognorm as sp_dist
                 from hsmm_mvpy.utils import logn_scale_to_mean,logn_mean_to_scale
                 self.scale_to_mean, self.mean_to_scale = logn_scale_to_mean, logn_mean_to_scale
-                self.pdf = sp_dist.pdf
             case 'wald':
                 from scipy.stats import invgauss as sp_dist
                 from hsmm_mvpy.utils import wald_scale_to_mean,wald_mean_to_scale
                 self.scale_to_mean, self.mean_to_scale = wald_scale_to_mean, wald_mean_to_scale
-                self.pdf = sp_dist.pdf
             case 'weibull':
                 from scipy.stats import weibull_min as sp_dist
                 from hsmm_mvpy.utils import weibull_scale_to_mean,weibull_mean_to_scale
                 self.scale_to_mean, self.mean_to_scale = weibull_scale_to_mean, weibull_mean_to_scale
-                self.pdf = sp_dist.pdf
             case 'log-logistic':
                 from scipy.stats import fisk as sp_dist
                 from hsmm_mvpy.utils import fisk_scale_to_mean,fisk_mean_to_scale
                 self.scale_to_mean, self.mean_to_scale = fisk_scale_to_mean,fisk_mean_to_scale
-                self.pdf = sp_dist.pdf
             case 'maxwell-boltzmann':
                 from scipy.stats import chi as sp_dist
                 from hsmm_mvpy.utils import maxb_scale_to_mean,maxb_mean_to_scale
                 shape = 3
                 self.scale_to_mean, self.mean_to_scale = maxb_scale_to_mean,maxb_mean_to_scale
-                self.pdf = sp_dist.pdf
             case 'rayleigh':
                 from scipy.stats import chi as sp_dist
                 from hsmm_mvpy.utils import ray_scale_to_mean,ray_mean_to_scale
                 shape = 2
                 self.scale_to_mean, self.mean_to_scale = ray_scale_to_mean,ray_mean_to_scale
-                self.pdf = sp_dist.pdf
             case 'half-normal':
                 from scipy.stats import chi as sp_dist
                 from hsmm_mvpy.utils import halfn_scale_to_mean,halfn_mean_to_scale
                 shape = 1
                 self.scale_to_mean, self.mean_to_scale = halfn_scale_to_mean,halfn_mean_to_scale
-                self.pdf = sp_dist.pdf
             case 'uniform':
-                from hsmm_mvpy.utils import uniform_pdf, uniform_dummy
+                from scipy.stats import uniform as sp_dist
+                from hsmm_mvpy.utils import uniform_dummy
                 self.scale_to_mean, self.mean_to_scale = uniform_dummy, uniform_dummy
-                self.pdf = uniform_pdf
             case _:
                 raise ValueError(f'Unknown Distribution {distribution}')
         self.distribution = distribution
-            
+        self.pdf = sp_dist.pdf
         if sfreq is None:
             sfreq = data.sfreq
         self.sfreq = sfreq

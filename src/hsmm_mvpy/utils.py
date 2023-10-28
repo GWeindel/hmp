@@ -58,8 +58,6 @@ def fisk_scale_to_mean(scale, shape):
 def fisk_mean_to_scale(mean, shape): 
     return  shape*(mean*np.sin(np.pi/shape))/np.pi
 
-def uniform_pdf(x,y,scale):
-    return [1 for i in x]
 def uniform_dummy(x,y):
     return x
 
