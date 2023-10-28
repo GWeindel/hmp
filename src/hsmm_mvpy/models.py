@@ -109,7 +109,6 @@ class hmp:
             case _:
                 raise ValueError(f'Unknown Distribution {distribution}')
         self.distribution = distribution
-        self.pdf = sp_dist.pdf
             
         if sfreq is None:
             sfreq = data.sfreq
