@@ -24,9 +24,9 @@ def gamma_mean_to_scale(mean, shape):
     return mean/shape
 
 def logn_scale_to_mean(scale, shape): 
-    return scale+shape**2/2
-def logn_mean_to_scale(mean, shape): 
-    return mean-shape**2/2
+    return np.exp(scale+shape**2/2)
+def logn_mean_to_scale(mean, shape):
+    return np.exp(np.log(mean)- shape**2/2)
 
 def wald_scale_to_mean(scale, shape): 
     return scale*shape
@@ -58,8 +58,10 @@ def fisk_scale_to_mean(scale, shape):
 def fisk_mean_to_scale(mean, shape): 
     return  shape*(mean*np.sin(np.pi/shape))/np.pi
 
-def uniform_dummy(x,y):
-    return x
+def uniform_scale_to_mean(scale, shape): 
+    return (scale-shape)/2
+def uniform_mean_to_scale(mean, shape): 
+    return 2*(mean-shape)
 
 def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None, 
                  subj_idx=None, metadata=None, events_provided=None, rt_col='rt', rts=None,

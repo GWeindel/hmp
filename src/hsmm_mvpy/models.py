@@ -96,8 +96,8 @@ class hmp:
                 self.scale_to_mean, self.mean_to_scale = halfn_scale_to_mean,halfn_mean_to_scale
             case 'uniform':
                 from scipy.stats import uniform as sp_dist
-                from hsmm_mvpy.utils import uniform_dummy
-                self.scale_to_mean, self.mean_to_scale = uniform_dummy, uniform_dummy
+                from hsmm_mvpy.utils import uniform_scale_to_mean,uniform_mean_to_scale
+                self.scale_to_mean, self.mean_to_scale = uniform_scale_to_mean,uniform_mean_to_scale
             case _:
                 raise ValueError(f'Unknown Distribution {distribution}')
         self.distribution = distribution
@@ -1907,7 +1907,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=False, max_iterations=1e3, tolerance=1e-4, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None):
+    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=False, max_iterations=1e3, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
