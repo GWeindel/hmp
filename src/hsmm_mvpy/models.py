@@ -27,7 +27,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
                    
 class hmp:
     
-    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', em_method="mean"):
+    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, location_threshold=.8, distribution='gamma', em_method="mean"):
         '''
         This function intializes an HMP model by providing the data, the expected probability distribution for the by-trial variation in stage onset, and the expected duration of the transition event.
 
@@ -53,6 +53,8 @@ class hmp:
             Expected shape for the transition event used in the cross-correlation, should be a vector of values capturing the expected shape over the sampling frequency of the data. If None, the template is created as a half-sine shape with a frequency derived from the event_width argument
         location : float
             Minimum stage duration in samples. 
+        location_threshold : float
+            Correlation threshold between magnitudes when location is activated.
         distribution: str
             Probability distribution for the by-trial onset of stages can be one of 'gamma','lognormal','wald', or 'weibull'
         em_method: str
@@ -113,6 +115,7 @@ class hmp:
             self.location = int(self.event_width / self.steps//2)+1
         else:
             self.location = int(np.rint(location))
+        self.location_threshold = location_threshold
         durations = data.unstack().sel(component=0).rename({'epochs':'trials'})\
             .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
             how="all").groupby('trial_x_participant').count(dim="samples").cumsum().squeeze()
@@ -236,7 +239,12 @@ class hmp:
             number of cores to use in the multiprocessing functions
         '''
         assert n_events is not None, 'The fit_single() function needs to be provided with a number of expected transition events'
-        assert self.location*(n_events-2) < min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
+        if self.location_threshold == 0:
+            assert self.location*(n_events-2) <= min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
+        else:
+            if self.location*(n_events-2) > min(self.durations):
+                print(f'{n_events} events might not fit given the minimum duration of {min(self.durations)} and a location of {self.location},')
+                print('depending on correlations between magnitudes and the setting of location_threshold.\n')
         if verbose:
             if parameters is None:
                 print(f'Estimating {n_events} events model with {starting_points} starting point(s)')
@@ -284,7 +292,7 @@ class hmp:
                 magnitudes = np.zeros((starting_points, n_events, self.n_dims))
                 magnitudes[0] = initial_m
                 if method == 'random':
-                    for _ in np.arange(starting_points):
+                    for _ in np.arange(starting_points-1):
                         proposal_p = self.gen_random_stages(n_events)
                         proposal_p[parameters_to_fix] = initial_p[parameters_to_fix]
                         parameters.append(proposal_p)
@@ -322,11 +330,11 @@ class hmp:
             eventprobs_sp = [x[3] for x in estimates]
             traces_sp = [x[4] for x in estimates]
             non_converged = 0
-            for iteration in range(len(estimates)):
-                #Filters out non-converged models
-                if np.diff(estimates[iteration][4][-2:]) < 0:
-                    lkhs_sp[iteration] = -np.inf
-                    non_converged += 1
+            # for iteration in range(len(estimates)):
+            #     #Filters out non-converged models
+            #     if np.diff(estimates[iteration][4][-2:]) < 0:
+            #         lkhs_sp[iteration] = -np.inf
+            #         non_converged += 1
                     
             if verbose and non_converged > 0:
                 warn(f'{non_converged}/{starting_points} starting points ended up not converging', RuntimeWarning)
@@ -407,6 +415,7 @@ class hmp:
                               'samples':np.arange(np.shape(eventprobs)[1])})
             xreventprobs = xreventprobs.assign_coords(trial_x_part)
             xreventprobs = xreventprobs.transpose('iteration','trial_x_participant','samples','event')
+        
         estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrtraces))
 
         if verbose:
@@ -956,7 +965,21 @@ class hmp:
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage scale
         for stage in range(n_stages):
             pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1])
-        pmf[:,1:-1] = np.concatenate([np.tile([0],(self.location,n_events-1)),pmf[self.location:,1:-1]])#all stages except first and last stages have a location (mainly to avoid overlap in cross-correlated signal)
+        
+        # add location (0 probability) for self.location duration for highly
+        # correlating magnitudes to avoid 'repeating events' in high likelihood 
+        # areas. This is only for stages between first and last event.
+        if n_events > 1:
+            if not (magnitudes == 0).all():
+                corr = np.corrcoef(magnitudes)
+                corr = corr[:-1,1:].diagonal() #only interested in sequential corrs
+                pmf[:self.location, np.where(corr > self.location_threshold)[0] + 1] = 0 # +1 as we skip first stage
+                #correct likelihood
+                pmf[:, np.where(corr > self.location_threshold)[0] + 1] = pmf[:, np.where(corr > self.location_threshold)[0] + 1] / np.sum(pmf[:, np.where(corr > self.location_threshold)[0] + 1],axis=0) #make likelihood add up to 1
+
+        #old version
+        #pmf[:,1:-1] = np.concatenate([np.tile([0],(self.location,n_events-1)),pmf[self.location:,1:-1]])
+
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
 
         if n_events > 0:
@@ -1130,7 +1153,7 @@ class hmp:
         return params
 
 
-    def backward_estimation(self,max_events=None, min_events=0, max_fit=None, max_starting_points=1, method="random", tolerance=1e-4, maximization=True, max_iteration=1e3):
+    def backward_estimation(self,max_events=None, min_events=0, max_fit=None, max_starting_points=1, method="random", tolerance=1e-4, maximization=True, max_iteration=1e3, extra_starting_points=0):
         '''
         First read or estimate max_event solution then estimate max_event - 1 solution by 
         iteratively removing one of the event and pick the one with the highest 
@@ -1145,7 +1168,7 @@ class hmp:
         max_fit : xarray
             To avoid re-estimating the model with maximum number of events it can be provided 
             with this arguments, defaults to None
-        max_starting_points: int
+        max_starting_points : int
             how many random starting points iteration to try for the model estimating the maximal number of events
         method: str
             What starting points generation method to use, 'random'or 'grid' (grid is not yet fully supported)
@@ -1155,6 +1178,8 @@ class hmp:
             If True (Default) perform the maximization phase in EM() otherwhise skip
         max_iteration: int
             Maximum number of iteration for the expectation maximization in the EM() function
+        extra_starting_points : int
+            how many random starting points iterations to try for model estimating less than the maximal number of events
         '''
         if max_events is None and max_fit is None:
             max_events = self.compute_max_events()
@@ -1191,6 +1216,10 @@ class hmp:
             with mp.Pool(processes=self.cpus) as pool:
                 event_loo_likelihood_temp = pool.starmap(self.fit_single, inputs)
 
+            #add random starting points for non-max estimates
+            if extra_starting_points > 0:
+                event_loo_likelihood_temp.append(self.fit_single(n_events, starting_points = extra_starting_points))
+                                
             lkhs = [x.likelihoods.values for x in event_loo_likelihood_temp]
             event_loo_results.append(event_loo_likelihood_temp[np.nanargmax(lkhs)])
 
@@ -1207,6 +1236,8 @@ class hmp:
         '''
         Compute the maximum possible number of events given event width and mean or minimum reaction time
         '''
+        if self.location_threshold > 0:
+            print('Note that more events probably fit, as long as they are not highly correlating.')
         return int(np.rint(np.min(self.durations)//(self.location)))
 
 
