@@ -809,7 +809,7 @@ class hmp:
         if n_cond is not None:
             lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
         else:
-            lkh, eventprobs, locations = self.estim_probs(magnitudes, parameters, n_events)
+            lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
 
         traces = [lkh]
         i = 0
@@ -817,15 +817,12 @@ class hmp:
             lkh_prev = lkh
         else:
             lkh_prev = lkh
-            locations_prev = locations
             while i < max_iteration :#Expectation-Maximization algorithm
-                #break if minimum iterations were performed, the locations did not change in the last iteration, and the change in
+                #break if minimum iterations were performed and the change in
                 #likelihood was less than the tolerance
-                #and (locations == locations_prev).all()
                 if i >= min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
                     break
                 lkh_prev = lkh.copy()
-                locations_prev = locations.copy()
 
                 if n_cond is not None: #condition dependent
                     for c in range(n_cond): #get params/mags
@@ -860,19 +857,13 @@ class hmp:
                 if n_cond is not None:
                     lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
                 else:
-                    lkh, eventprobs, locations = self.estim_probs(magnitudes, parameters, n_events)
+                    lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
                 traces.append(lkh)
                 i += 1
 
         if i == max_iteration:
             warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
-
-        #neutral probability calculation to enable comparison between different location settings
-        if n_cond is not None:
-            lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
-        else:
-            lkh, eventprobs, locations = self.estim_probs(magnitudes, parameters, n_events, location_off=True)
-        
+      
         return lkh, magnitudes, parameters, eventprobs, np.array(traces)
 
 
@@ -1065,7 +1056,7 @@ class hmp:
         if lkh_only:
             return likelihood
         else:
-            return [likelihood, eventprobs, locations]
+            return [likelihood, eventprobs]
 
     def estim_probs_conds(self, magnitudes, parameters, mags_map, pars_map, conds, lkh_only=False, cpus=1):
         '''
