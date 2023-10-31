@@ -859,7 +859,7 @@ class hmp:
                 if n_cond is not None:
                     lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
                 else:
-                    lkh, eventprobs, locations = self.estim_probs(magnitudes, parameters, n_events)
+                    lkh, eventprobs, locations = self.estim_probs(magnitudes, parameters, n_events, prev_locations=locations_prev)
                 traces.append(lkh)
                 i += 1
 
@@ -915,7 +915,7 @@ class hmp:
 
         return [magnitudes, parameters]
 
-    def estim_probs(self, magnitudes, parameters, n_events=None, subset_epochs=None, lkh_only=False, location_off=False):
+    def estim_probs(self, magnitudes, parameters, n_events=None, subset_epochs=None, lkh_only=False, location_off=False, prev_locations=None):
         '''
         parameters
         ----------
@@ -933,6 +933,8 @@ class hmp:
             Returning eventprobs (True) or not (False)
         location_off: bool
             Estimate probabilities without using location in pmf (typically used to estimate location-neutral probabilities at end of estimation)
+        prev_locations : ndarray bools
+            If prev_locations are given, these will be used, new locations might be added.
         
         Returns
         -------
@@ -986,9 +988,10 @@ class hmp:
         # areas. This is only for stages between first and last event.
         locations = np.full((n_stages,), False, dtype=bool)
         if (not location_off) and n_events > 1:
-            if (magnitudes == 0).all():
-                locations[1:-1] = True #start with all locations
-            else:
+            if prev_locations is not None:
+                locations = prev_locations #set previous locations as basis
+               
+            if not (magnitudes == 0).all():
                 corr = np.corrcoef(magnitudes)
                 corr = corr[:-1,1:].diagonal() #only interested in sequential corrs
                 locations[np.where(corr > self.location_threshold)[0] + 1] = True # +1 as we skip first stage
