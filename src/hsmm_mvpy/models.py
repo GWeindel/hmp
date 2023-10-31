@@ -809,7 +809,7 @@ class hmp:
         if n_cond is not None:
             lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
         else:
-            lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
+            lkh, eventprobs, locations = self.estim_probs(magnitudes, parameters, n_events)
 
         traces = [lkh]
         i = 0
@@ -817,12 +817,15 @@ class hmp:
             lkh_prev = lkh
         else:
             lkh_prev = lkh
+            locations_prev = locations
             while i < max_iteration :#Expectation-Maximization algorithm
-                if i >= min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
+                #break if minimum iterations were performed, the locations did not change in the last iteration, and the change in
+                #likelihood was less than the tolerance
+                if i >= min_iteration and (locations == locations_prev).all() and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
                     break
-                    #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
-                
+                locations_prev = locations.copy()
+
                 if n_cond is not None: #condition dependent
                     for c in range(n_cond): #get params/mags
 
@@ -856,13 +859,21 @@ class hmp:
                 if n_cond is not None:
                     lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
                 else:
-                    lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
+                    lkh, eventprobs, locations = self.estim_probs(magnitudes, parameters, n_events)
                 traces.append(lkh)
                 i += 1
 
         if i == max_iteration:
             warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
+
+        #neutral probability calculation to enable comparison between different location settings
+        if n_cond is not None:
+            lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
+        else:
+            lkh, eventprobs, locations = self.estim_probs(magnitudes, parameters, n_events, location_off=True)
+        
         return lkh, magnitudes, parameters, eventprobs, np.array(traces)
+
 
     def get_magnitudes_parameters_expectation(self,eventprobs,subset_epochs=None):
         
@@ -904,7 +915,7 @@ class hmp:
 
         return [magnitudes, parameters]
 
-    def estim_probs(self, magnitudes, parameters, n_events=None, subset_epochs=None, lkh_only=False):
+    def estim_probs(self, magnitudes, parameters, n_events=None, subset_epochs=None, lkh_only=False, location_off=False):
         '''
         parameters
         ----------
@@ -920,6 +931,8 @@ class hmp:
             how many events are estimated
         lkh_only: bool
             Returning eventprobs (True) or not (False)
+        location_off: bool
+            Estimate probabilities without using location in pmf (typically used to estimate location-neutral probabilities at end of estimation)
         
         Returns
         -------
@@ -927,6 +940,8 @@ class hmp:
             Summed log probabilities
         eventprobs : ndarray
             Probabilities with shape max_samples*n_trials*n_events
+        location : ndarray of bools
+            Whether locations are used for stages, n_events+1 (includes first and last stage, will always be False)
         '''
         if n_events is None:
             n_events = magnitudes.shape[0]
@@ -969,16 +984,17 @@ class hmp:
         # add location (0 probability) for self.location duration for highly
         # correlating magnitudes to avoid 'repeating events' in high likelihood 
         # areas. This is only for stages between first and last event.
-        if n_events > 1:
-            if not (magnitudes == 0).all():
+        locations = np.full((n_stages,), False, dtype=bool)
+        if (not location_off) and n_events > 1:
+            if (magnitudes == 0).all():
+                locations[1:-1] = True #start with all locations
+            else:
                 corr = np.corrcoef(magnitudes)
                 corr = corr[:-1,1:].diagonal() #only interested in sequential corrs
-                pmf[:self.location, np.where(corr > self.location_threshold)[0] + 1] = 0 # +1 as we skip first stage
-                #correct likelihood
-                pmf[:, np.where(corr > self.location_threshold)[0] + 1] = pmf[:, np.where(corr > self.location_threshold)[0] + 1] / np.sum(pmf[:, np.where(corr > self.location_threshold)[0] + 1],axis=0) #make likelihood add up to 1
-
-        #old version
-        #pmf[:,1:-1] = np.concatenate([np.tile([0],(self.location,n_events-1)),pmf[self.location:,1:-1]])
+                locations[np.where(corr > self.location_threshold)[0] + 1] = True # +1 as we skip first stage
+            
+            pmf[:self.location, locations] = 0 
+            pmf[:, locations] = pmf[:, locations] / np.sum(pmf[:, locations],axis=0) #make likelihood add up to 1
 
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
 
@@ -1051,7 +1067,7 @@ class hmp:
         if lkh_only:
             return likelihood
         else:
-            return [likelihood, eventprobs]
+            return [likelihood, eventprobs, locations]
 
     def estim_probs_conds(self, magnitudes, parameters, mags_map, pars_map, conds, lkh_only=False, cpus=1):
         '''
