@@ -118,7 +118,7 @@ class hmp:
         else:
             self.location = int(np.rint(location))
         self.location_threshold_min = location_threshold_min
-        self.location_threshold_min = location_threshold_max
+        self.location_threshold_max = location_threshold_max
         durations = data.unstack().sel(component=0).rename({'epochs':'trials'})\
             .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
             how="all").groupby('trial_x_participant').count(dim="samples").cumsum().squeeze()
