@@ -27,7 +27,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
                    
 class hmp:
     
-    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, location_threshold=.8, distribution='gamma', em_method="mean"):
+    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, location_threshold_min=.5,location_threshold_max=1, distribution='gamma', em_method="mean"):
         '''
         This function intializes an HMP model by providing the data, the expected probability distribution for the by-trial variation in stage onset, and the expected duration of the transition event.
 
@@ -53,8 +53,10 @@ class hmp:
             Expected shape for the transition event used in the cross-correlation, should be a vector of values capturing the expected shape over the sampling frequency of the data. If None, the template is created as a half-sine shape with a frequency derived from the event_width argument
         location : float
             Minimum stage duration in samples. 
-        location_threshold : float
-            Correlation threshold between magnitudes when location is activated.
+        location_threshold_min : float
+        location_threshold_max: float
+            Correlation thresholds between which location samples are affected, linear from 1 to 0 for correlation between
+            threshold_min and threshold_max.
         distribution: str
             Probability distribution for the by-trial onset of stages can be one of 'gamma','lognormal','wald', or 'weibull'
         em_method: str
@@ -115,7 +117,8 @@ class hmp:
             self.location = int(self.event_width / self.steps//2)+1
         else:
             self.location = int(np.rint(location))
-        self.location_threshold = location_threshold
+        self.location_threshold_min = location_threshold_min
+        self.location_threshold_min = location_threshold_max
         durations = data.unstack().sel(component=0).rename({'epochs':'trials'})\
             .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
             how="all").groupby('trial_x_participant').count(dim="samples").cumsum().squeeze()
@@ -907,7 +910,7 @@ class hmp:
 
         return [magnitudes, parameters]
 
-    def estim_probs(self, magnitudes, parameters, n_events=None, subset_epochs=None, lkh_only=False, location_off=False):
+    def estim_probs(self, magnitudes, parameters, n_events=None, subset_epochs=None, lkh_only=False):
         '''
         parameters
         ----------
@@ -923,8 +926,6 @@ class hmp:
             how many events are estimated
         lkh_only: bool
             Returning eventprobs (True) or not (False)
-        location_off: bool
-            Estimate probabilities without using location in pmf (typically used to estimate location-neutral probabilities at end of estimation)
         
         Returns
         -------
@@ -932,8 +933,6 @@ class hmp:
             Summed log probabilities
         eventprobs : ndarray
             Probabilities with shape max_samples*n_trials*n_events
-        location : ndarray of bools
-            Whether locations are used for stages, n_events+1 (includes first and last stage, will always be False)
         '''
         if n_events is None:
             n_events = magnitudes.shape[0]
@@ -977,12 +976,16 @@ class hmp:
         # correlating magnitudes to avoid 'repeating events' in high likelihood 
         # areas. This is only for stages between first and last event.
         locations = np.full((n_stages,), False, dtype=bool)
-        if (not location_off) and n_events > 1:
+        if n_events > 1:
             if not (magnitudes == 0).all():
                 corr = np.corrcoef(magnitudes)
                 corr = corr[:-1,1:].diagonal() #only interested in sequential corrs
-                locations[np.where(corr > self.location_threshold)[0] + 1] = True # +1 as we skip first stage            
-                pmf[:self.location, locations] = 0 
+        
+                corr = corr - self.location_threshold_min #start at .5
+                locations[np.where(corr > self.location_threshold_min)[0] + 1] = True # +1 as we skip first stage            
+                
+                correction = np.maximum(1 - corr[corr>0]/(self.location_threshold_max - self.location_threshold_min), 0)
+                pmf[:self.location, locations] = pmf[:self.location, locations] * correction
                 pmf[:, locations] = pmf[:, locations] / np.sum(pmf[:, locations],axis=0) #make likelihood add up to 1
 
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
