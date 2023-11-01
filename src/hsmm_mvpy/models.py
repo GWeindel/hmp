@@ -57,6 +57,7 @@ class hmp:
         location_threshold_max: float
             Correlation thresholds between which location samples are affected, linear from 1 to 0 for correlation between
             threshold_min and threshold_max.
+            If location_threshold_max == 0, location is used for all events.
         distribution: str
             Probability distribution for the by-trial onset of stages can be one of 'gamma','lognormal','wald', or 'weibull'
         em_method: str
@@ -117,6 +118,7 @@ class hmp:
             self.location = int(self.event_width / self.steps//2)+1
         else:
             self.location = int(np.rint(location))
+        assert location_threshold_max == 0 or location_threshold_max > location_threshold_min, 'location_threshold_max < location_threshold_min'
         self.location_threshold_min = location_threshold_min
         self.location_threshold_max = location_threshold_max
         durations = data.unstack().sel(component=0).rename({'epochs':'trials'})\
@@ -242,7 +244,7 @@ class hmp:
             number of cores to use in the multiprocessing functions
         '''
         assert n_events is not None, 'The fit_single() function needs to be provided with a number of expected transition events'
-        if self.location_threshold == 0:
+        if self.location_threshold_max == 0:
             assert self.location*(n_events-2) <= min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
         else:
             if self.location*(n_events-2) > min(self.durations):
@@ -561,7 +563,12 @@ class hmp:
         assert n_conds == mags_map.shape[0] == pars_map.shape[0], 'number of unique conditions should correspond to number of rows in map(s)'
 
         n_events = mags_map.shape[1]
-        assert self.location*(n_events) < min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
+        if self.location_threshold_max == 0:
+            assert self.location*(n_events-2) <= min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
+        else:
+            if self.location*(n_events-2) > min(self.durations):
+                print(f'{n_events} events might not fit given the minimum duration of {min(self.durations)} and a location of {self.location},')
+                print('depending on correlations between magnitudes and the setting of location_threshold.\n')
         assert conds.shape[0] == self.durations.shape[0], 'Conds parameter should contain the condition per epoch.'
         if verbose:
             if parameters is None:
@@ -975,18 +982,21 @@ class hmp:
         # add location (0 probability) for self.location duration for highly
         # correlating magnitudes to avoid 'repeating events' in high likelihood 
         # areas. This is only for stages between first and last event.
-        locations = np.full((n_stages,), False, dtype=bool)
-        if n_events > 1:
-            if not (magnitudes == 0).all():
-                corr = np.corrcoef(magnitudes)
-                corr = corr[:-1,1:].diagonal() #only interested in sequential corrs
-        
-                corr = corr - self.location_threshold_min #start at .5
-                locations[np.where(corr > self.location_threshold_min)[0] + 1] = True # +1 as we skip first stage            
-                
-                correction = np.maximum(1 - corr[corr>0]/(self.location_threshold_max - self.location_threshold_min), 0)
-                pmf[:self.location, locations] = pmf[:self.location, locations] * correction
-                pmf[:, locations] = pmf[:, locations] / np.sum(pmf[:, locations],axis=0) #make likelihood add up to 1
+        if self.location_threshold_max == 0: #use location for all (old behavior)
+            pmf[:,1:-1] = np.concatenate([np.tile([0],(self.location,n_events-1)),pmf[self.location:,1:-1]])
+        else: #continuous version
+            locations = np.full((n_stages,), False, dtype=bool)
+            if n_events > 1:
+                if not (magnitudes == 0).all():
+                    corr = np.corrcoef(magnitudes)
+                    corr = corr[:-1,1:].diagonal() #only interested in sequential corrs
+            
+                    corr = corr - self.location_threshold_min #start at .5
+                    locations[np.where(corr > self.location_threshold_min)[0] + 1] = True # +1 as we skip first stage            
+                    
+                    correction = np.maximum(1 - corr[corr>0]/(self.location_threshold_max - self.location_threshold_min), 0)
+                    pmf[:self.location, locations] = pmf[:self.location, locations] * correction
+                    pmf[:, locations] = pmf[:, locations] / np.sum(pmf[:, locations],axis=0) #make likelihood add up to 1
 
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
 
