@@ -992,8 +992,7 @@ class hmp:
                     corr = corr[:-1,1:].diagonal() #only interested in sequential corrs
             
                     corr = corr - self.location_threshold_min #start at .5
-                    locations[np.where(corr > self.location_threshold_min)[0] + 1] = True # +1 as we skip first stage            
-                    
+                    locations[np.where(corr > 0)[0] + 1] = True # +1 as we skip first stage            
                     correction = np.maximum(1 - corr[corr>0]/(self.location_threshold_max - self.location_threshold_min), 0)
                     pmf[:self.location, locations] = pmf[:self.location, locations] * correction
                     pmf[:, locations] = pmf[:, locations] / np.sum(pmf[:, locations],axis=0) #make likelihood add up to 1
