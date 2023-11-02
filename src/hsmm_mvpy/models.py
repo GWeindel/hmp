@@ -831,8 +831,18 @@ class hmp:
                 #break if minimum iterations were performed and the change in
                 #likelihood was less than the tolerance
                 if i >= min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
+                    if lkh < lkh_prev:
+                        magnitudes = magnitudes_prev
+                        parameters = parameters_prev
+                        if n_cond is not None:
+                            lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
+                        else:
+                            lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
                     break
+
                 lkh_prev = lkh.copy()
+                magnitudes_prev = magnitudes.copy()
+                parameters_prev = parameters.copy()
 
                 if n_cond is not None: #condition dependent
                     for c in range(n_cond): #get params/mags
@@ -991,11 +1001,22 @@ class hmp:
                     corr = np.corrcoef(magnitudes)
                     corr = corr[:-1,1:].diagonal() #only interested in sequential corrs
             
+                    #calc max correction (1 - adjusted corr^2)
                     corr = corr - self.location_threshold_min #start at .5
-                    locations[np.where(corr > 0)[0] + 1] = True # +1 as we skip first stage            
-                    correction = np.maximum(1 - corr[corr>0]/(self.location_threshold_max - self.location_threshold_min), 0)
-                    pmf[:self.location, locations] = pmf[:self.location, locations] * correction
-                    pmf[:, locations] = pmf[:, locations] / np.sum(pmf[:, locations],axis=0) #make likelihood add up to 1
+                    locations[np.where(corr > 0)[0] + 1] = True # +1 as we skip first stage     
+                    correction = np.minimum(1,corr[corr>0]/(self.location_threshold_max - self.location_threshold_min)) #linear 0-1, with 0 no correction, max at 1
+                    correction = correction**2 #power
+                    #correction = 1 - correction #inverse
+                    
+                    #correction by location
+                    correction_location = np.linspace(1,0,num=self.location,endpoint=False)**2
+  
+                    correction_location = np.tile(correction_location, (np.sum(locations), 1)).T
+                    correction_location = correction_location * correction
+                    correction_location = 1 - correction_location
+
+                    pmf[:self.location, locations] = pmf[:self.location, locations] * correction_location
+                    #pmf[:, locations] = pmf[:, locations] / np.sum(pmf[:, locations],axis=0) #make likelihood add up to 1
 
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
 
