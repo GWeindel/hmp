@@ -1006,16 +1006,16 @@ class hmp:
                     locations[np.where(corr > 0)[0] + 1] = True # +1 as we skip first stage     
                     correction = np.minimum(1,corr[corr>0]/(self.location_threshold_max - self.location_threshold_min)) #linear 0-1, with 0 no correction, max at 1
                     correction = correction**2 #power
-                    #correction = 1 - correction #inverse
+                    correction = 1 - correction #inverse
                     
                     #correction by location
-                    correction_location = np.linspace(1,0,num=self.location,endpoint=False)**2
+                    #correction_location = np.linspace(1,0,num=self.location,endpoint=False)**2
   
-                    correction_location = np.tile(correction_location, (np.sum(locations), 1)).T
-                    correction_location = correction_location * correction
-                    correction_location = 1 - correction_location
+                    #correction_location = np.tile(correction_location, (np.sum(locations), 1)).T
+                    #correction_location = correction_location * correction
+                    #correction_location = 1 - correction_location
 
-                    pmf[:self.location, locations] = pmf[:self.location, locations] * correction_location
+                    pmf[:self.location, locations] = pmf[:self.location, locations] * correction
                     #pmf[:, locations] = pmf[:, locations] / np.sum(pmf[:, locations],axis=0) #make likelihood add up to 1
 
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
