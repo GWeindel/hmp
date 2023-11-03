@@ -1388,7 +1388,8 @@ def condition_selection(hmp_data, epoch_data, condition_string, variable='event'
     ----------
     hmp_data : xr.Dataset
         transformed EEG data for hmp, from utils.transform_data
-    epoch_data : deprecated
+    epoch_data : xr.Dataset
+        Original EEG dataset, used to keep condition labels
     condition_string : str | num
         condition indicator for selection
     variable : str
@@ -1404,13 +1405,15 @@ def condition_selection(hmp_data, epoch_data, condition_string, variable='event'
         
     '''
     if method == 'equal':
-        dat = hmp_data.where(hmp_data[variable] == condition_string, drop=True)
+        unstacked = hmp_data.unstack().where(epoch_data[variable] == condition_string, drop=True)
+        stacked = stack_data(unstacked)
     elif method == 'contains':
-        dat = hmp_data.where(hmp_data[variable].str.contains(condition_string), drop=True)
+        unstacked = hmp_data.unstack().where(epoch_data[variable].str.contains(condition_string),drop=True)
+        stacked = stack_data(unstacked)
     else:
         print('unknown method, returning original data')
-        dat = hmp_data
-    return dat
+        stacked = hmp_data
+    return stacked
 
 
 def load_data(path):
