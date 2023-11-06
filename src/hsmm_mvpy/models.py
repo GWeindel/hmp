@@ -1954,7 +1954,7 @@ class hmp:
         if diagnostic:
             cycol = cycle(default_colors)
         pbar = tqdm(total = int(np.rint(end)))#progress bar
-        n_events, j, time = 0,1,0
+        n_events, j, time = 0,5,0#5 avoids hitting time 0
 
         #Init pars
         pars = np.zeros((max_event_n+1,2))
@@ -1965,7 +1965,10 @@ class hmp:
         #Init mags
         mags = np.zeros((max_event_n, self.n_dims)) #mags during estimation
         i = 0
-        lkh_prev = -np.inf
+        mags_props = np.zeros((1, 1, self.n_dims)) 
+        lkh_prev = self.fit_single(n_events+1, mags_props, pars_prop, [], [],\
+                            return_max=True, verbose=False, cpus=cpus, maximization=True,\
+                            min_iteration=min_iteration, tolerance=tolerance).likelihoods.values
         while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events < max_event_n-1:
             prev_time = time
             if fix_iter:
@@ -1985,7 +1988,6 @@ class hmp:
             if diagnostic:#Diagnostic plot
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
             if solutions.likelihoods > lkh_prev :#and np.diff(solutions.traces[-2:]) > 0:#Success
-                    
                 lkh_prev = solutions.likelihoods.values
                 if diagnostic:#Diagnostic plot
                     color = next(cycol)
@@ -2001,7 +2003,6 @@ class hmp:
             #New parameter proposition
             pars_prop = pars[:n_events+2].copy()
             pars_prop[n_events,1] = self.mean_to_scale(step*j, self.shape)
-            # pars_prop[1:-1,1] += 2.5
             last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:n_events+1,1])
             pars_prop[n_events+1,1] = last_stage
             time = int(np.round(self.scale_to_mean(np.sum(pars[:n_events,1]), self.shape)))
@@ -2017,7 +2018,7 @@ class hmp:
         if n_events > 0: 
             fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose)
         else:
-            warn('Failed to find more than two stages, returning 2 stage model with default starting values')
-            fit = self.fit_single(n_events+1, verbose=verbose)
+            warn('Failed to find more than two stages, returning None')
+            fit = None#self.fit_single(n_events+1, verbose=verbose)
         return fit
     
