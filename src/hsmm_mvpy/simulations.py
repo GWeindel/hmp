@@ -19,10 +19,7 @@ def available_sources(subselection=True):
     named_labels = []
     for label in range(len(labels)):
         named_labels.append(labels[label].name)
-    #Here we select sources with different topologies on HMP and relativ equal contribution on channels, not checked on MEG
     named_labels = np.array(named_labels)
-    if subselection:
-        named_labels = named_labels[[0,1,3,5,7,15,17,22,30,33,37,40,42,46,50,54,57,59,65,67]]
     return named_labels
 
 def simulation_sfreq():
@@ -60,7 +57,7 @@ def event_shape(event_width, event_width_samples, steps):
     template = template/np.sum(template**2)#Weight normalized
     return template
 
-def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, seed=None, sfreq=100): 
+def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, seed=None, sfreq=100, save_snr=False): 
     '''
     Simulates n_trials of EEG and/or MEG using MNE's tools based on the specified sources
     
@@ -95,7 +92,8 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
         Deterministic simulation of event transitions times. Format is n_sources X n_trials
     location: float
         value in ms to add after a simulated event and before another one
-    
+    save_snr: bool
+        Save the signal at peak value and electrode noise
     Returns
     -------
     generating_events: ndarray
@@ -107,6 +105,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
         random_state = np.random.RandomState(seed)
     else:
         random_state = None
+    n_events = len(sources)-1
     sources = np.array(sources, dtype=object)
     if len(np.shape(sources)) == 2:
         sources = [sources]#If only one subject
@@ -180,7 +179,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             selected_label = mne.read_labels_from_annot(
                     subject, regexp=sources_subj[0][0], subjects_dir=subjects_dir, verbose=verbose)[0]
             label = mne.label.select_sources(subject, selected_label, subjects_dir=subjects_dir, random_state=random_state)
-            source_time_series = np.array([1e-99])#stim trigger
+            source_time_series = np.array([1e-20])#stim trigger
             source_simulator.add_data(label, source_time_series, events)
             source_simulator.add_data(label, source_time_series, events)
 
@@ -227,6 +226,10 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
                 raw = raw.pick_types(meg=True, eeg=False, stim=True)
             elif data_type == 'eeg/meg':
                 raw = raw.pick_types(meg=True, eeg=True, stim=True)
+            snr = np.zeros((len(info['ch_names']), n_events))
+            data = raw.get_data()
+            for event in range(n_events):
+                snr[:,event] = data[:,                   generating_events[event+2,0]+event_duration//2+1]
             if noise:
                 cov = mne.make_ad_hoc_cov(raw.info, verbose=verbose)
                 mne.simulation.add_noise(raw, cov, iir_filter=[0.2, -0.2, 0.04], verbose=verbose, random_state=random_state)
@@ -235,13 +238,15 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             files_subj.append(subj_file)
             np.save(subj_file.split('.fif')[0]+'_generating_events.npy', generating_events)
             files_subj.append(subj_file.split('.fif')[0]+'_generating_events.npy')
+            if save_snr:
+                np.save(subj_file.split('.fif')[0]+'_snr.npy', snr)
+                files_subj.append(subj_file.split('.fif')[0]+'_snr.npy')
             files.append(files_subj)
             print(f'{subj_file} simulated')
             
     if n_subj == 1:
-        return files[0]
-    else:
-        return files
+        files = files[0]
+    return files
         
 
 def demo(cpus, n_events, seed=123):
@@ -300,20 +305,22 @@ def demo(cpus, n_events, seed=123):
     positions = mne.pick_info(positions, sel=chan_list)
     return eeg_dat, random_source_times, positions
 
-def classification_true(test, true, sfreq, resampling_freq=None):
+def classification_true(test, true):
     '''
     '''
     from scipy.spatial import distance_matrix
-    if resampling_freq is None:
-        resampling_freq = sfreq
+    true0 = np.zeros((true.magnitudes.shape[0]+1, true.magnitudes.shape[1]))
+    true0[1:] = true.magnitudes
     n_events_iter = int(np.sum(np.isfinite(test.magnitudes.values[:,0])))
-    diffs = distance_matrix(test.magnitudes, true.magnitudes)[:n_events_iter]
+    diffs = distance_matrix(test.magnitudes, true0)
     index_event = dict((i,j) for i,j in enumerate(diffs.argmin(axis=1)))
     true_events_in = list(set(list(index_event.values())))
     unique_index_event = []
-    for event in true.magnitudes.event[true_events_in]:
+    for event in true_events_in:
         unique_index_event.append(np.argmin(diffs[:,event]))
-    return list(set(list(index_event.values()))),unique_index_event
+    true_events_in = np.array(list(set(list(index_event.values()))))
+    non_zero_in = np.where(np.array(true_events_in) != 0)[0]
+    return true_events_in[non_zero_in], np.array(unique_index_event)[non_zero_in]
 
 def simulated_times_and_parameters(generating_events, init, resampling_freq=None):
     sfreq = init.sfreq
@@ -334,8 +341,8 @@ def simulated_times_and_parameters(generating_events, init, resampling_freq=None
     ## Recover parameters
     true_parameters = np.tile(init.shape, (n_stages, 2))
     true_parameters[:,1] = init.mean_to_scale(np.mean(random_source_times,axis=0),init.shape)
-    true_parameters[0,1] += init.mean_to_scale(init.event_width_samples/2, init.shape)#adjust the fact that we generated onset but recover peak
-    true_parameters[-1,1] -= init.mean_to_scale(init.event_width_samples/2, init.shape)#same
+    true_parameters[0,1] += init.mean_to_scale(init.event_width_samples/2, init.shape)+1#adjust the fact that we generated onset but recover peak
+    true_parameters[1:,1] -= init.mean_to_scale(init.event_width_samples/2, init.shape)+1#same
     true_parameters[true_parameters[:,1] <= 0, 1] = 1e-3#Can happen in corner cases
     random_source_times = random_source_times*(1000/sfreq)/(1000/resampling_freq)
     ## Recover magnitudes
