@@ -207,7 +207,6 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
                 if len(rand_i[rand_i<0]) > 0:
                     warn(f'Negative stage duration were found, 1 is imputed for the {len(rand_i[rand_i<0])} trial(s)', UserWarning)
                     rand_i[rand_i<0] = 1
-                #random_source_times.append(rand_i) #varying event 
                 events[:, 0] = events[:,0] + rand_i # Events sample.
                 events[:, 2] = trigger  # All events have the sample id.
                 trigger += 1
@@ -317,14 +316,21 @@ def classification_true(test, true):
     true0[1:] = true.magnitudes
     n_events_iter = int(np.sum(np.isfinite(test.magnitudes.values[:,0])))
     diffs = distance_matrix(test.magnitudes, true0)
-    index_event = dict((i,j) for i,j in enumerate(diffs.argmin(axis=1)))
-    true_events_in = list(set(list(index_event.values())))
-    unique_index_event = []
-    for event in true_events_in:
-        unique_index_event.append(np.argmin(diffs[:,event]))
-    true_events_in = np.array(list(set(list(index_event.values()))))
-    non_zero_in = np.where(np.array(true_events_in) != 0)[0]
-    return true_events_in[non_zero_in]-1, np.array(unique_index_event)[non_zero_in]
+    index_event = np.zeros((n_events_iter,3))
+    index_event[:,0] = np.arange(n_events_iter)
+    index_event[:,1] = diffs.argmin(axis=1)
+    index_event[:,2] = diffs.min(axis=1)
+    index_event = index_event[1:]#removes empty 
+    unique_index_event, c = np.unique(index_event[:,1], return_counts=True)
+    duplicates = unique_index_event[c > 1]
+    unique_corrected =  np.zeros((len(true0),2))
+    while len(duplicates) > 0:
+        for dup in duplicates:
+            to_rem = np.max(index_event[np.where(index_event[:,1] == dup),2])
+        index_event = index_event[index_event[:,2] != to_rem]
+        unique_index_event, c = np.unique(index_event[:,1], return_counts=True)
+        duplicates = unique_index_event[c > 1]
+    return index_event[:,0], index_event[:,1]
 
 def simulated_times_and_parameters(generating_events, init, resampling_freq=None):
     sfreq = init.sfreq
@@ -345,15 +351,15 @@ def simulated_times_and_parameters(generating_events, init, resampling_freq=None
     ## Recover parameters
     true_parameters = np.tile(init.shape, (n_stages, 2))
     true_parameters[:,1] = init.mean_to_scale(np.mean(random_source_times,axis=0),init.shape)
-    true_parameters[0,1] += init.mean_to_scale(init.event_width_samples/2, init.shape)+1#adjust the fact that we generated onset but recover peak
-    true_parameters[1:,1] -= init.mean_to_scale(init.event_width_samples/2, init.shape)+1#same
+    true_parameters[0,1] += init.mean_to_scale(init.event_width_samples/2, init.shape)#adjust the fact that we generated onset but recover peak
+    true_parameters[-1,1] -= init.mean_to_scale(init.event_width_samples/2, init.shape)#same
     true_parameters[true_parameters[:,1] <= 0, 1] = 1e-3#Can happen in corner cases
     random_source_times = random_source_times*(1000/sfreq)/(1000/resampling_freq)
     ## Recover magnitudes
     sample_times = np.zeros((init.n_trials, n_events), dtype=int)
     for event in range(n_events):
         for trial in range(init.n_trials):
-            trial_time = init.starts[trial]+np.sum(random_source_times[trial,:event+1])+ init.event_width_samples//2
+            trial_time = init.starts[trial]+np.sum(random_source_times[trial,:event+1])+ init.event_width_samples//2+1
             if init.ends[trial] >= trial_time:#exceeds RT
                 sample_times[trial,event] = trial_time
             else:
