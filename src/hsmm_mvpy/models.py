@@ -1966,9 +1966,7 @@ class hmp:
         mags = np.zeros((max_event_n, self.n_dims)) #mags during estimation
         i = 0
         mags_props = np.zeros((1, 1, self.n_dims)) 
-        lkh_prev = self.fit_single(n_events+1, mags_props, pars_prop, [], [],\
-                            return_max=True, verbose=False, cpus=cpus, maximization=True,\
-                            min_iteration=min_iteration, tolerance=tolerance).likelihoods.values
+        lkh_prev = -np.inf
         while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events < max_event_n-1:
             prev_time = time
             if fix_iter:
