@@ -340,7 +340,7 @@ def classification_true(test, true):
         index_event = index_event[index_event[:,2] != to_rem]
         unique_index_event, c = np.unique(index_event[:,1], return_counts=True)
         duplicates = unique_index_event[c > 1]
-    return index_event[:,1], index_event[:,0]
+    return index_event[:,0], index_event[:,1]
 
 def simulated_times_and_parameters(generating_events, init, resampling_freq=None):
     sfreq = init.sfreq
