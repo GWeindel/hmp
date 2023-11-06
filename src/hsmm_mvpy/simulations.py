@@ -226,14 +226,18 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
                 raw = raw.pick_types(meg=True, eeg=False, stim=True)
             elif data_type == 'eeg/meg':
                 raw = raw.pick_types(meg=True, eeg=True, stim=True)
-            snr = np.zeros((len(info['ch_names']), n_events))
+            snr = np.zeros((2,len(info['ch_names']), n_events, n_trials))
             data = raw.get_data()
             for event in range(n_events):
-                snr[:,event] = data[:,                   generating_events[event+2,0]+event_duration//2+1]
+                times = generating_events[generating_events[:,2] == event+2,0]
+                snr[0,:,event,:] = data[:, times+event_duration//2+1]
             if noise:
                 cov = mne.make_ad_hoc_cov(raw.info, verbose=verbose)
-                mne.simulation.add_noise(raw, cov, iir_filter=[0.2, -0.2, 0.04], verbose=verbose, random_state=random_state)
+                mne.simulation.add_noise(raw, cov,  verbose=verbose,iir_filter=[0.2, -0.2, 0.04], random_state=random_state)
             data = raw.get_data()
+            for event in range(n_events):
+                times = generating_events[generating_events[:,2] == event+2,0]
+                snr[1,:,event,:] = data[:, times+event_duration//2+1]
             raw.save(subj_file, overwrite=True)
             files_subj.append(subj_file)
             np.save(subj_file.split('.fif')[0]+'_generating_events.npy', generating_events)
