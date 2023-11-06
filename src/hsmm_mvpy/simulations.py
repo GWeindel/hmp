@@ -314,12 +314,22 @@ def classification_true(test, true):
     from scipy.spatial import distance_matrix
     true0 = np.zeros((true.magnitudes.shape[0]+1, true.magnitudes.shape[1]))
     true0[1:] = true.magnitudes
+    print(true0)
+    print(test.magnitudes)
     n_events_iter = int(np.sum(np.isfinite(test.magnitudes.values[:,0])))
     diffs = distance_matrix(test.magnitudes, true0)
+    print(diffs.argmin(axis=1))
     index_event = np.zeros((n_events_iter,3))
     index_event[:,0] = np.arange(n_events_iter)
     index_event[:,1] = diffs.argmin(axis=1)
     index_event[:,2] = diffs.min(axis=1)
+    # index_event = dict((i,j) for i,j in enumerate(diffs.argmin(axis=1)))
+
+    # true_events_in = np.array(list(set(list(index_event.values()))))
+    print(diffs)
+    print(index_event)
+    # print(unique_index_event)
+    # print(true_events_in)
     index_event = index_event[1:]#removes empty 
     unique_index_event, c = np.unique(index_event[:,1], return_counts=True)
     duplicates = unique_index_event[c > 1]
@@ -330,7 +340,7 @@ def classification_true(test, true):
         index_event = index_event[index_event[:,2] != to_rem]
         unique_index_event, c = np.unique(index_event[:,1], return_counts=True)
         duplicates = unique_index_event[c > 1]
-    return index_event[:,0], index_event[:,1]
+    return index_event[:,1], index_event[:,0]
 
 def simulated_times_and_parameters(generating_events, init, resampling_freq=None):
     sfreq = init.sfreq
