@@ -320,7 +320,7 @@ def classification_true(test, true):
         unique_index_event.append(np.argmin(diffs[:,event]))
     true_events_in = np.array(list(set(list(index_event.values()))))
     non_zero_in = np.where(np.array(true_events_in) != 0)[0]
-    return true_events_in[non_zero_in], np.array(unique_index_event)[non_zero_in]
+    return true_events_in[non_zero_in]-1, np.array(unique_index_event)[non_zero_in]
 
 def simulated_times_and_parameters(generating_events, init, resampling_freq=None):
     sfreq = init.sfreq
