@@ -1954,7 +1954,7 @@ class hmp:
         if diagnostic:
             cycol = cycle(default_colors)
         pbar = tqdm(total = int(np.rint(end)))#progress bar
-        n_events, j, time = 0,5,0#5 avoids hitting time 0
+        n_events, j, time = 0,1,0
 
         #Init pars
         pars = np.zeros((max_event_n+1,2))
