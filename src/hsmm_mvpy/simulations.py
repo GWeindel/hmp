@@ -320,7 +320,7 @@ def classification_true(test, true):
     index_event[:,0] = np.arange(n_events_iter)
     index_event[:,1] = diffs.argmin(axis=1)
     index_event[:,2] = diffs.min(axis=1)
-    index_event = index_event[1:]#removes empty 
+    index_event = index_event[index_event[:,1] != 0]#removes empty 
     unique_index_event, c = np.unique(index_event[:,1], return_counts=True)
     duplicates = unique_index_event[c > 1]
     unique_corrected =  np.zeros((len(true0),2))
@@ -330,7 +330,7 @@ def classification_true(test, true):
         index_event = index_event[index_event[:,2] != to_rem]
         unique_index_event, c = np.unique(index_event[:,1], return_counts=True)
         duplicates = unique_index_event[c > 1]
-    return index_event[:,1], index_event[:,0]
+    return index_event[:,1].astype(int), index_event[:,0].astype(int)
 
 def simulated_times_and_parameters(generating_events, init, resampling_freq=None):
     sfreq = init.sfreq
