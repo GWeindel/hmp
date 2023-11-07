@@ -14,7 +14,8 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
                 figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
                 ylabels=[], xlabel = None, max_time = None, vmin=None, vmax=None, title=False, ax=None, 
                 sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange',
-                colorbar=True, topo_size_scaling=False, as_time=False):
+                colorbar=True, topo_size_scaling=False, as_time=False,
+                        linecolors='black'):
     '''
     Plotting the event topologies at the average time of the onset of the next stage.
     
@@ -259,7 +260,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
    
     #add vlines across all rows
     if not cond_plot:
-        __display_times(ax, times_to_display, 0, time_step, max_time, times, n_iter)
+        __display_times(ax, times_to_display, 0, time_step, max_time, times, linecolors, n_iter)
 
     if not return_ax:
         ax.spines['top'].set_visible(False)
@@ -601,11 +602,11 @@ def plot_distribution(times, colors=default_colors, xlims=False, figsize=(8, 3),
         axs.set_xlim(xlims[0], xlims[1])
     return axs
 
-def __display_times(ax, times_to_display, yoffset, time_step, max_time, times, ymax=1):
+def __display_times(ax, times_to_display, yoffset, time_step, max_time, times, linecolors, ymax=1):
     n_iter = len(times)
     times = np.asarray(times,dtype=object)
     if isinstance(times_to_display, (np.ndarray, np.generic)):
-        ax.vlines(times_to_display*time_step, yoffset-1.1, yoffset+ymax+1.1, ls='--')
+        ax.vlines(times_to_display*time_step, yoffset-1.1, yoffset+ymax+1.1, ls='--', colors=linecolors)
         ax.set_xlim(-1*time_step, np.max(times_to_display)*time_step * 1.05)
     if max_time:
         ax.set_xlim(-1*time_step, max_time)
@@ -977,13 +978,24 @@ def plot_expected_distribution(distribution, mean, shape, location=0, xmax=300, 
             from hsmm_mvpy.utils import halfn_scale_to_mean,halfn_mean_to_scale
             shape = 1
             scale_to_mean, mean_to_scale = halfn_scale_to_mean,halfn_mean_to_scale
+        case 'uniform':
+            from scipy.stats import uniform as sp_dist
+            from hsmm_mvpy.utils import uniform_scale_to_mean,uniform_mean_to_scale
+            scale_to_mean, mean_to_scale = uniform_scale_to_mean,uniform_mean_to_scale
+            location=None
         case _:
                 raise ValueError(f'Unknown Distribution {distribution}')
     if ax is None:
         ax = plt
     x = np.linspace(xmin, xmax, num=num)
-    y = sp_dist.cdf(x, shape, scale=mean_to_scale(mean, shape), loc=location)
+    if distribution != 'uniform': 
+        y = sp_dist.cdf(x, shape, scale=mean_to_scale(mean, shape), loc=location)
+    else:
+        y = sp_dist.cdf(x, shape, scale=mean_to_scale(mean, shape))
     y = np.diff(y, prepend=0)#going to pmf
     ax.plot(x, y, label=label, color=color)
     if display_mean:
-        ax.vlines(sp_dist.mean(shape, scale=mean_to_scale(mean, shape), loc=location), np.min(y), np.max(y), color=color)
+        if distribution != 'uniform': 
+            ax.vlines(sp_dist.mean(shape, scale=mean_to_scale(mean, shape), loc=location), np.min(y), np.max(y), color=color)
+        else: 
+            ax.vlines(sp_dist.mean(shape, scale=mean_to_scale(mean, shape)), np.min(y), np.max(y), color=color)
