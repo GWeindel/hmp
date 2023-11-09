@@ -1907,7 +1907,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=False, max_iterations=1e3, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None):
+    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=False, max_iterations=1e3, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None, start=10):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -1939,6 +1939,8 @@ class hmp:
                 The minimum number of iterations for the EM() function
          	 decimate: int 
                 If not None, decimate the grid search on magnitudes by the int provided
+             start: float
+                 Where to start the starting point search, for some reason values below 10 samples produce unexpected results
          
          Returns: 
          	 A tuple containing the fitted parameters and the fitted
@@ -1954,7 +1956,7 @@ class hmp:
         if diagnostic:
             cycol = cycle(default_colors)
         pbar = tqdm(total = int(np.rint(end)))#progress bar
-        n_events, j, time = 0,1,0
+        n_events, j, time = 0,start,0
 
         #Init pars
         pars = np.zeros((max_event_n+1,2))
