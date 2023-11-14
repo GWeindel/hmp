@@ -677,6 +677,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         pca_weigths = np.identity(len(data.component))
     # zscore either across all data, by participant (preferred), or by trial
     if apply_zscore:
+        ori_coords = data.coords
         match apply_zscore:
             case 'all':
                 data = data.stack(comp=['component']).groupby('comp').map(zscore_xarray).unstack()
@@ -685,11 +686,10 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
             case 'trial':
                 data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
         data = data.transpose('participant','epochs','samples','component')
-    
+        data = data.assign_coords(ori_coords)
     data.attrs['pca_weights'] = pca_weights
     data.attrs['sfreq'] = sfreq
-    if stack_data:
-        data = stack_data(data)
+    data = stack_data(data)
     return data
     
 
@@ -1388,8 +1388,7 @@ def condition_selection(hmp_data, epoch_data, condition_string, variable='event'
     ----------
     hmp_data : xr.Dataset
         transformed EEG data for hmp, from utils.transform_data
-    epoch_data : xr.Dataset
-        Original EEG dataset, used to keep condition labels
+    epoch_data : deprecated
     condition_string : str | num
         condition indicator for selection
     variable : str
@@ -1404,11 +1403,12 @@ def condition_selection(hmp_data, epoch_data, condition_string, variable='event'
         Subset of hmp_data.
         
     '''
+    unstacked = hmp_data.unstack()
     if method == 'equal':
-        unstacked = hmp_data.unstack().where(epoch_data[variable] == condition_string, drop=True)
+        unstacked = unstacked.where(unstacked[variable] == condition_string, drop=True)
         stacked = stack_data(unstacked)
     elif method == 'contains':
-        unstacked = hmp_data.unstack().where(epoch_data[variable].str.contains(condition_string),drop=True)
+        unstacked = unstacked.where(unstacked[variable].str.contains(condition_string),drop=True)
         stacked = stack_data(unstacked)
     else:
         print('unknown method, returning original data')
