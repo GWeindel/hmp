@@ -1867,10 +1867,10 @@ class hmp:
             if ax is None:
                  _, ax = plt.subplots(figsize=figsize, dpi=100)
             ax.plot(self.scale_to_mean(pars_init[:,0,1],self.shape), lkhs_init, ls)
-        plt.ylabel('Log-likelihood')
-        plt.xlabel('Sample number')
-        if show:
-            plt.show()        
+            plt.ylabel('Log-likelihood')
+            plt.xlabel('Sample number')
+            if show:
+                plt.show()        
         if method is None:
             #pars, mags, lkhs = pars_init, mags_init, lkhs_init
             return ax
@@ -1907,7 +1907,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=False, max_iterations=1e3, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None, start=10):
+    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=False, max_iterations=1e3, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None, start=1):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -1963,13 +1963,17 @@ class hmp:
         pars[:,0] = self.shape #gamma parameters during estimation, shape x scale
         pars_prop = pars[:n_events+2].copy()
         pars_prop[0,1] = self.mean_to_scale(j,self.shape)#initialize gamma_parameters
-        pars_prop[n_events+1,1] = last_stage = self.mean_to_scale(end-j,self.shape)
+        last_stage = self.mean_to_scale(end-j,self.shape)
         #Init mags
         mags = np.zeros((max_event_n, self.n_dims)) #mags during estimation
         i = 0
-        mags_props = np.zeros((1, 1, self.n_dims)) 
-        lkh_prev = -np.inf
+        mags_props = np.zeros((1, 1, self.n_dims))
+        lkh_prev = self.fit_single(n_events+1, parameters_to_fix=[0,1], magnitudes_to_fix=0, verbose=False).likelihoods.values
+        lkhs = self.sliding_event(fix_pars=True, fix_mags=True, method='max', verbose=False)[0]        
+        delta = np.max(lkhs) - np.min(lkhs) + 1
         while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events < max_event_n-1:
+            last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:n_events+1,1])
+            pars_prop[n_events+1,1] = last_stage
             prev_time = time
             if fix_iter:
                 to_fix = [range(n_events-1)]
@@ -1987,7 +1991,7 @@ class hmp:
                             min_iteration=min_iteration, tolerance=tolerance)
             if diagnostic:#Diagnostic plot
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
-            if solutions.likelihoods > lkh_prev :#and np.diff(solutions.traces[-2:]) > 0:#Success
+            if solutions.likelihoods - lkh_prev > delta:#and np.diff(solutions.traces[-2:]) > 0:#Success
                 lkh_prev = solutions.likelihoods.values
                 if diagnostic:#Diagnostic plot
                     color = next(cycol)
@@ -2003,8 +2007,6 @@ class hmp:
             #New parameter proposition
             pars_prop = pars[:n_events+2].copy()
             pars_prop[n_events,1] = self.mean_to_scale(step*j, self.shape)
-            last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:n_events+1,1])
-            pars_prop[n_events+1,1] = last_stage
             time = int(np.round(self.scale_to_mean(np.sum(pars[:n_events,1]), self.shape)))
             pbar.update(int(np.rint(time-prev_time)))
         pbar.update(int(np.round(np.rint(end))-np.rint(time)))
