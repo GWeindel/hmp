@@ -954,10 +954,10 @@ class hmp:
 
         #check affected stages
         if self.correlation_distance is None: 
-            corr_stages = np.where(corr > self.correlation_threshold)[0] + 1 # +1 as we skip first stage
+            corr_stages = np.where(np.random.uniform(size=len(corr)) < corr)[0] + 1 # +1 as we skip first stage
         else: #also take distance into account
             durations = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters[1:-1,:]])
-            corr_stages = np.where(np.logical_and(corr > self.correlation_threshold, durations <= self.correlation_distance))[0] + 1 # +1 as we skip first stage
+            corr_stages = np.where(np.logical_and(np.random.uniform(size=len(corr)) < corr, durations <= self.correlation_distance))[0] + 1 # +1 as we skip first stage
 
         #set affected events and stages to prev parameters
         blocked = np.zeros((magnitudes.shape[0],))
