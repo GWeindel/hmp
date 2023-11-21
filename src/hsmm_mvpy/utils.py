@@ -746,9 +746,9 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
     else:
         #fit model
         n_eve = np.max(initial_fit.event.values)+1
-        fit_without_pp = model_without_pp.fit_single(n_eve, initial_fit.magnitudes.dropna('event').values, initial_fit.parameters.dropna('stage').values, verbose=False)
+        fit_without_pp = model_without_pp.fit_single(n_eve, initial_fit.magnitudes.dropna('event',how='all').values, initial_fit.parameters.dropna('stage').values, verbose=False)
         #calc lkh
-        likelihood = model_pp.estim_probs(fit_without_pp.magnitudes.dropna('event').values, fit_without_pp.parameters.dropna('stage').values, n_eve, None, True)
+        likelihood = model_pp.estim_probs(fit_without_pp.magnitudes.dropna('event',how='all').values, fit_without_pp.parameters.dropna('stage').values, n_eve, None, True)
 
     return likelihood
 
@@ -870,12 +870,12 @@ def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
                 loocv = []
                 if cpus == 1: #not mp            
                     for participant in participants_idx:
-                        loocv.append(loocv_calcs(data, init, participant, model.sel(n_events=n_eve).dropna('event'), verbose=verbose))
+                        loocv.append(loocv_calcs(data, init, participant, model.sel(n_events=n_eve).dropna('event',how='all'), verbose=verbose))
                 else: #mp
                     with mp.Pool(processes=cpus) as pool:
                         loocv = pool.starmap(loocv_calcs,
                                             zip(itertools.repeat(data), itertools.repeat(init),participants_idx,
-                                                itertools.repeat(model.sel(n_events=n_eve).dropna('event')),itertools.repeat(1),itertools.repeat(verbose)))
+                                                itertools.repeat(model.sel(n_events=n_eve).dropna('event',how='all')),itertools.repeat(1),itertools.repeat(verbose)))
 
                 loocv_back.append(xr.DataArray(np.expand_dims(np.array(loocv).astype(np.float64),axis=0), 
                                         dims=('n_event', 'participant'),
@@ -933,8 +933,8 @@ def example_complex_fit_func(hmp_model, max_events=None, n_events=1, mags_map=No
     backward_model = hmp_model.backward_estimation(max_events)
 
     #select n_events model
-    n_event_model = backward_model.sel(n_events=n_events).dropna('event')
-    mags = n_event_model.magnitudes.dropna('event').data
+    n_event_model = backward_model.sel(n_events=n_events).dropna('event',how='all')
+    mags = n_event_model.magnitudes.dropna('event',how='all').data
     pars = n_event_model.parameters.dropna('stage').data
 
     #fit condition model
@@ -1068,8 +1068,8 @@ def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False
 
         likelihood = model_pp.estim_probs_conds(estimate.magnitudes.values, estimate.parameters.values, estimate.mags_map, estimate.pars_map, conds, lkh_only=True)
     else:
-        n_eve = np.max(estimate.event.dropna('event').values)+1
-        likelihood = model_pp.estim_probs(estimate.magnitudes.dropna('event').values, estimate.parameters.dropna('stage').values, n_eve, None, True)
+        n_eve = np.max(estimate.event.dropna('event',how='all').values)+1
+        likelihood = model_pp.estim_probs(estimate.magnitudes.dropna('event',how='all').values, estimate.parameters.dropna('stage').values, n_eve, None, True)
 
     return likelihood
         
@@ -1193,12 +1193,12 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
                 loocv = []
                 if cpus == 1: #not mp            
                     for pidx, participant in enumerate(participants_idx):
-                        loocv.append(loocv_likelihood(data, init, participant, estimates[pidx].sel(n_events=n_eve).dropna('event'), verbose=verbose))
+                        loocv.append(loocv_likelihood(data, init, participant, estimates[pidx].sel(n_events=n_eve).dropna('event', how='all'), verbose=verbose))
                 else: #mp
                     with mp.Pool(processes=cpus) as pool:
                         loocv = pool.starmap(loocv_likelihood,
                                             zip(itertools.repeat(data), itertools.repeat(init),participants_idx,
-                                                [estimates[x].sel(n_events=n_eve).dropna('event') for x in range(len(participants_idx))],itertools.repeat(1),itertools.repeat(verbose)))
+                                                [estimates[x].sel(n_events=n_eve).dropna('event',how='all') for x in range(len(participants_idx))],itertools.repeat(1),itertools.repeat(verbose)))
 
                 loocv_back.append(xr.DataArray(np.expand_dims(np.array(loocv).astype(np.float64),axis=0), 
                                         dims=('n_event', 'participant'),
