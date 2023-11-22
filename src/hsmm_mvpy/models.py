@@ -1327,17 +1327,18 @@ class hmp:
 
                 if self.correlation_distance is None and (corr > self.correlation_threshold).any():
                     corr_error = 1
-                elif np.logical_and(corr > self.correlation_threshold, durations <= self.correlation_distance).any():
+                elif self.correlation_distance is not None and np.logical_and(corr > self.correlation_threshold, durations <= self.correlation_distance).any():
                     corr_error = 1
         
-        if verbose and corr_error == 1:
-            print('\nModel does not adhere to correlation thresholds.')
-        if advise:
-            print('It is advised to do either of the following:')
-            print('- try different starting points')
-            print('- reduce the number of events')
-            print('- increase the correlation threshold or decrease the correlation distance\n')
-            
+        if corr_error == 1:
+            if verbose: 
+                print('\nModel does not adhere to correlation thresholds.')
+                if advise:
+                    print('It is advised to do either of the following:')
+                    print('- try different starting points')
+                    print('- reduce the number of events')
+                    print('- increase the correlation threshold or decrease the correlation distance\n')
+                    
         return corr_error
 
     def event_times(self, eventprobs, mean=True):
