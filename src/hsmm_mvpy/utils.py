@@ -748,7 +748,7 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
         n_eve = np.max(initial_fit.event.values)+1
         fit_without_pp = model_without_pp.fit_single(n_eve, initial_fit.magnitudes.dropna('event',how='all').values, initial_fit.parameters.dropna('stage').values, verbose=False)
         #calc lkh
-        likelihood = model_pp.estim_probs(fit_without_pp.magnitudes.dropna('event',how='all').values, fit_without_pp.parameters.dropna('stage').values, fit_without_pp.locations.dropna('stage').values.astype(int), n_eve, None, True, None)
+        likelihood = model_pp.estim_probs(fit_without_pp.magnitudes.dropna('event',how='all').values, fit_without_pp.parameters.dropna('stage').values, fit_without_pp.locations.dropna('stage').values.astype(int), n_eve, None, True)
 
     return likelihood
 
@@ -1069,7 +1069,7 @@ def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False
         likelihood = model_pp.estim_probs_conds(estimate.magnitudes.values, estimate.parameters.values, estimate.mags_map, estimate.pars_map, conds, lkh_only=True)
     else:
         n_eve = np.max(estimate.event.dropna('event', how='all').values)+1
-        likelihood = model_pp.estim_probs(estimate.magnitudes.dropna('event', how='all').values, estimate.parameters.dropna('stage').values, estimate.locations.dropna('stage').values.astype(int), n_eve, None, True, None)
+        likelihood = model_pp.estim_probs(estimate.magnitudes.dropna('event', how='all').values, estimate.parameters.dropna('stage').values, estimate.locations.dropna('stage').values.astype(int), n_eve, None, True)
 
     return likelihood
         

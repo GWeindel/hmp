@@ -832,23 +832,25 @@ class hmp:
             raise ValueError(f'Wrong scale parameter input, provided scale parameter(s) {null_stages} should be positive but have value {parameters[...,-1].flatten()[null_stages]}')
         if n_cond is None and len(wrong_shape)>0:
             raise ValueError(f'Wrong shape parameter input, provided parameter(s) {wrong_shape} shape is {parameters[...,-2][wrong_shape]} but expected {self.shape}')
-        
-        initial_parameters = np.copy(parameters)
-        initial_magnitudes = np.copy(magnitudes)
+
         n_events = magnitudes.shape[magnitudes.ndim-2]
+        initial_magnitudes = magnitudes.copy()
+        initial_parameters = parameters.copy()
+        if locations is None:
+            locations = np.zeros((n_events+1,),dtype=int) #location per stage
+            if self.location_corr_threshold is None:
+                locations[1:-1] = self.location
+        else:
+            locations = locations.astype(int)
         
         if n_cond is not None:
             lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
         else:
-            if locations is None:
-                locations = np.zeros((n_events+1,),dtype=int) #location per stage
-            else:
-                locations = locations.astype(int)
-            lkh, eventprobs, locations = self.estim_probs(magnitudes, parameters, locations, n_events,parameters_prev=parameters)
+            lkh, eventprobs = self.estim_probs(magnitudes, parameters, locations, n_events)
 
         traces = [lkh.copy()]
         locations_dev = [locations.copy()]
-        param_dev = [initial_parameters]
+        param_dev = [parameters.copy()]
 
         i = 0
         if not maximization or n_events==0:
@@ -856,17 +858,13 @@ class hmp:
         else:
             lkh_prev = lkh
             parameters_prev = parameters.copy()
+            locations_prev = locations.copy()
+
             while i < max_iteration :#Expectation-Maximization algorithm
                 
                 stage_durations = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters])
                 stage_durations_prev = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters_prev])
                 
-                #print(stage_durations)
-                #print(stage_durations_prev)
-                #print(np.abs(stage_durations-stage_durations_prev))
-                #print()
-                #print(lkh)
-                #print(lkh_prev)
                 if i >= min_iteration and (np.isneginf(lkh) or (locations == locations_prev).all() and tolerance > np.abs(lkh-lkh_prev)/np.abs(lkh_prev) and (np.abs(stage_durations-stage_durations_prev) < .1).all()):
                     if np.isneginf(lkh):
                         print('-!- Estimation stopped because of -inf log-likelihood: this typically indicates requesting too many events -!-')
@@ -875,7 +873,7 @@ class hmp:
                 #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
                 locations_prev = locations.copy()
-                parameters_prev = param_dev[-1].copy()
+                parameters_prev = parameters.copy()
 
                 if n_cond is not None: #condition dependent
                     for c in range(n_cond): #get params/mags
@@ -906,11 +904,12 @@ class hmp:
                     magnitudes, parameters = self.get_magnitudes_parameters_expectation(eventprobs)
                     magnitudes[magnitudes_to_fix,:] = initial_magnitudes[magnitudes_to_fix,:].copy()
                     parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
+                    locations = self.get_locations(locations, magnitudes, parameters, parameters_prev)
 
                 if n_cond is not None:
                     lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
                 else:
-                    lkh, eventprobs, locations = self.estim_probs(magnitudes, parameters, locations, n_events,parameters_prev=parameters_prev)
+                    lkh, eventprobs = self.estim_probs(magnitudes, parameters, locations, n_events)
                 
                 traces.append(lkh)
                 locations_dev.append(locations.copy())
@@ -960,8 +959,29 @@ class hmp:
             parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=event_times_mean)                            
 
         return [magnitudes, parameters]
+    
+    def get_locations(self, locations, magnitudes, parameters, parameters_prev):
+        #if no correlation threshold is set, locations are set for all stages except first and last stage
+        #to self.location
+        #else, locations are only set for stages that exceed location_corr_threshold
+        n_events = magnitudes.shape[magnitudes.ndim-2]
+        if self.location_corr_threshold is None:
+            locations[1:-1] = self.location
+        else:
+            if n_events > 1 and not (magnitudes == 0).all():
+                corr = np.corrcoef(magnitudes)[:-1,1:].diagonal() #only interested in sequential corrs
+                stage_durations = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters[1:-1,:]])
+                stage_durations_prev = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters_prev[1:-1,:]])
 
-    def estim_probs(self, magnitudes, parameters, locations, n_events=None, subset_epochs=None, lkh_only=False, parameters_prev=None):
+                for ev in range(n_events-1):
+                    #high correlation and not moving away from each other,
+                    if corr[ev] > self.location_corr_threshold and stage_durations[ev] - stage_durations_prev[ev] < .1:
+                        #and either close to each other or location_corr_duration is None
+                        if self.location_corr_duration is None or stage_durations[ev] < self.location_corr_duration / self.steps:
+                            locations[ev + 1] += 1 #indexes stages
+        return locations
+
+    def estim_probs(self, magnitudes, parameters, locations, n_events=None, subset_epochs=None, lkh_only=False):
         '''
         parameters
         ----------
@@ -1020,23 +1040,6 @@ class hmp:
                 gains[starts[trial]:ends[trial]+1,:][::-1,::-1]
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage scale
-
-        #if no correlation threshold is set, locations are set for all stages except first and last stage
-        #to self.location
-        #else, locations are only set for stages that exceed location_corr_threshold
-        if self.location_corr_threshold is None:
-            locations[1:-1] = self.location
-        else:
-            if parameters_prev is not None and n_events > 1 and not (magnitudes == 0).all():
-                corr = np.corrcoef(magnitudes)[:-1,1:].diagonal() #only interested in sequential corrs
-                stage_durations = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters[1:-1,:]])
-                stage_durations_prev = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters_prev[1:-1,:]])
-                for ev in range(n_events-1):
-                    #high correlation and not moving away from each other,
-                    #and either close to each other or location_corr_duration is None
-                    if corr[ev] > self.location_corr_threshold and stage_durations[ev] - stage_durations_prev[ev] < .1 and (self.location_corr_duration is None or stage_durations[ev] < self.location_corr_duration / self.steps):
-                        locations[ev + 1] += 1 #indexes stages
-
         for stage in range(n_stages):
             pmf[:,stage] = np.concatenate((np.repeat(0,locations[stage]), \
                 self.distribution_pmf(parameters[stage,0], parameters[stage,1])[locations[stage]:]))
@@ -1111,7 +1114,7 @@ class hmp:
         if lkh_only:
             return likelihood
         else:
-            return [likelihood, eventprobs, locations]
+            return [likelihood, eventprobs]
 
     def estim_probs_conds(self, magnitudes, parameters, mags_map, pars_map, conds, lkh_only=False, cpus=1):
         '''
