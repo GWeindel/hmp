@@ -904,7 +904,8 @@ class hmp:
                     magnitudes, parameters = self.get_magnitudes_parameters_expectation(eventprobs)
                     magnitudes[magnitudes_to_fix,:] = initial_magnitudes[magnitudes_to_fix,:].copy()
                     parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
-                    locations = self.get_locations(locations, magnitudes, parameters, parameters_prev)
+                    if self.location_corr_threshold is not None:
+                        locations = self.get_locations(locations, magnitudes, parameters, parameters_prev)
 
                 if n_cond is not None:
                     lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
@@ -974,7 +975,7 @@ class hmp:
                 stage_durations_prev = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters_prev[1:-1,:]])
 
                 for ev in range(n_events-1):
-                    #high correlation and not moving away from each other,
+                    #high correlation and moving away from each other,
                     if corr[ev] > self.location_corr_threshold and stage_durations[ev] - stage_durations_prev[ev] < .1:
                         #and either close to each other or location_corr_duration is None
                         if self.location_corr_duration is None or stage_durations[ev] < self.location_corr_duration / self.steps:
@@ -1284,7 +1285,7 @@ class hmp:
                             itertools.repeat(tolerance), itertools.repeat(max_iteration), \
                             itertools.repeat(maximization), itertools.repeat(1),\
                             itertools.repeat(1),itertools.repeat('random'), itertools.repeat(True),\
-                            itertools.repeat(False),itertools.repeat(1),   locs_temp) #itertools.repeat(None))
+                            itertools.repeat(False),itertools.repeat(1), itertools.repeat(None))#   locs_temp) 
                 with mp.Pool(processes=self.cpus) as pool:
                     event_loo_likelihood_temp = pool.starmap(self.fit_single, inputs)
 
