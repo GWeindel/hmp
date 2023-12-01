@@ -110,7 +110,7 @@ class hmp:
         self.event_width = event_width
         self.event_width_samples = int(np.round(self.event_width / self.steps))
         if location is None:
-            self.location = int(self.event_width / self.steps//2)+1
+            self.location = int(self.event_width / self.steps)
         else:
             self.location = int(np.rint(location))
         durations = data.unstack().sel(component=0).rename({'epochs':'trials'})\
