@@ -342,7 +342,7 @@ class hmp:
             non_converged = 0
             for iteration in range(len(estimates)):
                 #Filters out non-converged models
-                if np.diff(estimates[iteration][4][-2:]) < 0:
+                if np.diff(estimates[iteration][5][-2:]) < 0:
                     lkhs_sp[iteration] = -np.inf
                     non_converged += 1
                     
@@ -865,7 +865,10 @@ class hmp:
                 stage_durations = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters])
                 stage_durations_prev = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters_prev])
                 
-                if i >= min_iteration and (np.isneginf(lkh) or (locations == locations_prev).all() and tolerance > np.abs(lkh-lkh_prev)/np.abs(lkh_prev) and (np.abs(stage_durations-stage_durations_prev) < .1).all()):
+                if i >= min_iteration and (np.isneginf(lkh) or (locations == locations_prev).all() and tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)): #and (np.abs(stage_durations-stage_durations_prev) < .1).all()):
+                                
+                #if i >= min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
+               
                     if np.isneginf(lkh):
                         print('-!- Estimation stopped because of -inf log-likelihood: this typically indicates requesting too many events -!-')
                     break
@@ -1183,9 +1186,11 @@ class hmp:
         '''
         if scale == 0:
             warn('Convergence failed: one stage has been found to be null')
-        p = self.pdf(np.arange(self.max_d), shape, scale=scale)
-        p = p/np.sum(p)
-        p[np.isnan(p)] = 0 #remove potential nans
+            p = np.repeat(0,self.max_d)
+        else:
+            p = self.pdf(np.arange(self.max_d), shape, scale=scale)
+            p = p/np.sum(p)
+            p[np.isnan(p)] = 0 #remove potential nans
         return p
     
     def scale_parameters(self, eventprobs=None, n_events=None, averagepos=None):
@@ -2058,39 +2063,47 @@ class hmp:
         if diagnostic:
             cycol = cycle(default_colors)
         pbar = tqdm(total = int(np.rint(end)))#progress bar
-        n_events, j, time = 0,start,0
+        n_events, j, time = 1,start,0
 
         #Init pars
         pars = np.zeros((max_event_n+1,2))
         pars[:,0] = self.shape #gamma parameters during estimation, shape x scale
-        pars_prop = pars[:n_events+2].copy()
+        pars_prop = pars[:n_events+1].copy()
         pars_prop[0,1] = self.mean_to_scale(j,self.shape)#initialize gamma_parameters
         last_stage = self.mean_to_scale(end-j,self.shape)
+        pars_prop[-1,1] = last_stage
         #Init mags
         mags = np.zeros((max_event_n, self.n_dims)) #mags during estimation
         i = 0
         mags_props = np.zeros((1, 1, self.n_dims))
-        lkh_prev = self.fit_single(n_events+1, parameters_to_fix=[0,1], magnitudes_to_fix=0, verbose=False).likelihoods.values
+        #Init locations
+        locations = np.zeros((max_event_n+1,),dtype=int) #location per stage
+        locations_props = locations[:n_events+1]
+        if self.location_corr_threshold is None:
+            locations_props[1:-1] = self.location
+
+        lkh_prev = self.fit_single(n_events, parameters_to_fix=[0,1], magnitudes_to_fix=0, verbose=False).likelihoods.values
         lkhs = self.sliding_event(fix_pars=True, fix_mags=True, method='max', verbose=False)[0]        
-        delta = np.max(lkhs) - np.min(lkhs) + 1
+        delta = np.max(lkhs) - np.min(lkhs) + 1 #max delta just on position - magntidues should add to this to be worth including
         while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events < max_event_n-1:
-            last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:n_events+1,1])
-            pars_prop[n_events+1,1] = last_stage
+            last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:-1,1])
+            pars_prop[n_events,1] = last_stage
             prev_time = time
             if fix_iter:
-                to_fix = [range(n_events-1)]
+                to_fix = [range(n_events-2)]
             else: to_fix = []
             #Generate a grid of magnitudes as proposition 
             if decimate is None:
-                mags_props = self.gen_mags(n_events+1, n_samples=grid_points, verbose=False)
+                mags_props = self.gen_mags(n_events, n_samples=grid_points, verbose=False)
             else:
-                mags_props = self.gen_mags(n_events+1, decimate=decimate, verbose=False)
+                mags_props = self.gen_mags(n_events, decimate=decimate, verbose=False) #always 0?
             #replave eventual event already found
-            mags_props[:,:n_events,:] = np.tile(mags[:n_events,:], (len(mags_props), 1, 1))
+            mags_props[:,:n_events-1,:] = np.tile(mags[:n_events-1,:], (len(mags_props), 1, 1))
             #estimate all grid_points models while fixing previous found events
-            solutions = self.fit_single(n_events+1, mags_props, pars_prop, to_fix, to_fix[:-1],\
+            solutions = self.fit_single(n_events, mags_props, pars_prop, to_fix, to_fix[:-1],\
                             return_max=True, verbose=False, cpus=cpus,\
-                            min_iteration=min_iteration, tolerance=tolerance)
+                            min_iteration=min_iteration, tolerance=tolerance, locations=locations_props)
+            locations[:n_events+1] = solutions.locations.values
             if diagnostic:#Diagnostic plot
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
             if solutions.likelihoods - lkh_prev > delta:#and np.diff(solutions.traces[-2:]) > 0:#Success
@@ -2098,20 +2111,25 @@ class hmp:
                 if diagnostic:#Diagnostic plot
                     color = next(cycol)
                     plt.plot(solutions.traces.T, c=color, label=f'Iteration {i}')
-                mags[:n_events+1], pars[:n_events+2] = solutions.magnitudes.values,\
+                mags[:n_events], pars[:n_events+1] = solutions.magnitudes.values,\
                     solutions.parameters.values
+                if verbose:
+                    print(f'Transition event {n_events} found around sample {int(np.round(self.scale_to_mean(np.sum(pars[:n_events-1,1]), self.shape)))}')
+
                 n_events += 1
                 j = 1
-                if verbose:
-                    print(f'Transition event {n_events} found around sample {int(np.round(self.scale_to_mean(np.sum(pars[:n_events,1]), self.shape)))}')
             j += 1
             i += 1
             #New parameter proposition
-            pars_prop = pars[:n_events+2].copy()
-            pars_prop[n_events,1] = self.mean_to_scale(step*j, self.shape)
+            pars_prop = pars[:n_events+1].copy()
+            pars_prop[n_events-1,1] = self.mean_to_scale(step*j, self.shape)
+            locations_props = locations[:n_events+1].copy()
+            if self.location_corr_threshold is None:
+                locations_props[1:-1] = self.location
             time = int(np.round(self.scale_to_mean(np.sum(pars[:n_events,1]), self.shape)))
             pbar.update(int(np.rint(time-prev_time)))
         pbar.update(int(np.round(np.rint(end))-np.rint(time)))
+        n_events = n_events-1
         if diagnostic:
             plt.ylabel('Log-likelihood')
             plt.xlabel('EM iteration')
@@ -2119,8 +2137,9 @@ class hmp:
             plt.show()
         mags = mags[:n_events, :]
         pars = pars[:n_events+1, :]
+        locs = locations[:n_events+1]
         if n_events > 0: 
-            fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose)
+            fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose,locations=locs)
         else:
             warn('Failed to find more than two stages, returning None')
             fit = None#self.fit_single(n_events+1, verbose=verbose)
