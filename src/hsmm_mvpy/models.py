@@ -1182,14 +1182,19 @@ class hmp:
                 temp_flat = np.delete(temp_flat, event+1, axis=0)
                 pars_temp.append(temp_flat)
             
-            inputs = zip(itertools.repeat(n_events), events_temp, pars_temp,\
-                        itertools.repeat([]), itertools.repeat([]),\
-                        itertools.repeat(tolerance), itertools.repeat(max_iteration), \
-                        itertools.repeat(maximization), itertools.repeat(1),\
-                        itertools.repeat(1),itertools.repeat('random'), itertools.repeat(True),\
-                        itertools.repeat(False),itertools.repeat(1))
-            with mp.Pool(processes=self.cpus) as pool:
-                event_loo_likelihood_temp = pool.starmap(self.fit_single, inputs)
+            if self.cpus == 1:
+                event_loo_likelihood_temp = []
+                for i in range(len(events_temp)):
+                    event_loo_likelihood_temp.append(self.fit_single(n_events, events_temp[i],pars_temp[i],tolerance=tolerance,max_iteration=max_iteration,maximization=maximization,verbose=False))
+            else:
+                inputs = zip(itertools.repeat(n_events), events_temp, pars_temp,\
+                            itertools.repeat([]), itertools.repeat([]),\
+                            itertools.repeat(tolerance), itertools.repeat(max_iteration), \
+                            itertools.repeat(maximization), itertools.repeat(1),\
+                            itertools.repeat(1),itertools.repeat('random'), itertools.repeat(True),\
+                            itertools.repeat(False),itertools.repeat(1))
+                with mp.Pool(processes=self.cpus) as pool:
+                    event_loo_likelihood_temp = pool.starmap(self.fit_single, inputs)
 
             lkhs = [x.likelihoods.values for x in event_loo_likelihood_temp]
             event_loo_results.append(event_loo_likelihood_temp[np.nanargmax(lkhs)])
