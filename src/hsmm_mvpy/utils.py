@@ -1140,7 +1140,7 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
             estimates.append(loocv_estimate_func(data, init, participant, func_estimate, func_args=func_args, verbose=verbose))
     else: #mp
         with mp.Pool(processes=cpus) as pool:
-            loocv = pool.starmap(loocv_estimate_func,
+            estimates = pool.starmap(loocv_estimate_func,
                         zip(itertools.repeat(data), itertools.repeat(init),participants_idx,
                             itertools.repeat(func_estimate),itertools.repeat(func_args),
                             itertools.repeat(1), itertools.repeat(verbose)))
