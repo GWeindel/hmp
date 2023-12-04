@@ -2108,7 +2108,6 @@ class hmp:
             solutions = self.fit_single(n_events, mags_props, pars_prop, to_fix, to_fix[:-1],\
                             return_max=True, verbose=False, cpus=cpus,\
                             min_iteration=min_iteration, tolerance=tolerance, locations=locations_props)
-            locations[:n_events+1] = solutions.locations.values
             if diagnostic:#Diagnostic plot
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
             if solutions.likelihoods - lkh_prev > delta:#and np.diff(solutions.traces[-2:]) > 0:#Success
@@ -2118,11 +2117,11 @@ class hmp:
                     plt.plot(solutions.traces.T, c=color, label=f'Iteration {i}')
                 mags[:n_events], pars[:n_events+1] = solutions.magnitudes.values,\
                     solutions.parameters.values
+                #locations[:n_events+1] = solutions.locations.values
                 if verbose:
-                    print(f'Transition event {n_events} found around sample {int(np.round(self.scale_to_mean(np.sum(pars[:n_events-1,1]), self.shape)))}')
-
+                    print(f'Transition event {n_events} found around sample {int(np.round(self.scale_to_mean(np.sum(pars[:n_events,1]), self.shape)))}')
                 n_events += 1
-                j = 1
+                j = 0
             j += 1
             i += 1
             #New parameter proposition
@@ -2131,7 +2130,7 @@ class hmp:
             locations_props = locations[:n_events+1].copy()
             if self.location_corr_threshold is None:
                 locations_props[1:-1] = self.location
-            time = int(np.round(self.scale_to_mean(np.sum(pars[:n_events,1]), self.shape)))
+            time = int(np.round(self.scale_to_mean(np.sum(pars[:n_events-1,1]), self.shape)))
             pbar.update(int(np.rint(time-prev_time)))
         pbar.update(int(np.round(np.rint(end))-np.rint(time)))
         n_events = n_events-1
