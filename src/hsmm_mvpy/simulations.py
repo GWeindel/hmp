@@ -57,7 +57,7 @@ def event_shape(event_width, event_width_samples, steps):
     template = template/np.sum(template**2)#Weight normalized
     return template
 
-def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, seed=None, sfreq=100, save_snr=False): 
+def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, seed=None, sfreq=100, save_snr=False, save_noiseless=False):
     '''
     Simulates n_trials of EEG and/or MEG using MNE's tools based on the specified sources
     
@@ -164,6 +164,10 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             warn(f'{subj_file} exists no new simulation performed', UserWarning)
             files_subj.append(subj_file)
             files_subj.append(subj_file.split('.fif')[0]+'_generating_events.npy')
+            if save_snr:
+                files_subj.append(subj_file.split('.fif')[0]+'_snr.npy')
+            if save_noiseless:
+                files_subj.append(file + f'_noiseless_raw.fif')
             files.append(files_subj)
         else:
             subj_file = op.join(path, subj_file)
@@ -219,6 +223,8 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             # Project the source time series to sensor space and add some noise. The source
             # simulator can be given directly to the simulate_raw function.
             raw = mne.simulation.simulate_raw(info, source_simulator, forward=fwd, n_jobs=n_jobs,verbose=verbose)
+            if save_noiseless:
+                raw.save(file + f'_noiseless_raw.fif', overwrite=True)
             if data_type == 'eeg':
                 raw = raw.pick_types(meg=False, eeg=True, stim=True)
             elif data_type == 'meg':
@@ -245,6 +251,8 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
                 np.save(subj_file.split('.fif')[0]+'_snr.npy', snr)
                 files_subj.append(subj_file.split('.fif')[0]+'_snr.npy')
             files.append(files_subj)
+            if save_noiseless:
+                files_subj.append(file + f'_noiseless_raw.fif')
             print(f'{subj_file} simulated')
             
     if n_subj == 1:
