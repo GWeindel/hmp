@@ -1375,7 +1375,10 @@ def event_times(data, times, channel, stage, baseline=0):
         trial_time = slice(times.sel(event=stage, trial_x_participant=trial)-baseline, \
                                                  times.sel(event=stage+1, trial_x_participant=trial))
         trial_elec = trial_dat.sel(channels = channel, samples=trial_time).squeeze()
-        brp_data[i, :len(trial_elec)] = trial_elec
+        try:#If only one sample -> TypeError: len() of unsized object
+            brp_data[i, :len(trial_elec)] = trial_elec
+        except:
+            brp_data[i, :1] = trial_elec
             
         i += 1
 
