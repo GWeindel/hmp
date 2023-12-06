@@ -733,8 +733,8 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
     data_pp = stack_data(data.sel(participant=participant, drop=False))
 
     #Building models 
-    model_without_pp = hmp(data_without_pp, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, em_method=init.em_method, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
-    model_pp = hmp(data_pp, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, em_method=init.em_method, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
+    model_without_pp = hmp(data_without_pp, epoch_data=init.stacked_epoch_data.where(init.stacked_epoch_data.participant.isin(participants_idx[participants_idx != participant]), drop=True), sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, em_method=init.em_method, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
+    model_pp = hmp(data_pp, epoch_data=init.stacked_epoch_data.where(init.stacked_epoch_data.participant == participant,drop=True), sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, em_method=init.em_method, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
 
     #fit the HMP using previously estimated parameters as initial parameters, and estimate likelihood
     if 'condition' in initial_fit.dims:
@@ -989,7 +989,7 @@ def loocv_estimate_func(data, init, participant, func_estimate, func_args=None, 
     data_without_pp = stack_data(data.sel(participant = participants_idx[participants_idx != participant], drop=False))
 
     #Building model
-    model_without_pp = hmp(data_without_pp, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, em_method=init.em_method, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
+    model_without_pp = hmp(data_without_pp, init.stacked_epoch_data.where(init.stacked_epoch_data.participant.isin(participants_idx[participants_idx != participant]), drop=True), sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, em_method=init.em_method, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
 
     #Apply function and return
     estimates = func_estimate(model_without_pp, *func_args)
@@ -1038,7 +1038,7 @@ def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False
     data_pp = stack_data(data.sel(participant=participant, drop=False))
 
     #Building model 
-    model_pp = hmp(data_pp, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, em_method=init.em_method, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
+    model_pp = hmp(data_pp, epoch_data=init.stacked_epoch_data.where(init.stacked_epoch_data.participant == participant, drop=True) ,sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, em_method=init.em_method, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
 
     #estimate likelihood with previously estimated parameters
     if 'condition' in estimate.dims:
@@ -1415,6 +1415,16 @@ def condition_selection(hmp_data, epoch_data, condition_string, variable='event'
         stacked = hmp_data
     return stacked
 
+def condition_selection_epoch(epoch_data, condition_string, variable='event', method='equal'):
+
+    if len(epoch_data.dims) == 4:
+        stacked_epoch_data = epoch_data.stack(trial_x_participant=('participant','epochs')).dropna('trial_x_participant',how='all')
+
+    if method == 'equal':
+        stacked_epoch_data = stacked_epoch_data.where(stacked_epoch_data[variable] == condition_string, drop=True)
+    elif method == 'contains':
+        stacked_epoch_data = stacked_epoch_data.where(stacked_epoch_data[variable].str.contains(condition_string),drop=True)
+    return epoch_data.unstack()
 
 def load_data(path):
     return xr.load_dataset(path)
