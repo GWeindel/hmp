@@ -2049,7 +2049,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, trace=False, fix_iter=False, max_iterations=1e3, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None, start=1, return_estimates=False ):
+    def fit(self, step=1, verbose=True, end=None, fix_iter=False, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None, start=1, return_estimates=False ):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -2094,80 +2094,114 @@ class hmp:
         if verbose and decimate is not None:#Just for printing the info
              self.gen_mags(1, decimate=decimate, verbose=True)
         max_event_n = self.compute_max_events()
-        n_points = int(np.rint(end)//step)
         if diagnostic:
             cycol = cycle(default_colors)
         pbar = tqdm(total = int(np.rint(end)))#progress bar
-        n_events, j, time = 1,start,0
+        n_events, j, time = 1, start, 0 #j = sample after last placed event
 
-        #Init pars
+        #Init pars (need this for min_model)
         pars = np.zeros((max_event_n+1,2))
-        pars[:,0] = self.shape #gamma parameters during estimation, shape x scale
-        pars_prop = pars[:n_events+1].copy()
-        pars_prop[0,1] = self.mean_to_scale(j,self.shape)#initialize gamma_parameters
-        last_stage = self.mean_to_scale(end-j,self.shape)
+        pars[:,0] = self.shape #final gamma parameters during estimation, shape x scale
+        pars_prop = pars[:n_events+1].copy() #gamma params of current estimation
+        pars_prop[0,1] = self.mean_to_scale(j, self.shape) #initialize gamma_parameters at 1 sample
+        last_stage = self.mean_to_scale(end-j, self.shape) #remainder of time
         pars_prop[-1,1] = last_stage
+
         #Init mags
-        mags = np.zeros((max_event_n, self.n_dims)) #mags during estimation
-        i = 0
-        mags_props = np.zeros((1, 1, self.n_dims))
+        mags = np.zeros((max_event_n, self.n_dims)) #final mags during estimation
+
         #Init locations
         locations = np.zeros((max_event_n+1,),dtype=int) #location per stage
-        locations_props = locations[:n_events+1]
-        if self.location_corr_threshold is None:
-            locations_props[1:-1] = self.location
 
-        lkh_prev = self.fit_single(n_events, parameters_to_fix=[0,1], magnitudes_to_fix=0, verbose=False).likelihoods.values
-        lkhs = self.sliding_event(fix_pars=True, fix_mags=True, method='max', verbose=False)[0]        
-        delta = np.max(lkhs) - np.min(lkhs) + 1 #max delta just on position - magntidues should add to this to be worth including
+        #lkhs based on single uninformed event
+        lkhs = self.sliding_event(fix_pars=True, fix_mags=True, method='max', verbose=False,show=True)[0]  
+        min_lkh = np.min(lkhs)
+
+        #max_lkh = self.fit_single(n_events, parameters_to_fix=[0,1], magnitudes_to_fix=0, verbose=False).likelihoods.values
+        #min_lkh = self.fit_single(n_events, parameters=pars_prop, parameters_to_fix=[0,1], magnitudes_to_fix=0, verbose=False).likelihoods.values
+        lkh_prev = min_lkh
         
-        estimates = []
+        estimates = [] #store all n_event solutions
         while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events < max_event_n-1:
+
+            prev_time = time
+            to_fix = [range(n_events-2)] if fix_iter else [] #fixing previous params/mags
+
+            #New parameter proposition
+            pars_prop = pars[:n_events+1].copy()
+            pars_prop[n_events-1,1] = self.mean_to_scale(step*j, self.shape)
             last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:-1,1])
             pars_prop[n_events,1] = last_stage
-            prev_time = time
-            if fix_iter:
-                to_fix = [range(n_events-2)]
-            else: to_fix = []
-            #Generate a grid of magnitudes as proposition 
+            
+            #New location proposition
+            locations_props = locations[:n_events+1].copy()
+            if self.location_corr_threshold is None:
+                locations_props[1:-1] = self.location
+
+            #New magnitude proposition 
             if decimate is None:
                 mags_props = self.gen_mags(n_events, n_samples=grid_points, verbose=False)
             else:
                 mags_props = self.gen_mags(n_events, decimate=decimate, verbose=False) #always 0?
-            #replave eventual event already found
             mags_props[:,:n_events-1,:] = np.tile(mags[:n_events-1,:], (len(mags_props), 1, 1))
-            #estimate all grid_points models while fixing previous found events
+
+            #Estimate model based on these propositions
             solutions = self.fit_single(n_events, mags_props, pars_prop, to_fix, to_fix[:-1],\
                             return_max=True, verbose=False, cpus=cpus,\
                             min_iteration=min_iteration, tolerance=tolerance, locations=locations_props)
-            locations[n_events] = solutions.locations.values[-1]
-            if diagnostic:#Diagnostic plot
-                plt.plot(solutions.traces.T, alpha=.3, c='k')
-            if solutions.likelihoods - lkh_prev > delta:#and np.diff(solutions.traces[-2:]) > 0:#Success
-                lkh_prev = solutions.likelihoods.values
-                if diagnostic:#Diagnostic plot
-                    color = next(cycol)
-                    plt.plot(solutions.traces.T, c=color, label=f'Iteration {i}')
-                mags[:n_events], pars[:n_events+1] = solutions.magnitudes.values,\
-                    solutions.parameters.values
-                locations[:n_events+1] = solutions.locations.values
-                estimates.append(solutions)
-                if verbose:
-                    print(f'Transition event {n_events} found around sample {int(np.round(self.scale_to_mean(np.sum(pars[:n_events,1]), self.shape)))}')
-                n_events += 1
-                j = 0
+            sol_lkh = solutions.likelihoods.values
+            sol_sample_new_event = int(np.round(self.scale_to_mean(np.sum(solutions.parameters.values[:n_events,1]), self.shape)))
 
-            j += 1
-            i += 1
-            #New parameter proposition
-            pars_prop = pars[:n_events+1].copy()
-            pars_prop[n_events-1,1] = self.mean_to_scale(step*j, self.shape)
-            locations_props = locations[:n_events+1].copy()
-            if self.location_corr_threshold is None:
-                locations_props[1:-1] = self.location
-            time = int(np.round(self.scale_to_mean(np.sum(pars_prop[:n_events,1]), self.shape)))
+            #Diagnostic plot
+            if diagnostic:
+                plt.plot(solutions.traces.T, alpha=.3, c='k')
+                print()
+                print('Event found at sample ' + str(sol_sample_new_event))
+                print('lkh change: ' + str(solutions.likelihoods.values - lkh_prev))
+
+            #calculate required delta
+            delta = lkhs[sol_sample_new_event] - min_lkh
+
+            if sol_lkh - lkh_prev > delta: 
+                
+                lkh_prev = sol_lkh
+
+                #update mags, params, and locations
+                mags[:n_events] = solutions.magnitudes.values
+                pars[:n_events+1] = solutions.parameters.values
+                locations[:n_events+1] = solutions.locations.values
+                
+                #store solution
+                estimates.append(solutions)
+
+                #search for one more event, starting again at sample 1
+                n_events += 1
+                j = 1
+
+                #Diagnostic plot
+                if diagnostic:
+                    color = next(cycol)
+                    plt.plot(solutions.traces.T, c=color, label=f'n-events {n_events-1}')
+
+                if verbose:
+                    print(f'Transition event {n_events-1} found around sample {sol_sample_new_event}')
+
+                time = sol_sample_new_event
+
+            else:
+
+                #find furthest explored param
+                max_scale = np.max([np.sum(x[:n_events,1]) for x in solutions.param_dev.values])
+                max_sample = int(np.round(self.scale_to_mean(max_scale, self.shape)))
+                prev_sample = int(np.round(self.scale_to_mean(np.sum(pars[:n_events-1,1]), self.shape)))
+                
+                j = np.max([max_sample - prev_sample + 1, j + 1]) #either ffwd to furthest explored sample or add 1 to j
+
+                time = prev_sample + j
+
             pbar.update(int(np.rint(time-prev_time)))
-        pbar.update(int(np.round(np.rint(end))-np.rint(time)))
+
+        #done estimating
         n_events = n_events-1
         if diagnostic:
             plt.ylabel('Log-likelihood')
@@ -2182,6 +2216,8 @@ class hmp:
         else:
             warn('Failed to find more than two stages, returning None')
             fit = None#self.fit_single(n_events+1, verbose=verbose)
+
+        pbar.update(int(np.rint(end)-int(np.rint(time))))
 
         if return_estimates:
             return fit, estimates
