@@ -170,11 +170,13 @@ class hmp:
             self.convolution = np.convolve
         self.trial_coords = data.unstack().sel(component=0,samples=0).rename({'epochs':'trials'}).\
             stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",how="all").coords
-        if epoch_data:
+        if epoch_data is not None:
             if len(epoch_data.dims) == 4:
                 self.stacked_epoch_data = epoch_data.stack(trial_x_participant=('participant','epochs')).dropna('trial_x_participant',how='all')
             else: #assume already stacked
                 self.stacked_epoch_data = epoch_data
+        else:
+            self.stacked_epoch_data = None
     
     def _event_shape(self):
         '''
@@ -1349,7 +1351,11 @@ class hmp:
         '''
         Compute the maximum possible number of events given event width and mean or minimum reaction time
         '''
-        return int(np.rint(np.min(self.durations)//(self.location)))
+        if self.location_corr_threshold is not None:
+            print('Note that more events might fit, as long as they are not highly correlating.')
+            return int(np.rint(np.min(self.durations)//(self.event_width_samples)))
+        else:
+            return int(np.rint(np.min(self.durations)//(self.location)))
 
 
     def event_times(self, eventprobs, mean=True):
@@ -2049,7 +2055,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, fix_iter=False, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None, start=1, return_estimates=False ):
+    def fit(self, step=1, verbose=True, end=None, fix_iter=False, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None, start=1, return_estimates=False, stepwise=False):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -2125,7 +2131,13 @@ class hmp:
         while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events < max_event_n-1:
 
             prev_time = time
-            to_fix = [range(n_events-2)] if fix_iter else [] #fixing previous params/mags
+            
+            if fix_iter:
+                to_fix_pars = np.arange(n_events-1) #fixing previous params/mags
+                to_fix_mags = to_fix_pars[:-1]
+            if stepwise: #fix all pars
+                to_fix_pars = np.arange(n_events+1) #fix all
+                to_fix_mags = None
 
             #New parameter proposition
             pars_prop = pars[:n_events+1].copy()
@@ -2146,7 +2158,7 @@ class hmp:
             mags_props[:,:n_events-1,:] = np.tile(mags[:n_events-1,:], (len(mags_props), 1, 1))
 
             #Estimate model based on these propositions
-            solutions = self.fit_single(n_events, mags_props, pars_prop, to_fix, to_fix[:-1],\
+            solutions = self.fit_single(n_events, mags_props, pars_prop, to_fix_pars, to_fix_mags,\
                             return_max=True, verbose=False, cpus=cpus,\
                             min_iteration=min_iteration, tolerance=tolerance, locations=locations_props)
             sol_lkh = solutions.likelihoods.values
