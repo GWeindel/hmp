@@ -172,9 +172,11 @@ class hmp:
             stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",how="all").coords
         if epoch_data is not None:
             if len(epoch_data.dims) == 4:
-                self.stacked_epoch_data = epoch_data.stack(trial_x_participant=('participant','epochs')).dropna('trial_x_participant',how='all')
+                self.stacked_epoch_data = epoch_data.rename({'epochs':'trials'}).stack(trial_x_participant=('participant','trials')).data.fillna(0).drop_duplicates('trial_x_participant')
             else: #assume already stacked
                 self.stacked_epoch_data = epoch_data
+            #make sure they correspond to data in model
+            self.stacked_epoch_data = self.stacked_epoch_data.sel(trial_x_participant=data.unstack().rename({'epochs':'trials'}).stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",how="all").trial_x_participant)
         else:
             self.stacked_epoch_data = None
     
@@ -1009,10 +1011,10 @@ class hmp:
         shift = -(self.event_width_samples // 2) + np.argmax(self.template)
         times = np.round(np.dot(eventprobs.T, np.arange(eventprobs.shape[0]))) - shift
 
-        event_values = np.zeros((self.stacked_epoch_data.data.values.shape[0],n_trials,n_events))
+        event_values = np.zeros((self.stacked_epoch_data.values.shape[0],n_trials,n_events))
         for ev in range(n_events):
             for tr in range(n_trials):
-                event_values[:,tr,ev] = self.stacked_epoch_data.data.values[:,int(times[ev,tr]),tr]
+                event_values[:,tr,ev] = self.stacked_epoch_data.values[:,int(times[ev,tr]),tr]
 
         return np.nanmean(event_values,axis=1)
 
@@ -1353,7 +1355,7 @@ class hmp:
         '''
         if self.location_corr_threshold is not None:
             print('Note that more events might fit, as long as they are not highly correlating.')
-            return int(np.rint(np.min(self.durations)//(self.event_width_samples)))
+            return int(np.rint(np.min(self.durations)//(self.event_width_samples/2)))
         else:
             return int(np.rint(np.min(self.durations)//(self.location)))
 
@@ -2055,7 +2057,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, fix_iter=False, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None, start=1, return_estimates=False, stepwise=False):
+    def fit(self, step=1, verbose=True, end=None, fix_iter=False, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None, start=1, return_estimates=False, by_sample=True):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -2120,23 +2122,31 @@ class hmp:
         locations = np.zeros((max_event_n+1,),dtype=int) #location per stage
 
         #lkhs based on single uninformed event
-        lkhs = self.sliding_event(fix_pars=True, fix_mags=True, method='max', verbose=False,show=True)[0]  
-        min_lkh = np.min(lkhs)
+        #lkhs = self.sliding_event(fix_pars=True, fix_mags=True,  method='max',verbose=False,show=True)[0]  
+        #min_lkh = np.min(lkhs)
 
         #max_lkh = self.fit_single(n_events, parameters_to_fix=[0,1], magnitudes_to_fix=0, verbose=False).likelihoods.values
-        #min_lkh = self.fit_single(n_events, parameters=pars_prop, parameters_to_fix=[0,1], magnitudes_to_fix=0, verbose=False).likelihoods.values
+        min_lkh = self.fit_single(n_events, parameters=pars_prop, parameters_to_fix=[0,1], magnitudes_to_fix=0, verbose=False).likelihoods.values
         lkh_prev = min_lkh
+        #delta = max_lkh - min_lkh + 1
         
         estimates = [] #store all n_event solutions
-        while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events < max_event_n-1:
+        while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events <= max_event_n:
 
             prev_time = time
             
-            if fix_iter:
-                to_fix_pars = np.arange(n_events-1) #fixing previous params/mags
-                to_fix_mags = to_fix_pars[:-1]
-            if stepwise: #fix all pars
-                to_fix_pars = np.arange(n_events+1) #fix all
+            if fix_iter: #fix previous params and mags
+                to_fix_pars = np.arange(n_events-1)
+                to_fix_mags = None
+                #to_fix_mags =  np.arange(n_events-1)
+            elif by_sample: #fix current params
+                to_fix_pars = np.arange(n_events-1,n_events+1)
+                to_fix_mags = None
+            elif fix_iter and by_sample: #fix previous params and mags and current params (== all params, n_events-1 mags)
+                to_fix_pars = np.arange(n_events+1)
+                to_fix_mags = np.arange(n_events-1)
+            else: 
+                to_fix_pars = None
                 to_fix_mags = None
 
             #New parameter proposition
@@ -2164,18 +2174,24 @@ class hmp:
             sol_lkh = solutions.likelihoods.values
             sol_sample_new_event = int(np.round(self.scale_to_mean(np.sum(solutions.parameters.values[:n_events,1]), self.shape)))
 
+            #get required delta: likelihood difference should be larger compared to neutral model
+            #delta = lkhs[sol_sample_new_event] - min_lkh
+            sol_mags_neutralized = solutions.magnitudes.values
+            sol_mags_neutralized[-1,:] = 0 #neutralize last event
+            neutral_lkh = self.fit_single(n_events, parameters=solutions.parameters.values, magnitudes=sol_mags_neutralized, parameters_to_fix=np.arange(n_events+1), magnitudes_to_fix = np.arange(n_events), locations=solutions.locations.values, verbose=False).likelihoods.values
+
+            delta = np.max([neutral_lkh - lkh_prev, 0])
             #Diagnostic plot
             if diagnostic:
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
                 print()
                 print('Event found at sample ' + str(sol_sample_new_event))
                 print('lkh change: ' + str(solutions.likelihoods.values - lkh_prev))
+                print('required delta: ' + str(delta))
 
-            #calculate required delta
-            delta = lkhs[sol_sample_new_event] - min_lkh
-
-            if sol_lkh - lkh_prev > delta: 
-                
+            #check solution
+            if sol_lkh - lkh_prev > delta: #accept solution
+            
                 lkh_prev = sol_lkh
 
                 #update mags, params, and locations
@@ -2186,7 +2202,7 @@ class hmp:
                 #store solution
                 estimates.append(solutions)
 
-                #search for one more event, starting again at sample 1
+                #search for an addition event, starting again at sample 1
                 n_events += 1
                 j = 1
 
@@ -2194,27 +2210,30 @@ class hmp:
                 if diagnostic:
                     color = next(cycol)
                     plt.plot(solutions.traces.T, c=color, label=f'n-events {n_events-1}')
-
-                if verbose:
+                if verbose: 
                     print(f'Transition event {n_events-1} found around sample {sol_sample_new_event}')
 
-                time = sol_sample_new_event
+                time = sol_sample_new_event + j
 
-            else:
-
-                #find furthest explored param
-                max_scale = np.max([np.sum(x[:n_events,1]) for x in solutions.param_dev.values])
-                max_sample = int(np.round(self.scale_to_mean(max_scale, self.shape)))
+            else: #reject solution, search on
                 prev_sample = int(np.round(self.scale_to_mean(np.sum(pars[:n_events-1,1]), self.shape)))
-                
-                j = np.max([max_sample - prev_sample + 1, j + 1]) #either ffwd to furthest explored sample or add 1 to j
 
+                if not by_sample: #find furthest explored param. Note: this also work by_sample, just a tiny bit faster this way
+                    max_scale = np.max([np.sum(x[:n_events,1]) for x in solutions.param_dev.values])
+                    max_sample = int(np.round(self.scale_to_mean(max_scale, self.shape)))
+                    j = np.max([max_sample - prev_sample + 1, j + 1]) #either ffwd to furthest explored sample or add 1 to j
+                else:
+                    j += 1
                 time = prev_sample + j
 
             pbar.update(int(np.rint(time-prev_time)))
 
         #done estimating
+
         n_events = n_events-1
+        if verbose:
+            print()
+            print('All events found, refitting final combination.')
         if diagnostic:
             plt.ylabel('Log-likelihood')
             plt.xlabel('EM iteration')
@@ -2224,7 +2243,7 @@ class hmp:
         pars = pars[:n_events+1, :]
         locs = locations[:n_events+1]
         if n_events > 0: 
-            fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose,locations=locs)
+            fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, locations=locs, verbose=verbose)
         else:
             warn('Failed to find more than two stages, returning None')
             fit = None#self.fit_single(n_events+1, verbose=verbose)
