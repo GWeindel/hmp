@@ -512,6 +512,8 @@ def zscore_xarray(data):
     '''
     zscore of the data in an xarray, avoiding any nans
     '''
+    if isinstance(data, xr.Dataset):#if no PCA
+        data = data.data
     non_nan_mask = ~np.isnan(data.values)
     if non_nan_mask.any(): #if not everything is nan, calc zscore
         data.values[non_nan_mask] = (data.values[non_nan_mask] - data.values[non_nan_mask].mean()) / data.values[non_nan_mask].std()
