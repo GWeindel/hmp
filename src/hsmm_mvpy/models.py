@@ -2057,7 +2057,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, fix_iter=False, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None, start=1, return_estimates=False, by_sample=True):
+    def fit(self, step=1, verbose=True, end=None, fix_prev=False, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None, start=1, return_estimates=False, by_sample=True):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -2073,8 +2073,8 @@ class hmp:
                 The maximum number of samples to explore within each trial
          	 trace: bool 
                 If True keep the scale and magnitudes parameters for each iteration
-         	 fix_iter: bool 
-                If True fix magnitudes and scale parameters for the previously found events
+         	 fix_prev: bool 
+                If True fix scale parameters for the previously found events
          	 max_iterations: int
                 The maximum number of iteration in the EM() function
          	 tolerance: float
@@ -2121,51 +2121,84 @@ class hmp:
         #Init locations
         locations = np.zeros((max_event_n+1,),dtype=int) #location per stage
 
-        #lkhs based on single uninformed event
-        #lkhs = self.sliding_event(fix_pars=True, fix_mags=True,  method='max',verbose=False,show=True)[0]  
-        #min_lkh = np.min(lkhs)
-
-        #max_lkh = self.fit_single(n_events, parameters_to_fix=[0,1], magnitudes_to_fix=0, verbose=False).likelihoods.values
+        #lkh-prev based on single uninformed event at sample 0
         min_lkh = self.fit_single(n_events, parameters=pars_prop, parameters_to_fix=[0,1], magnitudes_to_fix=0, verbose=False).likelihoods.values
         lkh_prev = min_lkh
-        #delta = max_lkh - min_lkh + 1
         
         estimates = [] #store all n_event solutions
         while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events <= max_event_n:
 
             prev_time = time
             
-            if fix_iter: #fix previous params and mags
-                to_fix_pars = np.arange(n_events-1)
-                to_fix_mags = None
-                #to_fix_mags =  np.arange(n_events-1)
-            elif by_sample: #fix current params
-                to_fix_pars = np.arange(n_events-1,n_events+1)
-                to_fix_mags = None
-            elif fix_iter and by_sample: #fix previous params and mags and current params (== all params, n_events-1 mags)
-                to_fix_pars = np.arange(n_events+1)
-                to_fix_mags = np.arange(n_events-1)
+            if by_sample and n_events > 1: #go through the whole range sample-by-sample, j is sample since start
+                
+                scale_j = self.mean_to_scale(j,self.shape)
+
+                #New parameter proposition
+                pars_prop = pars[:n_events].copy() #pars so far
+                n_event_j = np.argwhere(scale_j > np.cumsum(pars_prop[:,1])) + 2 #counting from 1
+                n_event_j = np.max(n_event_j) if len(n_event_j) > 0 else 1
+
+                #insert j at right spot, subtract prev scales
+                pars_prop = np.insert(pars_prop, n_event_j-1, [self.shape, scale_j - np.sum(pars_prop[:n_event_j-1,1])],axis=0)
+                #subtract inserted scale from next event
+                pars_prop[n_event_j, 1] =  pars_prop[n_event_j, 1] - pars_prop[n_event_j-1, 1]
+                last_stage = self.mean_to_scale(end-1, self.shape) - np.sum(pars_prop[:-1,1])
+                pars_prop[n_events,1] = last_stage
+
+                #New location proposition
+                locations_props = locations[:n_events].copy()
+                locations_props = np.insert(locations_props, n_event_j, 0)
+                if self.location_corr_threshold is None:
+                    locations_props[1:-1] = self.location
+
+                #New magnitude proposition 
+                if decimate is None:
+                    mags_props = self.gen_mags(n_events, n_samples=grid_points, verbose=False)
+                else:
+                    mags_props = self.gen_mags(n_events, decimate=decimate, verbose=False) #always 0?
+                mags_props[:,:n_events-1,:] = np.tile(mags[:n_events-1,:], (len(mags_props), 1, 1))
+                #shift new event to correct position
+                mags_props = np.insert(mags_props[:,:-1,:],n_event_j-1,mags_props[:,-1,:],axis=1)
+                
+                if fix_prev: #fix previous params and mags
+                    to_fix_pars = np.arange(n_events+1)
+                    to_fix_pars = to_fix_pars[np.isin(to_fix_pars,[n_event_j, n_event_j-1], invert=True)]
+                    to_fix_mags = None
+                    #to_fix_mags =  np.arange(n_events-1)
+                else: 
+                    to_fix_pars = None
+                    to_fix_mags = None
+
             else: 
-                to_fix_pars = None
-                to_fix_mags = None
+                #New parameter proposition
+                pars_prop = pars[:n_events+1].copy()
+                pars_prop[n_events-1,1] = self.mean_to_scale(step*j, self.shape)
+                last_stage = self.mean_to_scale(end-1, self.shape) - np.sum(pars_prop[:-1,1])
+                pars_prop[n_events,1] = last_stage
+                
+                #New location proposition
+                locations_props = locations[:n_events+1].copy()
+                if self.location_corr_threshold is None:
+                    locations_props[1:-1] = self.location
 
-            #New parameter proposition
-            pars_prop = pars[:n_events+1].copy()
-            pars_prop[n_events-1,1] = self.mean_to_scale(step*j, self.shape)
-            last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:-1,1])
-            pars_prop[n_events,1] = last_stage
-            
-            #New location proposition
-            locations_props = locations[:n_events+1].copy()
-            if self.location_corr_threshold is None:
-                locations_props[1:-1] = self.location
+                #New magnitude proposition 
+                if decimate is None:
+                    mags_props = self.gen_mags(n_events, n_samples=grid_points, verbose=False)
+                else:
+                    mags_props = self.gen_mags(n_events, decimate=decimate, verbose=False) #always 0?
+                mags_props[:,:n_events-1,:] = np.tile(mags[:n_events-1,:], (len(mags_props), 1, 1))
 
-            #New magnitude proposition 
-            if decimate is None:
-                mags_props = self.gen_mags(n_events, n_samples=grid_points, verbose=False)
-            else:
-                mags_props = self.gen_mags(n_events, decimate=decimate, verbose=False) #always 0?
-            mags_props[:,:n_events-1,:] = np.tile(mags[:n_events-1,:], (len(mags_props), 1, 1))
+                if fix_prev: #fix previous params and mags
+                    to_fix_pars = np.arange(n_events-1)
+                    to_fix_mags = None
+                    #to_fix_mags =  np.arange(n_events-1)
+                else: 
+                    to_fix_pars = None
+                    to_fix_mags = None
+
+            #in edge cases scale can get negative, make sure that doesn't happen:
+            pars_prop[:,1] = np.maximum(pars_prop[:,1],self.mean_to_scale(1, self.shape)) 
 
             #Estimate model based on these propositions
             solutions = self.fit_single(n_events, mags_props, pars_prop, to_fix_pars, to_fix_mags,\
@@ -2176,7 +2209,7 @@ class hmp:
 
             #get required delta: likelihood difference should be larger compared to neutral model
             #delta = lkhs[sol_sample_new_event] - min_lkh
-            sol_mags_neutralized = solutions.magnitudes.values
+            sol_mags_neutralized = solutions.magnitudes.values.copy()
             sol_mags_neutralized[-1,:] = 0 #neutralize last event
             neutral_lkh = self.fit_single(n_events, parameters=solutions.parameters.values, magnitudes=sol_mags_neutralized, parameters_to_fix=np.arange(n_events+1), magnitudes_to_fix = np.arange(n_events), locations=solutions.locations.values, verbose=False).likelihoods.values
 
@@ -2202,9 +2235,16 @@ class hmp:
                 #store solution
                 estimates.append(solutions)
 
-                #search for an addition event, starting again at sample 1
+                #search for an additional event, starting again at sample 1 from prev event,
+                #or next sample if by_sample
                 n_events += 1
-                j = 1
+                if by_sample:
+                    j += 1
+                    time = j
+                else:
+                    j = 1
+                    time = sol_sample_new_event + j
+
 
                 #Diagnostic plot
                 if diagnostic:
@@ -2213,7 +2253,6 @@ class hmp:
                 if verbose: 
                     print(f'Transition event {n_events-1} found around sample {sol_sample_new_event}')
 
-                time = sol_sample_new_event + j
 
             else: #reject solution, search on
                 prev_sample = int(np.round(self.scale_to_mean(np.sum(pars[:n_events-1,1]), self.shape)))
@@ -2222,9 +2261,10 @@ class hmp:
                     max_scale = np.max([np.sum(x[:n_events,1]) for x in solutions.param_dev.values])
                     max_sample = int(np.round(self.scale_to_mean(max_scale, self.shape)))
                     j = np.max([max_sample - prev_sample + 1, j + 1]) #either ffwd to furthest explored sample or add 1 to j
+                    time = prev_sample + j
                 else:
                     j += 1
-                time = prev_sample + j
+                    time = j
 
             pbar.update(int(np.rint(time-prev_time)))
 
@@ -2242,8 +2282,14 @@ class hmp:
         mags = mags[:n_events, :]
         pars = pars[:n_events+1, :]
         locs = locations[:n_events+1]
-        if n_events > 0: 
-            fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, locations=locs, verbose=verbose)
+        if n_events > 0:
+            #fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, locations=locs, verbose=verbose)
+            fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose)
+
+            #check if final fit didn't lead to -inf (sometimes happens when leaving out locations on final step)
+            if fit.likelihoods.values == -np.inf:
+                fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, locations=locs, verbose=verbose)
+
         else:
             warn('Failed to find more than two stages, returning None')
             fit = None#self.fit_single(n_events+1, verbose=verbose)
