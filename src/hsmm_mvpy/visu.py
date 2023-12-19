@@ -999,3 +999,67 @@ def plot_expected_distribution(distribution, mean, shape, location=0, xmax=300, 
             ax.vlines(sp_dist.mean(shape, scale=mean_to_scale(mean, shape), loc=location), np.min(y), np.max(y), color=color)
         else: 
             ax.vlines(sp_dist.mean(shape, scale=mean_to_scale(mean, shape)), np.min(y), np.max(y), color=color)
+
+
+def plot_estimate_development(estimates, init, epoch_data, info, print_correlations=False):
+    '''
+    Plot the shift in estimated event locations over time, with color-coded locations
+    for estimated model(s).
+     
+    Parameters
+     ----------
+     	estimates : estimated hmp model, or a list of models
+            estimated model(s) to be plotted
+        init : initialized hmp model
+        epoch_data : xr.Dataarray 
+            the original EEG data in HMP format
+        info : ndarray
+            Either a 2D array with dimension channel and [x,y] storing channel location in meters or an info object from
+            the mne package containning digit. points for channel location
+        print_correlations: bool
+            whether to print the correlations between events
+    '''
+    
+    if len(estimates) == 1:
+        estimates = [estimates]
+    
+    time_step = 1000/init.sfreq
+    
+    #get topos
+    topos = []
+    for est in estimates:
+        topos.append(init.compute_topologies(epoch_data,est,init).values)
+    vm = np.max([np.max(np.abs(x)) for x in topos])
+
+    for est_idx, est in enumerate(estimates):
+
+        figsize = (10, 5) 
+        plt.subplots(1, 1, figsize=figsize)
+    
+        #plot development of positions
+        neve = len(est.locations) - 1 
+        nr = est.traces.shape[0] #nr of estimations
+
+        #plot params
+        for i in range(nr):
+            cols = np.repeat('black', neve).astype('<U20')
+            
+            cols[est.locations_dev[i,1:].values == 1] = 'orange'
+            cols[est.locations_dev[i,1:].values == 2] = 'gold'
+            cols[est.locations_dev[i,1:].values == 3] = 'yellowgreen'
+            cols[est.locations_dev[i,1:].values == 4] = 'lawngreen'
+            cols[est.locations_dev[i,1:].values == 5] = 'deepskyblue'
+            cols[est.locations_dev[i,1:].values == 6] = 'darkblue'
+            cols[est.locations_dev[i,1:].values > 6] = 'red'
+            plt.scatter(np.cumsum(est.param_dev[i,:,1].values * init.shape * time_step)[:-1],np.repeat(i,neve),color=cols)
+
+        plt.gca().invert_yaxis()
+        plt.xlim(0,init.mean_d*time_step)
+
+        #plot topos
+        plot_topo_timecourse(epoch_data, est, info, init, as_time=True, contours=0,vmin=-vm,vmax=vm)
+        
+        #print correlations
+        if print_correlations and neve > 1:
+            corr = np.corrcoef(topos[est_idx])[:-1,1:].diagonal()
+            print(corr)
