@@ -1020,7 +1020,7 @@ def plot_estimate_development(estimates, init, epoch_data, info, print_correlati
             whether to print the correlations between events
     '''
     
-    if len(estimates) == 1:
+    if not isinstance(estimates, list):
         estimates = [estimates]
     
     time_step = 1000/init.sfreq

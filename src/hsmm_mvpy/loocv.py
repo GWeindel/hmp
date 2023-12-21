@@ -60,9 +60,9 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
     else:
         #fit model
         n_eve = np.max(initial_fit.event.values)+1
-        fit_without_pp = model_without_pp.fit_single(n_eve, initial_fit.magnitudes.dropna('event',how='all').values, initial_fit.parameters.dropna('stage').values, verbose=False)
+        fit_without_pp = model_without_pp.fit_single(n_eve, initial_fit.magnitudes.dropna('event',how='all').values, initial_fit.parameters.dropna('stage').values, initial_fit.locations.dropna('stage').values.astype(int), verbose=False)
         #calc lkh
-        likelihood = model_pp.estim_probs(fit_without_pp.magnitudes.dropna('event',how='all').values, fit_without_pp.parameters.dropna('stage').values, fit_without_pp.locations.dropna('stage').values.astype(int), n_eve, None, True)
+        likelihood = model_pp.estim_probs(fit_without_pp.magnitudes.dropna('event',how='all').values, fit_without_pp.parameters.dropna('stage').values, np.zeros((n_eve+1,),dtype=int), n_eve, None, True)
 
     return likelihood
 
@@ -505,7 +505,7 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
                 print(f'Calculating likelihood for backward estimation models with {max_n_events_over_subjects} to {min_n_events} event(s)')
 
             loocv_back = []
-            for n_eve in np.arange(max_n_events_over_subjects+1, min_n_events-1,-1):
+            for n_eve in np.arange(max_n_events_over_subjects, min_n_events-1,-1):
                 if verbose:
                     print(f'  Calculating likelihood for backward estimation model with {n_eve} event(s)')
                 loocv = []
@@ -556,7 +556,7 @@ def fit_backward_func(hmp_model, fix_prev=False, by_sample=False, min_events=0, 
 
 
 
-def loocv_backward(init, data, max_events=None, min_events=0, max_starting_points=1, method="random", tolerance=1e-4, maximization=True, max_iteration=1e3, cpus=1, verbose=True):
+def loocv_backward(init, data, max_events=None, min_events=0, max_starting_points=1, method="random", tolerance=1e-4, max_iteration=1e3, cpus=1, verbose=True):
     '''
     Performs leave-one-out cross validation using backward_estimation to calculate the initial fit.
     It will perform loocv by leaving out one participant, applying 'backward_estimation' to the 
