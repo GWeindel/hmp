@@ -657,26 +657,23 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
                 n_comp = np.shape(var_cov_matrix)[0]-1
                 fig, ax = plt.subplots(1,2, figsize=(.2*n_comp, 4))
                 pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
-                pca_weights = pca.fit_transform(var_cov_matrix.T)
-                var = pca.transform(var_cov_matrix)
-                var = np.var(var, axis=0)
-                ax[0].plot(np.arange(pca.n_components)+1, var/np.sum(var),'.-')
+                pca.fit(var_cov_matrix)
+
+                ax[0].plot(np.arange(pca.n_components)+1, pca.explained_variance_ratio_,'.-')
                 ax[0].set_ylabel('Normalized explained variance')
                 ax[0].set_xlabel('Component')
-                ax[1].plot(np.arange(pca.n_components)+1, np.cumsum(var/np.sum(var)),'.-')
+                ax[1].plot(np.arange(pca.n_components)+1, np.cumsum(pca.explained_variance_ratio_),'.-')
                 ax[1].set_ylabel('Cumulative normalized explained variance')
                 ax[1].set_xlabel('Component')
                 plt.tight_layout()
                 plt.show()
-                n_comp = int(input(f'How many PCs (90 and 99% explained variance at component n{np.where(np.cumsum(var/np.sum(var)) >= .90)[0][0]+1} and n{np.where(np.cumsum(var/np.sum(var)) >= .99)[0][0]+1})?'))
-            pca = PCA(n_components=n_comp)#selecting Principale components (PC)
-
-            pca_weights = pca.fit_transform(var_cov_matrix)#/pca.explained_variance_ # divided by explained var for compatibility with matlab's PCA
+                n_comp = int(input(f'How many PCs (90 and 99% explained variance at component n{np.where(np.cumsum(pca.explained_variance_ratio_) >= .90)[0][0]+1} and n{np.where(np.cumsum(pca.explained_variance_ratio_) >= .99)[0][0]+1})?'))
+            pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
+            pca.fit(var_cov_matrix)
             #Rebuilding pca PCs as xarray to ease computation
             coords = dict(channels=("channels", data.coords["channels"].values),
                          component=("component", np.arange(n_comp)))
-            pca_weights = xr.DataArray(pca_weights, dims=("channels","component"), coords=coords)
-            means = data.groupby('channels').mean(...)
+            pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
         data = data @ pca_weights
     elif method is None:
         data = data.rename({'channels':'component'})
