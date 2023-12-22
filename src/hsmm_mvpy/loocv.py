@@ -60,7 +60,7 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
     else:
         #fit model
         n_eve = np.max(initial_fit.event.values)+1
-        fit_without_pp = model_without_pp.fit_single(n_eve, initial_fit.magnitudes.dropna('event',how='all').values, initial_fit.parameters.dropna('stage').values, initial_fit.locations.dropna('stage').values.astype(int), verbose=False)
+        fit_without_pp = model_without_pp.fit_single(n_eve, initial_fit.magnitudes.dropna('event',how='all').values, initial_fit.parameters.dropna('stage').values, locations=initial_fit.locations.dropna('stage').values.astype(int), verbose=False)
         #calc lkh
         likelihood = model_pp.estim_probs(fit_without_pp.magnitudes.dropna('event',how='all').values, fit_without_pp.parameters.dropna('stage').values, np.zeros((n_eve+1,),dtype=int), n_eve, None, True)
 
