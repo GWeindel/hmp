@@ -547,7 +547,7 @@ def stack_data(data, subjects_variable='participant', channel_variable='componen
     data = data.stack(all_samples=['participant','epochs',"samples"]).dropna(dim="all_samples")
     return data
 
-def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', n_comp=None, pca_weights=None, filter=None, weigh_PCAs_by_explained_variance=True):
+def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', n_comp=None, pca_weights=None, filter=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -670,10 +670,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
             #Rebuilding pca PCs as xarray to ease computation
             coords = dict(channels=("channels", data.coords["channels"].values),
                          component=("component", np.arange(n_comp)))
-            if weigh_PCAs_by_explained_variance:
-                pca_weights = xr.DataArray(pca.components_.T * pca.explained_variance_ratio_, dims=("channels","component"), coords=coords)
-            else:
-                pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
+            pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
         data = data @ pca_weights
     elif method is None:
         data = data.rename({'channels':'component'})
