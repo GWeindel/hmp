@@ -1408,6 +1408,7 @@ def condition_selection(hmp_data, epoch_data, condition_string, variable='event'
         
     '''
     unstacked = hmp_data.unstack()
+    unstacked[variable] = unstacked[variable].fillna("")
     if method == 'equal':
         unstacked = unstacked.where(unstacked[variable] == condition_string, drop=True)
         stacked = stack_data(unstacked)
