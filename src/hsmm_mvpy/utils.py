@@ -502,6 +502,12 @@ def vcov_mat(x):
     xT = x.T.data
     return x @ xT
 
+def _center(data):
+    '''
+    zscore of the data
+    '''
+    return data - data.mean()
+
 def zscore(data):
     '''
     zscore of the data
@@ -554,7 +560,7 @@ def stack_data(data, subjects_variable='participant', channel_variable='componen
     data = data.stack(all_samples=['participant','epochs',"samples"]).dropna(dim="all_samples")
     return data
 
-def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', n_comp=None, pca_weights=None, filter=None):
+def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', centering=False, n_comp=None, pca_weights=None, filter=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -680,6 +686,11 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         data['component'] = np.arange(len(data.component))
         pca_weigths = np.identity(len(data.component))
     # zscore either across all data, by participant (preferred), or by trial
+    if centering:
+        ori_coords = data.coords
+        data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(_center).unstack()
+        data = data.transpose('participant','epochs','samples','component')
+        data = data.assign_coords(ori_coords)
     if apply_zscore:
         ori_coords = data.coords
         match apply_zscore:
