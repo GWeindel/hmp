@@ -662,7 +662,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
                 
                 plt.tight_layout()
                 plt.show()
-                n_comp = int(input(f'How many PCs (90 and 99% explained variance at component n{np.where(np.cumsum(pca.explained_variance_ratio_) >= .90)[0][0]+1} and n{np.where(np.cumsum(pca.explained_variance_ratio_) >= .99)[0][0]+1})?'))
+                n_comp = int(input(f'How many PCs (95 and 99% explained variance at component n{np.where(np.cumsum(pca.explained_variance_ratio_) >= .95)[0][0]+1} and n{np.where(np.cumsum(pca.explained_variance_ratio_) >= .99)[0][0]+1}; components till n{np.where(pca.explained_variance_ratio_ >= .01)[0][-1]+1} explain at least 1%)?'))
 
             pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
             pca.fit(var_cov_matrix)
@@ -693,27 +693,6 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     data = stack_data(data)
     return data
   
-# #pca test
-# X = np.random.rand(100, 20)
-# pca2 = PCA(n_components=10, svd_solver='full')#selecting Principale components (PC)
-# X2 = pca2.fit_transform(X)
-# X3 = np.dot(X, pca2.components_.T)
-# X3 = pca2.transform(X)
-
-# #classic
-# data=epoch_data.rename({'epochs':'trials'}).stack(trial_x_participant=('participant','trials')).data.fillna(0).drop_duplicates('trial_x_participant')
-# Xdat = data.values[:,:,0].T
-# pca3 = PCA(n_components=10, svd_solver='full')#selecting Principale components (PC)
-# Xdat2 = pca3.fit_transform(Xdat)
-
-# #varcovar
-# vcovmat = np.dot(Xdat.T,Xdat)
-# pca4 = PCA(n_components=10, svd_solver='full')
-# pca_weights = pca4.fit_transform(vcovmat) 
-# Xdat3 = np.dot(Xdat, pca_weights) #wrong
-# Xdat4 = pca4.transform(Xdat) #correct
-# Xdat5 = np.dot(Xdat, pca4.components_.T) #correct
-
 def reconstruct(magnitudes, PCs, eigen, means):
     '''
     Reconstruct channel activity from PCA
@@ -847,6 +826,7 @@ def condition_selection(hmp_data, epoch_data, condition_string, variable='event'
         
     '''
     unstacked = hmp_data.unstack()
+    unstacked[variable] = unstacked[variable].fillna("")
     if method == 'equal':
         unstacked = unstacked.where(unstacked[variable] == condition_string, drop=True)
         stacked = stack_data(unstacked)

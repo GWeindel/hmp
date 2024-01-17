@@ -2230,7 +2230,7 @@ class hmp:
                 #update mags, params, and locations
                 mags[:n_events] = solutions.magnitudes.values
                 pars[:n_events+1] = solutions.parameters.values
-                locations[:n_events+1] = solutions.locations.values
+                #locations[:n_events+1] = solutions.locations.values
                 
                 #store solution
                 estimates.append(solutions)

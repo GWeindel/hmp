@@ -486,7 +486,7 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     else:
         return_ax = True
     loocv_estimates = loocv_estimates.dropna('n_event', how='all')
-    
+
     #stats
     diffs, diff_bin, labels = [],[],[]
     pvalues = []
@@ -536,6 +536,8 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
         ax[0].errorbar(x=xap,y=meanap, yerr=err, marker='o')
       
     #second plot
+    diffs = np.array(diffs)
+    diffs[np.isneginf(diffs)] = np.nan
     ax[1].plot(diffs,'.-', alpha=.6)
     ax[1].set_xticks(ticks=np.arange(0,loocv_estimates.n_event.max()-1), labels=labels)
     ax[1].hlines(0,0,len(np.arange(2,loocv_estimates.n_event.max())),color='lightgrey',ls='--')
@@ -543,9 +545,9 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     ax[1].set_xlabel('')
         
     if pvals:
-        ymin = np.min(diffs[:])
-        ymintext = ymin - (np.max(diffs[:]) - ymin) * .05
-        ymin = ymin - (np.max(diffs[:]) - ymin) * .1
+        ymin = np.nanmin(diffs[:])
+        ymintext = ymin - (np.nanmax(diffs[:]) - ymin) * .05
+        ymin = ymin - (np.nanmax(diffs[:]) - ymin) * .1
         ax[1].set_ylim(bottom=ymin)
         for n_event in np.arange(2,loocv_estimates.n_event.max()+1):       
             ax[1].text(x=n_event-2, y=ymintext, s=str(int(np.nansum(diff_bin[n_event-2])))+'/'+ str(len(diffs[-1])) + ': ' + str(np.around(pvalues[n_event-2][-1],3)), ha='center')
