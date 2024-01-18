@@ -460,7 +460,7 @@ class hmp:
     def fit_single_conds(self, magnitudes=None, parameters=None, parameters_to_fix=None, 
                    magnitudes_to_fix=None, tolerance=1e-4, max_iteration=1e3, maximization=True, min_iteration = 1,
                    starting_points=1, method='random', return_max=True, verbose=True, cpus=None,
-                   mags_map=None, pars_map=None, conds=None):
+                   mags_map=None, pars_map=None, conds=None, locations=None):
         '''
         Fit HMP for a single n_events model
         
@@ -645,6 +645,17 @@ class hmp:
                 for c in range(n_conds):
                     magnitudes[c, np.where(mags_map[c,:]<0)[0],:] = np.nan
 
+        if locations is not None:
+            if len(np.shape(locations)) == 1: #broadcast locations across conditions
+                locations = np.tile(locations, (n_conds, 1))
+            assert locations.shape[1] == n_events + 1, f'Provided locations ({ locations.shape[1]} should match number of stages {n_events + 1} in parameters map'
+
+            #set locations missing stages to nan to make it obvious in the results
+            if (pars_map < 0).any():
+                for c in range(n_conds):
+                    locations[c, np.where(pars_map[c,:]<0)[0],:] = np.nan            
+
+
         if starting_points > 0:#Initialize with equally spaced option
             if parameters is None:
                 parameters = np.zeros((n_conds,n_events + 1, 2)) * np.nan #by default nan for missing stages
@@ -690,7 +701,7 @@ class hmp:
             if cpus > 1: 
                 inputs = zip(magnitudes, parameters, itertools.repeat(maximization),
                         itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(min_iteration),
-                        itertools.repeat(mags_map), itertools.repeat(pars_map), itertools.repeat(conds),itertools.repeat(1))
+                        itertools.repeat(mags_map), itertools.repeat(pars_map), itertools.repeat(conds),itertools.repeat(1), itertools.repeat(locations))
                 with mp.Pool(processes=cpus) as pool:
                     if starting_points > 1:
                         estimates = list(tqdm(pool.imap(self._EM_star, inputs), total=len(magnitudes)))
@@ -702,35 +713,48 @@ class hmp:
                 for pars, mags in zip(parameters, magnitudes):
                     estimates.append(self.EM(mags, maximization,\
                     magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration,
-                     pars, mags_map, pars_map, conds, cpus))
+                     pars, mags_map, pars_map, conds, cpus, locations=locations))
                 resetwarnings()
             
             lkhs_sp = [x[0] for x in estimates]
             mags_sp = [x[1] for x in estimates]
             pars_sp = [x[2] for x in estimates]
             eventprobs_sp = [x[3] for x in estimates]
-            traces_sp = [x[4] for x in estimates]
+            locations_sp = [x[4] for x in estimates]
+            traces_sp = [x[5] for x in estimates]
+            locations_dev_sp = [x[6] for x in estimates]
+            param_dev_sp = [x[7] for x in estimates]
             if return_max:
                 max_lkhs = np.argmax(lkhs_sp)
                 lkh = lkhs_sp[max_lkhs]
                 mags = mags_sp[max_lkhs]
                 pars = pars_sp[max_lkhs]
                 eventprobs = eventprobs_sp[max_lkhs]
+                locations = locations_sp[max_lkhs]
                 traces = traces_sp[max_lkhs]
+                locations_dev = locations_dev_sp[max_lkhs]
+                param_dev = param_dev_sp[max_lkhs]
             else:
                 lkh = lkhs_sp
                 mags = mags_sp
                 pars = pars_sp
                 eventprobs = eventprobs_sp
+                locations = locations_sp
                 traces = np.zeros((len(lkh),  max([len(x) for x in traces_sp])))*np.nan
                 for i, _i in enumerate(traces_sp):
                     traces[i, :len(_i)] = _i
+                locations_dev = np.zeros((len(lkh),  max([len(x) for x in locations_dev_sp]), n_conds, n_events + 1 ))*np.nan
+                for i, _i in enumerate(locations_dev_sp):
+                    locations_dev[i, :len(_i),:, :] = _i
+                param_dev = np.zeros((len(lkh),  max([len(x) for x in param_dev_sp]), n_conds, n_events + 1, 2))*np.nan
+                for i, _i in enumerate(param_dev_sp):
+                    param_dev[i, :len(_i),:,:,:] = _i
             
         elif starting_points == 1:#informed starting point
-            lkh, mags, pars, eventprobs, traces = self.EM(initial_m, initial_p, \
+            lkh, mags, pars, eventprobs, locations, traces, locations_dev, param_dev = self.EM(initial_m, initial_p, \
                                          maximization, magnitudes_to_fix, parameters_to_fix, \
                                          max_iteration, tolerance, min_iteration, 
-                                         mags_map, pars_map, conds, cpus)
+                                         mags_map, pars_map, conds, cpus, locations=locations)
 
         else:#uninitialized    
             if np.any(parameters)== None:
@@ -741,12 +765,13 @@ class hmp:
                 magnitudes = np.zeros((n_events,self.n_dims), dtype=np.float64)
                 magnitudes = np.tile(magnitudes, (n_conds, 1, 1)) #broadcast across conditions
 
-            lkh, mags, pars, eventprobs, traces = self.EM(magnitudes, parameters, maximization, magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration, mags_map, pars_map, conds, cpus)
+            lkh, mags, pars, eventprobs, locations, traces, locations_dev, param_dev = self.EM(magnitudes, parameters, maximization, magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration, mags_map, pars_map, conds, cpus, locations=locations)
         
         #make output object
         xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
         xrtraces = xr.DataArray(traces, dims=("em_iteration"), name="traces", coords={'em_iteration':range(len(traces))})
-        
+        xrlocations_dev = xr.DataArray(locations_dev, dims=("em_iteration", "condition", "stage"), name="locations_dev", coords={'em_iteration':range(len(locations_dev)),'condition':range(n_conds),'stage':range(n_events+1)})
+        xrparam_dev = xr.DataArray(param_dev, dims=("em_iteration","condition","stage",'parameter'), name="param_dev", coords=[range(len(param_dev)), range(n_conds), range(n_events+1), ['shape','scale']])               
         xrparams = xr.DataArray(pars, dims=("condition","stage",'parameter'), name="parameters", 
                                  coords ={'condition':range(n_conds), 'stage':range(n_events+1), 'parameter':['shape','scale']})
         xrmags = xr.DataArray(mags, dims=("condition", "event", "component"), name="magnitudes",
@@ -764,8 +789,10 @@ class hmp:
                                  'cond':('trial_x_participant',conds)})
         xreventprobs = xreventprobs.assign_coords(trial_x_part)
         xreventprobs = xreventprobs.transpose('trial_x_participant','samples','event')
+        xrlocations = xr.DataArray(locations, dims=("condition", "stage"), name="locations", 
+                            coords = [range(n_conds), range(n_events+1)])
 
-        estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrtraces))
+        estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrlocations, xrtraces,xrlocations_dev, xrparam_dev))
         estimated.attrs['mags_map'] = mags_map
         estimated.attrs['pars_map'] = pars_map
         estimated.attrs['clabels'] = clabels
@@ -849,11 +876,13 @@ class hmp:
             locations = np.zeros((n_events+1,),dtype=int) #location per stage
             if self.location_corr_threshold is None:
                 locations[1:-1] = self.location
+            if n_cond is not None:
+                locations = np.tile(locations, (n_cond, 1))
         else:
             locations = locations.astype(int)
         
         if n_cond is not None:
-            lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
+            lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, locations, mags_map, pars_map, conds, cpus=cpus)
         else:
             lkh, eventprobs = self.estim_probs(magnitudes, parameters, locations, n_events)
 
@@ -874,18 +903,15 @@ class hmp:
                 stage_durations = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters])
                 stage_durations_prev = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters_prev])
                 
-                if i >= min_iteration and (np.isneginf(lkh) or (locations == locations_prev).all() and tolerance > (lkh-lkh_prev)/np.abs(lkh_prev) and (np.abs(stage_durations-stage_durations_prev) < .1).all()):
-                 
-                    if np.isneginf(lkh):
-                        print('-!- Estimation stopped because of -inf log-likelihood: this typically indicates requesting too many and/or too closely spaced events -!-')
+                if self.location_corr_threshold is None:
+                    if i >= min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
+                        break
 
-                    #if self.location_corr_threshold is not None:
-                    #    if 
-                    #    print('-!- Final model did not adhere to location settings. -!-')
-                
-                    break
-
-
+                else:
+                    if i >= min_iteration and (np.isneginf(lkh) or (locations == locations_prev).all() and tolerance > (lkh-lkh_prev)/np.abs(lkh_prev) and (np.abs(stage_durations-stage_durations_prev) < .1).all()):
+                        if np.isneginf(lkh):
+                            print('-!- Estimation stopped because of -inf log-likelihood: this typically indicates requesting too many and/or too closely spaced events -!-')
+                        break
                 
                 #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
@@ -899,8 +925,10 @@ class hmp:
                         pars_map_cond = np.where(pars_map[c,:]>=0)[0]
                         epochs_cond = np.where(conds == c)[0]
                         
-                        #get mags/pars by condition
+                        #get mags/pars/locs by condition
                         magnitudes[c,mags_map_cond,:], parameters[c,pars_map_cond,:] = self.get_magnitudes_parameters_expectation(eventprobs[np.ix_(range(self.max_d),epochs_cond, mags_map_cond)], subset_epochs=epochs_cond)
+                        if self.location_corr_threshold is not None:
+                            locations[c,pars_map_cond] = self.get_locations(locations[c,pars_map_cond], magnitudes[c,mags_map_cond,:], parameters[c,pars_map_cond,:], parameters_prev[c,pars_map_cond,:], eventprobs[np.ix_(range(self.max_d),epochs_cond, mags_map_cond)], subset_epochs=epochs_cond)
 
                         magnitudes[c,magnitudes_to_fix,:] = initial_magnitudes[c,magnitudes_to_fix,:].copy()
                         parameters[c,parameters_to_fix,:] = initial_parameters[c,parameters_to_fix,:].copy()
@@ -911,11 +939,12 @@ class hmp:
                             if m_set >= 0:
                                 magnitudes[mags_map[:,m] == m_set,m,:] = np.mean(magnitudes[mags_map[:,m] == m_set,m,:],axis=0)
 
-                    #set params to mean if requested in map
+                    #set params and locations to mean/max if requested in map
                     for p in range(n_events+1):
                         for p_set in np.unique(pars_map[:,p]):
                             if p_set >= 0:
                                 parameters[pars_map[:,p] == p_set,p,:] = np.mean(parameters[pars_map[:,p] == p_set,p,:],axis=0)
+                                locations[pars_map[:,p] == p_set,p] = np.max(locations[pars_map[:,p] == p_set,p],axis=0)
 
                 else: #general
                     magnitudes, parameters = self.get_magnitudes_parameters_expectation(eventprobs)
@@ -925,7 +954,7 @@ class hmp:
                         locations = self.get_locations(locations, magnitudes, parameters, parameters_prev, eventprobs)
 
                 if n_cond is not None:
-                    lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, mags_map, pars_map, conds, cpus=cpus)
+                    lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, locations, mags_map, pars_map, conds, cpus=cpus)
                 else:
                     lkh, eventprobs = self.estim_probs(magnitudes, parameters, locations, n_events)
                 
@@ -978,17 +1007,18 @@ class hmp:
 
         return [magnitudes, parameters]
     
-    def get_locations(self, locations, magnitudes, parameters, parameters_prev, eventprobs):
+    def get_locations(self, locations, magnitudes, parameters, parameters_prev, eventprobs, subset_epochs=None):
         #if no correlation threshold is set, locations are set for all stages except first and last stage
         #to self.location
         #else, locations are only set for stages that exceed location_corr_threshold
         n_events = magnitudes.shape[magnitudes.ndim-2]
+        
         if self.location_corr_threshold is None:
             locations[1:-1] = self.location
         else:
             if n_events > 1 and not (magnitudes == 0).all():
 
-                topos = self.compute_topos_locations(eventprobs)
+                topos = self.compute_topos_locations(eventprobs,subset_epochs)
                     
                 corr = np.corrcoef(topos.T)[:-1,1:].diagonal() #only interested in sequential corrs
                 stage_durations = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters[1:-1,:]])
@@ -1002,10 +1032,12 @@ class hmp:
                             locations[ev + 1] += 1 #indexes stages
         return locations
 
-    def compute_topos_locations(self, eventprobs):
+    def compute_topos_locations(self, eventprobs, subset_epochs=None):
         
         n_events = eventprobs.shape[2]
         n_trials = eventprobs.shape[1]
+        if subset_epochs is None: #all trials
+            subset_epochs = range(n_trials)
 
         #estimating mid of event, so go to start, then shift back to max (by default this is 0)
         shift = -(self.event_width_samples // 2) + np.argmax(self.template)
@@ -1014,7 +1046,7 @@ class hmp:
         event_values = np.zeros((self.stacked_epoch_data.values.shape[0],n_trials,n_events))
         for ev in range(n_events):
             for tr in range(n_trials):
-                event_values[:,tr,ev] = self.stacked_epoch_data.values[:,int(times[ev,tr]),tr]
+                event_values[:,tr,ev] = self.stacked_epoch_data.values[:,int(times[ev,tr]),subset_epochs[tr]]
 
         return np.nanmean(event_values,axis=1)
 
@@ -1154,7 +1186,7 @@ class hmp:
         else:
             return [likelihood, eventprobs]
 
-    def estim_probs_conds(self, magnitudes, parameters, mags_map, pars_map, conds, lkh_only=False, cpus=1):
+    def estim_probs_conds(self, magnitudes, parameters, locations, mags_map, pars_map, conds, lkh_only=False, cpus=1):
         '''
         parameters
         ----------
@@ -1185,13 +1217,13 @@ class hmp:
         if cpus > 1:
             with mp.Pool(processes=cpus) as pool:
                 likes_events_cond = pool.starmap(self.estim_probs, 
-                    zip([magnitudes[c, mags_map[c,:]>=0, :] for c in range(n_conds)], [parameters[c, pars_map[c,:]>=0, :] for c in range(n_conds)], itertools.repeat(None),
-                        [conds == c for c in range(n_conds)], itertools.repeat(False)))
+                    zip([magnitudes[c, mags_map[c,:]>=0, :] for c in range(n_conds)], [parameters[c, pars_map[c,:]>=0, :] for c in range(n_conds)], [locations[c, pars_map[c,:]>=0] for c in range(n_conds)],itertools.repeat(None), [conds == c for c in range(n_conds)], itertools.repeat(False)))
         else:
             for c in range(n_conds):
                 magnitudes_cond = magnitudes[c, mags_map[c,:]>=0, :] #select existing magnitudes
                 parameters_cond = parameters[c, pars_map[c,:]>=0, :] #select existing params
-                likes_events_cond.append(self.estim_probs(magnitudes_cond, parameters_cond, subset_epochs = (conds == c)))
+                locations_cond = locations[c, pars_map[c,:]>=0] 
+                likes_events_cond.append(self.estim_probs(magnitudes_cond, parameters_cond, locations_cond, subset_epochs = (conds == c)))
 
         likelihood = np.sum([x[0] for x in likes_events_cond])
         eventprobs = np.zeros((self.max_d, len(conds), mags_map.shape[1]))

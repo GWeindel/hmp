@@ -639,3 +639,62 @@ def loocv_fit_backward(init, data, fix_prev=False, by_sample=False, min_events=0
     '''
 
     return loocv_func(init, data, fit_backward_func, func_args=[fix_prev, by_sample, min_events, tolerance, max_iteration], cpus=cpus, verbose=verbose)
+
+
+def get_average_parameters(all_estimates):
+
+    #make sure we have 'nested models', even if only one
+    if not isinstance(all_estimates[0], list): #then nested
+        all_estimates = [all_estimates]
+
+    all_average_parameters = []    
+    for estimates in all_estimates:
+
+        #single or conditions
+        if not 'n_events' in estimates[0].dims:
+
+            magnitudes = np.zeros(estimates[0].magnitudes.shape)        
+            parameters = np.zeros(estimates[0].parameters.shape)        
+            locations = np.zeros(estimates[0].locations.shape)        
+
+            for pp in range(len(estimates)):
+                magnitudes += estimates[pp].magnitudes
+                parameters += estimates[pp].parameters
+                locations += estimates[pp].locations
+
+            mags_average = magnitudes.values / len(estimates)
+            params_average = parameters.values / len(estimates)
+            locations_average = locations.values / len(estimates)
+
+            all_average_parameters.append([mags_average, params_average, locations_average])
+
+        #option 3: backward
+        elif 'n_events' in estimates[0].dims:
+
+            mags_average = [] 
+            params_average = [] 
+            locations_average = []
+
+            for ev in estimates[0].n_events:
+
+                #get averages
+                magnitudes = np.zeros(estimates[0].sel(n_events=ev).magnitudes.shape)        
+                parameters = np.zeros(estimates[0].sel(n_events=ev).parameters.shape)        
+                locations = np.zeros(estimates[0].sel(n_events=ev).locations.shape)        
+
+                for pp in range(len(estimates)):
+                    selected_backward = estimates[pp].sel(n_events=ev)
+                    magnitudes += selected_backward.magnitudes
+                    parameters += selected_backward.parameters
+                    locations += selected_backward.locations
+
+                mags_average.append(magnitudes.dropna('event').values / len(estimates))
+                params_average.append(parameters.dropna('stage').values / len(estimates))
+                locations_average.append(locations.dropna('stage').values / len(estimates))
+
+            all_average_parameters.append([mags_average, params_average, locations_average])
+    
+    if len(all_average_parameters) == 1:
+        all_average_parameters = all_average_parameters[0]
+
+    return all_average_parameters

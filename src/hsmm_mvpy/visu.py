@@ -1011,7 +1011,7 @@ def plot_estimate_development(estimates, init, epoch_data, info, print_correlati
     Parameters
      ----------
      	estimates : estimated hmp model, or a list of models
-            estimated model(s) to be plotted
+            estimated model(s) to be plotted, can be from fit_single, backward estimation, or fit
         init : initialized hmp model
         epoch_data : xr.Dataarray 
             the original EEG data in HMP format
@@ -1025,15 +1025,24 @@ def plot_estimate_development(estimates, init, epoch_data, info, print_correlati
     if not isinstance(estimates, list):
         estimates = [estimates]
     
+    #split backward if present
+    all_estimates = []
+    for est in estimates:
+        if not 'n_events' in est.dims:
+            all_estimates.append(est)
+        else:
+            for ev in est.n_events:
+                all_estimates.append(est.sel(n_events=ev).dropna("stage", how='all'))
+
     time_step = 1000/init.sfreq
     
     #get topos
     topos = []
-    for est in estimates:
+    for est in all_estimates:
         topos.append(init.compute_topologies(epoch_data,est,init).values)
-    vm = np.max([np.max(np.abs(x)) for x in topos])
+    vm = np.nanmax([np.nanmax(np.abs(x)) for x in topos])
 
-    for est_idx, est in enumerate(estimates):
+    for est_idx, est in enumerate(all_estimates):
 
         figsize = (10, 5) 
         plt.subplots(1, 1, figsize=figsize)
@@ -1064,4 +1073,4 @@ def plot_estimate_development(estimates, init, epoch_data, info, print_correlati
         #print correlations
         if print_correlations and neve > 1:
             corr = np.corrcoef(topos[est_idx])[:-1,1:].diagonal()
-            print(corr)
+            print(corr[not np.isnan(corr)])
