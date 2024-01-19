@@ -592,8 +592,8 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     '''
     if isinstance(data, xr.DataArray):
         raise ValueError('Expected a xarray Dataset with data and event as DataArrays, check the data format')
-    if not apply_zscore in ['all', 'participant', 'trial'] and not isinstance(apply_zscore,bool):
-        raise ValueError('apply_zscore should be either a boolean or one of [\'all\', \'participant\', \'trial\']')
+    if not apply_zscore in ['all', 'participant', 'trial', 'across_pcs'] and not isinstance(apply_zscore,bool):
+        raise ValueError('apply_zscore should be either a boolean or one of [\'all\', \'participant\', \'trial\', \'across_pcs\']')
     assert np.sum(np.isnan(data.groupby('participant').mean(['epochs','samples']).data.values)) == 0,\
         'at least one participant has an empty channel'
     sfreq = data.sfreq
@@ -686,8 +686,11 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
                 data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore_xarray).unstack()
             case 'trial':
                 data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
+            case 'across_pcs':
+                data = zscore_xarray(data)
         data = data.transpose('participant','epochs','samples','component')
         data = data.assign_coords(ori_coords)
+
     data.attrs['pca_weights'] = pca_weights
     data.attrs['sfreq'] = sfreq
     data = stack_data(data)
