@@ -1418,7 +1418,7 @@ class hmp:
 
 
     @staticmethod        
-    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=False, extra_dim=None, as_time=False, errorbars=None):
+    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=False, extra_dim=None, as_time=False, errorbars=None, center_measure='mean'):
         '''
         Compute the likeliest onset times for each event
 
@@ -1546,15 +1546,36 @@ class hmp:
         if mean:
             if extra_dim == 'condition': #calculate mean only in trials of specific condition
                 if mean_in_participant:
-                    times = times.groupby('cond_x_participant').mean('trial_x_participant')
+                    if center_measure == 'mean':
+                        times = times.groupby('cond_x_participant').mean('trial_x_participant')
+                    elif center_measure == 'median':
+                        times = times.groupby('cond_x_participant').median('trial_x_participant')
+                    else:
+                        print('center measure not recognized')
                     times = times.groupby('cond').mean('cond_x_participant')       
                 else:
-                    times = times.groupby('cond').mean('trial_x_participant')
+                    if center_measure == 'mean':
+                        times = times.groupby('cond').mean('trial_x_participant')
+                    elif center_measure == 'median':
+                        times = times.groupby('cond').median('trial_x_participant')
+                    else:
+                        print('center measure not recognized')
             else:
                 if mean_in_participant:
-                    times = times.groupby('participant').mean('trial_x_participant').mean('participant')
+                    if center_measure == 'mean':
+                        times = times.groupby('participant').mean('trial_x_participant').mean('participant')
+                    elif center_measure == 'median':
+                        times = times.groupby('participant').median('trial_x_participant').mean('participant')
+                    else:
+                        print('center measure not recognized')
                 else:
-                    times = times.mean('trial_x_participant')
+                    if center_measure == 'mean':
+                        times = times.mean('trial_x_participant')
+                    elif center_measure == 'median':
+                        times = times.median('trial_x_participant')
+                    else:
+                        print('center measure not recognized')
+                    
         elif errorbars:
             if extra_dim == 'condition':
                 errorbars_model = np.zeros((len(np.unique(times['cond'])), 2,times.shape[1]))
