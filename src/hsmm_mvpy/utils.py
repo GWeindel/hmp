@@ -547,7 +547,7 @@ def stack_data(data, subjects_variable='participant', channel_variable='componen
     data = data.stack(all_samples=['participant','epochs',"samples"]).dropna(dim="all_samples")
     return data
 
-def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', n_comp=None, pca_weights=None, filter=None):
+def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', zscore_acrossPCs=False, method='pca', n_comp=None, pca_weights=None, filter=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -592,8 +592,8 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     '''
     if isinstance(data, xr.DataArray):
         raise ValueError('Expected a xarray Dataset with data and event as DataArrays, check the data format')
-    if not apply_zscore in ['all', 'participant', 'trial', 'across_pcs'] and not isinstance(apply_zscore,bool):
-        raise ValueError('apply_zscore should be either a boolean or one of [\'all\', \'participant\', \'trial\', \'across_pcs\']')
+    if not apply_zscore in ['all', 'participant', 'trial'] and not isinstance(apply_zscore,bool):
+        raise ValueError('apply_zscore should be either a boolean or one of [\'all\', \'participant\', \'trial\']')
     assert np.sum(np.isnan(data.groupby('participant').mean(['epochs','samples']).data.values)) == 0,\
         'at least one participant has an empty channel'
     sfreq = data.sfreq
@@ -681,13 +681,20 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         ori_coords = data.coords
         match apply_zscore:
             case 'all':
-                data = data.stack(comp=['component']).groupby('comp').map(zscore_xarray).unstack()
+                if zscore_acrossPCs:
+                    data = zscore_xarray(data)
+                else:
+                    data = data.stack(comp=['component']).groupby('comp').map(zscore_xarray).unstack()
             case 'participant':
-                data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore_xarray).unstack()
+                if zscore_acrossPCs:
+                    data = data.groupby('participant').map(zscore_xarray)
+                else:
+                    data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore_xarray).unstack()
             case 'trial':
-                data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
-            case 'across_pcs':
-                data = zscore_xarray(data)
+                if zscore_acrossPCs:
+                    data = data.stack(trial=[participants_variable,'epochs']).groupby('trial').map(zscore_xarray).unstack()
+                else:
+                    data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
         data = data.transpose('participant','epochs','samples','component')
         data = data.assign_coords(ori_coords)
 
