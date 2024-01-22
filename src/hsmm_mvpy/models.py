@@ -1418,7 +1418,7 @@ class hmp:
 
 
     @staticmethod        
-    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=False, extra_dim=None, as_time=False, errorbars=None, center_measure='mean'):
+    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=False, extra_dim=None, as_time=False, errorbars=None, center_measure='mean',estimate_method=None):
         '''
         Compute the likeliest onset times for each event
 
@@ -1459,9 +1459,12 @@ class hmp:
 
         assert not(mean and errorbars is not None), 'Only one of mean and errorbars can be set.'
 
+        if estimate_method is None:
+            estimate_method = init.em_method
+
         event_shift = init.event_width_samples//2
         eventprobs = estimates.eventprobs.fillna(0).copy()
-        if init.em_method == "max":
+        if estimate_method == "max":
             times = eventprobs.argmax('samples') - event_shift #Most likely event location
         else:
             times = xr.dot(eventprobs, eventprobs.samples, dims='samples') - event_shift

@@ -1073,4 +1073,4 @@ def plot_estimate_development(estimates, init, epoch_data, info, print_correlati
         #print correlations
         if print_correlations and neve > 1:
             corr = np.corrcoef(topos[est_idx])[:-1,1:].diagonal()
-            print(corr[not np.isnan(corr)])
+            print(corr[~np.isnan(corr)])
