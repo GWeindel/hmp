@@ -1,12 +1,14 @@
 '''
 
 '''
-
+import scipy.stats as stats
+import scipy.signal as ssignal
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from itertools import cycle
+import warnings
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold']
 
 
@@ -999,3 +1001,94 @@ def plot_expected_distribution(distribution, mean, shape, location=0, xmax=300, 
             ax.vlines(sp_dist.mean(shape, scale=mean_to_scale(mean, shape), loc=location), np.min(y), np.max(y), color=color)
         else: 
             ax.vlines(sp_dist.mean(shape, scale=mean_to_scale(mean, shape)), np.min(y), np.max(y), color=color)
+
+def erp_data(epoched_data, times, channel,n_samples=None, pad=1):
+    '''
+    Create a data array compatible with the plot ERP function. Optionnally this function can resample the epochs to fit some provided times (e.g. onset of the events)
+
+    Parameters
+    ----------
+     	epoched_data: xr.Dataset 
+            Epoched physiological data with dims 'participant'X 'epochs' X 'channels'X 'samples'
+        times: xr.Dataset
+            Times between wich to extract or resample the data with dims 'trial_x_participant' X 'event'
+        channel: str
+            For which channel to extract the data
+        n_samples: int
+            How many samples to resample on if any
+        pad: int
+            padding added to the beginning and the end of the signal
+    
+    Returns
+    -------
+    data : nd.array
+        array containing the extracted times for each epoch and stage with format epochs X events X samples.
+    '''
+    epoched_data = epoched_data.sel(channels=channel)
+    if n_samples is None:
+        data = np.zeros((len(times.trial_x_participant), len(times.event), len(epoched_data.samples)))*np.nan
+    else:
+        data = np.zeros((len(times.trial_x_participant), len(times.event), n_samples))*np.nan
+
+    for i,trial in enumerate(times.trial_x_participant):
+        for j,event in enumerate(times.event):
+            if event == 0:
+                sub_prevtime = 0
+            else:
+                sub_prevtime = times.sel(trial_x_participant=trial, event=event-1).data
+            sub_times = times.sel(trial_x_participant=trial, event=event).data-1
+            time_diff = sub_times-sub_prevtime
+            if time_diff > 1:#rounds up to 0 otherwise
+                subset = epoched_data.sel(trial_x_participant=trial, samples=slice(sub_prevtime,sub_times))
+                if n_samples is None:
+                    limit = np.sum(~subset.data.isnull()).values
+                    data[i,j,:limit] = subset.data
+                else:
+                    padded_data = np.concatenate([np.repeat([subset.data[0]],pad), subset.data, np.repeat([subset.data[-1]], pad)])
+                    #resample_poly seems to have better results than resample
+                    data[i,j] = ssignal.resample_poly(padded_data,n_samples*10,len(padded_data.data)*(n_samples/10), padtype='median')
+                    # data[i,j] = ssignal.resample(padded_data.data, n_samples)
+    return data
+
+
+def plot_erp(times, data, color='k',ax=None, minmax_lines=(0,0), upsample=1, bootstrap=None):
+    '''
+    Plot the ERP based on the times extracted by HMP (or just stimulus and response and the data extracted from ```erp_data```.
+
+    
+    Parameters
+    ----------
+        times: xr.Dataset
+            Times between wich to extract or resample the data with dims 
+        data: nd.array
+            numpy array from the erp_data functino
+        color: str
+            color for the lines
+        ax: matplotlib.pyplot
+            ax on which to draw
+        minmax_lines: tuple
+            Min and max arguments for the vertical lines on the plot
+        upsample: float
+            Upsampling factor for the times
+        bootstrap: int
+            how many bootstrap draw to perform
+    '''
+    if ax is None:
+        ax = plt
+    for event in times.event[1:]:
+        time = times.sel(event=event-1).mean()
+        time_current = int(times.sel(event=event).mean())
+        if len(times.event)>2:
+            x = np.linspace(time,time_current,num=np.shape(data)[-1])*upsample
+            mean_signal =  np.nanmean(data[:,event,:],axis=0)
+        else:
+            x = np.arange(time,time_current)*upsample
+            mean_signal =  np.nanmean(data[:,event,:],axis=0)[:time_current]
+        ax.plot(x, mean_signal, color=color)
+        ax.vlines(times.mean('trial_x_participant')*upsample, minmax_lines[0],minmax_lines[1], color=color, ls=':', alpha=.25)
+        if bootstrap is not None:
+            test_boot = stats.bootstrap((data[:,event,:],), statistic=np.nanmean, n_resamples=bootstrap, axis=0, )
+            if len(times.event)>2:
+                ax.fill_between(x, test_boot.confidence_interval[0], test_boot.confidence_interval[1], alpha=0.5, color=color)
+            else:
+                ax.fill_between(x, test_boot.confidence_interval[0][:time_current], test_boot.confidence_interval[1][:time_current], alpha=0.5, color=color)
