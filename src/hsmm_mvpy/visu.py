@@ -261,7 +261,8 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     #add vlines across all rows
     if not cond_plot:
         __display_times(ax, times_to_display, 0, time_step, max_time, times, linecolors, n_iter)
-
+    else:
+        ax.set_xlim(-1*time_step, np.max(times_to_display)*time_step * 1.05)
     if not return_ax:
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
