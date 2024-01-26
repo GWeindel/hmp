@@ -1621,7 +1621,7 @@ class hmp:
         return times
    
     @staticmethod
-    def compute_topologies(channels, estimated, init, extra_dim=None, mean=True, mean_in_participant=True, peak=True):
+    def compute_topologies(channels, estimated, init, extra_dim=None, mean=True, mean_in_participant=True, peak=True, estimate_method=None):
         """
         Compute topologies for each trial. 
          
@@ -1648,6 +1648,10 @@ class hmp:
                 array containing the values of each electrode at the most likely transition time
                 contains nans for missing events
         """
+
+        if estimate_method is None:
+            estimate_method = init.em_method
+
         channels = channels.rename({'epochs':'trials'}).\
                           stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant')
         estimated = estimated.eventprobs.fillna(0).copy()
@@ -1664,7 +1668,7 @@ class hmp:
 
         event_shift = init.event_width_samples // 2
         if not extra_dim or extra_dim == 'condition': #also in the condition case, only one fit per trial
-            if init.em_method == "max":
+            if estimate_method == "max":
                 times = estimated.argmax('samples') - event_shift #Most likely event location
             else:
                 times = np.round(xr.dot(estimated, estimated.samples, dims='samples')) - event_shift
@@ -1707,7 +1711,7 @@ class hmp:
             n_dim = estimated[extra_dim].count().values
             event_values = np.zeros((n_dim, n_channels, n_trials, n_events))*np.nan
             for x in range(n_dim):
-                if init.em_method == "max":
+                if estimate_method == "max":
                     times = estimated[x].argmax('samples') - init.event_width_samples//2
                 else:
                     times = np.round(xr.dot(estimated[x], estimated.samples, dims='samples')) - init.event_width_samples//2

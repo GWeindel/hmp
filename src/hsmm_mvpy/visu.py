@@ -15,7 +15,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
                 ylabels=[], xlabel = None, max_time = None, vmin=None, vmax=None, title=False, ax=None, 
                 sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange',
                 colorbar=True, topo_size_scaling=False, as_time=False,
-                        linecolors='black'):
+                        linecolors='black',center_measure='mean',estimate_method=None):
     '''
     Plotting the event topologies at the average time of the onset of the next stage.
     
@@ -104,18 +104,19 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         n_cond = estimated.parameters.shape[0]
 
         #make times_to_display in list with lines per condition
+        default = [np.mean(init.durations[conds==c]) for c in range(n_cond)]
+        default.reverse()
         if times_to_display is None:
-            times_to_display = [np.mean(init.durations[conds==c]) for c in range(n_cond)]
-            times_to_display.reverse()
-        elif len(times_to_display) == 1: #only one set of times
-            if isinstance(times_to_display, np.ndarray):
-                times_to_display = [times_to_display] * n_cond
-            elif isinstance(times_to_display, list):
+            times_to_display = default
+        elif isinstance(times_to_display, list):
+            if not isinstance(times_to_display[0], list): #assume it's a list that needs to be copied
                 times_to_display = times_to_display * n_cond
-        elif len(times_to_display) > 1 and len(times_to_display) != n_cond:
-            print('times_to_display should either be a list of length n_cond or an ndarray which will be repeated across conditions')
-            times_to_display = [np.mean(init.durations[conds==c]) for c in range(n_cond)].reverse() # default to RTs
-            times_to_display.reverse()
+            elif len(times_to_display) != n_cond:
+                print('times_to_display should either be a list of length n_cond or an ndarray which will be repeated across conditions')
+                times_to_display = default
+        elif isinstance(times_to_display, np.ndarray): #only one set of times
+            if len(times_to_display.shape) == 1:
+                times_to_display = [times_to_display] * n_cond
 
         #set ylabels to conditions
         if ylabels == []:
@@ -149,12 +150,11 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             elif 'condition' in estimated.dims:
                 ydim = 'condition'
         if not skip_channels_computation:
-            channels = init.compute_topologies(channels, estimated, init, ydim).data #compute topologies
-        times = init.compute_times(init, estimated, mean=True, extra_dim=ydim, as_time=as_time).data #compute corresponding times
+            channels = init.compute_topologies(channels, estimated, init, ydim, estimate_method=estimate_method).data #compute topologies
+        times = init.compute_times(init, estimated, mean=True, extra_dim=ydim, as_time=as_time, center_measure=center_measure,estimate_method=estimate_method).data #compute corresponding times
     else:#assumes times/topologies already computed
         times = estimated 
     times = times * time_step
-
     if len(np.shape(channels)) == 2:
         channels = channels[np.newaxis]
     
@@ -202,6 +202,11 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     rowheight = 1/n_iter 
     for iteration in np.arange(n_iter):
         times_iteration = times[iteration]
+        if as_time:
+            times_iteration = times_iteration - time_step/2 #center on sample
+        else:
+            times_iteration = times_iteration - 1 # if event starts at sample 7 should be plotted at 6
+
         missing_evts = np.where(np.isnan(times_iteration))[0]
         times_iteration = np.delete(times_iteration,missing_evts)
         channels_ = channels[iteration,:,:]
@@ -230,7 +235,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
                 ax.fill_between(np.array([times_iteration[event],times_iteration[event]+event_size]), ylow, yhigh, alpha=0.15,color=event_color, transform=ax.get_xaxis_transform(),edgecolor=None)
 
         #add lines per condition
-        if cond_plot and times_to_display[iteration]:
+        if cond_plot and times_to_display is not None:
             #bottom of row + 5% if n_iter > 1
             ylow = iteration * rowheight if n_iter == 1 else iteration * rowheight + .05 * rowheight
             #top of row - 5% if n_iter > 1
