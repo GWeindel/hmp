@@ -151,7 +151,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             elif 'condition' in estimated.dims:
                 ydim = 'condition'
         if not skip_channels_computation:
-            channels = init.compute_topologies(channels, estimated, init, ydim).data #compute topologies
+            channels = init.compute_topologies(channels, estimated, init, ydim, peak=False).data #compute topologies
         times = init.compute_times(init, estimated, mean=True, extra_dim=ydim, as_time=as_time).data #compute corresponding times
     else:#assumes times/topologies already computed
         times = estimated 
@@ -1051,7 +1051,7 @@ def erp_data(epoched_data, times, channel,n_samples=None, pad=1):
     return data
 
 
-def plot_erp(times, data, color='k',ax=None, minmax_lines=(0,0), upsample=1, bootstrap=None):
+def plot_erp(times, data, color='k',ax=None, minmax_lines=None, upsample=1, bootstrap=None, label=None):
     '''
     Plot the ERP based on the times extracted by HMP (or just stimulus and response and the data extracted from ```erp_data```.
 
@@ -1084,10 +1084,11 @@ def plot_erp(times, data, color='k',ax=None, minmax_lines=(0,0), upsample=1, boo
         else:
             x = np.arange(time,time_current)*upsample
             mean_signal =  np.nanmean(data[:,event,:],axis=0)[:time_current]
-        ax.plot(x, mean_signal, color=color)
-        ax.vlines(times.mean('trial_x_participant')*upsample, minmax_lines[0],minmax_lines[1], color=color, ls=':', alpha=.25)
+        ax.plot(x, mean_signal, color=color, label=label)
+        if minmax_lines is not None:
+            ax.vlines(times.mean('trial_x_participant')*upsample, minmax_lines[0],minmax_lines[1], color=color, ls=':', alpha=.25)
         if bootstrap is not None:
-            test_boot = stats.bootstrap((data[:,event,:],), statistic=np.nanmean, n_resamples=bootstrap, axis=0, )
+            test_boot = stats.bootstrap((data[:,event,:],), statistic=np.nanmean, n_resamples=bootstrap, axis=0, batch=10)
             if len(times.event)>2:
                 ax.fill_between(x, test_boot.confidence_interval[0], test_boot.confidence_interval[1], alpha=0.5, color=color)
             else:
