@@ -1241,7 +1241,7 @@ class hmp:
 
 
     @staticmethod        
-    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=False, extra_dim=None, as_time=False, errorbars=None):
+    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=False, extra_dim=None, as_time=False, errorbars=None, method='max'):
         '''
         Compute the likeliest onset times for each event
 
@@ -1272,7 +1272,8 @@ class hmp:
             calculate 95% confidence interval ('ci'), standard deviation ('std'),
             standard error ('se') on the times or durations, or None.
             Note that mean and errorbars cannot both be true.
-        
+        method : str
+            if 'mean' takes the weigthed average of the event probabilities to compute the topologies, otherwise use the time point with 'max' probability
         Returns
         -------
         times : xr.DataArray
@@ -1284,7 +1285,7 @@ class hmp:
 
         event_shift = init.event_width_samples//2
         eventprobs = estimates.eventprobs.fillna(0).copy()
-        if init.em_method == "max":
+        if method == "max":
             times = eventprobs.argmax('samples') - event_shift #Most likely event location
         else:
             times = xr.dot(eventprobs, eventprobs.samples, dims='samples') - event_shift
@@ -1420,7 +1421,7 @@ class hmp:
         return times
    
     @staticmethod
-    def compute_topologies(channels, estimated, init, extra_dim=None, mean=True, mean_in_participant=True, peak=True):
+    def compute_topologies(channels, estimated, init, extra_dim=None, mean=True, mean_in_participant=True, peak=True, method='max'):
         """
         Compute topologies for each trial. 
          
@@ -1440,7 +1441,8 @@ class hmp:
                 Whether the mean is first computed within participant before calculating the overall mean.
             peak : bool
                 if true, return topology at peak of the event. If false, return topologies weighted by a normalized template.
-         
+             method : str
+                 if 'mean' takes the weigthed average of the event probabilities to compute the topologies, otherwise use the time point with 'max' probability
          Returns
          -------
          	event_values: xr.DataArray
@@ -1463,7 +1465,7 @@ class hmp:
 
         event_shift = init.event_width_samples // 2
         if not extra_dim or extra_dim == 'condition': #also in the condition case, only one fit per trial
-            if init.em_method == "max":
+            if method == "max":
                 times = estimated.argmax('samples') - event_shift #Most likely event location
             else:
                 times = np.round(xr.dot(estimated, estimated.samples, dims='samples')) - event_shift
@@ -1506,7 +1508,7 @@ class hmp:
             n_dim = estimated[extra_dim].count().values
             event_values = np.zeros((n_dim, n_channels, n_trials, n_events))*np.nan
             for x in range(n_dim):
-                if init.em_method == "max":
+                if method == "max":
                     times = estimated[x].argmax('samples') - init.event_width_samples//2
                 else:
                     times = np.round(xr.dot(estimated[x], estimated.samples, dims='samples')) - init.event_width_samples//2
