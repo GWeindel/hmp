@@ -624,7 +624,7 @@ def plot_latencies_gamma(gammas, event_width=0, time_step=1, labels=[''], colors
     gammas : ndarray
         instance of hmp.hmp.parameters
     event_width : float
-        Size of the event in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
+        Size of the event in time unit given sampling frequency, if drawing a fitted object using hmp you 
         can provide the event_width_sample of fitted hmp (e.g. init.event_width_sample)
     time_step : float
         What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
@@ -693,7 +693,7 @@ def plot_latencies(times, init=None, time_step=1, labels=[], colors=default_colo
     init : hmp object
         Initialized hmp object, required if times is an hmp results object
     event_width : float
-        Display size of the event in time unit given sampling frequency, if drawing a fitted object using hsmm_mvpy you 
+        Display size of the event in time unit given sampling frequency, if drawing a fitted object using hmp you 
         can provide the event_width_sample of fitted hmp (e.g. init.event_width_sample)
     time_step : float
         What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
@@ -873,7 +873,7 @@ def plot_iterations(iterations, eeg_data, init, positions, dims=['magnitudes','p
     """
     Currently DEPRECATED
     """
-    from hsmm_mvpy.models import hmp
+    from hmp.models import hmp
     if 'iteration' not in iterations.dims:
         try:
             iterations['iteration'] = [0]
@@ -905,7 +905,7 @@ def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoc
             If None ( default ) the model to compare is taken as the maximal n_event model among the bootstrapped models 
      	 epoch_data: If None ( default
     """
-    from hsmm_mvpy.resample import event_occurence
+    from hmp.resample import event_occurence
     maxboot_model, labels, counts, event_number, label_event_num = event_occurence(bootstrapped, model_to_compare)
     fig, axes = plt.subplot_mosaic([['a', 'a'], ['b', 'c'], ['b', 'c']],
                               layout='constrained')
@@ -947,42 +947,42 @@ def plot_expected_distribution(distribution, mean, shape, location=0, xmax=300, 
     match distribution:
         case 'gamma':
             from scipy.stats import gamma as sp_dist
-            from hsmm_mvpy.utils import gamma_scale_to_mean,gamma_mean_to_scale
+            from hmp.utils import gamma_scale_to_mean,gamma_mean_to_scale
             scale_to_mean, mean_to_scale = gamma_scale_to_mean,gamma_mean_to_scale
         case 'lognormal':
             from scipy.stats import lognorm as sp_dist
-            from hsmm_mvpy.utils import logn_scale_to_mean,logn_mean_to_scale
+            from hmp.utils import logn_scale_to_mean,logn_mean_to_scale
             scale_to_mean, mean_to_scale = logn_scale_to_mean,logn_mean_to_scale
         case 'wald':
             from scipy.stats import invgauss as sp_dist
-            from hsmm_mvpy.utils import wald_scale_to_mean,wald_mean_to_scale
+            from hmp.utils import wald_scale_to_mean,wald_mean_to_scale
             scale_to_mean, mean_to_scale = wald_scale_to_mean,wald_mean_to_scale
         case 'weibull':
             from scipy.stats import weibull_min as sp_dist
-            from hsmm_mvpy.utils import weibull_scale_to_mean,weibull_mean_to_scale
+            from hmp.utils import weibull_scale_to_mean,weibull_mean_to_scale
             scale_to_mean, mean_to_scale = weibull_scale_to_mean,weibull_mean_to_scale
         case 'maxwell-boltzmann':
             from scipy.stats import chi as sp_dist
-            from hsmm_mvpy.utils import maxb_scale_to_mean,maxb_mean_to_scale
+            from hmp.utils import maxb_scale_to_mean,maxb_mean_to_scale
             shape = 3
             scale_to_mean, mean_to_scale = maxb_scale_to_mean,maxb_mean_to_scale
         case 'log-logistic':
             from scipy.stats import fisk as sp_dist
-            from hsmm_mvpy.utils import fisk_scale_to_mean,fisk_mean_to_scale
+            from hmp.utils import fisk_scale_to_mean,fisk_mean_to_scale
             scale_to_mean, mean_to_scale = fisk_scale_to_mean,fisk_mean_to_scale
         case 'rayleigh':
             from scipy.stats import chi as sp_dist
-            from hsmm_mvpy.utils import ray_scale_to_mean,ray_mean_to_scale
+            from hmp.utils import ray_scale_to_mean,ray_mean_to_scale
             shape = 2
             scale_to_mean, mean_to_scale = ray_scale_to_mean,ray_mean_to_scale
         case 'half-normal':
             from scipy.stats import chi as sp_dist
-            from hsmm_mvpy.utils import halfn_scale_to_mean,halfn_mean_to_scale
+            from hmp.utils import halfn_scale_to_mean,halfn_mean_to_scale
             shape = 1
             scale_to_mean, mean_to_scale = halfn_scale_to_mean,halfn_mean_to_scale
         case 'uniform':
             from scipy.stats import uniform as sp_dist
-            from hsmm_mvpy.utils import uniform_scale_to_mean,uniform_mean_to_scale
+            from hmp.utils import uniform_scale_to_mean,uniform_mean_to_scale
             scale_to_mean, mean_to_scale = uniform_scale_to_mean,uniform_mean_to_scale
             location=None
         case _:

@@ -595,7 +595,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     Returns
     -------
     data : xarray.Dataset
-        xarray dataset [n_samples * n_comp] data expressed in the PC space, ready for hsMM fit
+        xarray dataset [n_samples * n_comp] data expressed in the PC space, ready for HMP fit
     pca_weigths : xarray.Dataset
         loadings of the PCA, used to retrieve channel space
     pca.explained_variance_ : ndarray
@@ -734,7 +734,7 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
         likelihood computed for the left-out participant
     '''
 
-    from hsmm_mvpy.models import hmp
+    from hmp.models import hmp
 
     if verbose:
             print(f'\t\tCalculating fit for participant {participant}')
@@ -991,7 +991,7 @@ def loocv_estimate_func(data, init, participant, func_estimate, func_args=None, 
         estimated hmp_model with func_estimate on n-1 participants
     '''
 
-    from hsmm_mvpy.models import hmp
+    from hmp.models import hmp
 
     if verbose:
             print(f'\tEstimating model for all participants except {participant}')
@@ -1042,7 +1042,7 @@ def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False
         likelihood computed for the left-out participant
     '''
 
-    from hsmm_mvpy.models import hmp
+    from hmp.models import hmp
 
     if verbose:
             print(f'\tCalculating likelihood for participant {participant}')

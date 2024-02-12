@@ -1,4 +1,4 @@
-"""Software for fitting HsMM-MVPA nodels on EEG data."""
+"""Software for fitting HMP on EEG/MEG data."""
 
 
 from . import models
