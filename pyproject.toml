@@ -29,6 +29,27 @@ dependencies=["mne >=1.0.0",
 "more_itertools",
 "ipywidgets"]
 
+
+keywords = [
+    "neuroscience",
+    "neuroimaging",
+    "MEG",
+    "EEG",
+    "ECoG",
+    "brain",
+]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python",
+    "Topic :: Software Development",
+    "Topic :: Scientific/Engineering",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: Unix",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+]
+
 [project.urls]
-"Homepage" = "https://github.com/GWeindel/hsmm_mvpy"
-"Bug Tracker" = "https://github.com/GWeindel/hsmm_mvpy/issues"
+"Homepage" = "https://github.com/GWeindel/hmp"
+"Bug Tracker" = "https://github.com/GWeindel/hmp/issues"
