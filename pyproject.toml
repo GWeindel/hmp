@@ -44,6 +44,7 @@ keywords = [
     "brain",
 ]
 
+[tool.hatch.build]
 exclude = [
     "/.*",
     "/*.npy",
