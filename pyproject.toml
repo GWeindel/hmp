@@ -43,9 +43,6 @@ keywords = [
     "ECoG",
     "brain",
 ]
-classifiers = [
-
-]
 
 [project.urls]
 "Homepage" = "https://github.com/GWeindel/hmp"
