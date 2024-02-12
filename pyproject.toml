@@ -1,6 +1,6 @@
 [build-system]
-requires = [ "setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 
 [project]
@@ -43,6 +43,16 @@ keywords = [
     "ECoG",
     "brain",
 ]
+
+exclude = [
+    "/.*",
+    "/*.npy",
+    "/*.fif",
+    "/*.toml",
+    "/*.txt",
+    "/plots",
+    "/tutorials",
+] 
 
 [project.urls]
 "Homepage" = "https://github.com/GWeindel/hmp"
