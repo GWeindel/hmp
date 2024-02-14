@@ -17,7 +17,6 @@ import mne
 import os
 
 filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later 
-
 def gamma_scale_to_mean(scale, shape): 
     return scale*shape
 def gamma_mean_to_scale(mean, shape): 
@@ -607,7 +606,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         raise ValueError('Expected a xarray Dataset with data and event as DataArrays, check the data format')
     if not apply_zscore in ['all', 'participant', 'trial'] and not isinstance(apply_zscore,bool):
         raise ValueError('apply_zscore should be either a boolean or one of [\'all\', \'participant\', \'trial\']')
-    assert np.sum(np.isnan(data.groupby('participant').mean(['epochs','samples']).data.values)) == 0,\
+    assert np.sum(np.isnan(data.groupby('participant', squeeze=False).mean(['epochs','samples']).data.values)) == 0,\
         'at least one participant has an empty channel'
     sfreq = data.sfreq
 
@@ -643,9 +642,9 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         if 'participant' not in data.dims or len(data.participant) == 1:
             warn('Requested standardization of between participant variance yet no participant dimension is found in the data or only one participant is present. No standardization is done, set apply_standard to False to avoid this warning.')
         else:
-            mean_std = data.groupby(participants_variable).std(dim=...).data.mean()
+            mean_std = data.groupby(participants_variable, squeeze=False).std(dim=...).data.mean()
             data = data.assign(mean_std=mean_std.data)
-            data = data.groupby(participants_variable).map(standardize)
+            data = data.groupby(participants_variable, squeeze=False).map(standardize)
 
 
     if method == 'pca':
@@ -654,7 +653,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         if pca_weights is None:
             from sklearn.decomposition import PCA
             var_cov_matrices = []
-            for i,trial_dat in data.stack(trial=("participant", "epochs")).drop_duplicates('trial').groupby('trial'):
+            for i,trial_dat in data.stack(trial=("participant", "epochs")).drop_duplicates('trial').groupby('trial', squeeze=False):
                 var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
             var_cov_matrix = np.mean(var_cov_matrices,axis=0)
             # Performing spatial PCA on the average var-cov matrix
@@ -688,18 +687,18 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     # zscore either across all data, by participant (preferred), or by trial
     if centering:
         ori_coords = data.coords
-        data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(_center).unstack()
+        data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial', squeeze=False).map(_center).unstack()
         data = data.transpose('participant','epochs','samples','component')
         data = data.assign_coords(ori_coords)
     if apply_zscore:
         ori_coords = data.coords
         match apply_zscore:
             case 'all':
-                data = data.stack(comp=['component']).groupby('comp').map(zscore_xarray).unstack()
+                data = data.stack(comp=['component']).groupby('comp', squeeze=False).map(zscore_xarray).unstack()
             case 'participant':
-                data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore_xarray).unstack()
+                data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp', squeeze=False).map(zscore_xarray).unstack()
             case 'trial':
-                data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
+                data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial', squeeze=False).map(zscore_xarray).unstack()
         data = data.transpose('participant','epochs','samples','component')
         data = data.assign_coords(ori_coords)
     data.attrs['pca_weights'] = pca_weights
@@ -1381,7 +1380,7 @@ def event_times(data, times, channel, stage, baseline=0):
 
     brp_data = np.tile(np.nan, (len(data.trial_x_participant), int(round(baseline+max(times.sel(event=stage+1).data- times.sel(event=stage).data)))+1))
     i=0
-    for trial, trial_dat in data.groupby('trial_x_participant'):
+    for trial, trial_dat in data.groupby('trial_x_participant', squeeze=False):
         trial_time = slice(times.sel(event=stage, trial_x_participant=trial)-baseline, \
                                                  times.sel(event=stage+1, trial_x_participant=trial))
         trial_elec = trial_dat.sel(channels = channel, samples=trial_time).squeeze()
