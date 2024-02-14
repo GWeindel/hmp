@@ -1,9 +1,16 @@
 HMP
 ==========
 
+
 ![](plots/general_illustration.png)
 
-HMP is an open-source Python package to analyze neural time-series (e.g. EEG) to estimate Hidden Multivariate Patterns (HMP). HMP is described in Weindel, van Maanen & Borst (in preparation) and is a generalized and simplified version of the HsMM-MVPA method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)).
+> [!NOTE]
+> The preprint is now live : [Trial-by-trial detection of cognitive events in neural time-series](https://www.biorxiv.org/content/10.1101/2024.02.13.580102v1)
+
+
+HMP is an open-source Python package to analyze neural time-series (e.g. EEG) to estimate Hidden Multivariate Patterns (HMP). 
+
+HMP is described in Weindel, van Maanen & Borst (2024, [see the preprint on biorXiv](https://www.biorxiv.org/content/10.1101/2024.02.13.580102v1)) and is a generalized and simplified version of the HsMM-MVPA method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)).
 
 As a summary of the method, an HMP model parses the reaction time into a number of successive events determined based on patterns in a neural time-serie. Hence any reaction time can then be described by a number of cognitive events and the duration between them estimated using HMP. The important aspect of HMP is that it is a whole-brain analysis (or whole scalp analysis) that estimates the onset of events on a single-trial basis. These by-trial estimates allow you then to further dig into any aspect you are interested in a signal:
 - Describing an experiment or a clinical sample in terms of events detected in the EEG signal
@@ -66,8 +73,8 @@ First we load the packages necessary for the demo on simulated data
 ## Importing these packages is specific for this simulation case
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 from scipy.stats import gamma
+import seaborn as sns
 
 ## Importing HMP
 import hmp
@@ -100,21 +107,13 @@ for source in zip(names, scales):#One source = one frequency/event width, one am
     sources.append([source[0], frequency, amplitude, gamma(shape, scale=source[1])])
 
 # Function used to generate the data
-file = simulations.simulate(sources, n_trials, cpus, 'dataset_README',  overwrite=True, sfreq=sfreq, seed=1)
+file = simulations.simulate(sources, n_trials, cpus, 'dataset_README',  overwrite=False, sfreq=sfreq, seed=1)
 #load electrode position, specific to the simulations
 positions = simulations.simulation_positions()
 ```
 
-    Simulating ./dataset_README_raw.fif
-    NOTE: pick_types() is a legacy function. New code should use inst.pick(...).
-    Removing projector <Projection | PCA-v1, active : True, n_channels : 102>
-    Removing projector <Projection | PCA-v2, active : True, n_channels : 102>
-    Removing projector <Projection | PCA-v3, active : True, n_channels : 102>
-    Overwriting existing file.
-    Writing /home/gweindel/owncloud/projects/RUGUU/main_hmp/hmp/dataset_README_raw.fif
-    Closing /home/gweindel/owncloud/projects/RUGUU/main_hmp/hmp/dataset_README_raw.fif
-    [done]
-    ./dataset_README_raw.fif simulated
+    /home/gweindel/owncloud/projects/RUGUU/main_hmp/hmp/hmp/simulations.py:164: UserWarning: ./dataset_README_raw.fif exists no new simulation performed
+      warn(f'{subj_file} exists no new simulation performed', UserWarning)
 
 
 ### Creating the event structure and plotting the raw data
