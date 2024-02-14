@@ -255,7 +255,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
 
         offset_after_resp_samples = np.rint(offset_after_resp*sfreq).astype(int)
         valid_epoch_index = [x for x,y in enumerate(epochs.drop_log) if len(y) == 0]
-        data_epoch = epochs.get_data()#preserves index
+        data_epoch = epochs.get_data(copy=False)#preserves index
         rts = metadata_i[rt_col]
         if isinstance(metadata_i, pd.DataFrame):
             if len(metadata_i) > len(data_epoch):#assumes metadata contains rejected epochs
