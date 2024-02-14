@@ -90,7 +90,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     '''
 
     from mne.viz import plot_brain_colorbar, plot_topomap
-    from mne.io.meas_info import Info
+    from mne import Info
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
     if as_time and time_step != 1:
