@@ -24,7 +24,9 @@ except NameError:
 
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold', 'brown']
 
-                   
+filterwarnings('ignore', 'DeprecationWarning: This process ',)#To address soon 15/02/2024
+
+
 class hmp:
     
     def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', em_method="mean"):
@@ -1992,7 +1994,7 @@ class hmp:
             mags_props[:,:n_events,:] = np.tile(mags[:n_events,:], (len(mags_props), 1, 1))
             #estimate all grid_points models while fixing previous found events
             solutions = self.fit_single(n_events+1, mags_props, pars_prop, to_fix, to_fix[:-1],\
-                            return_max=True, verbose=False, cpus=cpus,\
+                            return_max=True, verbose=False, cpus=1,\
                             min_iteration=min_iteration, tolerance=tolerance)
             if diagnostic:#Diagnostic plot
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
