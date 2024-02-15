@@ -33,7 +33,8 @@ dependencies=["mne >=1.0.0",
 "netcdf4",
 "seaborn",
 "more_itertools",
-"ipywidgets"]
+"ipywidgets",
+"nibabel"]
 
 
 keywords = [
