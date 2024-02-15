@@ -3,7 +3,7 @@ import xarray as xr
 import multiprocessing as mp
 import warnings
 from warnings import warn, filterwarnings
-from hmp.models import hmp
+from hmp.models import hmp as classhmp
 from hmp.utils import transform_data, stack_data, save_eventprobs
 from hmp.visu import plot_topo_timecourse
 
@@ -58,12 +58,12 @@ def _bootstrapped_run(fit, data, dim, indexes, order, init, n_iter, use_starting
     else:
         hmp_data_boot = stack_data(resampled_data)
     if use_starting_points:
-        init_boot = hmp.hmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1,
+        init_boot = classhmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1,
                         shape=init.shape, estimate_magnitudes=init.estimate_magnitudes, 
                         estimate_parameters=init.estimate_parameters, template=init.template,
                         location=init.location, distribution=init.distribution, em_method=init.em_method)
     else:
-        init_boot = hmp.hmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1,
+        init_boot = classhmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1,
                         shape=init.shape, template=init.template,
                         location=init.location, distribution=init.distribution, em_method=init.em_method)
     estimates_boot = init_boot.fit_single(fit.magnitudes.shape[0], verbose=verbose, parameters=fit.parameters,
