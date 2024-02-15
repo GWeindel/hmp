@@ -1289,7 +1289,7 @@ class hmp:
             times = eventprobs.argmax('samples') - event_shift #Most likely event location
         else:
             times = xr.dot(eventprobs, eventprobs.samples, dims='samples') - event_shift
-
+        times = times.astype('float32')#needed for eventual addition of NANs
         #in case there is a single model, but there are empty stages at the end
         #this happens with selected model from backward estimation
         if 'n_events' in times.coords and len(times.shape) == 2:
@@ -1297,7 +1297,6 @@ class hmp:
             if tmp[-1] == -event_shift:
                 filled_stages = np.where(tmp != -event_shift)[0]
                 times = times[:, filled_stages]
-
         #set to nan if stage missing
         if extra_dim == 'condition':
             times_cond = times.groupby('cond').mean('trial_x_participant').values #take average to make sure it's not just 0 on the trial-level
@@ -1307,7 +1306,6 @@ class hmp:
             times_n_events = times.mean('trial_x_participant').values
             for x, e in np.argwhere(times_n_events == -event_shift):
                 times[x,:,e] = np.nan
-
         if as_time:
             times = times * 1000/init.sfreq
         if duration:
