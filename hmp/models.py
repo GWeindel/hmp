@@ -24,9 +24,6 @@ except NameError:
 
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold', 'brown']
 
-filterwarnings('ignore', 'DeprecationWarning: This process ',)#To address soon 15/02/2024
-
-
 class hmp:
     
     def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', em_method="mean"):
@@ -1775,7 +1772,7 @@ class hmp:
         lkhs = np.zeros((n_iter * max_run_len))*np.nan
         times = np.zeros((n_iter * max_run_len))*np.nan
         mags = np.zeros((n_iter * max_run_len, self.n_dims))*np.nan
-        channels = np.zeros((n_iter * max_run_len, epoch_data.dims['channels']))*np.nan
+        channels = np.zeros((n_iter * max_run_len, epoch_data.sizes['channels']))*np.nan
 
         for i, est in enumerate(estimates):
             idx = i * max_run_len
