@@ -15,7 +15,7 @@ from hmp import utils
 from itertools import cycle, product
 from scipy.stats import sem
 import gc
-mp.set_start_method("spawn")
+
 try:
     __IPYTHON__
     from tqdm.notebook import tqdm
@@ -1160,7 +1160,7 @@ class hmp:
         if not max_fit:
             if max_starting_points > 0:
                 print(f'Estimating all solutions for maximal number of events ({max_events}) with 1 pre-defined starting point and {max_starting_points-1} {method} starting points')
-            event_loo_results = [self.fit_single(max_events, starting_points=max_starting_points, method=method, verbose=False, cpus=cpus)]
+            event_loo_results = [self.fit_single(max_events, starting_points=max_starting_points, method=method, verbose=False)]
         else:
             event_loo_results = [max_fit]
         max_events = event_loo_results[0].event.max().values+1
