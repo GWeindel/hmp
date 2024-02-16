@@ -8,9 +8,7 @@ HMP
 > The preprint is now live : [Trial-by-trial detection of cognitive events in neural time-series](https://www.biorxiv.org/content/10.1101/2024.02.13.580102v1)
 
 
-HMP is an open-source Python package to analyze neural time-series (e.g. EEG) to estimate Hidden Multivariate Patterns (HMP). 
-
-HMP is described in Weindel, van Maanen & Borst (2024, [see the preprint on biorXiv](https://www.biorxiv.org/content/10.1101/2024.02.13.580102v1)) and is a generalized and simplified version of the HsMM-MVPA method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)).
+HMP is an open-source Python package to analyze neural time-series (e.g. EEG) to estimate Hidden Multivariate Patterns (HMP).  HMP is described in Weindel, van Maanen & Borst (2024, [see the preprint on biorXiv](https://www.biorxiv.org/content/10.1101/2024.02.13.580102v1)) and is a generalized and simplified version of the HsMM-MVPA method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)).
 
 As a summary of the method, an HMP model parses the reaction time into a number of successive events determined based on patterns in a neural time-serie. Hence any reaction time can then be described by a number of cognitive events and the duration between them estimated using HMP. The important aspect of HMP is that it is a whole-brain analysis (or whole scalp analysis) that estimates the onset of events on a single-trial basis. These by-trial estimates allow you then to further dig into any aspect you are interested in a signal:
 - Describing an experiment or a clinical sample in terms of events detected in the EEG signal
@@ -18,7 +16,6 @@ As a summary of the method, an HMP model parses the reaction time into a number 
 - Estimating the effect of trial-wise manipulations on the identified event presence and time occurrence (e.g. the by-trial variation of stimulus strength or the effect of time-on-task)
 - Time-lock EEG signal to the onset of a given event and perform classical ERPs or time-frequency analysis based on the onset of a new event
 - And many more (e.g. evidence accumulation models, classification based on the number of events in the signal,...)
-
 
 # Documentation
 
@@ -53,11 +50,11 @@ Then move to the clone repository and run
 To get started with the code:
 - Check the demo below 
 - Inspect the tutorials in the tutorials repository
-    - Tutorial 0: Loading EEG data 
-    - Tutorial 1: General aspects on HMP 
-    - Tutorial 2: Estimating HMP with a given number of events
-    - Tutorial 3: Test for the number of events that best explains the data
-    - Tutorial 4: Testing differences across conditions
+    - [Load EEG data (tutorial 0)](tutorials/0-Data_loading.ipynb)
+    - [General aspects on HMP (tutorial 1)](tutorials/1-General_aspects_on_HMP.ipynb)
+    - [Estimating a model (tutorial 2)](tutorials/2-Estimating_a_model.ipynb)
+    - [Test for the best number of events (tutorial 3)](tutorials/3-Testing_the_number_of_bumps.ipynb)
+    - [Looking at condition differences (tutorial 4)](4-condition_differences.ipynb)
 
 ## Demo on simulated data
 
@@ -137,9 +134,15 @@ raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events, block=True
 ```
 
     NOTE: pick_types() is a legacy function. New code should use inst.pick(...).
-    Using qt as 2D backend.
-    Channels marked as bad:
-    none
+
+
+    Using matplotlib as 2D backend.
+
+
+
+    
+![png](README_files/README_5_2.png)
+    
 
 
 ![png](README_files/README_7_1.png)
@@ -171,6 +174,12 @@ eeg_data = hmp.utils.read_mne_data(file[0], event_id=event_id, resp_id=resp_id, 
 
     Processing participant ./dataset_README_raw.fif's continuous eeg
     Reading 0 ... 208135  =      0.000 ...   416.270 secs...
+
+
+    /home/gweindel/miniconda3/envs/hmp_prev/lib/python3.12/site-packages/mne/epochs.py:2986: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise in a future error of pandas. Value '' has dtype incompatible with float64, please explicitly cast to a compatible dtype first.
+      metadata.iloc[:, 0] = ""
+
+
     50 trials were retained for participant ./dataset_README_raw.fif
 
 
@@ -248,8 +257,12 @@ estimates = init.fit()
 
     Transition event 1 found around sample 42
     Transition event 2 found around sample 117
+
+
     Transition event 3 found around sample 221
     Transition event 4 found around sample 265
+
+
     Estimating 4 events model
     parameters estimated for 4 events model
 
@@ -355,14 +368,96 @@ plt.tight_layout();
 We see that every events gets nicely recovered even on a by-trial basis!
 
 
+# We have by-trial estimations. Now what?
+
+HMP just helped us estimate at which time point single-trial events occured. There are plenty of things to do with this information.
+
+As an example consider how average curve of traditional event related potentials (ERP) in EEG are a bad representation of the underlying single-trial event. In the following cell we do the average ERP electrode activity for 4 subselected electrodes in the classical way (stimulus centered) and in a new way that HMP allows, **by-trial resampled signal**
+
+
+```python
+fig, ax = plt.subplots(1,2, figsize=(6,2), sharey=True, sharex=True, dpi=300)
+colors = iter([plt.cm.tab10(i) for i in range(10)])
+
+for channel in  ['EEG 031', 'EEG 039', 'EEG 040', 'EEG 048']:
+    c = next(colors)
+    fakefit = init.fit_single(2, maximization=False, verbose=False)#Just to get the stim ERP in the same format
+    BRP_times = init.compute_times(init, fakefit, fill_value=0, add_rt=True)
+    times = BRP_times.sel(event=[0,3])#Stim and response only
+    times['event'] = [0,1]
+    test = hmp.visu.erp_data(eeg_data.stack(trial_x_participant=["participant","epochs"]), times, channel)
+    hmp.visu.plot_erp(times, test, c, ax[0], upsample=2, label=channel)
+    BRP_times = init.compute_times(init, estimates, fill_value=0, add_rt=True)#Real estimate
+    test = hmp.visu.erp_data(eeg_data.stack(trial_x_participant=["participant","epochs"]), BRP_times, channel,100)
+    hmp.visu.plot_erp(BRP_times, test, c, ax[1], upsample=2)
+
+for event in range(4):
+    c = next(colors)
+    ax[1].vlines(sim_event_times_cs[:,event].mean()*2, ymin=-3e-6, ymax=3e-6, color=c, alpha=.75)
+
+plt.xlim(0,600)
+ax[0].legend(bbox_to_anchor=(2.9,.85))
+plt.show()
+```
+
+
+    
+![png](README_files/README_30_0.png)
+    
+
+
+In the right panel the signal between each event is resampled to have the same duration as the average between event times (in order to be represented along with the classical ERP on the left). Do you see the gain in signal-to-noise ratio? This is because **prior to averaging we centered all trials around the most likely event onset time detected by HMP!**
+
+Now in order to display both ERPs side-by-side we had to transform the signal by quite a bit. Instead of doing this resampling procedure we can also just look at the activity of those four electrodes in the vincinity of the detected events: 
+
+
+```python
+import pandas as pd
+fig, ax = plt.subplots(1,4, figsize=(7.5,2), sharey=True, sharex=True, dpi=300)
+colors = iter([plt.cm.tab10(i) for i in range(10)])
+
+data_speed = eeg_data.stack({'trial_x_participant':['participant','epochs']}).data.dropna('trial_x_participant', how="all")
+times_speed = init.compute_times(init, estimates.dropna('event'), fill_value=0, add_rt=True)
+for channel in  ['EEG 031', 'EEG 039', 'EEG 040', 'EEG 048']:
+    c = next(colors)
+    baseline = 25
+    ev_colors = iter(['gray', 'red', 'purple','brown','black'])
+    for event in range(4):
+        ev_c = next(ev_colors)
+        bsl = baseline
+        BRP = hmp.utils.event_times(data_speed, times_speed,channel,stage=event, baseline = bsl)
+        df = pd.DataFrame(BRP).melt(var_name='Time')
+        df.Time -= bsl
+        df.Time = df.Time*2
+        sns.lineplot(x="Time", y="value", data=df,ax=ax[event], color=c)
+        ax[event].vlines(0,-7e-6,7e-6, color=ev_c, alpha=.75)
+        ax[event].set_xlabel(f'Time Event {int(event)}')
+ax[0].set_xlabel('Time stimulus')
+plt.xlim(-25,100);
+```
+
+
+    
+![png](README_files/README_32_0.png)
+    
+
+
+Compared to the traditional ERP representation we see that HMP provides a much better view of the underlying single-trial activities than the tradition ERP.
+
+Now HMP is not merely a method to look at ERPs or by-trial times. A lot can be done once the estimation has been made, for example:
+- Connectivity analysis starting from each event onset
+- Time/frequency decomposition
+- Single-trial signal analysis with, e.g. a single-trial covariate
+- and so on 
+
 ### Follow-up
 
 For examples on how to use the package on real data, or to compare event time onset across conditions see the tutorial notebooks:
-- Load EEG data (tutorial 1)
-- Estimating a given number of events (tutorial 2)
-- Test for the number of events that best explains the data (tutorial 3)
-- Testing differences across conditions (tutorial 4)
-- Plotting Event Related Potentials with an HMP decomposition (tutorial 5)
+- [Load EEG data (tutorial 0)](tutorials/0-Data_loading.ipynb)
+- [General aspects on HMP (tutorial 1)](tutorials/1-General_aspects_on_HMP.ipynb)
+- [Estimating a model (tutorial 2)](tutorials/2-Estimating_a_model.ipynb)
+- [Test for the best number of events (tutorial 3)](tutorials/3-Testing_the_number_of_bumps.ipynb)
+- [Looking at condition differences (tutorial 4)](4-condition_differences.ipynb)
 
 ### Bibliography
 HMP is very flexible regarding what type of pattern, type of distribution and data to fit HMP to. Readers interested in the original HsMM-MVPA method (which can be seen as a specific implementation of HMP) can take a look at the paper by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)) as well as the book chapter by Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HMP_MVPA_BorstAnderson_preprint.pdf)). The following list contains a non-exhaustive list of papers published using the original HsMM-MVPA method:
