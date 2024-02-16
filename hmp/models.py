@@ -15,7 +15,7 @@ from hmp import utils
 from itertools import cycle, product
 from scipy.stats import sem
 import gc
-
+mp.set_start_method("spawn")
 try:
     __IPYTHON__
     from tqdm.notebook import tqdm
@@ -349,7 +349,7 @@ class hmp:
             lkh, mags, pars, eventprobs, traces = self.EM(initial_m, initial_p,\
                                         maximization, magnitudes_to_fix, parameters_to_fix, \
                                          max_iteration, tolerance, min_iteration)
-
+            
         else:#uninitialized    
             if np.any(parameters)== None:
                 parameters = np.tile([self.shape, self.mean_to_scale(np.mean(self.durations)/(n_events+1),self.shape)], (n_events+1,1))
@@ -652,7 +652,7 @@ class hmp:
                 for pars, mags in zip(parameters, magnitudes):
                     estimates.append(self.EM(mags, maximization,\
                     magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration,
-                     pars, mags_map, pars_map, conds, cpus))
+                     pars, mags_map, pars_map, conds, 1))
                 resetwarnings()
             
             lkhs_sp = [x[0] for x in estimates]
@@ -680,7 +680,7 @@ class hmp:
             lkh, mags, pars, eventprobs, traces = self.EM(initial_m, initial_p, \
                                          maximization, magnitudes_to_fix, parameters_to_fix, \
                                          max_iteration, tolerance, min_iteration, 
-                                         mags_map, pars_map, conds, cpus)
+                                         mags_map, pars_map, conds, 1)
 
         else:#uninitialized    
             if np.any(parameters)== None:
@@ -691,7 +691,7 @@ class hmp:
                 magnitudes = np.zeros((n_events,self.n_dims), dtype=np.float64)
                 magnitudes = np.tile(magnitudes, (n_conds, 1, 1)) #broadcast across conditions
 
-            lkh, mags, pars, eventprobs, traces = self.EM(magnitudes, parameters, maximization, magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration, mags_map, pars_map, conds, cpus)
+            lkh, mags, pars, eventprobs, traces = self.EM(magnitudes, parameters, maximization, magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration, mags_map, pars_map, conds, 1)
         
         #make output object
         xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
@@ -1160,7 +1160,7 @@ class hmp:
         if not max_fit:
             if max_starting_points > 0:
                 print(f'Estimating all solutions for maximal number of events ({max_events}) with 1 pre-defined starting point and {max_starting_points-1} {method} starting points')
-            event_loo_results = [self.fit_single(max_events, starting_points=max_starting_points, method=method, verbose=False)]
+            event_loo_results = [self.fit_single(max_events, starting_points=max_starting_points, method=method, verbose=False, cpus=cpus)]
         else:
             event_loo_results = [max_fit]
         max_events = event_loo_results[0].event.max().values+1
@@ -1180,7 +1180,6 @@ class hmp:
                 temp_flat[event,1] = temp_flat[event,1] + temp_flat[event+1,1] #combine two stages into one
                 temp_flat = np.delete(temp_flat, event+1, axis=0)
                 pars_temp.append(temp_flat)
-            
             if self.cpus == 1:
                 event_loo_likelihood_temp = []
                 for i in range(len(events_temp)):
@@ -2022,7 +2021,7 @@ class hmp:
         mags = mags[:n_events, :]
         pars = pars[:n_events+1, :]
         if n_events > 0: 
-            fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose)
+            fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose, cpus=1)
         else:
             warn('Failed to find more than two stages, returning None')
             fit = None#self.fit_single(n_events+1, verbose=verbose)
