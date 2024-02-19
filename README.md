@@ -39,26 +39,23 @@ For the cutting edge version you can clone the repository using *git*
 
 Open a terminal and type:
 
-```bash
-    git clone https://github.com/gweindel/hmp.git
-```
-
+    $ git clone https://github.com/gweindel/hmp.git
+   
 Then move to the clone repository and run 
-
-```bash
+    
     $ pip install -e .
-```
-The -e flag is optional if you don't want to edit the source code
+
 
 ## To get started
 To get started with the code:
 - Check the demo below 
 - Inspect the tutorials in the tutorials repository
-    - [Load EEG data (tutorial 0)](tutorials/0-Data_loading.ipynb)
-    - [General aspects on HMP (tutorial 1)](tutorials/1-General_aspects_on_HMP.ipynb)
+    - [Load EEG data ](tutorials/Data_loading.ipynb)
+    - [General aspects on HMP (tutorial 1)](tutorials/1-Background_on_HMP.ipynb)
     - [Estimating a model (tutorial 2)](tutorials/2-Estimating_a_model.ipynb)
-    - [Test for the best number of events (tutorial 3)](tutorials/3-Testing_the_number_of_bumps.ipynb)
-    - [Looking at condition differences (tutorial 4)](4-condition_differences.ipynb)
+    - [Test for the best number of events (tutorial 3)](tutorials/3-Testing_the_number_of_events.ipynb)
+    - [Looking at condition differences (tutorial 4)](tutorials/4-Analyzing_condition_differences.ipynb)
+
 
 ## Demo on simulated data
 
@@ -138,15 +135,9 @@ raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events, block=True
 ```
 
     NOTE: pick_types() is a legacy function. New code should use inst.pick(...).
-
-
-    Using matplotlib as 2D backend.
-
-
-
-    
-![png](README_files/README_5_2.png)
-    
+    Using qt as 2D backend.
+    Channels marked as bad:
+    none
 
 
 ![png](README_files/README_7_1.png)
@@ -178,12 +169,6 @@ eeg_data = hmp.utils.read_mne_data(file[0], event_id=event_id, resp_id=resp_id, 
 
     Processing participant ./dataset_README_raw.fif's continuous eeg
     Reading 0 ... 208135  =      0.000 ...   416.270 secs...
-
-
-    /home/gweindel/miniconda3/envs/hmp_prev/lib/python3.12/site-packages/mne/epochs.py:2986: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise in a future error of pandas. Value '' has dtype incompatible with float64, please explicitly cast to a compatible dtype first.
-      metadata.iloc[:, 0] = ""
-
-
     50 trials were retained for participant ./dataset_README_raw.fif
 
 
@@ -261,12 +246,8 @@ estimates = init.fit()
 
     Transition event 1 found around sample 42
     Transition event 2 found around sample 117
-
-
     Transition event 3 found around sample 221
     Transition event 4 found around sample 265
-
-
     Estimating 4 events model
     parameters estimated for 4 events model
 
@@ -394,9 +375,9 @@ for channel in  ['EEG 031', 'EEG 039', 'EEG 040', 'EEG 048']:
     BRP_times = init.compute_times(init, estimates, fill_value=0, add_rt=True)#Real estimate
     test = hmp.visu.erp_data(eeg_data.stack(trial_x_participant=["participant","epochs"]), BRP_times, channel,100)
     hmp.visu.plot_erp(BRP_times, test, c, ax[1], upsample=2)
-
+ev_colors = iter(['red', 'purple','brown','black'])
 for event in range(4):
-    c = next(colors)
+    c = next(ev_colors)
     ax[1].vlines(sim_event_times_cs[:,event].mean()*2, ymin=-3e-6, ymax=3e-6, color=c, alpha=.75)
 
 plt.xlim(0,600)
@@ -424,20 +405,17 @@ data_speed = eeg_data.stack({'trial_x_participant':['participant','epochs']}).da
 times_speed = init.compute_times(init, estimates.dropna('event'), fill_value=0, add_rt=True)
 for channel in  ['EEG 031', 'EEG 039', 'EEG 040', 'EEG 048']:
     c = next(colors)
-    baseline = 25
     ev_colors = iter(['gray', 'red', 'purple','brown','black'])
     for event in range(4):
         ev_c = next(ev_colors)
-        bsl = baseline
-        BRP = hmp.utils.event_times(data_speed, times_speed,channel,stage=event, baseline = bsl)
+        BRP = hmp.utils.event_times(data_speed, times_speed,channel,stage=event)
         df = pd.DataFrame(BRP).melt(var_name='Time')
-        df.Time -= bsl
         df.Time = df.Time*2
         sns.lineplot(x="Time", y="value", data=df,ax=ax[event], color=c)
         ax[event].vlines(0,-7e-6,7e-6, color=ev_c, alpha=.75)
         ax[event].set_xlabel(f'Time Event {int(event)}')
 ax[0].set_xlabel('Time stimulus')
-plt.xlim(-25,100);
+plt.xlim(-5,100);
 ```
 
 
@@ -457,11 +435,11 @@ Now HMP is not merely a method to look at ERPs or by-trial times. A lot can be d
 ### Follow-up
 
 For examples on how to use the package on real data, or to compare event time onset across conditions see the tutorial notebooks:
-- [Load EEG data (tutorial 0)](tutorials/0-Data_loading.ipynb)
-- [General aspects on HMP (tutorial 1)](tutorials/1-General_aspects_on_HMP.ipynb)
+- [Load EEG data ](tutorials/Data_loading.ipynb)
+- [General aspects on HMP (tutorial 1)](tutorials/1-Background_on_HMP.ipynb)
 - [Estimating a model (tutorial 2)](tutorials/2-Estimating_a_model.ipynb)
-- [Test for the best number of events (tutorial 3)](tutorials/3-Testing_the_number_of_bumps.ipynb)
-- [Looking at condition differences (tutorial 4)](4-condition_differences.ipynb)
+- [Test for the best number of events (tutorial 3)](tutorials/3-Testing_the_number_of_events.ipynb)
+- [Looking at condition differences (tutorial 4)](tutorials/4-Analyzing_condition_differences.ipynb)
 
 ### Bibliography
 HMP is very flexible regarding what type of pattern, type of distribution and data to fit HMP to. Readers interested in the original HsMM-MVPA method (which can be seen as a specific implementation of HMP) can take a look at the paper by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)) as well as the book chapter by Borst & Anderson ([2021](http://jelmerborst.nl/pubs/ACTR_HMP_MVPA_BorstAnderson_preprint.pdf)). The following list contains a non-exhaustive list of papers published using the original HsMM-MVPA method:
