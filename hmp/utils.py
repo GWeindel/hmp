@@ -578,7 +578,7 @@ def _filtering(data, filter, sfreq):
                 data.data.values[pp, trial, :, :dat.shape[1]] = dat
         return data
 
-def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='trial', method='pca', centering=False, n_comp=None, pca_weights=None, filter=None):
+def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='trial', zscore_acrossPCs=False, method='pca', centering=False, n_comp=None, pca_weights=None, filter=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -693,11 +693,20 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         ori_coords = data.coords
         match apply_zscore:
             case 'all':
-                data = data.stack(comp=['component']).groupby('comp', squeeze=False).map(zscore_xarray).unstack()
+                if zscore_acrossPCs:
+                    data = zscore_xarray(data)
+                else:
+                    data = data.stack(comp=['component']).groupby('comp').map(zscore_xarray).unstack()
             case 'participant':
-                data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp', squeeze=False).map(zscore_xarray).unstack()
+                if zscore_acrossPCs:
+                    data = data.groupby('participant').map(zscore_xarray)
+                else:
+                    data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore_xarray).unstack()
             case 'trial':
-                data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial', squeeze=False).map(zscore_xarray).unstack()
+                if zscore_acrossPCs:
+                    data = data.stack(trial=[participants_variable,'epochs']).groupby('trial').map(zscore_xarray).unstack()
+                else:
+                    data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
         data = data.transpose('participant','epochs','samples','component')
         data = data.assign_coords(ori_coords)
     data.attrs['pca_weights'] = pca_weights
