@@ -578,7 +578,7 @@ def _filtering(data, filter, sfreq):
                 data.data.values[pp, trial, :, :dat.shape[1]] = dat
         return data
 
-def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', centering=False, n_comp=None, pca_weights=None, filter=None):
+def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='trial', method='pca', centering=False, n_comp=None, pca_weights=None, filter=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
