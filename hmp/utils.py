@@ -490,31 +490,20 @@ def hmp_data_format(data, sfreq, events=None, offset=0, participants=[], epochs=
         data = data.set_coords('events')
     return data
 
-def standardize(x):
+def _standardize(x):
     '''
     Scaling variances to mean variance of the group
     '''
     return ((x.data / x.data.std(dim=...))*x.mean_std)
 
-def vcov_mat(x):
-    '''
-    Computes Variance-Covariance matrix
-    '''
-    x = x.dropna(dim="samples").squeeze().data
-    xT = x.T.data
-    return x @ xT
-
 def _center(data):
     '''
     zscore of the data
     '''
-    return data - data.mean()
-
-def zscore(data):
-    '''
-    zscore of the data
-    '''
-    return (data - data.mean()) / data.std()
+    non_nan_mask = ~np.isnan(data.values)
+    if non_nan_mask.any(): #if not everything is nan, calc zscore
+        data.values[non_nan_mask] = (data.values[non_nan_mask] - data.values[non_nan_mask].mean())
+    return data
 
 def zscore_xarray(data):
     '''
@@ -561,6 +550,33 @@ def stack_data(data, subjects_variable='participant', channel_variable='componen
         data = data.expand_dims("participant")
     data = data.stack(all_samples=['participant','epochs',"samples"]).dropna(dim="all_samples")
     return data
+
+def _filtering(data, filter, sfreq):
+    print("NOTE: filtering at this step is suboptimal, filter before epoching if at all possible, see")
+    print("also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html")
+    from mne.filter import filter_data
+
+    lfreq, hfreq = filter
+    n_participant, n_epochs, _, _ = data.data.values.shape
+    for pp in range(n_participant):
+        for trial in range(n_epochs):
+
+            dat = data.data.values[pp, trial, :, :]
+
+            if not np.isnan(dat).all():
+                dat = dat[:,~np.isnan(dat[0,:])] #remove nans
+
+                #pad by reflecting the whole trial twice
+                trial_len = dat.shape[1] * 2
+                dat = np.pad(dat, ((0,0),(trial_len,trial_len)), mode='reflect')
+
+                #filter
+                dat = filter_data(dat, sfreq, lfreq, hfreq, verbose=False)
+
+                #remove padding
+                dat = dat[:,trial_len:-trial_len]
+                data.data.values[pp, trial, :, :dat.shape[1]] = dat
+        return data
 
 def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='participant', method='pca', centering=False, n_comp=None, pca_weights=None, filter=None):
     '''
@@ -612,32 +628,9 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     assert np.sum(np.isnan(data.groupby('participant', squeeze=False).mean(['epochs','samples']).data.values)) == 0,\
         'at least one participant has an empty channel'
     sfreq = data.sfreq
-
+    
     if filter:
-        print("NOTE: filtering at this step is suboptimal, filter before epoching if at all possible, see")
-        print("also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html")
-        from mne.filter import filter_data
-
-        lfreq, hfreq = filter
-        n_participant, n_epochs, _, _ = data.data.values.shape
-        for pp in range(n_participant):
-            for trial in range(n_epochs):
-
-                dat = data.data.values[pp, trial, :, :]
-
-                if not np.isnan(dat).all():
-                    dat = dat[:,~np.isnan(dat[0,:])] #remove nans
-
-                    #pad by reflecting the whole trial twice
-                    trial_len = dat.shape[1] * 2
-                    dat = np.pad(dat, ((0,0),(trial_len,trial_len)), mode='reflect')
-
-                    #filter
-                    dat = filter_data(dat, sfreq, lfreq, hfreq, verbose=False)
-
-                    #remove padding
-                    dat = dat[:,trial_len:-trial_len]
-                    data.data.values[pp, trial, :, :dat.shape[1]] = dat
+        data = _filtering(data, filter, sfreq)
 
     if apply_zscore == True:
         apply_zscore = 'trial' #defaults to trial
@@ -647,7 +640,8 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         else:
             mean_std = data.groupby(participants_variable, squeeze=False).std(dim=...).data.mean()
             data = data.assign(mean_std=mean_std.data)
-            data = data.groupby(participants_variable, squeeze=False).map(standardize)
+            data = data.groupby(participants_variable, squeeze=False).map(_standardize)
+
 
 
     if method == 'pca':
@@ -656,8 +650,10 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         if pca_weights is None:
             from sklearn.decomposition import PCA
             var_cov_matrices = []
-            for i,trial_dat in data.stack(trial=("participant", "epochs")).drop_duplicates('trial').groupby('trial', squeeze=False):
-                var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
+            for i,part_dat in data.groupby('participant', squeeze=False):
+                var_cov_matrices.append(np.mean(\
+                    [np.cov(trial_dat.data[0,:,~np.isnan(trial_dat.data[0,0,:])].T)\
+                    for _,trial_dat in part_dat.dropna('epochs', how='all').groupby("epochs")],axis=0))
             var_cov_matrix = np.mean(var_cov_matrices,axis=0)
             # Performing spatial PCA on the average var-cov matrix
             if n_comp == None:
