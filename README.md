@@ -39,12 +39,16 @@ For the cutting edge version you can clone the repository using *git*
 
 Open a terminal and type:
 
-    $ git clone https://github.com/gweindel/hmp.git
-   
-Then move to the clone repository and run 
-    
-    $ pip install -e .
+```bash
+    git clone https://github.com/gweindel/hmp.git
+```
 
+Then move to the clone repository and run 
+
+```bash
+    $ pip install -e .
+```
+The -e flag is optional if you don't want to edit the source code
 
 ## To get started
 To get started with the code:
