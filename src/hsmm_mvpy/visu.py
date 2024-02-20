@@ -104,7 +104,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         n_cond = estimated.parameters.shape[0]
 
         #make times_to_display in list with lines per condition
-        default = [np.mean(init.durations[conds==c]) for c in range(n_cond)]
+        default = init.compute_times(init, estimated, mean=True, add_rt=True, extra_dim='condition', center_measure=center_measure,estimate_method=estimate_method).values[:,-1].tolist() #compute corresponding times
         default.reverse()
         if times_to_display is None:
             times_to_display = default
@@ -123,10 +123,13 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             ylabels = estimated.clabels
 
     return_ax = True
+
     #if not times specified, plot average RT
     if times_to_display is None:
-        times_to_display = init.mean_d
-    
+        times_to_display = init.compute_times(init, estimated, mean=True, add_rt=True, extra_dim=None, center_measure=center_measure,estimate_method=estimate_method).values[-1]
+        if len(times_to_display) > 1:
+            times_to_display = times_to_display[-1]
+
     #set xlabel depending on time_step
     if xlabel is None:
         if time_step == 1 and as_time == False:
@@ -206,7 +209,6 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             times_iteration = times_iteration - time_step/2 #center on sample
         else:
             times_iteration = times_iteration - 1 # if event starts at sample 7 should be plotted at 6
-
         missing_evts = np.where(np.isnan(times_iteration))[0]
         times_iteration = np.delete(times_iteration,missing_evts)
         channels_ = channels[iteration,:,:]
@@ -226,13 +228,13 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             #lines/fill of detected event
             if event_lines:
                 #bottom of row + 5% if n_iter > 1
-                ylow = iteration * rowheight if n_iter == 1 else iteration * rowheight + .05 * rowheight
+                ylow2 = iteration * rowheight if n_iter == 1 else iteration * rowheight + .05 * rowheight
                 #top of row - 5% if n_iter > 1
                 yhigh = (iteration + 1) * rowheight if n_iter == 1 else (iteration + 1) * rowheight - .05 * rowheight
 
-                ax.vlines(times_iteration[event],ylow,yhigh, linestyles='dotted',color=event_color,alpha=.5,transform=ax.get_xaxis_transform())
-                ax.vlines(times_iteration[event]+event_size,ylow, yhigh, linestyles='dotted',color=event_color,alpha=.5, transform=ax.get_xaxis_transform())
-                ax.fill_between(np.array([times_iteration[event],times_iteration[event]+event_size]), ylow, yhigh, alpha=0.15,color=event_color, transform=ax.get_xaxis_transform(),edgecolor=None)
+                ax.vlines(times_iteration[event],ylow2,yhigh, linestyles='dotted',color=event_color,alpha=.5,transform=ax.get_xaxis_transform())
+                ax.vlines(times_iteration[event]+event_size,ylow2, yhigh, linestyles='dotted',color=event_color,alpha=.5, transform=ax.get_xaxis_transform())
+                ax.fill_between(np.array([times_iteration[event],times_iteration[event]+event_size]), ylow2, yhigh, alpha=0.15,color=event_color, transform=ax.get_xaxis_transform(),edgecolor=None)
 
         #add lines per condition
         if cond_plot and times_to_display is not None:
@@ -244,8 +246,9 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
 
     #legend
     if colorbar:
-        cheight = "100%" if n_iter == 1 else f"{200/n_iter}%" 
-        axins = inset_axes(ax, width="0.5%", height=cheight, loc="lower left", bbox_to_anchor=(1.025, 0, 2, 1), bbox_transform=ax.transAxes, borderpad=0)
+        cheight = 1 if n_iter == 1 else 2/n_iter 
+        #axins = ax.inset_axes(width="0.5%", height=cheight, loc="lower left", bbox_to_anchor=(1.025, 0, 2, 1), bbox_transform=ax.transAxes, borderpad=0)
+        axins = ax.inset_axes([1.025, 0, .03,cheight])
         if isinstance(channel_position, Info):
             lab = 'Voltage' if channel_position['chs'][0]['unit'] == 107 else channel_position['chs'][0]['unit']._name
         else:

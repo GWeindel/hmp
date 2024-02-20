@@ -640,8 +640,10 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         if pca_weights is None:
             from sklearn.decomposition import PCA
             var_cov_matrices = []
-            for i,trial_dat in data.stack(trial=("participant", "epochs")).drop_duplicates('trial').groupby('trial'):
-                var_cov_matrices.append(vcov_mat(trial_dat)) #Would be nice not to have a for loop but groupby.map seem to fal
+            for i,part_dat in data.groupby('participant', squeeze=False):
+                var_cov_matrices.append(np.mean(\
+                    [np.cov(trial_dat.data[0,:,~np.isnan(trial_dat.data[0,0,:])].T)\
+                    for _,trial_dat in part_dat.dropna('epochs', how='all').groupby("epochs")],axis=0))
             var_cov_matrix = np.mean(var_cov_matrices,axis=0)
             # Performing spatial PCA on the average var-cov matrix
             if n_comp == None:
@@ -666,7 +668,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
 
             pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
             pca.fit(var_cov_matrix)
- 
+            
             #Rebuilding pca PCs as xarray to ease computation
             coords = dict(channels=("channels", data.coords["channels"].values),
                          component=("component", np.arange(n_comp)))

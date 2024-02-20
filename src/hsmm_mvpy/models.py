@@ -2192,7 +2192,7 @@ class hmp:
             
             if by_sample and n_events > 1: #go through the whole range sample-by-sample, j is sample since start
                 
-                scale_j = self.mean_to_scale(j,self.shape)
+                scale_j = self.mean_to_scale(step*j,self.shape)
 
                 #New parameter proposition
                 pars_prop = pars[:n_events].copy() #pars so far
