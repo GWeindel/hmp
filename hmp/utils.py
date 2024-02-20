@@ -681,11 +681,13 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
                         [np.cov(trial_dat.data[0,:,~np.isnan(trial_dat.data[0,0,:])].T)\
                         for _,trial_dat in part_dat.dropna('epochs', how='all').groupby("epochs")],axis=0))
                 pca_ready_data = np.mean(var_cov_matrices,axis=0)
-            else:
+            elif 'erp':
                 erps = []
                 for part in data.participant:
                     erps.append(data.sel(participant=part).groupby('samples').mean('epochs').T)
                 pca_ready_data = np.nanmean(erps,axis=0)
+            else:#assumes all
+                pca_ready_data = data.stack({'all':['participant','epochs','samples']}).dropna('all')
             # Performing spatial PCA on the average var-cov matrix
             data = data @ _pca(pca_ready_data, n_comp, data.coords["channels"].values)
     elif method is None:
