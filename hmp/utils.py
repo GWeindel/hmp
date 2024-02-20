@@ -578,7 +578,33 @@ def _filtering(data, filter, sfreq):
                 data.data.values[pp, trial, :, :dat.shape[1]] = dat
         return data
 
-def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='trial', zscore_acrossPCs=False, method='pca', centering=False, n_comp=None, pca_weights=None, filter=None):
+def _pca(pca_ready_data, n_comp, channels):
+    from sklearn.decomposition import PCA
+    if n_comp == None:
+        import matplotlib.pyplot as plt
+        n_comp = np.shape(pca_ready_data)[0]-1
+        fig, ax = plt.subplots(1,2, figsize=(.2*n_comp, 4))
+        pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
+        pca.fit(pca_ready_data)
+
+        ax[0].plot(np.arange(pca.n_components)+1, pca.explained_variance_ratio_,'.-')
+        ax[0].set_ylabel('Normalized explained variance')
+        ax[0].set_xlabel('Component')
+        ax[1].plot(np.arange(pca.n_components)+1, np.cumsum(pca.explained_variance_ratio_),'.-')
+        ax[1].set_ylabel('Cumulative normalized explained variance')
+        ax[1].set_xlabel('Component')
+        plt.tight_layout()
+        plt.show()
+        n_comp = int(input(f'How many PCs (90 and 99% explained variance at component n{np.where(np.cumsum(pca.explained_variance_ratio_) >= .90)[0][0]+1} and n{np.where(np.cumsum(pca.explained_variance_ratio_) >= .99)[0][0]+1})?'))
+    pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
+    pca.fit(pca_ready_data)
+    #Rebuilding pca PCs as xarray to ease computation
+    coords = dict(channels=("channels", channels),
+                 component=("component", np.arange(n_comp)))
+    pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
+    return pca_weights
+
+def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='trial', zscore_acrossPCs=False, method='pca', pca_on='cov', centering=False, n_comp=None, pca_weights=None, filter=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -648,37 +674,20 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         if isinstance(data, xr.Dataset):
             data = data.data
         if pca_weights is None:
-            from sklearn.decomposition import PCA
-            var_cov_matrices = []
-            for i,part_dat in data.groupby('participant', squeeze=False):
-                var_cov_matrices.append(np.mean(\
-                    [np.cov(trial_dat.data[0,:,~np.isnan(trial_dat.data[0,0,:])].T)\
-                    for _,trial_dat in part_dat.dropna('epochs', how='all').groupby("epochs")],axis=0))
-            var_cov_matrix = np.mean(var_cov_matrices,axis=0)
+            if pca_on=='cov':
+                var_cov_matrices = []
+                for i,part_dat in data.groupby('participant', squeeze=False):
+                    var_cov_matrices.append(np.mean(\
+                        [np.cov(trial_dat.data[0,:,~np.isnan(trial_dat.data[0,0,:])].T)\
+                        for _,trial_dat in part_dat.dropna('epochs', how='all').groupby("epochs")],axis=0))
+                pca_ready_data = np.mean(var_cov_matrices,axis=0)
+            else:
+                erps = []
+                for part in data.participant:
+                    erps.append(data.sel(participant=part).groupby('samples').mean('epochs').T)
+                pca_ready_data = np.nanmean(erps,axis=0)
             # Performing spatial PCA on the average var-cov matrix
-            if n_comp == None:
-                import matplotlib.pyplot as plt
-                n_comp = np.shape(var_cov_matrix)[0]-1
-                fig, ax = plt.subplots(1,2, figsize=(.2*n_comp, 4))
-                pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
-                pca.fit(var_cov_matrix)
-
-                ax[0].plot(np.arange(pca.n_components)+1, pca.explained_variance_ratio_,'.-')
-                ax[0].set_ylabel('Normalized explained variance')
-                ax[0].set_xlabel('Component')
-                ax[1].plot(np.arange(pca.n_components)+1, np.cumsum(pca.explained_variance_ratio_),'.-')
-                ax[1].set_ylabel('Cumulative normalized explained variance')
-                ax[1].set_xlabel('Component')
-                plt.tight_layout()
-                plt.show()
-                n_comp = int(input(f'How many PCs (90 and 99% explained variance at component n{np.where(np.cumsum(pca.explained_variance_ratio_) >= .90)[0][0]+1} and n{np.where(np.cumsum(pca.explained_variance_ratio_) >= .99)[0][0]+1})?'))
-            pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
-            pca.fit(var_cov_matrix)
-            #Rebuilding pca PCs as xarray to ease computation
-            coords = dict(channels=("channels", data.coords["channels"].values),
-                         component=("component", np.arange(n_comp)))
-            pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
-        data = data @ pca_weights
+            data = data @ _pca(pca_ready_data, n_comp, data.coords["channels"].values)
     elif method is None:
         data = data.rename({'channels':'component'})
         data['component'] = np.arange(len(data.component))
