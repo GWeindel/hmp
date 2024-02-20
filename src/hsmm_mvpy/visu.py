@@ -127,7 +127,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     #if not times specified, plot average RT
     if times_to_display is None:
         times_to_display = init.compute_times(init, estimated, mean=True, add_rt=True, extra_dim=None, center_measure=center_measure,estimate_method=estimate_method).values[-1]
-        if len(times_to_display) > 1:
+        if not isinstance(times_to_display, float):
             times_to_display = times_to_display[-1]
 
     #set xlabel depending on time_step
