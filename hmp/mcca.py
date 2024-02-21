@@ -1,6 +1,7 @@
-"""
+""" 
 Adapted from https://github.com/ANCPLabOldenburg/MCCA/blob/main/README.md
-Atuhor/maintainer: Leo Michalke https://github.com/lmichalke
+Author/maintainer: Leo Michalke https://github.com/lmichalke
+
 
 MIT License
 
@@ -30,6 +31,8 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.exceptions import NotFittedError
 from scipy.linalg import eigh, norm
+import warnings
+
 
 
 class MCCA:
@@ -44,6 +47,8 @@ class MCCA:
 
         n_components_mcca (int): Number of MCCA components to retain (default 10)
 
+        cov (bool): If true (default), apply the PCA to the var-cov matrix
+        
         r (int or float): Regularization strength (default 0)
 
         pca_only (bool): If true, skip MCCA calculation (default False)
@@ -60,7 +65,7 @@ class MCCA:
                                 None if pca_only is True. (subjects, PCs, CCs)
     """
 
-    def __init__(self, n_components_pca=50, n_components_mcca=10, r=0, pca_only=False):
+    def __init__(self, n_components_pca, n_components_mcca, cov=True, r=0, pca_only=False):
         if n_components_mcca > n_components_pca:
             import warnings
             warnings.warn(f"Warning........... number of MCCA components ({n_components_mcca}) cannot be greater than "
@@ -70,6 +75,7 @@ class MCCA:
         self.n_ccs = n_components_mcca
         self.r = r
         self.pca_only = pca_only
+        self.cov = cov
         self.mcca_weights, self.pca_weights, self.mu, self.sigma = None, None, None, None
 
     def obtain_mcca(self, X):
@@ -91,13 +97,19 @@ class MCCA:
         for i in range(n_subjects):
             pca = PCA(n_components=self.n_pcs, svd_solver='full')
             x_i = np.squeeze(X[i]).copy()  # time x sensors
-            score = pca.fit_transform(x_i)
+            if self.cov:
+                pca.fit(np.cov(x_i[~np.isnan(x_i[:,0]),:].T))
+                self.mu[i] = 0
+                self.sigma[i] = 1
+                score =  x_i[~np.isnan(x_i[:,0]),:] @ pca.components_.T
+            else:
+                score = pca.fit_transform( x_i[~np.isnan(x_i[:,0]),:])
+                self.mu[i] = pca.mean_
+                self.sigma[i] = np.sqrt(pca.explained_variance_)
+                score /= self.sigma[i]
             self.pca_weights[i] = pca.components_.T
-            self.mu[i] = pca.mean_
-            self.sigma[i] = np.sqrt(pca.explained_variance_)
-            score /= self.sigma[i]
-            X_pca[i] = score
-
+            X_pca[i, ~np.isnan(x_i[:,0]),:] = score
+            
         if self.pca_only:
             return X_pca
         else:
