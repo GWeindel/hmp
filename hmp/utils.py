@@ -12,6 +12,7 @@ import pandas as pd
 import warnings
 from warnings import warn, filterwarnings
 from seaborn.algorithms import bootstrap
+from hmp import mcca
 import json
 import mne
 import os
@@ -604,7 +605,7 @@ def _pca(pca_ready_data, n_comp, channels):
     pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
     return pca_weights
 
-def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='trial', zscore_acrossPCs=False, method='pca', pca_on='cov', centering=False, n_comp=None, pca_weights=None, filter=None):
+def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='trial', zscore_acrossPCs=False, method='pca', cov=True, centering=False, n_comp=None, n_ppcas=None, pca_weights=None, filter=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -625,7 +626,9 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     apply_zscore : str 
         Whether to apply z-scoring and on what data, either None, 'all', 'participant', 'trial', for zscoring across all data, by participant, or by trial, respectively. If set to true, evaluates to 'trial' for backward compatibility.
     method : str
-        Method to apply, for now limited to 'pca'
+        Method to apply, 'pca' or 'mcca'
+    cov : bool
+        Wether to apply the pca/mcca to the variance covariance (True, default) or the epoched data
     n_comp : int
         How many components to select from the PC space, if None plots the scree plot and a prompt requires user
         to specify how many PCs should be retained
@@ -654,7 +657,6 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     assert np.sum(np.isnan(data.groupby('participant', squeeze=False).mean(['epochs','samples']).data.values)) == 0,\
         'at least one participant has an empty channel'
     sfreq = data.sfreq
-    
     if filter:
         data = _filtering(data, filter, sfreq)
 
@@ -668,28 +670,42 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
             data = data.assign(mean_std=mean_std.data)
             data = data.groupby(participants_variable, squeeze=False).map(_standardize)
 
-
-
     if method == 'pca':
         if isinstance(data, xr.Dataset):
             data = data.data
         if pca_weights is None:
-            if pca_on=='cov':
-                var_cov_matrices = []
+            if cov:
+                indiv_data = []
                 for i,part_dat in data.groupby('participant', squeeze=False):
-                    var_cov_matrices.append(np.mean(\
+                    indiv_data.append(np.mean(\
                         [np.cov(trial_dat.data[0,:,~np.isnan(trial_dat.data[0,0,:])].T)\
                         for _,trial_dat in part_dat.dropna('epochs', how='all').groupby("epochs")],axis=0))
-                pca_ready_data = np.mean(var_cov_matrices,axis=0)
-            elif 'erp':
-                erps = []
-                for part in data.participant:
-                    erps.append(data.sel(participant=part).groupby('samples').mean('epochs').T)
-                pca_ready_data = np.nanmean(erps,axis=0)
+                    pca_ready_data = np.mean(indiv_data,axis=0)
             else:#assumes all
                 pca_ready_data = data.stack({'all':['participant','epochs','samples']}).dropna('all')
             # Performing spatial PCA on the average var-cov matrix
             data = data @ _pca(pca_ready_data, n_comp, data.coords["channels"].values)
+    elif method == 'mcca':
+        ori_coords = data.drop_vars('channels').coords
+        if n_ppcas is None:
+            n_ppcas = n_comp*2
+        mcca_m = mcca.MCCA(n_components_pca=n_ppcas, n_components_mcca=n_comp, cov=cov)
+        stacked = data.stack({'all':['epochs','samples']})\
+            .transpose('participant','all','channels').data
+        
+        ccs = mcca_m.obtain_mcca(stacked)
+        trans_ccs = np.tile(np.nan, (data.sizes['participant'], data.sizes['epochs'], data.sizes['samples'], ccs.shape[-1]))
+        for i, part in enumerate(data.participant):
+                trans_ccs[i] = mcca_m.transform_trials(data.sel(participant=part).transpose('epochs','samples', 'channels').data.copy())
+        data = xr.DataArray(trans_ccs,
+             dims = ["participant","epochs","samples","component"],
+             coords=dict(
+                 participant=data.participant,
+                 epochs=data.epochs,
+                 samples=data.samples,
+                 component = np.arange(n_comp))#n_comp
+            )
+        data = data.assign_coords(ori_coords)
     elif method is None:
         data = data.rename({'channels':'component'})
         data['component'] = np.arange(len(data.component))
@@ -719,7 +735,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
                 else:
                     data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
         data = data.transpose('participant','epochs','samples','component')
-        data = data.assign_coords(ori_coords)
+    data = data.assign_coords(ori_coords)
     data.attrs['pca_weights'] = pca_weights
     data.attrs['sfreq'] = sfreq
     data = stack_data(data)
