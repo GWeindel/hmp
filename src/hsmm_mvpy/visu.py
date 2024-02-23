@@ -15,7 +15,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
                 ylabels=[], xlabel = None, max_time = None, vmin=None, vmax=None, title=False, ax=None, 
                 sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange',
                 colorbar=True, topo_size_scaling=False, as_time=False,
-                        linecolors='black',center_measure='mean',estimate_method=None):
+                linecolors='black',center_measure='mean',estimate_method=None):
     '''
     Plotting the event topologies at the average time of the onset of the next stage.
     
@@ -80,7 +80,11 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         on total plotted time interval, if False it is only dependent on magnify.
     as_time : bool
         if true, plot time (ms) instead of samples (time_step takes precedence). Ignored if times are provided as array.
-
+    center_measure : string
+        mean (default) or median, used to calculate the time within participant
+    estimate_method : string
+        'max' or 'mean', either take the max probability of each event on each trial, or the weighted 
+        average.
     Returns
     -------
     ax : matplotlib.pyplot.ax
@@ -205,10 +209,6 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     rowheight = 1/n_iter 
     for iteration in np.arange(n_iter):
         times_iteration = times[iteration]
-        if as_time:
-            times_iteration = times_iteration - time_step/2 #center on sample
-        else:
-            times_iteration = times_iteration - 1 # if event starts at sample 7 should be plotted at 6
         missing_evts = np.where(np.isnan(times_iteration))[0]
         times_iteration = np.delete(times_iteration,missing_evts)
         channels_ = channels[iteration,:,:]
