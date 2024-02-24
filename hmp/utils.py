@@ -605,7 +605,7 @@ def _pca(pca_ready_data, n_comp, channels):
     pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
     return pca_weights
 
-def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='trial', zscore_acrossPCs=False, method='pca', cov=True, centering=False, n_comp=None, n_ppcas=None, pca_weights=None, filter=None):
+def transform_data(data, participants_variable="participant", apply_standard=False, averaged=False, apply_zscore='trial', zscore_acrossPCs=False, method='pca', cov=True, centering=False, n_comp=None, n_ppcas=None, pca_weights=None, filter=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -669,10 +669,9 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
             mean_std = data.groupby(participants_variable, squeeze=False).std(dim=...).data.mean()
             data = data.assign(mean_std=mean_std.data)
             data = data.groupby(participants_variable, squeeze=False).map(_standardize)
-
-    if method == 'pca':
-        if isinstance(data, xr.Dataset):
+    if isinstance(data, xr.Dataset):
             data = data.data
+    if method == 'pca':
         if pca_weights is None:
             if cov:
                 indiv_data = []
@@ -682,7 +681,13 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
                         for _,trial_dat in part_dat.dropna('epochs', how='all').groupby("epochs")],axis=0))
                     pca_ready_data = np.mean(indiv_data,axis=0)
             else:#assumes all
-                pca_ready_data = data.stack({'all':['participant','epochs','samples']}).dropna('all')
+                if averaged:
+                    erps = []
+                    for part in data.participant:
+                        erps.append(data.sel(participant=part).groupby('samples').mean('epochs').T)
+                    pca_ready_data = np.nanmean(erps,axis=0)
+                else: 
+                    pca_ready_data = data.stack({'all':['participant','epochs','samples']}).dropna('all')
             # Performing spatial PCA on the average var-cov matrix
             data = data @ _pca(pca_ready_data, n_comp, data.coords["channels"].values)
     elif method == 'mcca':
@@ -690,10 +695,12 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         if n_ppcas is None:
             n_ppcas = n_comp*2
         mcca_m = mcca.MCCA(n_components_pca=n_ppcas, n_components_mcca=n_comp, cov=cov)
-        stacked = data.stack({'all':['epochs','samples']})\
+        if averaged:
+            fitted_data = data.mean('epochs').transpose('participant','samples','channels').data
+        else:
+            fitted_data = data.stack({'all':['epochs','samples']})\
             .transpose('participant','all','channels').data
-        
-        ccs = mcca_m.obtain_mcca(stacked)
+        ccs = mcca_m.obtain_mcca(fitted_data)
         trans_ccs = np.tile(np.nan, (data.sizes['participant'], data.sizes['epochs'], data.sizes['samples'], ccs.shape[-1]))
         for i, part in enumerate(data.participant):
                 trans_ccs[i] = mcca_m.transform_trials(data.sel(participant=part).transpose('epochs','samples', 'channels').data.copy())
