@@ -742,7 +742,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
                 else:
                     data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
         data = data.transpose('participant','epochs','samples','component')
-    data = data.assign_coords(ori_coords)
+        data = data.assign_coords(ori_coords)
     data.attrs['pca_weights'] = pca_weights
     data.attrs['sfreq'] = sfreq
     data = stack_data(data)
