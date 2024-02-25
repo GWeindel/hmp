@@ -605,7 +605,7 @@ def _pca(pca_ready_data, n_comp, channels):
     pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
     return pca_weights
 
-def transform_data(data, participants_variable="participant", apply_standard=False, averaged=False, apply_zscore='trial', zscore_acrossPCs=False, method='pca', cov=True, centering=False, n_comp=None, n_ppcas=None, pca_weights=None, filter=None):
+def transform_data(data, participants_variable="participant", apply_standard=False, averaged=False, apply_zscore='trial', zscore_acrossPCs=False, method='pca', cov=True, centering=True, n_comp=None, n_ppcas=None, pca_weights=None, filter=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -659,7 +659,11 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
     sfreq = data.sfreq
     if filter:
         data = _filtering(data, filter, sfreq)
-
+    if centering:
+        ori_coords = data.coords
+        data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial', squeeze=False).map(_center).unstack()
+        data = data.transpose('participant','epochs','samples','component')
+        data = data.assign_coords(ori_coords)
     if apply_zscore == True:
         apply_zscore = 'trial' #defaults to trial
     if apply_standard:
@@ -718,11 +722,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
         data['component'] = np.arange(len(data.component))
         pca_weigths = np.identity(len(data.component))
     # zscore either across all data, by participant (preferred), or by trial
-    if centering:
-        ori_coords = data.coords
-        data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial', squeeze=False).map(_center).unstack()
-        data = data.transpose('participant','epochs','samples','component')
-        data = data.assign_coords(ori_coords)
+
     if apply_zscore:
         ori_coords = data.coords
         match apply_zscore:
