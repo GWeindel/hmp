@@ -659,13 +659,6 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
     sfreq = data.sfreq
     if filter:
         data = _filtering(data, filter, sfreq)
-    if centering:
-        ori_coords = data.coords
-        data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial', squeeze=False).map(_center).unstack()
-        data = data.transpose('participant','epochs','samples','component')
-        data = data.assign_coords(ori_coords)
-    if apply_zscore == True:
-        apply_zscore = 'trial' #defaults to trial
     if apply_standard:
         if 'participant' not in data.dims or len(data.participant) == 1:
             warn('Requested standardization of between participant variance yet no participant dimension is found in the data or only one participant is present. No standardization is done, set apply_standard to False to avoid this warning.')
@@ -675,6 +668,14 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
             data = data.groupby(participants_variable, squeeze=False).map(_standardize)
     if isinstance(data, xr.Dataset):
             data = data.data
+    if centering:
+        ori_coords = data.coords
+        data = data.stack(trial=[participants_variable,'epochs','channels']).groupby('trial', squeeze=False).map(_center).unstack()
+        data = data.transpose('participant','epochs','samples','channels')
+        data = data.assign_coords(ori_coords)
+    if apply_zscore == True:
+        apply_zscore = 'trial' #defaults to trial
+
     if method == 'pca':
         if pca_weights is None:
             if cov:
