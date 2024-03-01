@@ -687,10 +687,10 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
                 for i,part_dat in data.groupby('participant', squeeze=True):
                     indiv_data.append(np.mean(\
                         [np.cov(trial_dat.data[0,:,~np.isnan(trial_dat.data[0,0,:])].T)\
-                        for _,trial_dat in part_dat.dropna('epochs', how='all').groupby("epochs")],axis=0))
+                        for _,trial_dat in part_dat.dropna('epochs', how='all').groupby("epochs",squeeze=False)],axis=0))
                     pca_ready_data = np.mean(indiv_data,axis=0)
                 if averaged and len(data.participant) > 1:
-                    pca_ready_data = np.nanmean(pca_ready_data, axis=0)
+                    pca_ready_data = np.mean(pca_ready_data, axis=0)
             else:#assumes all
                 if averaged:
                     erps = []
