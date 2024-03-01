@@ -159,6 +159,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
             raise ValueError(f'Incompatible dimension between the provided metadata {len(metadata)} and the number of eeg files provided {len(pfiles)}')
     else:
         metadata_i = None
+    i = 0 #syncing up indexing between event and raw files
     for participant in pfiles:
 
         print(f"Processing participant {participant}'s {dict_datatype[epoched]} {pick_channels}")
@@ -190,7 +191,9 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
             else:
                 if len(np.shape(events_provided)) == 2:
                     events_provided = events_provided[np.newaxis]
-                events = events_provided[y]
+                    events = events_provided[y]
+                else:#assumes stacked event files
+                    events = events_provided
             if reference is not None:
                 data = data.set_eeg_reference(reference)
             data = _pick_channels(pick_channels,data, stim=True)
