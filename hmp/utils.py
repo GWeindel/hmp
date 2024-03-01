@@ -159,7 +159,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
             raise ValueError(f'Incompatible dimension between the provided metadata {len(metadata)} and the number of eeg files provided {len(pfiles)}')
     else:
         metadata_i = None
-    i = 0 #syncing up indexing between event and raw files
+    ev_i = 0 #syncing up indexing between event and raw files
     for participant in pfiles:
 
         print(f"Processing participant {participant}'s {dict_datatype[epoched]} {pick_channels}")
@@ -181,7 +181,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
                 try:
                     events = mne.find_events(data, verbose=verbose, min_duration = 1 / data.info['sfreq'])
                 except:
-                    events = mne.events_from_annotations(data, verbose=verbose)
+                    events = mne.events_from_annotations(data, verbose=verbose)[0]
                 if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicates offset in the trggers
                     print(f'Correcting event values as trigger channel has offset {np.unique(events[:,1])}')
                     events[:,2] = events[:,2]-events[:,1]#correction on event value             
@@ -189,11 +189,12 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
                 events = np.array([list(x) for x in events if x[2] in events_values])#only keeps events with stim or response
                 events_stim = np.array([list(x) for x in events if x[2] in event_id.values()])#only stim
             else:
-                if len(np.shape(events_provided)) == 2:
+                if len(events_provided[0]) == 3:
                     events_provided = events_provided[np.newaxis]
                     events = events_provided[y]
                 else:#assumes stacked event files
-                    events = events_provided
+                    events = events_provided[ev_i]
+                    ev_i += 1
             if reference is not None:
                 data = data.set_eeg_reference(reference)
             data = _pick_channels(pick_channels,data, stim=True)
