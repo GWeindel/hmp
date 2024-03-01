@@ -581,6 +581,7 @@ def _filtering(data, filter, sfreq):
 
 def _pca(pca_ready_data, n_comp, channels):
     from sklearn.decomposition import PCA
+    # pca_ready_data = pca_ready_data.transpose(...,'channels')
     if n_comp == None:
         import matplotlib.pyplot as plt
         n_comp = np.shape(pca_ready_data)[0]-1
@@ -666,25 +667,26 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
             mean_std = data.groupby(participants_variable, squeeze=False).std(dim=...).data.mean()
             data = data.assign(mean_std=mean_std.data)
             data = data.groupby(participants_variable, squeeze=False).map(_standardize)
-    if isinstance(data, xr.Dataset):
+    if isinstance(data, xr.Dataset):#needs to be a dataset if apply_standard is used
             data = data.data
     if centering:
         ori_coords = data.coords
         data = data.stack(trial=[participants_variable,'epochs','channels']).groupby('trial', squeeze=False).map(_center).unstack()
-        data = data.transpose('participant','epochs','samples','channels')
         data = data.assign_coords(ori_coords)
     if apply_zscore == True:
         apply_zscore = 'trial' #defaults to trial
-
+    data = data.transpose('participant','epochs','channels','samples')
     if method == 'pca':
         if pca_weights is None:
             if cov:
                 indiv_data = []
-                for i,part_dat in data.groupby('participant', squeeze=False):
+                for i,part_dat in data.groupby('participant', squeeze=True):
                     indiv_data.append(np.mean(\
                         [np.cov(trial_dat.data[0,:,~np.isnan(trial_dat.data[0,0,:])].T)\
                         for _,trial_dat in part_dat.dropna('epochs', how='all').groupby("epochs")],axis=0))
                     pca_ready_data = np.mean(indiv_data,axis=0)
+                if averaged and len(data.participant) > 1:
+                    pca_ready_data = np.nanmean(pca_ready_data, axis=0)
             else:#assumes all
                 if averaged:
                     erps = []
@@ -693,6 +695,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
                     pca_ready_data = np.nanmean(erps,axis=0)
                 else: 
                     pca_ready_data = data.stack({'all':['participant','epochs','samples']}).dropna('all')
+                    pca_ready_data = pca_ready_data.transpose('all','channels')
             # Performing spatial PCA on the average var-cov matrix
             data = data @ _pca(pca_ready_data, n_comp, data.coords["channels"].values)
     elif method == 'mcca':
