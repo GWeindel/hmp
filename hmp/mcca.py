@@ -88,11 +88,11 @@ class MCCA:
             scores (ndarray): Returns scores in PCA space if self.pca_only is true and MCCA scores otherwise.
         """
         n_subjects, n_samples, n_sensors = X.shape
-        X_pca = np.zeros((n_subjects, n_samples, self.n_pcs))
+        X_pca = np.zeros((n_subjects, n_samples, self.n_pcs))*np.nan
         self.pca_weights = np.zeros((n_subjects, n_sensors, self.n_pcs))
         self.mu = np.zeros((n_subjects, n_sensors))
         self.sigma = np.zeros((n_subjects, self.n_pcs))
-
+        lim = np.inf
         # obtain subject-specific PCAs
         for i in range(n_subjects):
             pca = PCA(n_components=self.n_pcs, svd_solver='full')
@@ -107,9 +107,11 @@ class MCCA:
                 self.mu[i] = pca.mean_
                 self.sigma[i] = np.sqrt(pca.explained_variance_)
                 score /= self.sigma[i]
+            lim_i = len(x_i[~np.isnan(x_i[:,0])])
+            lim = int(np.min([lim, lim_i]))
             self.pca_weights[i] = pca.components_.T
-            X_pca[i, ~np.isnan(x_i[:,0]),:] = score
-            
+            X_pca[i,:lim_i,:] = score
+        X_pca = X_pca[:, :lim,:]
         if self.pca_only:
             return X_pca
         else:
