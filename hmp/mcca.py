@@ -112,6 +112,9 @@ class MCCA:
             self.pca_weights[i] = pca.components_.T
             X_pca[i,:lim_i,:] = score
         X_pca = X_pca[:, :lim,:]
+        
+        warnings.warn(f'MCCA is done on {lim} samples per subject')
+        
         if self.pca_only:
             return X_pca
         else:
