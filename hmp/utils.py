@@ -607,10 +607,10 @@ def _pca(pca_ready_data, n_comp, channels):
     #Rebuilding pca PCs as xarray to ease computation
     coords = dict(channels=("channels", channels),
                  component=("component", np.arange(n_comp)))
-    pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
-    return pca_weights
+    weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
+    return weights
 
-def transform_data(data, participants_variable="participant", apply_standard=False, averaged=False, apply_zscore='trial', zscore_acrossPCs=False, method='pca', cov=True, centering=True, n_comp=None, n_ppcas=None, pca_weights=None, filter=None):
+def transform_data(data, participants_variable="participant", apply_standard=False, averaged=False, apply_zscore='trial', method='pca', cov=True, centering=True, n_comp=None, n_ppcas=None, weights=None, filter=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -627,7 +627,9 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
     participants_variable : str
         name of the dimension for participants ID
     apply_standard : bool 
-        Whether to apply standardization
+        Whether to apply standardization of variance between participants, recommended when they are few of them (e.g. < 10)
+    averaged : bool
+        Applying the pca on the averaged variance/covariance matrix or ERP (True) or single trial cov/ERP (False, default)
     apply_zscore : str 
         Whether to apply z-scoring and on what data, either None, 'all', 'participant', 'trial', for zscoring across all data, by participant, or by trial, respectively. If set to true, evaluates to 'trial' for backward compatibility.
     method : str
@@ -648,12 +650,6 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
     -------
     data : xarray.Dataset
         xarray dataset [n_samples * n_comp] data expressed in the PC space, ready for HMP fit
-    pca_weigths : xarray.Dataset
-        loadings of the PCA, used to retrieve channel space
-    pca.explained_variance_ : ndarray
-        explained variance for each component
-    means : xarray.DataArray
-        means of the channels before PCA/zscore
     '''
     if isinstance(data, xr.DataArray):
         raise ValueError('Expected a xarray Dataset with data and event as DataArrays, check the data format')
@@ -673,7 +669,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
             data = data.groupby(participants_variable, squeeze=False).map(_standardize)
     if isinstance(data, xr.Dataset):#needs to be a dataset if apply_standard is used
             data = data.data
-    if centering:
+    if centering or method=='mcca':
         ori_coords = data.coords
         data = data.stack(trial=[participants_variable,'epochs','channels']).groupby('trial', squeeze=False).map(_center).unstack()
         data = data.assign_coords(ori_coords)
@@ -681,15 +677,15 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
         apply_zscore = 'trial' #defaults to trial
     data = data.transpose('participant','epochs','channels','samples')
     if method == 'pca':
-        if pca_weights is None:
+        if weights is None:
             if cov:
                 indiv_data = []
-                for i,part_dat in data.groupby('participant', squeeze=True):
+                for i,part_dat in data.groupby('participant'):
                     indiv_data.append(np.mean(\
                         [np.cov(trial_dat.data[0,:,~np.isnan(trial_dat.data[0,0,:])].T)\
-                        for _,trial_dat in part_dat.dropna('epochs', how='all').groupby("epochs",squeeze=False)],axis=0))
-                    pca_ready_data = np.mean(indiv_data,axis=0)
-                if averaged and len(data.participant) > 1:
+                        for _,trial_dat in part_dat.squeeze().dropna('epochs', how='all').groupby("epochs",squeeze=False)],axis=0))
+                    pca_ready_data = np.mean(np.array(indiv_data),axis=0)
+                if averaged and data.sizes['participant'] > 1:
                     pca_ready_data = np.mean(pca_ready_data, axis=0)
             else:#assumes all
                 if averaged:
@@ -701,7 +697,9 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
                     pca_ready_data = data.stack({'all':['participant','epochs','samples']}).dropna('all')
                     pca_ready_data = pca_ready_data.transpose('all','channels')
             # Performing spatial PCA on the average var-cov matrix
-            data = data @ _pca(pca_ready_data, n_comp, data.coords["channels"].values)
+            weights = _pca(pca_ready_data, n_comp, data.coords["channels"].values)
+            data = data @ weights
+            data.attrs['weights'] = weights
     elif method == 'mcca':
         ori_coords = data.drop_vars('channels').coords
         if n_ppcas is None:
@@ -725,33 +723,25 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
                  component = np.arange(n_comp))#n_comp
             )
         data = data.assign_coords(ori_coords)
+        data.attrs['mcca_weights'] = mcca_m.mcca_weights
+        data.attrs['pca_weights'] = mcca_m.pca_weights
     elif method is None:
         data = data.rename({'channels':'component'})
         data['component'] = np.arange(len(data.component))
-        pca_weigths = np.identity(len(data.component))
+        data.attrs['weights'] = np.identity(len(data.component))
     # zscore either across all data, by participant (preferred), or by trial
 
     if apply_zscore:
         ori_coords = data.coords
         match apply_zscore:
             case 'all':
-                if zscore_acrossPCs:
-                    data = zscore_xarray(data)
-                else:
-                    data = data.stack(comp=['component']).groupby('comp').map(zscore_xarray).unstack()
+                data = data.stack(comp=['component']).groupby('comp').map(zscore_xarray).unstack()
             case 'participant':
-                if zscore_acrossPCs:
-                    data = data.groupby('participant').map(zscore_xarray)
-                else:
-                    data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore_xarray).unstack()
+                data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore_xarray).unstack()
             case 'trial':
-                if zscore_acrossPCs:
-                    data = data.stack(trial=[participants_variable,'epochs']).groupby('trial').map(zscore_xarray).unstack()
-                else:
-                    data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
+                data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
         data = data.transpose('participant','epochs','samples','component')
         data = data.assign_coords(ori_coords)
-    data.attrs['pca_weights'] = pca_weights
     data.attrs['sfreq'] = sfreq
     data = stack_data(data)
     return data
