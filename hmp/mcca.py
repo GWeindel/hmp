@@ -140,6 +140,8 @@ class MCCA:
             lim_i = len(x_i[~np.isnan(x_i[:,0])])
             lim = int(np.min([lim, lim_i]))
             self.pca_weights[i] = pca.components_.T
+            self.mu = 0
+            self.sigma = 1
             X_pca[i,:lim_i,:] = score
         warnings.warn(f'MCCA is done on {lim} out of {n_trials*n_samples} samples per subject')
         X_pca = X_pca[:, :lim,:]
