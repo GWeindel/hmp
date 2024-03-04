@@ -629,7 +629,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
     apply_standard : bool 
         Whether to apply standardization of variance between participants, recommended when they are few of them (e.g. < 10)
     averaged : bool
-        Applying the pca on the averaged variance/covariance matrix or ERP (True) or single trial cov/ERP (False, default)
+        Applying the pca on the averaged ERP (True) or single trial ERP (False, default). No effect if cov = True
     apply_zscore : str 
         Whether to apply z-scoring and on what data, either None, 'all', 'participant', 'trial', for zscoring across all data, by participant, or by trial, respectively. If set to true, evaluates to 'trial' for backward compatibility.
     method : str
@@ -657,6 +657,8 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
         raise ValueError('apply_zscore should be either a boolean or one of [\'all\', \'participant\', \'trial\']')
     assert np.sum(np.isnan(data.groupby('participant', squeeze=False).mean(['epochs','samples']).data.values)) == 0,\
         'at least one participant has an empty channel'
+    if method == 'mcca' and data.size['participants'] == 1:
+        raise ValueError('MCCA cannot be applied to only one participant')
     sfreq = data.sfreq
     if filter:
         data = _filtering(data, filter, sfreq)
@@ -679,15 +681,16 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
     if method == 'pca':
         if pca_weights is None:
             if cov:
-                indiv_data = []
-                for i,part_dat in data.groupby('participant'):
-                    indiv_data.append(np.mean(\
-                        [np.cov(trial_dat.data[0,:,~np.isnan(trial_dat.data[0,0,:])].T)\
-                        for _,trial_dat in part_dat.squeeze().dropna('epochs', how='all').groupby("epochs",squeeze=False)],axis=0))
-                    pca_ready_data = np.mean(np.array(indiv_data),axis=0)
-                if averaged and data.sizes['participant'] > 1:
-                    pca_ready_data = np.mean(pca_ready_data, axis=0)
-            else:#assumes all
+                indiv_data = np.zeros((data.sizes['participant'], data.sizes['channels'], data.sizes['channels']))
+                for i in range(data.sizes['participant']):
+                    x_i = np.squeeze(data.data[i])
+                    indiv_data[i] = np.mean(\
+                        [np.cov(
+                            x_i[trial,:,~np.isnan(x_i[trial,0,:])].T)\
+                            for trial in range(x_i.shape[0]) 
+                            if ~np.isnan(x_i[trial,0,:]).all()],axis=0)
+                pca_ready_data = np.mean(np.array(indiv_data),axis=0)
+            else:#assumes ERPs
                 if averaged:
                     erps = []
                     for part in data.participant:
@@ -704,13 +707,17 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
         ori_coords = data.drop_vars('channels').coords
         if n_ppcas is None:
             n_ppcas = n_comp*3
-        mcca_m = mcca.MCCA(n_components_pca=n_ppcas, n_components_mcca=n_comp, cov=cov)
-        if averaged:
-            fitted_data = data.mean('epochs').transpose('participant','samples','channels').data
+        mcca_m = mcca.MCCA(n_components_pca=n_ppcas, n_components_mcca=n_comp)
+        if cov:
+            fitted_data = data.transpose('participant','epochs','samples','channels').data
+            ccs = mcca_m.obtain_mcca_cov(fitted_data)
         else:
-            fitted_data = data.stack({'all':['epochs','samples']})\
-            .transpose('participant','all','channels').data
-        ccs = mcca_m.obtain_mcca(fitted_data)
+            if averaged:
+                fitted_data = data.mean('epochs').transpose('participant','samples','channels').data
+            else:
+                fitted_data = data.stack({'all':['epochs','samples']})\
+                .transpose('participant','all','channels').data
+            ccs = mcca_m.obtain_mcca(fitted_data)
         trans_ccs = np.tile(np.nan, (data.sizes['participant'], data.sizes['epochs'], data.sizes['samples'], ccs.shape[-1]))
         for i, part in enumerate(data.participant):
                 trans_ccs[i] = mcca_m.transform_trials(data.sel(participant=part).transpose('epochs','samples', 'channels').data.copy())
@@ -729,7 +736,8 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
         data = data.rename({'channels':'component'})
         data['component'] = np.arange(len(data.component))
         data.attrs['pca_weights'] = np.identity(len(data.component))
-    # zscore either across all data, by participant (preferred), or by trial
+    else:
+        raise ValueError(f"method {method} is unknown, choose either 'pca', 'mcca' or None")
 
     if apply_zscore:
         ori_coords = data.coords
