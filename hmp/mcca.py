@@ -125,6 +125,8 @@ class MCCA:
         X_pca = np.zeros((n_subjects, n_trials*n_samples, self.n_pcs))*np.nan
         self.pca_weights = np.zeros((n_subjects, n_sensors, self.n_pcs))
         lim = np.inf
+        self.mu = np.zeros((n_subjects, n_sensors))
+        self.sigma = np.ones((n_subjects, self.n_pcs))
         # obtain subject-specific PCAs
         for i in range(n_subjects):
             pca = PCA(n_components=self.n_pcs, svd_solver='full')
@@ -140,8 +142,6 @@ class MCCA:
             lim_i = len(x_i[~np.isnan(x_i[:,0])])
             lim = int(np.min([lim, lim_i]))
             self.pca_weights[i] = pca.components_.T
-            self.mu = 0
-            self.sigma = 1
             X_pca[i,:lim_i,:] = score
         warnings.warn(f'MCCA is done on {lim} out of {n_trials*n_samples} samples per subject')
         X_pca = X_pca[:, :lim,:]
