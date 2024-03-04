@@ -607,10 +607,10 @@ def _pca(pca_ready_data, n_comp, channels):
     #Rebuilding pca PCs as xarray to ease computation
     coords = dict(channels=("channels", channels),
                  component=("component", np.arange(n_comp)))
-    weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
-    return weights
+    pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
+    return pca_weights
 
-def transform_data(data, participants_variable="participant", apply_standard=False, averaged=False, apply_zscore='trial', method='pca', cov=True, centering=True, n_comp=None, n_ppcas=None, weights=None, filter=None):
+def transform_data(data, participants_variable="participant", apply_standard=False, averaged=False, apply_zscore='trial', method='pca', cov=True, centering=True, n_comp=None, n_ppcas=None, pca_weights=None, filter=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -677,7 +677,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
         apply_zscore = 'trial' #defaults to trial
     data = data.transpose('participant','epochs','channels','samples')
     if method == 'pca':
-        if weights is None:
+        if pca_weights is None:
             if cov:
                 indiv_data = []
                 for i,part_dat in data.groupby('participant'):
@@ -697,13 +697,13 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
                     pca_ready_data = data.stack({'all':['participant','epochs','samples']}).dropna('all')
                     pca_ready_data = pca_ready_data.transpose('all','channels')
             # Performing spatial PCA on the average var-cov matrix
-            weights = _pca(pca_ready_data, n_comp, data.coords["channels"].values)
-            data = data @ weights
-            data.attrs['weights'] = weights
+            pca_weights = _pca(pca_ready_data, n_comp, data.coords["channels"].values)
+            data = data @ pca_weights
+            data.attrs['pca_weights'] = pca_weights
     elif method == 'mcca':
         ori_coords = data.drop_vars('channels').coords
         if n_ppcas is None:
-            n_ppcas = n_comp*2
+            n_ppcas = n_comp*3
         mcca_m = mcca.MCCA(n_components_pca=n_ppcas, n_components_mcca=n_comp, cov=cov)
         if averaged:
             fitted_data = data.mean('epochs').transpose('participant','samples','channels').data
@@ -728,7 +728,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
     elif method is None:
         data = data.rename({'channels':'component'})
         data['component'] = np.arange(len(data.component))
-        data.attrs['weights'] = np.identity(len(data.component))
+        data.attrs['pca_weights'] = np.identity(len(data.component))
     # zscore either across all data, by participant (preferred), or by trial
 
     if apply_zscore:
