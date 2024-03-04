@@ -556,18 +556,17 @@ def backward_func(hmp_model, max_events=None, min_events=0, max_starting_points=
     return hmp_model.backward_estimation(max_events, min_events, None, max_starting_points, method, tolerance, True, max_iteration)
 
 
-def fit_backward_func(hmp_model, fix_prev=False, by_sample=False, min_events=0, tolerance=1e-4, max_iteration=1e3):
+def fit_backward_func(hmp_model, by_sample=False, min_events=0, tolerance=1e-4, max_iteration=1e3):
     '''
     Helper function for fit_loocv_backward. Calls fit function followed by backward_estimation on hmp_model with provided args.
     '''    
     #fit model
-    fit_model = hmp_model.fit(fix_prev=fix_prev,by_sample=by_sample,tolerance=tolerance)
+    fit_model = hmp_model.fit(by_sample=by_sample,tolerance=tolerance)
 
     #backward estimation based on fit
     backward_model = hmp_model.backward_estimation(max_fit=fit_model, min_events=min_events, tolerance=tolerance, max_iteration=max_iteration)
 
     return backward_model
-
 
 
 def loocv_backward(init, data, max_events=None, min_events=0, max_starting_points=1, method="random", tolerance=1e-4, max_iteration=1e3, cpus=1, verbose=True):
@@ -612,7 +611,7 @@ def loocv_backward(init, data, max_events=None, min_events=0, max_starting_point
     return loocv_func(init, data, backward_func, func_args=[max_events, min_events, max_starting_points, method, tolerance, max_iteration], cpus=cpus, verbose=verbose)
 
 
-def loocv_fit_backward(init, data, fix_prev=False, by_sample=False, min_events=0, tolerance=1e-4, max_iteration=1e3, cpus=1, verbose=True):
+def loocv_fit_backward(init, data, by_sample=False, min_events=0, tolerance=1e-4, max_iteration=1e3, cpus=1, verbose=True):
     '''
     Performs leave-one-out cross validation using the fit function followed by backward_estimation
     using the fit-ted model as the maximal model to calculate the initial fit.
@@ -652,7 +651,7 @@ def loocv_fit_backward(init, data, fix_prev=False, by_sample=False, min_events=0
     likelihood object and fitten backward estimation models
     '''
 
-    return loocv_func(init, data, fit_backward_func, func_args=[fix_prev, by_sample, min_events, tolerance, max_iteration], cpus=cpus, verbose=verbose)
+    return loocv_func(init, data, fit_backward_func, func_args=[by_sample, min_events, tolerance, max_iteration], cpus=cpus, verbose=verbose)
 
 
 def get_average_parameters(all_estimates):
