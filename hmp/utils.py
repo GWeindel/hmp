@@ -657,7 +657,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
         raise ValueError('apply_zscore should be either a boolean or one of [\'all\', \'participant\', \'trial\']')
     assert np.sum(np.isnan(data.groupby('participant', squeeze=False).mean(['epochs','samples']).data.values)) == 0,\
         'at least one participant has an empty channel'
-    if method == 'mcca' and data.size['participants'] == 1:
+    if method == 'mcca' and data.sizes['participant'] == 1:
         raise ValueError('MCCA cannot be applied to only one participant')
     sfreq = data.sfreq
     if filter:
