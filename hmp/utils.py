@@ -12,6 +12,7 @@ import pandas as pd
 import warnings
 from warnings import warn, filterwarnings
 from seaborn.algorithms import bootstrap
+from hmp import mcca
 import json
 import mne
 import os
@@ -158,6 +159,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
             raise ValueError(f'Incompatible dimension between the provided metadata {len(metadata)} and the number of eeg files provided {len(pfiles)}')
     else:
         metadata_i = None
+    ev_i = 0 #syncing up indexing between event and raw files
     for participant in pfiles:
 
         print(f"Processing participant {participant}'s {dict_datatype[epoched]} {pick_channels}")
@@ -179,7 +181,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
                 try:
                     events = mne.find_events(data, verbose=verbose, min_duration = 1 / data.info['sfreq'])
                 except:
-                    events = mne.events_from_annotations(data, verbose=verbose)
+                    events = mne.events_from_annotations(data, verbose=verbose)[0]
                 if events[0,1] > 0:#bug from some stim channel, should be 0 otherwise indicates offset in the trggers
                     print(f'Correcting event values as trigger channel has offset {np.unique(events[:,1])}')
                     events[:,2] = events[:,2]-events[:,1]#correction on event value             
@@ -187,9 +189,12 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
                 events = np.array([list(x) for x in events if x[2] in events_values])#only keeps events with stim or response
                 events_stim = np.array([list(x) for x in events if x[2] in event_id.values()])#only stim
             else:
-                if len(np.shape(events_provided)) == 2:
+                if len(events_provided[0]) == 3:
                     events_provided = events_provided[np.newaxis]
-                events = events_provided[y]
+                    events = events_provided[y]
+                else:#assumes stacked event files
+                    events = events_provided[ev_i]
+                    ev_i += 1
             if reference is not None:
                 data = data.set_eeg_reference(reference)
             data = _pick_channels(pick_channels,data, stim=True)
@@ -578,7 +583,34 @@ def _filtering(data, filter, sfreq):
                 data.data.values[pp, trial, :, :dat.shape[1]] = dat
         return data
 
-def transform_data(data, participants_variable="participant", apply_standard=True,  apply_zscore='trial', zscore_acrossPCs=False, method='pca', centering=False, n_comp=None, pca_weights=None, filter=None):
+def _pca(pca_ready_data, n_comp, channels):
+    from sklearn.decomposition import PCA
+    # pca_ready_data = pca_ready_data.transpose(...,'channels')
+    if n_comp == None:
+        import matplotlib.pyplot as plt
+        n_comp = np.shape(pca_ready_data)[0]-1
+        fig, ax = plt.subplots(1,2, figsize=(.2*n_comp, 4))
+        pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
+        pca.fit(pca_ready_data)
+
+        ax[0].plot(np.arange(pca.n_components)+1, pca.explained_variance_ratio_,'.-')
+        ax[0].set_ylabel('Normalized explained variance')
+        ax[0].set_xlabel('Component')
+        ax[1].plot(np.arange(pca.n_components)+1, np.cumsum(pca.explained_variance_ratio_),'.-')
+        ax[1].set_ylabel('Cumulative normalized explained variance')
+        ax[1].set_xlabel('Component')
+        plt.tight_layout()
+        plt.show()
+        n_comp = int(input(f'How many PCs (90 and 99% explained variance at component n{np.where(np.cumsum(pca.explained_variance_ratio_) >= .90)[0][0]+1} and n{np.where(np.cumsum(pca.explained_variance_ratio_) >= .99)[0][0]+1})?'))
+    pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
+    pca.fit(pca_ready_data)
+    #Rebuilding pca PCs as xarray to ease computation
+    coords = dict(channels=("channels", channels),
+                 component=("component", np.arange(n_comp)))
+    pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
+    return pca_weights
+
+def transform_data(data, participants_variable="participant", apply_standard=False, averaged=False, apply_zscore='trial', method='pca', cov=True, centering=True, n_comp=None, n_ppcas=None, pca_weights=None, filter=None):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -595,11 +627,15 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     participants_variable : str
         name of the dimension for participants ID
     apply_standard : bool 
-        Whether to apply standardization
+        Whether to apply standardization of variance between participants, recommended when they are few of them (e.g. < 10)
+    averaged : bool
+        Applying the pca on the averaged ERP (True) or single trial ERP (False, default). No effect if cov = True
     apply_zscore : str 
         Whether to apply z-scoring and on what data, either None, 'all', 'participant', 'trial', for zscoring across all data, by participant, or by trial, respectively. If set to true, evaluates to 'trial' for backward compatibility.
     method : str
-        Method to apply, for now limited to 'pca'
+        Method to apply, 'pca' or 'mcca'
+    cov : bool
+        Wether to apply the pca/mcca to the variance covariance (True, default) or the epoched data
     n_comp : int
         How many components to select from the PC space, if None plots the scree plot and a prompt requires user
         to specify how many PCs should be retained
@@ -614,12 +650,6 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
     -------
     data : xarray.Dataset
         xarray dataset [n_samples * n_comp] data expressed in the PC space, ready for HMP fit
-    pca_weigths : xarray.Dataset
-        loadings of the PCA, used to retrieve channel space
-    pca.explained_variance_ : ndarray
-        explained variance for each component
-    means : xarray.DataArray
-        means of the channels before PCA/zscore
     '''
     if isinstance(data, xr.DataArray):
         raise ValueError('Expected a xarray Dataset with data and event as DataArrays, check the data format')
@@ -627,13 +657,11 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
         raise ValueError('apply_zscore should be either a boolean or one of [\'all\', \'participant\', \'trial\']')
     assert np.sum(np.isnan(data.groupby('participant', squeeze=False).mean(['epochs','samples']).data.values)) == 0,\
         'at least one participant has an empty channel'
+    if method == 'mcca' and data.size['participants'] == 1:
+        raise ValueError('MCCA cannot be applied to only one participant')
     sfreq = data.sfreq
-    
     if filter:
         data = _filtering(data, filter, sfreq)
-
-    if apply_zscore == True:
-        apply_zscore = 'trial' #defaults to trial
     if apply_standard:
         if 'participant' not in data.dims or len(data.participant) == 1:
             warn('Requested standardization of between participant variance yet no participant dimension is found in the data or only one participant is present. No standardization is done, set apply_standard to False to avoid this warning.')
@@ -641,75 +669,87 @@ def transform_data(data, participants_variable="participant", apply_standard=Tru
             mean_std = data.groupby(participants_variable, squeeze=False).std(dim=...).data.mean()
             data = data.assign(mean_std=mean_std.data)
             data = data.groupby(participants_variable, squeeze=False).map(_standardize)
-
-
-
-    if method == 'pca':
-        if isinstance(data, xr.Dataset):
+    if isinstance(data, xr.Dataset):#needs to be a dataset if apply_standard is used
             data = data.data
+    if centering or method=='mcca':
+        ori_coords = data.coords
+        data = data.stack(trial=[participants_variable,'epochs','channels']).groupby('trial', squeeze=False).map(_center).unstack()
+        data = data.assign_coords(ori_coords)
+    if apply_zscore == True:
+        apply_zscore = 'trial' #defaults to trial
+    data = data.transpose('participant','epochs','channels','samples')
+    if method == 'pca':
         if pca_weights is None:
-            from sklearn.decomposition import PCA
-            var_cov_matrices = []
-            for i,part_dat in data.groupby('participant', squeeze=False):
-                var_cov_matrices.append(np.mean(\
-                    [np.cov(trial_dat.data[0,:,~np.isnan(trial_dat.data[0,0,:])].T)\
-                    for _,trial_dat in part_dat.dropna('epochs', how='all').groupby("epochs")],axis=0))
-            var_cov_matrix = np.mean(var_cov_matrices,axis=0)
+            if cov:
+                indiv_data = np.zeros((data.sizes['participant'], data.sizes['channels'], data.sizes['channels']))
+                for i in range(data.sizes['participant']):
+                    x_i = np.squeeze(data.data[i])
+                    indiv_data[i] = np.mean(\
+                        [np.cov(
+                            x_i[trial,:,~np.isnan(x_i[trial,0,:])].T)\
+                            for trial in range(x_i.shape[0]) 
+                            if ~np.isnan(x_i[trial,0,:]).all()],axis=0)
+                pca_ready_data = np.mean(np.array(indiv_data),axis=0)
+            else:#assumes ERPs
+                if averaged:
+                    erps = []
+                    for part in data.participant:
+                        erps.append(data.sel(participant=part).groupby('samples').mean('epochs').T)
+                    pca_ready_data = np.nanmean(erps,axis=0)
+                else: 
+                    pca_ready_data = data.stack({'all':['participant','epochs','samples']}).dropna('all')
+                    pca_ready_data = pca_ready_data.transpose('all','channels')
             # Performing spatial PCA on the average var-cov matrix
-            if n_comp == None:
-                import matplotlib.pyplot as plt
-                n_comp = np.shape(var_cov_matrix)[0]-1
-                fig, ax = plt.subplots(1,2, figsize=(.2*n_comp, 4))
-                pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
-                pca.fit(var_cov_matrix)
-
-                ax[0].plot(np.arange(pca.n_components)+1, pca.explained_variance_ratio_,'.-')
-                ax[0].set_ylabel('Normalized explained variance')
-                ax[0].set_xlabel('Component')
-                ax[1].plot(np.arange(pca.n_components)+1, np.cumsum(pca.explained_variance_ratio_),'.-')
-                ax[1].set_ylabel('Cumulative normalized explained variance')
-                ax[1].set_xlabel('Component')
-                plt.tight_layout()
-                plt.show()
-                n_comp = int(input(f'How many PCs (90 and 99% explained variance at component n{np.where(np.cumsum(pca.explained_variance_ratio_) >= .90)[0][0]+1} and n{np.where(np.cumsum(pca.explained_variance_ratio_) >= .99)[0][0]+1})?'))
-            pca = PCA(n_components=n_comp, svd_solver='full')#selecting Principale components (PC)
-            pca.fit(var_cov_matrix)
-            #Rebuilding pca PCs as xarray to ease computation
-            coords = dict(channels=("channels", data.coords["channels"].values),
-                         component=("component", np.arange(n_comp)))
-            pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
-        data = data @ pca_weights
+            pca_weights = _pca(pca_ready_data, n_comp, data.coords["channels"].values)
+            data = data @ pca_weights
+            data.attrs['pca_weights'] = pca_weights
+    elif method == 'mcca':
+        ori_coords = data.drop_vars('channels').coords
+        if n_ppcas is None:
+            n_ppcas = n_comp*3
+        mcca_m = mcca.MCCA(n_components_pca=n_ppcas, n_components_mcca=n_comp)
+        if cov:
+            fitted_data = data.transpose('participant','epochs','samples','channels').data
+            ccs = mcca_m.obtain_mcca_cov(fitted_data)
+        else:
+            if averaged:
+                fitted_data = data.mean('epochs').transpose('participant','samples','channels').data
+            else:
+                fitted_data = data.stack({'all':['epochs','samples']})\
+                .transpose('participant','all','channels').data
+            ccs = mcca_m.obtain_mcca(fitted_data)
+        trans_ccs = np.tile(np.nan, (data.sizes['participant'], data.sizes['epochs'], data.sizes['samples'], ccs.shape[-1]))
+        for i, part in enumerate(data.participant):
+                trans_ccs[i] = mcca_m.transform_trials(data.sel(participant=part).transpose('epochs','samples', 'channels').data.copy())
+        data = xr.DataArray(trans_ccs,
+             dims = ["participant","epochs","samples","component"],
+             coords=dict(
+                 participant=data.participant,
+                 epochs=data.epochs,
+                 samples=data.samples,
+                 component = np.arange(n_comp))#n_comp
+            )
+        data = data.assign_coords(ori_coords)
+        data.attrs['mcca_weights'] = mcca_m.mcca_weights
+        data.attrs['pca_weights'] = mcca_m.pca_weights
     elif method is None:
         data = data.rename({'channels':'component'})
         data['component'] = np.arange(len(data.component))
-        pca_weigths = np.identity(len(data.component))
-    # zscore either across all data, by participant (preferred), or by trial
-    if centering:
-        ori_coords = data.coords
-        data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial', squeeze=False).map(_center).unstack()
-        data = data.transpose('participant','epochs','samples','component')
-        data = data.assign_coords(ori_coords)
+        data.attrs['pca_weights'] = np.identity(len(data.component))
+    else:
+        raise ValueError(f"method {method} is unknown, choose either 'pca', 'mcca' or None")
+
     if apply_zscore:
         ori_coords = data.coords
         match apply_zscore:
             case 'all':
-                if zscore_acrossPCs:
-                    data = zscore_xarray(data)
-                else:
-                    data = data.stack(comp=['component']).groupby('comp').map(zscore_xarray).unstack()
+                data = data.stack(comp=['component']).groupby('comp').map(zscore_xarray).unstack()
             case 'participant':
-                if zscore_acrossPCs:
-                    data = data.groupby('participant').map(zscore_xarray)
-                else:
-                    data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore_xarray).unstack()
+                data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore_xarray).unstack()
             case 'trial':
-                if zscore_acrossPCs:
-                    data = data.stack(trial=[participants_variable,'epochs']).groupby('trial').map(zscore_xarray).unstack()
-                else:
-                    data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
+                data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
         data = data.transpose('participant','epochs','samples','component')
         data = data.assign_coords(ori_coords)
-    data.attrs['pca_weights'] = pca_weights
     data.attrs['sfreq'] = sfreq
     data = stack_data(data)
     return data

@@ -7,4 +7,4 @@ from . import visu
 from . import resample
 from . import clusters
 
-__all__ = ["models", "simulations", "utils","visu", "clusters"]
+__all__ = ["models", "simulations", "utils","visu", "clusters","MCCA"]
