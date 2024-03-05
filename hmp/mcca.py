@@ -87,11 +87,11 @@ class MCCA:
             scores (ndarray): Returns scores in PCA space if self.pca_only is true and MCCA scores otherwise.
         """
         n_subjects, n_samples, n_sensors = X.shape
-        X_pca = np.zeros((n_subjects, n_samples, self.n_pcs))*np.nan
+        X_pca = np.zeros((n_subjects, n_samples, self.n_pcs))
         self.pca_weights = np.zeros((n_subjects, n_sensors, self.n_pcs))
         self.mu = np.zeros((n_subjects, n_sensors))
         self.sigma = np.zeros((n_subjects, self.n_pcs))
-        lim = np.inf
+        lim = 0
         # obtain subject-specific PCAs
         for i in range(n_subjects):
             pca = PCA(n_components=self.n_pcs, svd_solver='full')
@@ -101,7 +101,7 @@ class MCCA:
             self.sigma[i] = np.sqrt(pca.explained_variance_)
             score /= self.sigma[i]
             lim_i = len(x_i[~np.isnan(x_i[:,0])])
-            lim = int(np.min([lim, lim_i]))
+            lim = int(np.max([lim, lim_i]))
             self.pca_weights[i] = pca.components_.T
             X_pca[i,:lim_i,:] = score
         warnings.warn(f'MCCA is done on {lim} samples per subject')
@@ -122,9 +122,9 @@ class MCCA:
             scores (ndarray): Returns scores in PCA space if self.pca_only is true and MCCA scores otherwise.
         """
         n_subjects, n_trials, n_samples, n_sensors = X.shape
-        X_pca = np.zeros((n_subjects, n_trials*n_samples, self.n_pcs))*np.nan
+        X_pca = np.zeros((n_subjects, n_trials*n_samples, self.n_pcs))
         self.pca_weights = np.zeros((n_subjects, n_sensors, self.n_pcs))
-        lim = np.inf
+        lim = 0
         self.mu = np.zeros((n_subjects, n_sensors))
         self.sigma = np.ones((n_subjects, self.n_pcs))
         # obtain subject-specific PCAs
@@ -140,7 +140,7 @@ class MCCA:
             x_i = x_i.reshape(n_trials*n_samples, n_sensors)
             score =  x_i[~np.isnan(x_i[:,0]),:] @ pca.components_.T
             lim_i = len(x_i[~np.isnan(x_i[:,0])])
-            lim = int(np.min([lim, lim_i]))
+            lim = int(np.max([lim, lim_i]))
             self.pca_weights[i] = pca.components_.T
             X_pca[i,:lim_i,:] = score
         warnings.warn(f'MCCA is done on {lim} out of {n_trials*n_samples} samples per subject')
