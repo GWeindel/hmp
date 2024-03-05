@@ -610,7 +610,7 @@ def _pca(pca_ready_data, n_comp, channels):
     pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
     return pca_weights
 
-def transform_data(data, participants_variable="participant", apply_standard=False, averaged=False, apply_zscore='trial', method='pca', cov=True, centering=True, n_comp=None, n_ppcas=None, pca_weights=None, filter=None):
+def transform_data(data, participants_variable="participant", apply_standard=False, averaged=False, apply_zscore='trial', method='pca', cov=True, centering=True, n_comp=None, n_ppcas=None, pca_weights=None, filter=None, mcca_reg=0):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -645,6 +645,8 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
         If none, no filtering is appliedn. If tuple, data is filtered between lfreq-hfreq.
         NOTE: filtering at this step is suboptimal, filter before epoching if at all possible, see
               also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
+    mcca_reg: float
+        regularization used for the mcca computation (see mcca.py)
 
     Returns
     -------
@@ -717,7 +719,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
             else:
                 fitted_data = data.stack({'all':['epochs','samples']})\
                 .transpose('participant','all','channels').data
-            ccs = mcca_m.obtain_mcca(fitted_data)
+            ccs = mcca_m.obtain_mcca(fitted_data, r=mcca_reg)
         trans_ccs = np.tile(np.nan, (data.sizes['participant'], data.sizes['epochs'], data.sizes['samples'], ccs.shape[-1]))
         for i, part in enumerate(data.participant):
                 trans_ccs[i] = mcca_m.transform_trials(data.sel(participant=part).transpose('epochs','samples', 'channels').data.copy())
