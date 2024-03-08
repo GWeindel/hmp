@@ -1,11 +1,6 @@
 __pycache__/
 *.py[cod]
 *.nc
-/documentation
-/temp
-/papers
-/matlab
-/MCCA
 .ipynb_checkpoints
 /old
 /__pycache__
@@ -17,6 +12,5 @@ __pycache__/
 /dist
 *egg*
 !tutorials/sample_data/sample_data.nc
-*.mat
 .DS_Store
 .vscode
