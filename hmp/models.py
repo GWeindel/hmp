@@ -899,7 +899,7 @@ class hmp:
                 locations = np.tile(locations, (n_cond, 1))
         else:
             locations = locations.astype(int)
-        
+        locations[-1] = 0
         if n_cond is not None:
             lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, locations, mags_map, pars_map, conds, cpus=cpus)
         else:
@@ -918,7 +918,6 @@ class hmp:
             locations_prev = locations.copy()
 
             while i < max_iteration :#Expectation-Maximization algorithm
-                
                 if self.location_corr_threshold is None: #standard threshold
                     if i >= min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
                         break
@@ -976,7 +975,7 @@ class hmp:
                     parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
                     if self.location_corr_threshold is not None: #update location when location correlation threshold is used
                         locations = self.get_locations(locations, magnitudes, parameters, parameters_prev, eventprobs)
-
+                locations[-1] = 0
                 if n_cond is not None:
                     lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, locations, mags_map, pars_map, conds, cpus=cpus)
                 else:
@@ -1453,7 +1452,7 @@ class hmp:
 
 
     @staticmethod        
-    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=False, extra_dim=None, as_time=False, errorbars=None, center_measure='mean',estimate_method=None):
+    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=False, extra_dim=None, as_time=False, errorbars=None, center_measure='mean',estimate_method='max'):
         '''
         Compute the likeliest onset times for each event
 
@@ -1500,7 +1499,7 @@ class hmp:
         assert not(mean and errorbars is not None), 'Only one of mean and errorbars can be set.'
 
         if estimate_method is None:
-            estimate_method = init.em_method
+            estimate_method = 'max'
 
         event_shift = init.event_width_samples//2
         eventprobs = estimates.eventprobs.fillna(0).copy()
@@ -1659,7 +1658,7 @@ class hmp:
         return times
    
     @staticmethod
-    def compute_topologies(channels, estimated, init, extra_dim=None, mean=True, mean_in_participant=True, peak=True, estimate_method=None):
+    def compute_topologies(channels, estimated, init, extra_dim=None, mean=True, mean_in_participant=True, peak=True, estimate_method='max'):
         """
         Compute topologies for each trial. 
          
@@ -1691,7 +1690,7 @@ class hmp:
         """
 
         if estimate_method is None:
-            estimate_method = init.em_method
+            estimate_method = 'max'
 
         channels = channels.rename({'epochs':'trials'}).\
                           stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant')
@@ -2191,15 +2190,15 @@ class hmp:
          	 decimate: int 
                 If not None, decimate the grid search on magnitudes by the int provided
              start: float
-                 Where to start the starting point search, for some reason values below 10 samples produce unexpected results
-            return_estimates : bool
+                Where to start the starting point search, for some reason values below 10 samples produce unexpected results
+             return_estimates : bool
                 return all intermediate models
-            by_sample : bool
+             by_sample : bool
                 try every sample as the starting point, even if a later event has already
                 been identified. This in case the method jumped over a local maximum in an earlier estimation.
          
          Returns: 
-         	 A tuple containing the fitted parameters and the fitted
+         	 A the fitted HMP mo
         """
         if cpus is None:
             cpus = self.cpus
@@ -2231,7 +2230,10 @@ class hmp:
         #lkh-prev based on single uninformed event at sample 0
         min_lkh = self.fit_single(n_events, parameters=pars_prop, parameters_to_fix=[0,1], magnitudes_to_fix=0, verbose=False).likelihoods.values
         lkh_prev = min_lkh
-        
+        # The following two lines define the bias in likelihood development as the RTs get splitted
+        # A genuine new detected event should be higher than the bias induced by splitting the RT in two random partition
+        lkhs = self.sliding_event(fix_pars=True, fix_mags=True, method='max', verbose=False)[0]        
+        delta = np.max(lkhs) - np.min(lkhs)
         estimates = [] #store all n_event solutions
         while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events <= max_event_n:
 
@@ -2240,26 +2242,19 @@ class hmp:
             #get new parameters
             mags_props, pars_prop, locations_props = self.propose_fit_params(n_events, by_sample, step, j, mags, pars, locations, decimate, grid_points,end)
             last_stage = pars_prop[n_events,1]
-     
             #Estimate model based on these propositions
             solutions = self.fit_single(n_events, mags_props, pars_prop, None, None,\
-                            return_max=True, verbose=False, cpus=cpus,\
+                            return_max=True, verbose=False, cpus=1,\
                             min_iteration=min_iteration, tolerance=tolerance, locations=locations_props)
             sol_lkh = solutions.likelihoods.values
             sol_sample_new_event = int(np.round(self.scale_to_mean(np.sum(solutions.parameters.values[:n_events,1]), self.shape)))
 
-            #get required delta: likelihood difference should be larger compared to neutral model
-            #delta = lkhs[sol_sample_new_event] - min_lkh
-            sol_mags_neutralized = solutions.magnitudes.values.copy()
-            sol_mags_neutralized[-1,:] = 0 #neutralize last event
-            neutral_lkh = self.fit_single(n_events, parameters=solutions.parameters.values, magnitudes=sol_mags_neutralized, parameters_to_fix=np.arange(n_events+1), magnitudes_to_fix = np.arange(n_events), locations=solutions.locations.values, verbose=False).likelihoods.values
-
-            delta = np.max([neutral_lkh - lkh_prev, 0])
             #Diagnostic plot
             if diagnostic:
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
                 print()
                 print('Event found at sample ' + str(sol_sample_new_event))
+                print(f'Events at {np.round(self.scale_to_mean(np.cumsum(solutions.parameters.values[:,1]), self.shape)).astype(int)}')
                 print('lkh change: ' + str(solutions.likelihoods.values - lkh_prev))
                 print('required delta: ' + str(delta))
 
@@ -2306,7 +2301,7 @@ class hmp:
                 else:
                     j += 1
                     time = j
-
+            
             pbar.update(int(np.rint(time-prev_time)))
 
         #done estimating
@@ -2324,7 +2319,6 @@ class hmp:
         pars = pars[:n_events+1, :]
         locs = locations[:n_events+1]
         if n_events > 0:
-            #fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, locations=locs, verbose=verbose)
             fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose, cpus=1)
 
             #check if final fit didn't lead to -inf (sometimes happens when leaving out locations on final step)
@@ -2333,7 +2327,7 @@ class hmp:
 
         else:
             warn('Failed to find more than two stages, returning None')
-            fit = None#self.fit_single(n_events+1, verbose=verbose)
+            fit = None
 
         pbar.update(int(np.rint(end)-int(np.rint(time))))
 
