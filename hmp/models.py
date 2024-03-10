@@ -2353,7 +2353,7 @@ class hmp:
                 pars_prop = np.insert(pars_prop, n_event_j-1, [self.shape, scale_j - np.sum(pars_prop[:n_event_j-1,1])],axis=0)
                 #subtract inserted scale from next event
                 pars_prop[n_event_j, 1] =  pars_prop[n_event_j, 1] - pars_prop[n_event_j-1, 1]
-                last_stage = self.mean_to_scale(end-1, self.shape) - np.sum(pars_prop[:-1,1])
+                last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:-1,1])
                 pars_prop[n_events,1] = last_stage
 
                 #New location proposition
@@ -2374,8 +2374,8 @@ class hmp:
         else: 
             #New parameter proposition
             pars_prop = pars[:n_events+1].copy()
-            pars_prop[n_events-1,1] = self.mean_to_scale(step*j, self.shape)
-            last_stage = self.mean_to_scale(end-1, self.shape) - np.sum(pars_prop[:-1,1])
+            pars_prop[n_events-1,1] = self.mean_to_scale(step*j+1, self.shape)
+            last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:-1,1])
             pars_prop[n_events,1] = last_stage
             
             #New location proposition
