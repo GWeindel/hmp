@@ -17,7 +17,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
                 ylabels=[], xlabel = None, max_time = None, vmin=None, vmax=None, title=False, ax=None, 
                 sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange',
                 colorbar=True, topo_size_scaling=False, as_time=False,
-                        linecolors='black'):
+                linecolors='black',center_measure='mean',estimate_method=None):
     '''
     Plotting the event topologies at the average time of the onset of the next stage.
     
@@ -82,7 +82,11 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         on total plotted time interval, if False it is only dependent on magnify.
     as_time : bool
         if true, plot time (ms) instead of samples (time_step takes precedence). Ignored if times are provided as array.
-
+    center_measure : string
+        mean (default) or median, used to calculate the time within participant
+    estimate_method : string
+        'max' or 'mean', either take the max probability of each event on each trial, or the weighted 
+        average.
     Returns
     -------
     ax : matplotlib.pyplot.ax
@@ -106,28 +110,32 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         n_cond = estimated.parameters.shape[0]
 
         #make times_to_display in list with lines per condition
+        default = init.compute_times(init, estimated, mean=True, add_rt=True, extra_dim='condition', center_measure=center_measure,estimate_method=estimate_method).values[:,-1].tolist() #compute corresponding times
+        default.reverse()
         if times_to_display is None:
-            times_to_display = [np.mean(init.durations[conds==c]) for c in range(n_cond)]
-            times_to_display.reverse()
-        elif len(times_to_display) == 1: #only one set of times
-            if isinstance(times_to_display, np.ndarray):
-                times_to_display = [times_to_display] * n_cond
-            elif isinstance(times_to_display, list):
+            times_to_display = default
+        elif isinstance(times_to_display, list):
+            if not isinstance(times_to_display[0], list): #assume it's a list that needs to be copied
                 times_to_display = times_to_display * n_cond
-        elif len(times_to_display) > 1 and len(times_to_display) != n_cond:
-            print('times_to_display should either be a list of length n_cond or an ndarray which will be repeated across conditions')
-            times_to_display = [np.mean(init.durations[conds==c]) for c in range(n_cond)].reverse() # default to RTs
-            times_to_display.reverse()
+            elif len(times_to_display) != n_cond:
+                print('times_to_display should either be a list of length n_cond or an ndarray which will be repeated across conditions')
+                times_to_display = default
+        elif isinstance(times_to_display, np.ndarray): #only one set of times
+            if len(times_to_display.shape) == 1:
+                times_to_display = [times_to_display] * n_cond
 
         #set ylabels to conditions
         if ylabels == []:
             ylabels = estimated.clabels
 
     return_ax = True
+
     #if not times specified, plot average RT
     if times_to_display is None:
-        times_to_display = init.mean_d
-    
+        times_to_display = init.compute_times(init, estimated, mean=True, add_rt=True, extra_dim=None, center_measure=center_measure,estimate_method=estimate_method).values[-1]
+        if not isinstance(times_to_display, float):
+            times_to_display = times_to_display[-1]
+
     #set xlabel depending on time_step
     if xlabel is None:
         if time_step == 1 and as_time == False:
@@ -151,12 +159,12 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             elif 'condition' in estimated.dims:
                 ydim = 'condition'
         if not skip_channels_computation:
-            channels = init.compute_topologies(channels, estimated, init, ydim, peak=False).data #compute topologies
-        times = init.compute_times(init, estimated, mean=True, extra_dim=ydim, as_time=as_time).data #compute corresponding times
+            channels = init.compute_topologies(channels, estimated, init, ydim, estimate_method=estimate_method).data #compute topologies
+        times = init.compute_times(init, estimated, mean=True, extra_dim=ydim, as_time=as_time, center_measure=center_measure,estimate_method=estimate_method).data #compute corresponding times
+
     else:#assumes times/topologies already computed
         times = estimated 
     times = times * time_step
-
     if len(np.shape(channels)) == 2:
         channels = channels[np.newaxis]
     
@@ -223,16 +231,16 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             #lines/fill of detected event
             if event_lines:
                 #bottom of row + 5% if n_iter > 1
-                ylow = iteration * rowheight if n_iter == 1 else iteration * rowheight + .05 * rowheight
+                ylow2 = iteration * rowheight if n_iter == 1 else iteration * rowheight + .05 * rowheight
                 #top of row - 5% if n_iter > 1
                 yhigh = (iteration + 1) * rowheight if n_iter == 1 else (iteration + 1) * rowheight - .05 * rowheight
 
-                ax.vlines(times_iteration[event],ylow,yhigh, linestyles='dotted',color=event_color,alpha=.5,transform=ax.get_xaxis_transform())
-                ax.vlines(times_iteration[event]+event_size,ylow, yhigh, linestyles='dotted',color=event_color,alpha=.5, transform=ax.get_xaxis_transform())
-                ax.fill_between(np.array([times_iteration[event],times_iteration[event]+event_size]), ylow, yhigh, alpha=0.15,color=event_color, transform=ax.get_xaxis_transform(),edgecolor=None)
+                ax.vlines(times_iteration[event],ylow2,yhigh, linestyles='dotted',color=event_color,alpha=.5,transform=ax.get_xaxis_transform())
+                ax.vlines(times_iteration[event]+event_size,ylow2, yhigh, linestyles='dotted',color=event_color,alpha=.5, transform=ax.get_xaxis_transform())
+                ax.fill_between(np.array([times_iteration[event],times_iteration[event]+event_size]), ylow2, yhigh, alpha=0.15,color=event_color, transform=ax.get_xaxis_transform(),edgecolor=None)
 
         #add lines per condition
-        if cond_plot and times_to_display[iteration]:
+        if cond_plot and times_to_display is not None:
             #bottom of row + 5% if n_iter > 1
             ylow = iteration * rowheight if n_iter == 1 else iteration * rowheight + .05 * rowheight
             #top of row - 5% if n_iter > 1
@@ -241,8 +249,9 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
 
     #legend
     if colorbar:
-        cheight = "100%" if n_iter == 1 else f"{200/n_iter}%" 
-        axins = inset_axes(ax, width="0.5%", height=cheight, loc="lower left", bbox_to_anchor=(1.025, 0, 2, 1), bbox_transform=ax.transAxes, borderpad=0)
+        cheight = 1 if n_iter == 1 else 2/n_iter 
+        #axins = ax.inset_axes(width="0.5%", height=cheight, loc="lower left", bbox_to_anchor=(1.025, 0, 2, 1), bbox_transform=ax.transAxes, borderpad=0)
+        axins = ax.inset_axes([1.025, 0, .03,cheight])
         if isinstance(channel_position, Info):
             lab = 'Voltage' if channel_position['chs'][0]['unit'] == 107 else channel_position['chs'][0]['unit']._name
         else:
@@ -263,7 +272,8 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     #add vlines across all rows
     if not cond_plot:
         __display_times(ax, times_to_display, 0, time_step, max_time, times, linecolors, n_iter)
-
+    else:
+        ax.set_xlim(-1*time_step, np.max(times_to_display)*time_step * 1.05)
     if not return_ax:
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
@@ -488,7 +498,7 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     else:
         return_ax = True
     loocv_estimates = loocv_estimates.dropna('n_event', how='all')
-    
+
     #stats
     diffs, diff_bin, labels = [],[],[]
     pvalues = []
@@ -538,6 +548,8 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
         ax[0].errorbar(x=xap,y=meanap, yerr=err, marker='o')
       
     #second plot
+    diffs = np.array(diffs)
+    diffs[np.isneginf(diffs)] = np.nan
     ax[1].plot(diffs,'.-', alpha=.6)
     ax[1].set_xticks(ticks=np.arange(0,loocv_estimates.n_event.max()-1), labels=labels)
     ax[1].hlines(0,0,len(np.arange(2,loocv_estimates.n_event.max())),color='lightgrey',ls='--')
@@ -545,9 +557,9 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     ax[1].set_xlabel('')
         
     if pvals:
-        ymin = np.min(diffs[:])
-        ymintext = ymin - (np.max(diffs[:]) - ymin) * .05
-        ymin = ymin - (np.max(diffs[:]) - ymin) * .1
+        ymin = np.nanmin(diffs[:])
+        ymintext = ymin - (np.nanmax(diffs[:]) - ymin) * .05
+        ymin = ymin - (np.nanmax(diffs[:]) - ymin) * .1
         ax[1].set_ylim(bottom=ymin)
         for n_event in np.arange(2,loocv_estimates.n_event.max()+1):       
             ax[1].text(x=n_event-2, y=ymintext, s=str(int(np.nansum(diff_bin[n_event-2])))+'/'+ str(len(diffs[-1])) + ': ' + str(np.around(pvalues[n_event-2][-1],3)), ha='center')
@@ -1001,6 +1013,78 @@ def plot_expected_distribution(distribution, mean, shape, location=0, xmax=300, 
             ax.vlines(sp_dist.mean(shape, scale=mean_to_scale(mean, shape), loc=location), np.min(y), np.max(y), color=color)
         else: 
             ax.vlines(sp_dist.mean(shape, scale=mean_to_scale(mean, shape)), np.min(y), np.max(y), color=color)
+
+def plot_estimate_development(estimates, init, epoch_data, info, print_correlations=False):
+    '''
+    Plot the shift in estimated event locations over time, with color-coded locations
+    for estimated model(s).
+     
+    Parameters
+     ----------
+     	estimates : estimated hmp model, or a list of models
+            estimated model(s) to be plotted, can be from fit_single, backward estimation, or fit
+        init : initialized hmp model
+        epoch_data : xr.Dataarray 
+            the original EEG data in HMP format
+        info : ndarray
+            Either a 2D array with dimension channel and [x,y] storing channel location in meters or an info object from
+            the mne package containning digit. points for channel location
+        print_correlations: bool
+            whether to print the correlations between events
+    '''
+    
+    if not isinstance(estimates, list):
+        estimates = [estimates]
+    
+    #split backward if present
+    all_estimates = []
+    for est in estimates:
+        if not 'n_events' in est.dims:
+            all_estimates.append(est)
+        else:
+            for ev in est.n_events:
+                all_estimates.append(est.sel(n_events=ev).dropna("stage", how='all'))
+
+    time_step = 1000/init.sfreq
+    
+    #get topos
+    topos = []
+    for est in all_estimates:
+        topos.append(init.compute_topologies(epoch_data,est,init).values)
+    vm = np.nanmax([np.nanmax(np.abs(x)) for x in topos])
+
+    for est_idx, est in enumerate(all_estimates):
+
+        figsize = (10, 5) 
+        plt.subplots(1, 1, figsize=figsize)
+    
+        #plot development of positions
+        neve = len(est.locations) - 1 
+        nr = est.traces.shape[0] #nr of estimations
+
+        #plot params
+        for i in range(nr):
+            cols = np.repeat('black', neve).astype('<U20')
+            
+            cols[est.locations_dev[i,1:].values == 1] = 'orange'
+            cols[est.locations_dev[i,1:].values == 2] = 'gold'
+            cols[est.locations_dev[i,1:].values == 3] = 'yellowgreen'
+            cols[est.locations_dev[i,1:].values == 4] = 'lawngreen'
+            cols[est.locations_dev[i,1:].values == 5] = 'deepskyblue'
+            cols[est.locations_dev[i,1:].values == 6] = 'darkblue'
+            cols[est.locations_dev[i,1:].values > 6] = 'red'
+            plt.scatter(np.cumsum(est.param_dev[i,:,1].values * init.shape * time_step)[:-1],np.repeat(i,neve),color=cols)
+
+        plt.gca().invert_yaxis()
+        plt.xlim(0,init.mean_d*time_step)
+
+        #plot topos
+        plot_topo_timecourse(epoch_data, est, info, init, as_time=True, contours=0,vmin=-vm,vmax=vm)
+        
+        #print correlations
+        if print_correlations and neve > 1:
+            corr = np.corrcoef(topos[est_idx])[:-1,1:].diagonal()
+            print(corr[~np.isnan(corr)])
 
 def erp_data(epoched_data, times, channel,n_samples=None, pad=1):
     '''
