@@ -759,7 +759,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
                 if zscore_acrossPCs:
                     data = data.stack(trial=[participants_variable,'epochs']).groupby('trial').map(zscore_xarray).unstack()
                 else:
-                    data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial').map(zscore_xarray).unstack()
+                    data = data.stack(trial=[participants_variable,'epochs','component']).groupby('trial', squeeze=False).map(zscore_xarray).unstack()
         data = data.transpose('participant','epochs','samples','component')
         data = data.assign_coords(ori_coords)
 
