@@ -987,9 +987,9 @@ class hmp:
                 i += 1
         # Getting eventprobs without locations
         if n_cond is not None:
-            _, eventprobs = self.estim_probs_conds(magnitudes, parameters, np.ones(n_events+1).astype(int), mags_map, pars_map, conds, cpus=cpus)
+            _, eventprobs = self.estim_probs_conds(magnitudes, parameters, np.zeros(n_events+1).astype(int), mags_map, pars_map, conds, cpus=cpus)
         else:
-            _, eventprobs = self.estim_probs(magnitudes, parameters, np.ones(n_events+1).astype(int), n_events)
+            _, eventprobs = self.estim_probs(magnitudes, parameters, np.zeros(n_events+1).astype(int), n_events)
         if i == max_iteration:
             warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
         return lkh, magnitudes, parameters, eventprobs, locations, np.array(traces), np.array(locations_dev), np.array(param_dev)
