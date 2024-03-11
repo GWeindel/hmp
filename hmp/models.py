@@ -357,15 +357,7 @@ class hmp:
             traces_sp = [x[5] for x in estimates]
             locations_dev_sp = [x[6] for x in estimates]
             param_dev_sp = [x[7] for x in estimates]
-            non_converged = 0
-            for iteration in range(len(estimates)):
-                #Filters out non-converged models
-                if np.diff(estimates[iteration][5][-2:]) < 0:
-                    lkhs_sp[iteration] = -np.inf
-                    non_converged += 1
-                    
-            if verbose and non_converged > 0:
-                warn(f'{non_converged}/{starting_points} starting points ended up not converging', RuntimeWarning)
+
             if return_max:
                 max_lkhs = np.argmax(lkhs_sp)
                 lkh = lkhs_sp[max_lkhs]
