@@ -985,7 +985,11 @@ class hmp:
                 locations_dev.append(locations.copy())
                 param_dev.append(parameters.copy())
                 i += 1
-
+        # Getting eventprobs without locations
+        if n_cond is not None:
+            _, eventprobs = self.estim_probs_conds(magnitudes, parameters, np.ones(n_events+1).astype(int), mags_map, pars_map, conds, cpus=cpus)
+        else:
+            _, eventprobs = self.estim_probs(magnitudes, parameters, np.ones(n_events+1).astype(int), n_events)
         if i == max_iteration:
             warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
         return lkh, magnitudes, parameters, eventprobs, locations, np.array(traces), np.array(locations_dev), np.array(param_dev)
@@ -1089,7 +1093,7 @@ class hmp:
             if parameters are fixed, parameters estimated will be the same as the one provided. When providing a list, stage need to be in the same order
             _n_th gamma parameter is  used for the _n_th stage
         locations : ndarray
-            1D ndarray n_events, locations for events
+            1D ndarray of int with size n_events+1, locations for events
         n_events : int
             how many events are estimated
         subset_epochs : list
@@ -2257,7 +2261,6 @@ class hmp:
                 print(f'Events at {np.round(self.scale_to_mean(np.cumsum(solutions.parameters.values[:,1]), self.shape)).astype(int)}')
                 print('lkh change: ' + str(solutions.likelihoods.values - lkh_prev))
                 print('required delta: ' + str(delta))
-
             #check solution
             if sol_lkh - lkh_prev > delta: #accept solution
             
