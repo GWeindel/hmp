@@ -26,7 +26,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 class hmp:
     
-    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=0, distribution='gamma', em_method="mean", location_corr_threshold=.8, location_corr_duration=200):
+    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', em_method="mean", location_corr_threshold=None, location_corr_duration=200):
         '''
         This function intializes an HMP model by providing the data, the expected probability distribution for the by-trial variation in stage onset, and the expected duration of the transition event.
 
@@ -118,7 +118,7 @@ class hmp:
         self.event_width = event_width
         self.event_width_samples = int(np.round(self.event_width / self.steps))
         if location is None:
-            self.location = int(self.event_width / self.steps//2)+1
+            self.location = int(self.event_width / self.steps)
         else:
             self.location = int(np.rint(location))
             if location_corr_threshold is None: #
