@@ -26,7 +26,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 class hmp:
     
-    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', em_method="mean", location_corr_threshold=None,location_corr_duration=200):
+    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', em_method="mean", location_corr_threshold=None, location_corr_duration=200):
         '''
         This function intializes an HMP model by providing the data, the expected probability distribution for the by-trial variation in stage onset, and the expected duration of the transition event.
 
@@ -118,7 +118,7 @@ class hmp:
         self.event_width = event_width
         self.event_width_samples = int(np.round(self.event_width / self.steps))
         if location is None:
-            self.location = int(self.event_width / self.steps//2)+1
+            self.location = int(self.event_width / self.steps)
         else:
             self.location = int(np.rint(location))
             if location_corr_threshold is None: #
@@ -357,15 +357,7 @@ class hmp:
             traces_sp = [x[5] for x in estimates]
             locations_dev_sp = [x[6] for x in estimates]
             param_dev_sp = [x[7] for x in estimates]
-            non_converged = 0
-            for iteration in range(len(estimates)):
-                #Filters out non-converged models
-                if np.diff(estimates[iteration][5][-2:]) < 0:
-                    lkhs_sp[iteration] = -np.inf
-                    non_converged += 1
-                    
-            if verbose and non_converged > 0:
-                warn(f'{non_converged}/{starting_points} starting points ended up not converging', RuntimeWarning)
+
             if return_max:
                 max_lkhs = np.argmax(lkhs_sp)
                 lkh = lkhs_sp[max_lkhs]
@@ -651,17 +643,15 @@ class hmp:
             if len(np.shape(magnitudes)) == 2: #broadcast magnitudes across conditions
                 magnitudes = np.tile(magnitudes, (n_conds, 1, 1))
             assert magnitudes.shape[1] == n_events, 'Provided magnitudes should match number of events in magnitudes map'
-
+            
             #set mags missing events to nan to make it obvious in the results
             if (mags_map < 0).any():
                 for c in range(n_conds):
                     magnitudes[c, np.where(mags_map[c,:]<0)[0],:] = np.nan
-
         if locations is not None:
             if len(np.shape(locations)) == 1: #broadcast locations across conditions
                 locations = np.tile(locations, (n_conds, 1))
             assert locations.shape[1] == n_events + 1, f'Provided locations ({ locations.shape[1]} should match number of stages {n_events + 1} in parameters map'
-
             #set locations missing stages to nan to make it obvious in the results
             if (pars_map < 0).any():
                 for c in range(n_conds):
@@ -899,7 +889,7 @@ class hmp:
                 locations = np.tile(locations, (n_cond, 1))
         else:
             locations = locations.astype(int)
-        locations[-1] = 0
+        
         if n_cond is not None:
             lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, locations, mags_map, pars_map, conds, cpus=cpus)
         else:
@@ -975,7 +965,7 @@ class hmp:
                     parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
                     if self.location_corr_threshold is not None: #update location when location correlation threshold is used
                         locations = self.get_locations(locations, magnitudes, parameters, parameters_prev, eventprobs)
-                locations[-1] = 0
+                
                 if n_cond is not None:
                     lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, locations, mags_map, pars_map, conds, cpus=cpus)
                 else:
@@ -987,9 +977,9 @@ class hmp:
                 i += 1
         # Getting eventprobs without locations
         if n_cond is not None:
-            _, eventprobs = self.estim_probs_conds(magnitudes, parameters, np.zeros(n_events+1).astype(int), mags_map, pars_map, conds, cpus=cpus)
+            _, eventprobs = self.estim_probs_conds(magnitudes, parameters, np.zeros(locations.shape).astype(int), mags_map, pars_map, conds, cpus=cpus)
         else:
-            _, eventprobs = self.estim_probs(magnitudes, parameters, np.zeros(n_events+1).astype(int), n_events)
+            _, eventprobs = self.estim_probs(magnitudes, parameters, np.zeros(locations.shape).astype(int), n_events)
         if i == max_iteration:
             warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
         return lkh, magnitudes, parameters, eventprobs, locations, np.array(traces), np.array(locations_dev), np.array(param_dev)
@@ -2161,7 +2151,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=1, verbose=True, end=None, tolerance=1e-3, grid_points=1, cpus=None, diagnostic=False, min_iteration=1, decimate=None, start=1, return_estimates=False, by_sample=False):
+    def fit(self, step=None, verbose=True, end=None, tolerance=1e-3, diagnostic=False, return_estimates=False, by_sample=False):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -2170,31 +2160,17 @@ class hmp:
         parameters
         ----------
          	 step: float
-                The size of the step from 0 to the mean RT
+                The size of the step from 0 to the mean RT, defaults to the widths of the expected event.
          	 verbose: bool 
                 If True print information about the fit
          	 end: int
                 The maximum number of samples to explore within each trial
          	 trace: bool 
                 If True keep the scale and magnitudes parameters for each iteration
-         	 fix_prev: bool 
-                If True fix scale parameters for the previously found events
-         	 max_iterations: int
-                The maximum number of iteration in the EM() function
          	 tolerance: float
                 The tolerance used for the convergence in the EM() function
-         	 grid_points: int
-                The number of grid points to use when testing for different magnitudes
-         	 cpus: int
-                The number of CPUs to use
          	 diagnostic: bool
-                If True print a diagnostic plot of the EM traces for each iteration
-         	 min_iteration: int 
-                The minimum number of iterations for the EM() function
-         	 decimate: int 
-                If not None, decimate the grid search on magnitudes by the int provided
-             start: float
-                Where to start the starting point search, for some reason values below 10 samples produce unexpected results
+                If True print a diagnostic plot of the EM traces for each iteration and several statistics at each iteration
              return_estimates : bool
                 return all intermediate models
              by_sample : bool
@@ -2204,24 +2180,22 @@ class hmp:
          Returns: 
          	 A the fitted HMP mo
         """
-        if cpus is None:
-            cpus = self.cpus
         if end is None:
             end = self.mean_d
-        if verbose and decimate is not None:#Just for printing the info
-             self.gen_mags(1, decimate=decimate, verbose=True)
+        if step is None:
+            step = self.event_width_samples
         max_event_n = self.compute_max_events()
         if diagnostic:
             cycol = cycle(default_colors)
         pbar = tqdm(total = int(np.rint(end)))#progress bar
-        n_events, j, time = 1, start, 0 #j = sample after last placed event
+        n_events, j, time = 1, 1, 0 #j = sample after last placed event
 
         #Init pars (need this for min_model)
         pars = np.zeros((max_event_n+1,2))
         pars[:,0] = self.shape #final gamma parameters during estimation, shape x scale
         pars_prop = pars[:n_events+1].copy() #gamma params of current estimation
-        pars_prop[0,1] = self.mean_to_scale(j, self.shape) #initialize gamma_parameters at 1 sample
-        last_stage = self.mean_to_scale(end-j, self.shape) #remainder of time
+        pars_prop[0,1] = self.mean_to_scale(j*step, self.shape) #initialize gamma_parameters at 1 sample
+        last_stage = self.mean_to_scale(end-j*step, self.shape) #remainder of time
         pars_prop[-1,1] = last_stage
 
         #Init mags
@@ -2231,28 +2205,25 @@ class hmp:
         locations = np.zeros((max_event_n+1,),dtype=int) #location per stage
         locations[1:-1] = self.location
 
-        #lkh-prev based on single uninformed event at sample 0
-        min_lkh = self.fit_single(n_events, parameters=pars_prop, parameters_to_fix=[0,1], magnitudes_to_fix=0, verbose=False).likelihoods.values
-        lkh_prev = min_lkh
-        # The following two lines define the bias in likelihood development as the RTs get splitted
-        # A genuine new detected event should be higher than the bias induced by splitting the RT in two random partition
-        lkhs = self.sliding_event(fix_pars=True, fix_mags=True, method='max', verbose=False)[0]        
-        delta = np.max(lkhs) - np.min(lkhs)
-        estimates = [] #store all n_event solutions
+        # The first new detected event should be higher than the bias induced by splitting the RT in two random partition
+        lkhs = self.sliding_event(fix_pars=True, fix_mags=True, method='max', verbose=False)[0]
+        lkh_prev = np.max(lkhs)
+        
+        if return_estimates:
+            estimates = [] #store all n_event solutions
         while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events <= max_event_n:
 
             prev_time = time
             
             #get new parameters
-            mags_props, pars_prop, locations_props = self.propose_fit_params(n_events, by_sample, step, j, mags, pars, locations, decimate, grid_points,end)
+            mags_props, pars_prop, locations_props = self.propose_fit_params(n_events, by_sample, step, j, mags, pars, locations, end)
             last_stage = pars_prop[n_events,1]
             #Estimate model based on these propositions
             solutions = self.fit_single(n_events, mags_props, pars_prop, None, None,\
-                            return_max=True, verbose=False, cpus=1,\
-                            min_iteration=min_iteration, tolerance=tolerance, locations=locations_props)
+                            verbose=False, cpus=1,\
+                            tolerance=tolerance, locations=locations_props)
             sol_lkh = solutions.likelihoods.values
             sol_sample_new_event = int(np.round(self.scale_to_mean(np.sum(solutions.parameters.values[:n_events,1]), self.shape)))
-
             #Diagnostic plot
             if diagnostic:
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
@@ -2260,29 +2231,28 @@ class hmp:
                 print('Event found at sample ' + str(sol_sample_new_event))
                 print(f'Events at {np.round(self.scale_to_mean(np.cumsum(solutions.parameters.values[:,1]), self.shape)).astype(int)}')
                 print('lkh change: ' + str(solutions.likelihoods.values - lkh_prev))
-                print('required delta: ' + str(delta))
             #check solution
-            if sol_lkh - lkh_prev > delta: #accept solution
+            if sol_lkh - lkh_prev > 0: #accept solution if likelihood improved
             
                 lkh_prev = sol_lkh
 
                 #update mags, params, and locations
                 mags[:n_events] = solutions.magnitudes.values
                 pars[:n_events+1] = solutions.parameters.values
-                #locations[:n_events+1] = solutions.locations.values
-                
+
                 #store solution
-                estimates.append(solutions)
+                if return_estimates:
+                    estimates.append(solutions)
 
                 #search for an additional event, starting again at sample 1 from prev event,
                 #or next sample if by_sample
                 n_events += 1
                 if by_sample:
                     j += 1
-                    time = j
+                    time = j * step
                 else:
                     j = 1
-                    time = sol_sample_new_event + j
+                    time = sol_sample_new_event + j * step
 
 
                 #Diagnostic plot
@@ -2295,11 +2265,10 @@ class hmp:
 
             else: #reject solution, search on
                 prev_sample = int(np.round(self.scale_to_mean(np.sum(pars[:n_events-1,1]), self.shape)))
-
                 if not by_sample: #find furthest explored param. Note: this also work by_sample, just a tiny bit faster this way
                     max_scale = np.max([np.sum(x[:n_events,1]) for x in solutions.param_dev.values])
                     max_sample = int(np.round(self.scale_to_mean(max_scale, self.shape)))
-                    j = np.max([max_sample - prev_sample + 1, j + 1]) #either ffwd to furthest explored sample or add 1 to j
+                    j = np.max([max_sample - prev_sample + 1, j + 1])/step #either ffwd to furthest explored sample or add 1 to j
                     time = prev_sample + j
                 else:
                     j += 1
@@ -2341,7 +2310,7 @@ class hmp:
     
 
 
-    def propose_fit_params(self, n_events, by_sample, step, j, mags, pars, locations, decimate, grid_points, end):
+    def propose_fit_params(self, n_events, by_sample, step, j, mags, pars, locations, end):
 
         if by_sample and n_events > 1: #go through the whole range sample-by-sample, j is sample since start
                 
@@ -2361,15 +2330,12 @@ class hmp:
 
                 #New location proposition
                 locations_props = locations[:n_events].copy()
+                locations_props[-1] = 0
                 locations_props = np.insert(locations_props, n_event_j, 0)
                 if self.location_corr_threshold is None:
                     locations_props[1:-1] = self.location
 
-                #New magnitude proposition 
-                if decimate is None:
-                    mags_props = self.gen_mags(n_events, n_samples=grid_points, verbose=False)
-                else:
-                    mags_props = self.gen_mags(n_events, decimate=decimate, verbose=False) #always 0?
+                mags_props = np.zeros((1,n_events, self.n_dims)) #always 0?
                 mags_props[:,:n_events-1,:] = np.tile(mags[:n_events-1,:], (len(mags_props), 1, 1))
                 #shift new event to correct position
                 mags_props = np.insert(mags_props[:,:-1,:],n_event_j-1,mags_props[:,-1,:],axis=1)
@@ -2377,20 +2343,16 @@ class hmp:
         else: 
             #New parameter proposition
             pars_prop = pars[:n_events+1].copy()
-            pars_prop[n_events-1,1] = self.mean_to_scale(step*j+1, self.shape)
+            pars_prop[n_events-1,1] = self.mean_to_scale(step*j, self.shape)
             last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:-1,1])
             pars_prop[n_events,1] = last_stage
             
             #New location proposition
             locations_props = locations[:n_events+1].copy()
+            locations_props[-1] = 0
             if self.location_corr_threshold is None:
                 locations_props[1:-1] = self.location
-
-            #New magnitude proposition 
-            if decimate is None:
-                mags_props = self.gen_mags(n_events, n_samples=grid_points, verbose=False)
-            else:
-                mags_props = self.gen_mags(n_events, decimate=decimate, verbose=False) #always 0?
+            mags_props = np.zeros((1,n_events, self.n_dims)) #always 0?
             mags_props[:,:n_events-1,:] = np.tile(mags[:n_events-1,:], (len(mags_props), 1, 1))
 
         #in edge cases scale can get negative, make sure that doesn't happen:

@@ -359,19 +359,20 @@ def simulated_times_and_parameters(generating_events, init, resampling_freq=None
     ## Recover parameters
     true_parameters = np.tile(init.shape, (n_stages, 2))
     true_parameters[:,1] = init.mean_to_scale(np.mean(random_source_times,axis=0),init.shape)
-    true_parameters[0,1] += init.mean_to_scale(init.event_width_samples/2, init.shape)#adjust the fact that we generated onset but recover peak
-    true_parameters[-1,1] -= init.mean_to_scale(init.event_width_samples/2, init.shape)#same
+    true_parameters[0,1] += init.mean_to_scale(init.event_width_samples//2+1, init.shape)#adjust the fact that we generated onset but recover peak
+    true_parameters[-1,1] -= init.mean_to_scale(init.event_width_samples//2-1, init.shape)#same
     true_parameters[true_parameters[:,1] <= 0, 1] = 1e-3#Can happen in corner cases
     random_source_times = random_source_times*(1000/sfreq)/(1000/resampling_freq)
     ## Recover magnitudes
     sample_times = np.zeros((init.n_trials, n_events), dtype=int)
     for event in range(n_events):
         for trial in range(init.n_trials):
-            trial_time = init.starts[trial]+np.sum(random_source_times[trial,:event+1])+ init.event_width_samples//2+1
+            trial_time = init.starts[trial]+np.sum(random_source_times[trial,:event+1])+ init.event_width_samples//2
             if init.ends[trial] >= trial_time:#exceeds RT
                 sample_times[trial,event] = trial_time
             else:
                 sample_times[trial,event] = init.ends[trial]
+    sample_times[:,-1] -= init.event_width_samples//2-1
     true_activities = init.events[sample_times[:,:]]
     true_magnitudes = np.mean(true_activities, axis=0)
     return random_source_times.astype(int), true_parameters, true_magnitudes, true_activities
