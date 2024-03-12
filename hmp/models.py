@@ -643,17 +643,15 @@ class hmp:
             if len(np.shape(magnitudes)) == 2: #broadcast magnitudes across conditions
                 magnitudes = np.tile(magnitudes, (n_conds, 1, 1))
             assert magnitudes.shape[1] == n_events, 'Provided magnitudes should match number of events in magnitudes map'
-
+            
             #set mags missing events to nan to make it obvious in the results
             if (mags_map < 0).any():
                 for c in range(n_conds):
                     magnitudes[c, np.where(mags_map[c,:]<0)[0],:] = np.nan
-
         if locations is not None:
             if len(np.shape(locations)) == 1: #broadcast locations across conditions
                 locations = np.tile(locations, (n_conds, 1))
             assert locations.shape[1] == n_events + 1, f'Provided locations ({ locations.shape[1]} should match number of stages {n_events + 1} in parameters map'
-
             #set locations missing stages to nan to make it obvious in the results
             if (pars_map < 0).any():
                 for c in range(n_conds):
@@ -979,9 +977,9 @@ class hmp:
                 i += 1
         # Getting eventprobs without locations
         if n_cond is not None:
-            _, eventprobs = self.estim_probs_conds(magnitudes, parameters, np.zeros(n_events+1).astype(int), mags_map, pars_map, conds, cpus=cpus)
+            _, eventprobs = self.estim_probs_conds(magnitudes, parameters, np.zeros(locations.shape).astype(int), mags_map, pars_map, conds, cpus=cpus)
         else:
-            _, eventprobs = self.estim_probs(magnitudes, parameters, np.zeros(n_events+1).astype(int), n_events)
+            _, eventprobs = self.estim_probs(magnitudes, parameters, np.zeros(locations.shape).astype(int), n_events)
         if i == max_iteration:
             warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
         return lkh, magnitudes, parameters, eventprobs, locations, np.array(traces), np.array(locations_dev), np.array(param_dev)
