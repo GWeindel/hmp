@@ -891,7 +891,7 @@ class hmp:
                 locations = np.tile(locations, (n_cond, 1))
         else:
             locations = locations.astype(int)
-        locations[-1] = 0
+        
         if n_cond is not None:
             lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, locations, mags_map, pars_map, conds, cpus=cpus)
         else:
@@ -967,7 +967,7 @@ class hmp:
                     parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
                     if self.location_corr_threshold is not None: #update location when location correlation threshold is used
                         locations = self.get_locations(locations, magnitudes, parameters, parameters_prev, eventprobs)
-                locations[-1] = 0
+                
                 if n_cond is not None:
                     lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, locations, mags_map, pars_map, conds, cpus=cpus)
                 else:
@@ -2226,7 +2226,6 @@ class hmp:
                             tolerance=tolerance, locations=locations_props)
             sol_lkh = solutions.likelihoods.values
             sol_sample_new_event = int(np.round(self.scale_to_mean(np.sum(solutions.parameters.values[:n_events,1]), self.shape)))
-
             #Diagnostic plot
             if diagnostic:
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
@@ -2333,6 +2332,7 @@ class hmp:
 
                 #New location proposition
                 locations_props = locations[:n_events].copy()
+                locations_props[-1] = 0
                 locations_props = np.insert(locations_props, n_event_j, 0)
                 if self.location_corr_threshold is None:
                     locations_props[1:-1] = self.location
@@ -2351,6 +2351,7 @@ class hmp:
             
             #New location proposition
             locations_props = locations[:n_events+1].copy()
+            locations_props[-1] = 0
             if self.location_corr_threshold is None:
                 locations_props[1:-1] = self.location
             mags_props = np.zeros((1,n_events, self.n_dims)) #always 0?
