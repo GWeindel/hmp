@@ -2153,8 +2153,8 @@ class hmp:
             sol_lkh = solutions.likelihoods.values
             sol_sample_new_event = int(np.round(self.scale_to_mean(np.sum(solutions.parameters.values[:n_events,1]), self.shape)))
             #Diagnostic plot
-            convergence = solutions.traces[-2:]
-            convergence = tolerance>(convergence[0]-convergence[1])/convergence[1] > 0
+            # convergence = solutions.traces[-2:]
+            # convergence = tolerance>(convergence[0]-convergence[1])/convergence[1] > 0
             if diagnostic:
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
                 print()
@@ -2162,7 +2162,7 @@ class hmp:
                 print(f'Events at {np.round(self.scale_to_mean(np.cumsum(solutions.parameters.values[:,1]), self.shape)).astype(int)}')
                 print('lkh change: ' + str(solutions.likelihoods.values - lkh_prev))
             #check solution
-            if sol_lkh - lkh_prev > 0 and convergence: #accept solution if likelihood improved
+            if sol_lkh - lkh_prev > 0:# and convergence: #accept solution if likelihood improved
             
                 lkh_prev = sol_lkh
 
