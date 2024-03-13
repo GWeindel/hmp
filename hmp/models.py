@@ -26,7 +26,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 class hmp:
     
-    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', location_corr_threshold=None, location_corr_duration=200):
+    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, template=None, location=None, distribution='gamma', location_corr_threshold=None, location_corr_duration=200):
         '''
         This function intializes an HMP model by providing the data, the expected probability distribution for the by-trial variation in stage onset, and the expected duration of the transition event.
 
@@ -44,10 +44,6 @@ class hmp:
             width of events in milliseconds, by default 50 ms.
         shape: float
             shape of the probability distributions of the by-trial stage onset (one shape for all stages)
-        estimated_magnitudes: bool
-            To estimate (True) or not the magnitudes of the transition events
-        estimate_parameters: bool
-            To estimate (True) or not the parameters parameter of the stages
         template: ndarray
             Expected shape for the transition event used in the cross-correlation, should be a vector of values capturing the expected shape over the sampling frequency of the data. If None, the template is created as a half-sine shape with a frequency derived from the event_width argument
         location : float
@@ -165,8 +161,6 @@ class hmp:
                 self.events[self.starts[trial]:self.ends[trial]+1,:]
             #Reorganize samples crosscorrelated with template on trial basis
         
-        self.estimate_magnitudes = estimate_magnitudes
-        self.estimate_parameters = estimate_parameters
         if self.max_d > 500:#FFT conv from scipy faster in this case
             from scipy.signal import fftconvolve
             self.convolution = fftconvolve
@@ -276,11 +270,7 @@ class hmp:
         if cpus is None:
             cpus = self.cpus
         if n_events is None and parameters is not None:
-            n_events = len(parameters)-1
-        if self.estimate_magnitudes == False:#Don't need to manually fix mags if not estimated
-            magnitudes_to_fix = np.arange(n_events)
-        if self.estimate_parameters == False:#Don't need to manually fix pars if not estimated
-            parameters_to_fix = np.arange(n_events+1)            
+            n_events = len(parameters)-1          
         #Formatting parameters
         if isinstance(parameters, (xr.DataArray,xr.Dataset)):
             parameters = parameters.dropna(dim='stage').values
@@ -608,12 +598,7 @@ class hmp:
             else:
                 print(f'\nEstimating {n_events} events model')
         if cpus is None:
-            cpus = self.cpus
-     
-        if self.estimate_magnitudes == False:#Don't need to manually fix mags if not estimated
-            magnitudes_to_fix = np.arange(n_events)
-        if self.estimate_parameters == False:#Don't need to manually fix pars if not estimated
-            parameters_to_fix = np.arange(n_events+1)            
+            cpus = self.cpus         
         
         #Formatting parameters
         if isinstance(parameters, (xr.DataArray,xr.Dataset)):
