@@ -841,7 +841,7 @@ class hmp:
         param_dev : ndarray
             paramters for each iteration of EM
         ''' 
-
+        
         if mags_map is not None or pars_map is not None or conds is not None: #condition version
             assert mags_map is not None and pars_map is not None and conds is not None, 'Both magnitude and parameter maps need to be provided when doing EM based on conditions, as well as conditions.'
             assert mags_map.shape[0] == pars_map.shape[0], 'Both maps need to indicate the same number of conditions.'
@@ -863,6 +863,8 @@ class hmp:
             raise ValueError(f'Wrong shape parameter input, provided parameter(s) {wrong_shape} shape is {parameters[...,-2][wrong_shape]} but expected {self.shape}')
 
         n_events = magnitudes.shape[magnitudes.ndim-2]
+        if n_events == 0:
+            raise ValueError(f'At least one event has to be required')
         initial_magnitudes = magnitudes.copy()
         initial_parameters = parameters.copy()
         if locations is None:
@@ -878,12 +880,12 @@ class hmp:
         else:
             lkh, eventprobs = self.estim_probs(magnitudes, parameters, locations, n_events)
 
-        traces = [lkh.copy()]
+        traces = [lkh]
         locations_dev = [locations.copy()] #store development of locations
         param_dev = [parameters.copy()] #... and parameters
 
         i = 0
-        if not maximization or n_events==0:
+        if not maximization:
             lkh_prev = lkh
         else:
             lkh_prev = lkh
@@ -1106,71 +1108,56 @@ class hmp:
                 self.distribution_pmf(parameters[stage,0], parameters[stage,1])[locations[stage]:]))
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
 
-        if n_events > 0:
-            forward = np.zeros((self.max_d, n_trials, n_events), dtype=np.float64)
-            backward = np.zeros((self.max_d, n_trials, n_events), dtype=np.float64)
-            # Computing forward and backward helper variable
-            #  when stage = 0:
-            forward[:,:,0] = np.tile(pmf[:,0][np.newaxis].T,\
-                (1,n_trials))*probs[:,:,0] #first stage transition is p(B) * p(d)
-            backward[:,:,0] = np.tile(pmf_b[:,0][np.newaxis].T,\
-                        (1,n_trials)) #Reversed gamma (i.e. last stage) without probs as last event ends at time T
+        forward = np.zeros((self.max_d, n_trials, n_events), dtype=np.float64)
+        backward = np.zeros((self.max_d, n_trials, n_events), dtype=np.float64)
+        # Computing forward and backward helper variable
+        #  when stage = 0:
+        forward[:,:,0] = np.tile(pmf[:,0][np.newaxis].T,\
+            (1,n_trials))*probs[:,:,0] #first stage transition is p(B) * p(d)
+        backward[:,:,0] = np.tile(pmf_b[:,0][np.newaxis].T,\
+                    (1,n_trials)) #Reversed gamma (i.e. last stage) without probs as last event ends at time T
 
-            for event in np.arange(1,n_events):#Following stage transitions integrate previous transitions
-                add_b = backward[:,:,event-1]*probs_b[:,:,event-1]#Next stage in back
-                for trial in np.arange(n_trials):
-                    # convolution between gamma * gains at previous event and event
-                    forward[:,trial,event] = self.convolution(forward[:,trial,event-1], pmf[:,event])[:self.max_d]
-                    # same but backwards
-                    backward[:,trial,event] = self.convolution(add_b[:,trial], pmf_b[:, event])[:self.max_d]
-                forward[:,:,event] = forward[:,:,event]*probs[:,:,event]
-            #re-arranging backward to the expected variable
-            backward = backward[:,:,::-1]#undoes stage inversion
-            for trial in np.arange(n_trials):#Undoes sample inversion
-                backward[:durations[trial],trial,:] = \
-                    backward[:durations[trial],trial,:][::-1]
-            
-            eventprobs = forward * backward
-            eventprobs = np.clip(eventprobs, 0, None) #floating point precision error
-            
-            #eventprobs can be so low as to be 0, avoid dividing by 0
-            #this only happens when magnitudes are 0 and gammas are randomly determined
-            if (eventprobs.sum(axis=0) == 0).any() or (eventprobs[:,:,0].sum(axis=0) == 0).any(): 
+        for event in np.arange(1,n_events):#Following stage transitions integrate previous transitions
+            add_b = backward[:,:,event-1]*probs_b[:,:,event-1]#Next stage in back
+            for trial in np.arange(n_trials):
+                # convolution between gamma * gains at previous event and event
+                forward[:,trial,event] = self.convolution(forward[:,trial,event-1], pmf[:,event])[:self.max_d]
+                # same but backwards
+                backward[:,trial,event] = self.convolution(add_b[:,trial], pmf_b[:, event])[:self.max_d]
+            forward[:,:,event] = forward[:,:,event]*probs[:,:,event]
+        #re-arranging backward to the expected variable
+        backward = backward[:,:,::-1]#undoes stage inversion
+        for trial in np.arange(n_trials):#Undoes sample inversion
+            backward[:durations[trial],trial,:] = \
+                backward[:durations[trial],trial,:][::-1]
+        
+        eventprobs = forward * backward
+        eventprobs = np.clip(eventprobs, 0, None) #floating point precision error
+        
+        #eventprobs can be so low as to be 0, avoid dividing by 0
+        #this only happens when magnitudes are 0 and gammas are randomly determined
+        if (eventprobs.sum(axis=0) == 0).any() or (eventprobs[:,:,0].sum(axis=0) == 0).any(): 
 
-                #set likelihood
-                eventsums = eventprobs[:,:,0].sum(axis=0)
-                eventsums[eventsums != 0] = np.log(eventsums[eventsums != 0])
-                eventsums[eventsums == 0] = -np.inf
-                likelihood = np.sum(eventsums)
+            #set likelihood
+            eventsums = eventprobs[:,:,0].sum(axis=0)
+            eventsums[eventsums != 0] = np.log(eventsums[eventsums != 0])
+            eventsums[eventsums == 0] = -np.inf
+            likelihood = np.sum(eventsums)
 
-                #set eventprobs, check if any are 0   
-                eventsums = eventprobs.sum(axis=0)
-                if (eventsums == 0).any():
-                    for i in range(eventprobs.shape[0]):
-                        eventprobs[i,:,:][eventsums == 0] = 0
-                        eventprobs[i,:,:][eventsums != 0] = eventprobs[i,:,:][eventsums != 0] / eventsums[eventsums != 0]
-                else:
-                    eventprobs = eventprobs / eventprobs.sum(axis=0)
-
+            #set eventprobs, check if any are 0   
+            eventsums = eventprobs.sum(axis=0)
+            if (eventsums == 0).any():
+                for i in range(eventprobs.shape[0]):
+                    eventprobs[i,:,:][eventsums == 0] = 0
+                    eventprobs[i,:,:][eventsums != 0] = eventprobs[i,:,:][eventsums != 0] / eventsums[eventsums != 0]
             else:
-
-                likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
                 eventprobs = eventprobs / eventprobs.sum(axis=0)
-            #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
-            
+
         else:
-            forward = np.zeros((self.max_d, n_trials), dtype=np.float64)
-            backward = np.zeros((self.max_d, n_trials), dtype=np.float64)
-            forward[:,:] = np.tile(pmf[:,0][np.newaxis].T,\
-                (1,n_trials))
-            backward[:,:] = np.tile(pmf_b[:,0][np.newaxis].T,\
-                        (1,n_trials))
-            for trial in np.arange(n_trials):#Undoes sample inversion
-                backward[:durations[trial],trial] = \
-                    backward[:durations[trial],trial][::-1]
-            eventprobs = forward * backward
-            likelihood = np.sum(np.log(eventprobs[:,:].sum(axis=0)))#sum over max_samples to avoid 0s in log
+
+            likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
             eventprobs = eventprobs / eventprobs.sum(axis=0)
+        #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
 
         if lkh_only:
             return likelihood
