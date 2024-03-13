@@ -61,11 +61,11 @@ def _bootstrapped_run(fit, data, dim, indexes, order, init, n_iter, use_starting
         init_boot = classhmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1,
                         shape=init.shape, estimate_magnitudes=init.estimate_magnitudes, 
                         estimate_parameters=init.estimate_parameters, template=init.template,
-                        location=init.location, distribution=init.distribution, em_method=init.em_method)
+                        location=init.location, distribution=init.distribution)
     else:
         init_boot = classhmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1,
                         shape=init.shape, template=init.template,
-                        location=init.location, distribution=init.distribution, em_method=init.em_method)
+                        location=init.location, distribution=init.distribution)
     estimates_boot = init_boot.fit_single(fit.magnitudes.shape[0], verbose=verbose, parameters=fit.parameters,
                                          magnitudes=fit.magnitudes)
     if trace:

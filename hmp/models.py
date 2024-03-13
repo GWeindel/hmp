@@ -26,7 +26,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 class hmp:
     
-    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', em_method="mean", location_corr_threshold=None, location_corr_duration=200):
+    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, estimate_magnitudes=True, estimate_parameters=True, template=None, location=None, distribution='gamma', location_corr_threshold=None, location_corr_duration=200):
         '''
         This function intializes an HMP model by providing the data, the expected probability distribution for the by-trial variation in stage onset, and the expected duration of the transition event.
 
@@ -55,8 +55,6 @@ class hmp:
             location_corr_threshold is not None, location sets the initial location of all events.
         distribution : str
             Probability distribution for the by-trial onset of stages can be one of 'gamma','lognormal','wald', or 'weibull'
-        em_method: str
-            can be either mean or max, max method isn't yet supported, only use the 'mean'method (default)
         location_corr_threshold : None | float
             correlation threshold for subsequent events. If correlation exceeds this threshold,
             the location of the first event will be increased. If None (default), correlations 
@@ -160,13 +158,13 @@ class hmp:
         else: self.template = template
         self.events = self.cross_correlation(data.data.T)#adds event morphology
         self.max_d = self.durations.max()
-        self.em_method = em_method
-        if self.em_method == "mean":
-            self.data_matrix = np.zeros((self.max_d, self.n_trials, self.n_dims), dtype=np.float64)
-            for trial in range(self.n_trials):
-                self.data_matrix[:self.durations[trial],trial,:] = \
-                    self.events[self.starts[trial]:self.ends[trial]+1,:]
-                #Reorganize samples crosscorrelated with template on trial basis
+
+        self.data_matrix = np.zeros((self.max_d, self.n_trials, self.n_dims), dtype=np.float64)
+        for trial in range(self.n_trials):
+            self.data_matrix[:self.durations[trial],trial,:] = \
+                self.events[self.starts[trial]:self.ends[trial]+1,:]
+            #Reorganize samples crosscorrelated with template on trial basis
+        
         self.estimate_magnitudes = estimate_magnitudes
         self.estimate_parameters = estimate_parameters
         if self.max_d > 500:#FFT conv from scipy faster in this case
@@ -984,8 +982,8 @@ class hmp:
             warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
         return lkh, magnitudes, parameters, eventprobs, locations, np.array(traces), np.array(locations_dev), np.array(param_dev)
 
+
     def get_magnitudes_parameters_expectation(self,eventprobs,subset_epochs=None):
-        
         n_events = eventprobs.shape[2]
         n_trials = eventprobs.shape[1]
         if subset_epochs is None: #all trials
@@ -994,33 +992,18 @@ class hmp:
         magnitudes = np.zeros((n_events, self.n_dims))
 
         #Magnitudes from Expectation
-        if self.em_method == "max": 
-            event_times = np.zeros((n_events+1, n_trials))
-            event_times[-1,:] = self.durations[subset_epochs]
         for event in range(n_events):
-            if self.em_method == "max":
-                #Take time point at maximum p() for each trial
-                #Average channel activity at those points
-                event_values = np.zeros((n_trials, self.n_dims))
-                for trial in range(n_trials):
-                    event_times[event,trial]  = np.argmax(eventprobs[:, trial, event])
-                    event_values[trial] = self.events[self.starts[subset_epochs][trial] + int(event_times[event,trial])]
-                magnitudes[event] = np.mean(event_values, axis=0)
-            elif self.em_method == "mean":
-                for comp in range(self.n_dims):
-                    magnitudes[event,comp] = np.mean(np.sum( \
-                        eventprobs[:,:,event]*self.data_matrix[:,subset_epochs,comp], axis=0))
-                # scale cross-correlation with likelihood of the transition
-                # sum by-trial these scaled activation for each transition events
-                # average across trials
+            for comp in range(self.n_dims):
+                magnitudes[event,comp] = np.mean(np.sum( \
+                    eventprobs[:,:,event]*self.data_matrix[:,subset_epochs,comp], axis=0))
+            # scale cross-correlation with likelihood of the transition
+            # sum by-trial these scaled activation for each transition events
+            # average across trials
         
         #Gamma parameters from Expectation
-        if self.em_method == "max":
-            parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=np.mean(event_times,axis=1))
-        elif self.em_method == "mean":
-            #calc averagepos here as mean_d can be condition dependent, whereas scale_parameters() assumes it's general
-            event_times_mean = np.concatenate([np.arange(self.max_d) @ eventprobs.mean(axis=1), [np.mean(self.durations[subset_epochs])-1]])
-            parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=event_times_mean)                            
+        #calc averagepos here as mean_d can be condition dependent, whereas scale_parameters() assumes it's general
+        event_times_mean = np.concatenate([np.arange(self.max_d) @ eventprobs.mean(axis=1), [np.mean(self.durations[subset_epochs])-1]])
+        parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=event_times_mean)                            
 
         return [magnitudes, parameters]
     
@@ -1998,7 +1981,7 @@ class hmp:
         inputs = zip(itertools.repeat((12,3)), itertools.repeat(False), itertools.repeat('search'), 
                     grid, itertools.repeat(step), itertools.repeat(False), itertools.repeat(None),
                     itertools.repeat(False),itertools.repeat(False), itertools.repeat(1), itertools.repeat(tolerance),
-                    itertools.repeat(min_iteration),itertools.repeat(self.em_method))
+                    itertools.repeat(min_iteration))
         with mp.Pool(processes=cpu) as pool:
             estimates = list(tqdm(pool.imap(self._sliding_event_star, inputs), total=len(grid)))
             
@@ -2105,7 +2088,7 @@ class hmp:
         else: 
             pars_to_fix = []
             ls = 'o'
-        lkhs_init, mags_init, pars_init, times_init = self._estimate_single_event(magnitudes, parameters, pars_to_fix, mags_to_fix, maximization, cpus, tolerance=tolerance,min_iteration=min_iteration,em_method=em_method)
+        lkhs_init, mags_init, pars_init, times_init = self._estimate_single_event(magnitudes, parameters, pars_to_fix, mags_to_fix, maximization, cpus, tolerance=tolerance,min_iteration=min_iteration)
         
         if verbose:
             if ax is None:
@@ -2121,7 +2104,7 @@ class hmp:
         else:
             return lkhs_init, mags_init, times_init
         
-    def _estimate_single_event(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, maximization, cpus, max_iteration=1e2, tolerance=1e-4,min_iteration=1,em_method='mean'):
+    def _estimate_single_event(self, magnitudes, parameters, parameters_to_fix, magnitudes_to_fix, maximization, cpus, max_iteration=1e2, tolerance=1e-4,min_iteration=1):
         filterwarnings('ignore', 'Convergence failed, estimation hitted the maximum ', )#will be the case but for a subset only hence ignore
         if cpus is None:
             cpus = self.cpus
@@ -2143,10 +2126,8 @@ class hmp:
         pars_sp = np.array([x[2] for x in estimates])
 
         #calc expected time
-        if em_method == "max":
-            times_sp = np.array([np.argmax(np.squeeze(x[3]),axis=0) for x in estimates]) - self.event_width_samples//2
-        else:
-            times_sp = np.array([np.rint(np.dot(np.squeeze(x[3]).T, np.arange(x[3].shape[0]))) for x in estimates]) - self.event_width_samples//2
+
+        times_sp = np.array([np.rint(np.dot(np.squeeze(x[3]).T, np.arange(x[3].shape[0]))) for x in estimates]) - self.event_width_samples//2
 
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
