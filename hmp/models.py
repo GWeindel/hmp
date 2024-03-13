@@ -2268,11 +2268,11 @@ class hmp:
                 if not by_sample: #find furthest explored param. Note: this also work by_sample, just a tiny bit faster this way
                     max_scale = np.max([np.sum(x[:n_events,1]) for x in solutions.param_dev.values])
                     max_sample = int(np.round(self.scale_to_mean(max_scale, self.shape)))
-                    j = np.max([max_sample - prev_sample + 1, j + 1])/step #either ffwd to furthest explored sample or add 1 to j
-                    time = prev_sample + j
+                    j = np.max([max_sample - prev_sample + 1, j*step + 1])/step #either ffwd to furthest explored sample or add 1 to j
+                    time = prev_sample + j*step
                 else:
                     j += 1
-                    time = j
+                    time = j*step
             
             pbar.update(int(np.rint(time-prev_time)))
 
