@@ -2153,8 +2153,6 @@ class hmp:
             sol_lkh = solutions.likelihoods.values
             sol_sample_new_event = int(np.round(self.scale_to_mean(np.sum(solutions.parameters.values[:n_events,1]), self.shape)))
             #Diagnostic plot
-            # convergence = solutions.traces[-2:]
-            # convergence = tolerance>(convergence[0]-convergence[1])/convergence[1] > 0
             if diagnostic:
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
                 print()
@@ -2162,7 +2160,7 @@ class hmp:
                 print(f'Events at {np.round(self.scale_to_mean(np.cumsum(solutions.parameters.values[:,1]), self.shape)).astype(int)}')
                 print('lkh change: ' + str(solutions.likelihoods.values - lkh_prev))
             #check solution
-            if sol_lkh - lkh_prev > 0:# and convergence: #accept solution if likelihood improved
+            if sol_lkh - lkh_prev > 0:#accept solution if likelihood improved
             
                 lkh_prev = sol_lkh
 
@@ -2198,7 +2196,7 @@ class hmp:
                 if not by_sample: #find furthest explored param. Note: this also work by_sample, just a tiny bit faster this way
                     max_scale = np.max([np.sum(x[:n_events,1]) for x in solutions.param_dev.values])
                     max_sample = int(np.round(self.scale_to_mean(max_scale, self.shape)))
-                    j = np.max([max_sample - prev_sample + 1, j*step + 1])/step #either ffwd to furthest explored sample or add 1 to j
+                    j = np.max([max_sample - prev_sample +1, (j+1)*step])/step #either ffwd to furthest explored sample or add 1 to j
                     time = prev_sample + j*step
                 else:
                     j += 1
