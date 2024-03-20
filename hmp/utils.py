@@ -810,7 +810,7 @@ def save_eventprobs(eventprobs, filename):
     eventprobs.to_dataframe().to_csv(filename)
     print(f"Saved at {filename}")
 
-def event_times(data, times, channel, stage, baseline=0):
+def event_times(data, times, channel, stage, last_stage=None, baseline=0):
     '''
     Event times parses the single trial EEG signal of a given channel in a given stage, from event onset to the next one. If requesting the last
     stage it is defined as the onset of the last event until the response of the participants.
@@ -823,20 +823,23 @@ def event_times(data, times, channel, stage, baseline=0):
         Onset times as computed using onset_times()
     channel : str
         channel to pick for the parsing of the signal
-    stage : float | ndarray
+    stage : int 
         Which stage to parse the signal into
+    last_stage: int
+        Which stage to cut samples off
 
     Returns
     -------
     brp_data : ndarray
         Matrix with trial_x_participant * samples with sample dimension given by the maximum stage duration
     '''
-
-    brp_data = np.tile(np.nan, (len(data.trial_x_participant), int(round(baseline+max(times.sel(event=stage+1).data- times.sel(event=stage).data)))+1))
+    if last_stage is None:
+        last_stage = stage+1
+    brp_data = np.tile(np.nan, (len(data.trial_x_participant), int(round(baseline+max(times.sel(event=last_stage).data- times.sel(event=stage).data)))+1))
     i=0
     for trial, trial_dat in data.groupby('trial_x_participant', squeeze=False):
         trial_time = slice(times.sel(event=stage, trial_x_participant=trial)-baseline, \
-                                                 times.sel(event=stage+1, trial_x_participant=trial))
+                                                 times.sel(event=last_stage, trial_x_participant=trial))
         trial_elec = trial_dat.sel(channels = channel, samples=trial_time).squeeze()
         try:#If only one sample -> TypeError: len() of unsized object
             brp_data[i, :len(trial_elec)] = trial_elec
