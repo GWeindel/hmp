@@ -810,7 +810,7 @@ def save_eventprobs(eventprobs, filename):
     eventprobs.to_dataframe().to_csv(filename)
     print(f"Saved at {filename}")
 
-def event_times(data, times, channel, stage, last_stage=None, baseline=0):
+def event_times(data, times, channel, stage, last_stage=None, baseline=0, cut_at_previous=False):
     '''
     Event times parses the single trial EEG signal of a given channel in a given stage, from event onset to the next one. If requesting the last
     stage it is defined as the onset of the last event until the response of the participants.
@@ -838,14 +838,18 @@ def event_times(data, times, channel, stage, last_stage=None, baseline=0):
     brp_data = np.tile(np.nan, (len(data.trial_x_participant), int(round(baseline+max(times.sel(event=last_stage).data- times.sel(event=stage).data)))+1))
     i=0
     for trial, trial_dat in data.groupby('trial_x_participant', squeeze=False):
-        trial_time = slice(times.sel(event=stage, trial_x_participant=trial)-baseline, \
-                                                 times.sel(event=last_stage, trial_x_participant=trial))
+        if cut_at_previous and baseline != 0:
+            lower_lim = np.min(times.sel(event=stage-1, trial_x_participant=trial), baseline)
+        else:
+            lower_lim = baseline
+        upper_lim = times.sel(event=last_stage, trial_x_participant=trial)
+        trial_time = slice(times.sel(event=stage, trial_x_participant=trial)-lower_lim, upper_lim)
         trial_elec = trial_dat.sel(channels = channel, samples=trial_time).squeeze()
-        try:#If only one sample -> TypeError: len() of unsized object
-            brp_data[i, :len(trial_elec)] = trial_elec
-        except:
-            brp_data[i, :1] = trial_elec
-            
+        if 'samples' in trial_elec.dims:#If only one sample -> TypeError: len() of unsized object
+            start_idx = int(baseline-lower_lim)
+            brp_data[i, start_idx:len(trial_elec)] = trial_elec
+        else:#only one sample
+            brp_data[i, baseline:baseline+1] = trial_elec
         i += 1
 
     return brp_data    
