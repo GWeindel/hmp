@@ -839,7 +839,7 @@ def event_times(data, times, channel, stage, last_stage=None, baseline=0, cut_at
     i=0
     for trial, trial_dat in data.groupby('trial_x_participant', squeeze=False):
         if cut_at_previous and baseline != 0:
-            lower_lim = np.min([times.sel(event=stage-1, trial_x_participant=trial), baseline])
+            lower_lim = np.min([np.max([times.sel(event=stage, trial_x_participant=trial)-times.sel(event=stage-1, trial_x_participant=trial),0], baseline])
         else:
             lower_lim = baseline
         upper_lim = times.sel(event=last_stage, trial_x_participant=trial)
