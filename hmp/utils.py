@@ -810,7 +810,7 @@ def save_eventprobs(eventprobs, filename):
     eventprobs.to_dataframe().to_csv(filename)
     print(f"Saved at {filename}")
 
-def event_times(data, times, channel, stage, last_stage=None, baseline=0, cut_at_previous=False):
+def event_times(data, times, channel, stage, last_stage=None, baseline=0, cut_at_previous=False, event_width=0):
     '''
     Event times parses the single trial EEG signal of a given channel in a given stage, from event onset to the next one. If requesting the last
     stage it is defined as the onset of the last event until the response of the participants.
@@ -827,6 +827,10 @@ def event_times(data, times, channel, stage, last_stage=None, baseline=0, cut_at
         Which stage to parse the signal into
     last_stage: int
         Which stage to cut samples off
+    cut_at_previous: bool
+        Whether to cut samples at the previous event (True) or up to ```baseline``` (False, Default)
+    event_width: int
+        Duration of the fitted events, used when cut_at_previous is True
 
     Returns
     -------
@@ -838,10 +842,12 @@ def event_times(data, times, channel, stage, last_stage=None, baseline=0, cut_at
     brp_data = np.tile(np.nan, (len(data.trial_x_participant), int(round(baseline+max(times.sel(event=last_stage).data- times.sel(event=stage).data)))+1))
     i=0
     for trial, trial_dat in data.groupby('trial_x_participant', squeeze=False):
-        if cut_at_previous and baseline != 0:
-            lower_lim = np.min([np.max([times.sel(event=stage, trial_x_participant=trial)-times.sel(event=stage-1, trial_x_participant=trial),0]), baseline])
-        else:
+        if cut_at_previous and baseline != 0 and stage > 1:
+            lower_lim = np.min([np.max([times.sel(event=stage, trial_x_participant=trial)-times.sel(event=stage-1, trial_x_participant=trial)+event_width,0]), baseline])
+        elif stage > 1:
             lower_lim = baseline
+        else:#first stage, no samples before 0
+            lower_lim = 0
         upper_lim = times.sel(event=last_stage, trial_x_participant=trial)
         trial_time = slice(times.sel(event=stage, trial_x_participant=trial)-lower_lim, upper_lim)
         trial_elec = trial_dat.sel(channels = channel, samples=trial_time).squeeze()
