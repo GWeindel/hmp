@@ -842,12 +842,10 @@ def event_times(data, times, channel, stage, last_stage=None, baseline=0, cut_at
     brp_data = np.tile(np.nan, (len(data.trial_x_participant), int(round(baseline+max(times.sel(event=last_stage).data- times.sel(event=stage).data)))+1))
     i=0
     for trial, trial_dat in data.groupby('trial_x_participant', squeeze=False):
-        if cut_at_previous and baseline != 0 and stage > 1:
+        if cut_at_previous and baseline != 0 and stage > 0:
             lower_lim = np.min([np.max([times.sel(event=stage, trial_x_participant=trial)-times.sel(event=stage-1, trial_x_participant=trial)+event_width,0]), baseline])
-        elif stage > 1:
+        else:
             lower_lim = baseline
-        else:#first stage, no samples before 0
-            lower_lim = 0
         upper_lim = times.sel(event=last_stage, trial_x_participant=trial)
         trial_time = slice(times.sel(event=stage, trial_x_participant=trial)-lower_lim, upper_lim)
         trial_elec = trial_dat.sel(channels = channel, samples=trial_time).squeeze()
