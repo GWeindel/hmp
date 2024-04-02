@@ -857,7 +857,7 @@ def centered_activity(data, times, channel, event, n_samples=None, cut_after_eve
         else:
             lower_lim = -baseline
         if event < times.event.max():
-            upper_lim = -np.min([times.sel(event=event+cut_after_event, trial_x_participant=trial) - times.sel(event=event, trial_x_participant=trial), -n_samples])
+            upper_lim = np.min([times.sel(event=event+cut_after_event, trial_x_participant=trial) - times.sel(event=event, trial_x_participant=trial), n_samples])
         else:
              upper_lim = 0
         trial_time = slice(times.sel(event=event, trial_x_participant=trial)+lower_lim, times.sel(event=event, trial_x_participant=trial)+upper_lim)
