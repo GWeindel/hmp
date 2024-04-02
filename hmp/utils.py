@@ -810,50 +810,60 @@ def save_eventprobs(eventprobs, filename):
     eventprobs.to_dataframe().to_csv(filename)
     print(f"Saved at {filename}")
 
-def event_times(data, times, channel, stage, last_stage=None, baseline=0, cut_at_previous=False, event_width=0):
+def centered_activity(data, times, channel, event, n_samples=None, cut_after_event=1, baseline=0, cut_before_event=0, event_width=0):
     '''
-    Event times parses the single trial EEG signal of a given channel in a given stage, from event onset to the next one. If requesting the last
-    stage it is defined as the onset of the last event until the response of the participants.
+    Parses the single trial signal of a given channel in a given number of samples before and after an event.
 
     Parameters
     ----------
     data : xr.Dataset
-        HMP EEG data (untransformed but with trial and participant stacked)
+        HMP data (untransformed but with trial and participant stacked)
     times : xr.DataArray
         Onset times as computed using onset_times()
     channel : str
         channel to pick for the parsing of the signal
-    stage : int 
-        Which stage to parse the signal into
-    last_stage: int
-        Which stage to cut samples off
-    cut_at_previous: bool
-        Whether to cut samples at the previous event (True) or up to ```baseline``` (False, Default)
+    event : int 
+        Which event is used to parse the signal 
+    n_samples : int
+        How many samples to record after the event (default = maximum duration between event and the consecutive event)
+    cut_after_event: int
+        Which event after ```event``` to cut samples off, if 1 (Default) cut at the next event
+    baseline: int
+        How much samples should be kept before the event
+    cut_before_event: int
+        At which previous event to cut samples from, ```baseline``` if 0 (Default), no effect if baseline = 0
     event_width: int
-        Duration of the fitted events, used when cut_at_previous is True
+        Duration of the fitted events, used when cut_before_event is True
 
     Returns
     -------
     brp_data : ndarray
-        Matrix with trial_x_participant * samples with sample dimension given by the maximum stage duration
+        Matrix with trial_x_participant * samples with sample dimension given by the maximum event duration
     '''
-    if last_stage is None:
-        last_stage = stage+1
-    brp_data = np.tile(np.nan, (len(data.trial_x_participant), int(round(baseline+max(times.sel(event=last_stage).data- times.sel(event=stage).data)))+1))
-    i=0
+    if n_samples is None:
+        n_samples = max(times.sel(event=event+cut_after_event).data- 
+                                   times.sel(event=event).data)+1
+    brp_data = np.tile(np.nan, (len(data.trial_x_participant), 
+            int(round(baseline+n_samples+1))))
+    i = 0
     for trial, trial_dat in data.groupby('trial_x_participant', squeeze=False):
-        if cut_at_previous and baseline != 0 and stage > 0:
-            lower_lim = np.min([np.max([times.sel(event=stage, trial_x_participant=trial)-times.sel(event=stage-1, trial_x_participant=trial)-event_width,0]), baseline])
+        if event > 0 and cut_before_event>0:
+            lower_lim = np.max([-
+                np.max([times.sel(event=event, trial_x_participant=trial)-
+                        times.sel(event=event-cut_before_event, trial_x_participant=trial)-
+                    event_width,0]), -baseline])
+        elif event == 0:
+            lower_lim = 0
         else:
-            lower_lim = baseline
-        upper_lim = times.sel(event=last_stage, trial_x_participant=trial)
-        trial_time = slice(times.sel(event=stage, trial_x_participant=trial)-lower_lim, upper_lim)
+            lower_lim = -baseline
+        if event < times.event.max():
+            upper_lim = -np.min([times.sel(event=event+cut_after_event, trial_x_participant=trial) - times.sel(event=event, trial_x_participant=trial), -n_samples])
+        else:
+             upper_lim = 0
+        trial_time = slice(times.sel(event=event, trial_x_participant=trial)+lower_lim, times.sel(event=event, trial_x_participant=trial)+upper_lim)
         trial_elec = trial_dat.sel(channels = channel, samples=trial_time).squeeze()
         if 'samples' in trial_elec.dims:#If only one sample -> TypeError: len() of unsized object
-            if lower_lim != baseline:
-                start_idx = int(round(baseline-lower_lim))
-            else: 
-                start_idx = baseline
+            start_idx = int(round(baseline+lower_lim))
             brp_data[i, start_idx:start_idx+len(trial_elec)] = trial_elec
         else:#only one sample
             brp_data[i, baseline:baseline+1] = trial_elec
