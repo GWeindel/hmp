@@ -850,7 +850,10 @@ def event_times(data, times, channel, stage, last_stage=None, baseline=0, cut_at
         trial_time = slice(times.sel(event=stage, trial_x_participant=trial)-lower_lim, upper_lim)
         trial_elec = trial_dat.sel(channels = channel, samples=trial_time).squeeze()
         if 'samples' in trial_elec.dims:#If only one sample -> TypeError: len() of unsized object
-            start_idx = int(baseline-lower_lim)
+            if lower_lim != baseline:
+                start_idx = int(round(baseline-lower_lim))
+            else: 
+                start_idx = baseline
             brp_data[i, start_idx:start_idx+len(trial_elec)] = trial_elec
         else:#only one sample
             brp_data[i, baseline:baseline+1] = trial_elec
