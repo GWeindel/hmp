@@ -59,18 +59,26 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
 
 
     #fit the HMP using previously estimated parameters as initial parameters, and estimate likelihood
+    dur_ratio = model_pp.mean_d / model_without_pp.mean_d
+    
     if 'condition' in initial_fit.dims:
         #fit model
         fit_without_pp = model_without_pp.fit_single_conds(initial_fit.magnitudes.values, initial_fit.parameters.values, mags_map=initial_fit.mags_map, pars_map=initial_fit.pars_map, conds=initial_fit.conds_dict, verbose=False)
         #calc lkh
+        #adjust params to fit average duration of subject
+        params = fit_without_pp.parameters.values
+        params[:,:,1] = params[:,:,1] * dur_ratio
         conds_pp = initial_fit.sel(participant=participant)['cond'].values
-        likelihood = model_pp.estim_probs_conds(fit_without_pp.magnitudes.values, fit_without_pp.parameters.values, fit_without_pp.locations.values, initial_fit.mags_map, initial_fit.pars_map, conds_pp, lkh_only=True)
+        likelihood = model_pp.estim_probs_conds(fit_without_pp.magnitudes.values, params, fit_without_pp.locations.values, initial_fit.mags_map, initial_fit.pars_map, conds_pp, lkh_only=True)
     else:
         #fit model
         n_eve = np.max(initial_fit.event.values)+1
         fit_without_pp = model_without_pp.fit_single(n_eve, initial_fit.magnitudes.dropna('event',how='all').values, initial_fit.parameters.dropna('stage').values, locations=initial_fit.locations.dropna('stage').values.astype(int), verbose=False)
         #calc lkh
-        likelihood = model_pp.estim_probs(fit_without_pp.magnitudes.dropna('event',how='all').values, fit_without_pp.parameters.dropna('stage').values, fit_without_pp.locations.dropna('stage').values.astype(int), n_eve, None, True)
+        #adjust params to fit average duration of subject
+        params = fit_without_pp.parameters.dropna('stage').values
+        params[:,1] = params[:,1] * dur_ratio
+        likelihood = model_pp.estim_probs(fit_without_pp.magnitudes.dropna('event',how='all').values, params, fit_without_pp.locations.dropna('stage').values.astype(int), n_eve, None, True)
 
     return likelihood
 
@@ -366,6 +374,11 @@ def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False
         epoch_pp = None
     model_pp = hmp.models.hmp(data_pp, epoch_data=epoch_pp, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
 
+    #calc ratio average duration and subj duration
+    nsubj = len(np.unique(data.participant.values))
+    mean_d_without_subj = (init.mean_d * nsubj - model_pp.mean_d) / (nsubj-1)
+    dur_ratio = model_pp.mean_d / mean_d_without_subj
+
     #estimate likelihood with previously estimated parameters
     if 'condition' in estimate.dims:
 
@@ -392,10 +405,19 @@ def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False
             conds[np.where((cond_trials == level).all(axis=1))] = i
         conds=np.int8(conds)
 
-        likelihood = model_pp.estim_probs_conds(estimate.magnitudes.values, estimate.parameters.values, estimate.locations.dropna('stage').values.astype(int), estimate.mags_map, estimate.pars_map, conds, lkh_only=True)
+        #adjust parameters based on average RT
+        parameters = estimate.parameters.values
+        parameters[:,:,1] = parameters[:,:,1] * dur_ratio
+
+        likelihood = model_pp.estim_probs_conds(estimate.magnitudes.values, parameters, estimate.locations.dropna('stage').values.astype(int), estimate.mags_map, estimate.pars_map, conds, lkh_only=True)
     else:
         n_eve = np.max(estimate.event.dropna('event', how='all').values)+1
-        likelihood = model_pp.estim_probs(estimate.magnitudes.dropna('event', how='all').values, estimate.parameters.dropna('stage').values, estimate.locations.dropna('stage').values.astype(int), n_eve, None, True)
+
+        #adjust parameters based on average RT
+        parameters = estimate.parameters.dropna('stage').values
+        parameters[:,1] = parameters[:,1] * dur_ratio
+
+        likelihood = model_pp.estim_probs(estimate.magnitudes.dropna('event', how='all').values, parameters, estimate.locations.dropna('stage').values.astype(int), n_eve, None, True)
 
     return likelihood
         
