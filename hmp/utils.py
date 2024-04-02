@@ -856,10 +856,13 @@ def centered_activity(data, times, channel, event, n_samples=None, cut_after_eve
             lower_lim = 0
         else:
             lower_lim = -baseline
-        if event < times.event.max():
+        if event < times.event.max() and cut_after_event>0:
             upper_lim = np.min([times.sel(event=event+cut_after_event, trial_x_participant=trial) - times.sel(event=event, trial_x_participant=trial), n_samples])
-        else:
+        elif event == times.event.max():
              upper_lim = 0
+        else:
+            upper_lim = n_samples
+            
         trial_time = slice(times.sel(event=event, trial_x_participant=trial)+lower_lim, times.sel(event=event, trial_x_participant=trial)+upper_lim)
         trial_elec = trial_dat.sel(channels = channel, samples=trial_time).squeeze()
         if 'samples' in trial_elec.dims:#If only one sample -> TypeError: len() of unsized object
