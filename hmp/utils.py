@@ -611,7 +611,7 @@ def _pca(pca_ready_data, n_comp, channels):
     pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
     return pca_weights
 
-def transform_data(data, participants_variable="participant", apply_standard=False, averaged=False, apply_zscore='trial', zscore_acrossPCs=False, method='pca', cov=True, centering=True, n_comp=None, n_ppcas=None, pca_weights=None, filter=None, mcca_reg=0):
+def transform_data(data, participants_variable="participant", apply_standard=False, averaged=False, apply_zscore='trial', zscore_acrossPCs=False, method='pca', cov=True, centering=True, n_comp=None, n_ppcas=None, pca_weights=None, bandfilter=None, mcca_reg=0):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -640,9 +640,11 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
     n_comp : int
         How many components to select from the PC space, if None plots the scree plot and a prompt requires user
         to specify how many PCs should be retained
+    n_ppcas : int
+        If method = 'mcca', controls the number of components retained for the by-participant PCAs
     pca_weigths : xarray
         Weights of a PCA to apply to the data (e.g. in the resample function)
-    filter: None | (lfreq, hfreq) 
+    bandfilter: None | (lfreq, hfreq) 
         If none, no filtering is appliedn. If tuple, data is filtered between lfreq-hfreq.
         NOTE: filtering at this step is suboptimal, filter before epoching if at all possible, see
               also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
@@ -663,8 +665,8 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
     if method == 'mcca' and data.sizes['participant'] == 1:
         raise ValueError('MCCA cannot be applied to only one participant')
     sfreq = data.sfreq
-    if filter:
-        data = _filtering(data, filter, sfreq)
+    if bandfilter:
+        data = _filtering(data, bandfilter, sfreq)
     if apply_standard:
         if 'participant' not in data.dims or len(data.participant) == 1:
             warn('Requested standardization of between participant variance yet no participant dimension is found in the data or only one participant is present. No standardization is done, set apply_standard to False to avoid this warning.')
