@@ -316,14 +316,29 @@ def demo(cpus, n_events, seed=123):
     positions = mne.pick_info(positions, sel=chan_list)
     return eeg_dat, random_source_times, positions
 
-def classification_true(test, true):
+def classification_true(test_topologies, true_topologies):
     '''
+    Classifies event as belonging to one of the true events
+
+    Parameters
+    ----------
+    test_tolopogies : xarray.DataArray
+        topologies for the events found in the estimation procedure obtained from `init.compute_topologies(epoch_data, true_estimates, true_init, mean=True)`
+    true_topologies : xarray.DataArray
+        topologies for the true events simulated obtained from `init.compute_topologies(epoch_data, test_estimates, test_init, mean=True)`
+    
+    Returns
+    -------
+    Corresponding true events:
+        index of the true events found in the test estimation
+    Index of the test events:
+        
     '''
     from scipy.spatial import distance_matrix
-    true0 = np.zeros((true.magnitudes.shape[0]+1, true.magnitudes.shape[1]))
-    true0[1:] = true.magnitudes
-    n_events_iter = int(np.sum(np.isfinite(test.magnitudes.values[:,0])))
-    diffs = distance_matrix(test.magnitudes, true0)
+    true0 = np.zeros((true_topologies.shape[0]+1, true_topologies.shape[1]))
+    true0[1:] = true_topologies
+    n_events_iter = int(np.sum(np.isfinite(test_topologies.values[:,0])))
+    diffs = distance_matrix(test_topologies, true0)
     index_event = np.zeros((n_events_iter,3))
     index_event[:,0] = np.arange(n_events_iter)
     index_event[:,1] = diffs.argmin(axis=1)
@@ -338,7 +353,9 @@ def classification_true(test, true):
         index_event = index_event[index_event[:,2] != to_rem]
         unique_index_event, c = np.unique(index_event[:,1], return_counts=True)
         duplicates = unique_index_event[c > 1]
-    return index_event[:,1].astype(int)-1, index_event[:,0].astype(int)
+    corresp_true_idx = index_event[:,1].astype(int)-1
+    idx_true_positive = index_event[:,0].astype(int)
+    return corresp_true_idx, idx_true_positive
 
 def simulated_times_and_parameters(generating_events, init, resampling_freq=None):
     sfreq = init.sfreq
