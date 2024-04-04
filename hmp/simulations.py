@@ -329,9 +329,10 @@ def classification_true(test_topologies, true_topologies):
     
     Returns
     -------
-    Corresponding true events:
+    corresp_true_idx: np.array
         index of the true events found in the test estimation
-    Index of the test events:
+    idx_true_positive: np.array
+        index in the test estimate that correspond to the indexes in corresp_true_idx
         
     '''
     from scipy.spatial import distance_matrix
