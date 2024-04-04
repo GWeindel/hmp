@@ -1582,13 +1582,13 @@ class hmp:
         return times
    
     @staticmethod
-    def compute_topologies(channels, estimated, init, extra_dim=None, mean=True, mean_in_participant=True, peak=True, estimate_method='max'):
+    def compute_topologies(epoch_data, estimated, init, extra_dim=None, mean=True, mean_in_participant=True, peak=True, estimate_method='max'):
         """
         Compute topologies for each trial. 
          
         parameters
         ----------
-         	channels: xr.Dataset 
+         	epoch_data: xr.Dataset 
                 Epoched data
          	estimated: xr.Dataset 
                 estimated model parameters and event probabilities
@@ -1616,14 +1616,14 @@ class hmp:
         if estimate_method is None:
             estimate_method = 'max'
 
-        channels = channels.rename({'epochs':'trials'}).\
+        epoch_data = epoch_data.rename({'epochs':'trials'}).\
                           stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant')
         estimated = estimated.eventprobs.fillna(0).copy()
         n_events = estimated.event.count().values
         n_trials = estimated.trial_x_participant.count().values
-        n_channels = channels.channels.count().values
+        n_channels = epoch_data.channels.count().values
 
-        channels = channels.sel(trial_x_participant=estimated.trial_x_participant) #subset to estimated
+        epoch_data = epoch_data.sel(trial_x_participant=estimated.trial_x_participant) #subset to estimated
 
         if peak:
             peak_shift = np.argmax(init.template)
@@ -1642,16 +1642,16 @@ class hmp:
                 for tr in range(n_trials):
                     samp = int(times.values[tr,ev])
                     if peak:
-                        event_values[:,tr,ev] = channels.values[:,samp+peak_shift,tr]
+                        event_values[:,tr,ev] = epoch_data.values[:,samp+peak_shift,tr]
                     else:
-                        vals = channels.values[:,samp:samp+init.event_width_samples,tr]
+                        vals = epoch_data.values[:,samp:samp+init.event_width_samples,tr]
                         event_values[:,tr,ev] = np.dot(vals, normed_template[:vals.shape[1]])          
                     
             event_values = xr.DataArray(event_values, 
                         dims = ["channels","trial_x_participant","event",],
                         coords={"trial_x_participant":estimated.trial_x_participant,
                                 "event": estimated.event,
-                                "channels":channels.channels
+                                "channels":epoch_data.channels
                         })
             event_values = event_values.transpose("trial_x_participant","event","channels") #to maintain previous behavior
 
@@ -1663,8 +1663,8 @@ class hmp:
                         
             if extra_dim == 'condition':
                 #add coords
-                event_values = event_values.assign_coords({'cond_x_participant': ('trial_x_participant', channels['cond_x_participant'].values),
-                                            'cond': ('trial_x_participant', channels['cond'].values)})
+                event_values = event_values.assign_coords({'cond_x_participant': ('trial_x_participant', epoch_data['cond_x_participant'].values),
+                                            'cond': ('trial_x_participant', epoch_data['cond'].values)})
 
                 #set to nan if stage missing
                 times = times.groupby('cond').mean('trial_x_participant').values
@@ -1683,9 +1683,9 @@ class hmp:
                     for tr in range(n_trials):
                         samp = int(times.values[tr,ev])
                         if peak:
-                            event_values[x,:,tr,ev] = channels.values[:,samp+peak_shift,tr]  
+                            event_values[x,:,tr,ev] = epoch_data.values[:,samp+peak_shift,tr]  
                         else:
-                            vals = channels.values[:,samp:samp+init.event_width_samples,tr]
+                            vals = epoch_data.values[:,samp:samp+init.event_width_samples,tr]
                             event_values[x,:,tr,ev] = np.dot(vals, normed_template[:vals.shape[1]]) 
 
                 #set to nan if missing
@@ -1698,7 +1698,7 @@ class hmp:
                     coords={extra_dim:estimated[extra_dim],
                             "trial_x_participant":estimated.trial_x_participant,
                             "event": estimated.event,
-                            "channels":channels.channels
+                            "channels":epoch_data.channels
                     })
             event_values = event_values.transpose(extra_dim, "trial_x_participant","event","channels") #to maintain previous behavior
         else:
