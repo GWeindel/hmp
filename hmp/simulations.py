@@ -316,47 +316,47 @@ def demo(cpus, n_events, seed=123):
     positions = mne.pick_info(positions, sel=chan_list)
     return eeg_dat, random_source_times, positions
 
-def classification_true(test_topologies, true_topologies):
+def classification_true(true_topologies,test_topologies):
     '''
     Classifies event as belonging to one of the true events
 
-    Parameters
+    Parameters,
     ----------
-    test_tolopogies : xarray.DataArray
-        topologies for the events found in the estimation procedure obtained from `init.compute_topologies(epoch_data, true_estimates, true_init, mean=True)`
     true_topologies : xarray.DataArray
         topologies for the true events simulated obtained from `init.compute_topologies(epoch_data, test_estimates, test_init, mean=True)`
+    test_tolopogies : xarray.DataArray
+        topologies for the events found in the estimation procedure obtained from `init.compute_topologies(epoch_data, true_estimates, true_init, mean=True)`
+
     
     Returns
     -------
-    corresp_true_idx: np.array
-        index of the true events found in the test estimation
     idx_true_positive: np.array
+        index of the true events found in the test estimation
+    corresp_true_idx: np.array
         index in the test estimate that correspond to the indexes in corresp_true_idx
         
     '''
     from scipy.spatial import distance_matrix
-    true0 = np.zeros((true_topologies.shape[0]+1, true_topologies.shape[1]))
-    true0[1:] = true_topologies
-    n_events_iter = int(np.sum(np.isfinite(test_topologies.values[:,0])))
-    diffs = distance_matrix(test_topologies, true0)
-    index_event = np.zeros((n_events_iter,3))
-    index_event[:,0] = np.arange(n_events_iter)
-    index_event[:,1] = diffs.argmin(axis=1)
-    index_event[:,2] = diffs.min(axis=1)
-    index_event = index_event[index_event[:,1] != 0]#removes empty 
-    unique_index_event, c = np.unique(index_event[:,1], return_counts=True)
-    duplicates = unique_index_event[c > 1]
-    unique_corrected =  np.zeros((len(true0),2))
-    while len(duplicates) > 0:
-        for dup in duplicates:
-            to_rem = np.max(index_event[np.where(index_event[:,1] == dup),2])
-        index_event = index_event[index_event[:,2] != to_rem]
-        unique_index_event, c = np.unique(index_event[:,1], return_counts=True)
-        duplicates = unique_index_event[c > 1]
-    corresp_true_idx = index_event[:,1].astype(int)-1
-    idx_true_positive = index_event[:,0].astype(int)
-    return corresp_true_idx, idx_true_positive
+    true0 = np.vstack((np.zeros(true_topologies.shape[1]), true_topologies))#add a zero electrode event
+    classif = np.zeros(test_topologies.shape[0], dtype=int)#array of categorization in true events
+    classif_vals = np.zeros(test_topologies.shape[0])#values of the squared diff
+    for i, test_ev in enumerate(test_topologies):
+        all_distances = np.zeros(len(true0))
+        for j, true_ev in enumerate(true0):
+            all_distances[j] = np.sum((test_ev - true_ev)**2)
+        classif[i] = np.argmin(all_distances)
+        classif_vals[i] = all_distances[classif[i]]
+
+    mapping_true = {}
+    for test_idx, (idx, val) in enumerate(zip(classif, classif_vals)):
+        if idx > 0:
+            if idx not in mapping_true or val < mapping_true[idx]:
+                mapping_true[idx] = test_idx
+                
+    corresp_true_idx = np.array(list(mapping_true.keys()))-1#Corresponding true index, excluding 0 event
+    idx_true_positive = np.array(list(mapping_true.values()))
+    return idx_true_positive, corresp_true_idx 
+
 
 def simulated_times_and_parameters(generating_events, init, resampling_freq=None):
     sfreq = init.sfreq
