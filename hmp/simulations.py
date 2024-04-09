@@ -336,7 +336,8 @@ def classification_true(true_topologies,test_topologies):
         index in the test estimate that correspond to the indexes in corresp_true_idx
         
     '''
-    from scipy.spatial import distance_matrix
+    test_topologies = (test_topologies.copy()-test_topologies.mean())/test_topologies.std()
+    true_topologies = (true_topologies.copy()-true_topologies.mean())/true_topologies.std()
     true0 = np.vstack((np.zeros(true_topologies.shape[1]), true_topologies))#add a zero electrode event
     classif = np.zeros(test_topologies.shape[0], dtype=int)#array of categorization in true events
     classif_vals = np.zeros(test_topologies.shape[0])#values of the squared diff
