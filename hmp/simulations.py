@@ -105,7 +105,6 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
         random_state = np.random.RandomState(seed)
     else:
         random_state = None
-    n_events = len(sources)-1
     sources = np.array(sources, dtype=object)
     if len(np.shape(sources)) == 2:
         sources = [sources]#If only one subject
@@ -185,7 +184,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             label = mne.label.select_sources(subject, selected_label, subjects_dir=subjects_dir, random_state=random_state)
             source_time_series = np.array([1e-20])#stim trigger
             source_simulator.add_data(label, source_time_series, events)
-            source_simulator.add_data(label, source_time_series, events)
+            #source_simulator.add_data(label, source_time_series, events)
 
             trigger = 2
             #random_source_times = []
@@ -211,6 +210,7 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
                 if len(rand_i[rand_i<0]) > 0:
                     warn(f'Negative stage duration were found, 1 is imputed for the {len(rand_i[rand_i<0])} trial(s)', UserWarning)
                     rand_i[rand_i<0] = 1
+                
                 events[:, 0] = events[:,0] + rand_i # Events sample.
                 events[:, 2] = trigger  # All events have the sample id.
                 trigger += 1
@@ -223,6 +223,8 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             # Project the source time series to sensor space and add some noise. The source
             # simulator can be given directly to the simulate_raw function.
             raw = mne.simulation.simulate_raw(info, source_simulator, forward=fwd, n_jobs=n_jobs,verbose=verbose)
+            
+            n_events = len(sources_subj)-1
             if save_noiseless:
                 raw.save(file + f'_noiseless_raw.fif', overwrite=True)
             if data_type == 'eeg':
@@ -234,15 +236,15 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             snr = np.zeros((2,len(info['ch_names']), n_events, n_trials))
             data = raw.get_data()
             for event in range(n_events):
-                times = generating_events[generating_events[:,2] == event+2,0]
-                snr[0,:,event,:] = data[:, times+event_duration//2+1]
+                times_out = generating_events[generating_events[:,2] == event+2,0]
+                snr[0,:,event,:] = data[:, times_out+event_duration//2+1]
             if noise:
                 cov = mne.make_ad_hoc_cov(raw.info, verbose=verbose)
                 mne.simulation.add_noise(raw, cov,  verbose=verbose,iir_filter=[0.2, -0.2, 0.04], random_state=random_state)
             data = raw.get_data()
             for event in range(n_events):
-                times = generating_events[generating_events[:,2] == event+2,0]
-                snr[1,:,event,:] = data[:, times+event_duration//2+1]
+                times_out = generating_events[generating_events[:,2] == event+2,0]
+                snr[1,:,event,:] = data[:, times_out+event_duration//2+1]
             raw.save(subj_file, overwrite=True)
             files_subj.append(subj_file)
             np.save(subj_file.split('.fif')[0]+'_generating_events.npy', generating_events)

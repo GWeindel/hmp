@@ -2248,6 +2248,7 @@ class hmp:
                 pars_prop = pars[:n_events].copy() #pars so far
                 n_event_j = np.argwhere(scale_j > np.cumsum(pars_prop[:,1])) + 2 #counting from 1
                 n_event_j = np.max(n_event_j) if len(n_event_j) > 0 else 1
+                n_event_j = np.min([n_event_j, n_events]) #do not insert even after last stage
 
                 #insert j at right spot, subtract prev scales
                 pars_prop = np.insert(pars_prop, n_event_j-1, [self.shape, scale_j - np.sum(pars_prop[:n_event_j-1,1])],axis=0)
