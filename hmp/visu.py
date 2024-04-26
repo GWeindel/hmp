@@ -1014,7 +1014,7 @@ def plot_expected_distribution(distribution, mean, shape, location=0, xmax=300, 
         else: 
             ax.vlines(sp_dist.mean(shape, scale=mean_to_scale(mean, shape)), np.min(y), np.max(y), color=color)
 
-def plot_estimate_development(estimates, init, epoch_data, info, print_correlations=False):
+def plot_estimate_development(estimates, init, epoch_data, info, print_correlations=False, estimate_method='mean'):
     '''
     Plot the shift in estimated event locations over time, with color-coded locations
     for estimated model(s).
@@ -1031,6 +1031,9 @@ def plot_estimate_development(estimates, init, epoch_data, info, print_correlati
             the mne package containning digit. points for channel location
         print_correlations: bool
             whether to print the correlations between events
+        estimate_method : 'max' or 'mean'
+            if mean, uses estimates that are used during estimation
+            if max, makes plots and correlation based on max (default plotting)
     '''
     
     if not isinstance(estimates, list):
@@ -1050,7 +1053,7 @@ def plot_estimate_development(estimates, init, epoch_data, info, print_correlati
     #get topos
     topos = []
     for est in all_estimates:
-        topos.append(init.compute_topologies(epoch_data,est,init).values)
+        topos.append(init.compute_topologies(epoch_data,est,init,estimate_method=estimate_method).values)
     vm = np.nanmax([np.nanmax(np.abs(x)) for x in topos])
 
     for est_idx, est in enumerate(all_estimates):
@@ -1079,7 +1082,7 @@ def plot_estimate_development(estimates, init, epoch_data, info, print_correlati
         plt.xlim(0,init.mean_d*time_step)
 
         #plot topos
-        plot_topo_timecourse(epoch_data, est, info, init, as_time=True, contours=0,vmin=-vm,vmax=vm)
+        plot_topo_timecourse(epoch_data, est, info, init, as_time=True, contours=0,vmin=-vm,vmax=vm, estimate_method=estimate_method)
         
         #print correlations
         if print_correlations and neve > 1:
