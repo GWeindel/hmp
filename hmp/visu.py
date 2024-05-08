@@ -550,6 +550,8 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     #second plot
     diffs = np.array(diffs)
     diffs[np.isneginf(diffs)] = np.nan
+    diffs[np.isinf(diffs)] = np.nan
+
     ax[1].plot(diffs,'.-', alpha=.6)
     ax[1].set_xticks(ticks=np.arange(0,loocv_estimates.n_event.max()-1), labels=labels)
     ax[1].hlines(0,0,len(np.arange(2,loocv_estimates.n_event.max())),color='lightgrey',ls='--')
