@@ -839,8 +839,8 @@ def centered_activity(data, times, channel, event, n_samples=None, cut_after_eve
 
     Returns
     -------
-    brp_data : ndarray
-        Matrix with trial_x_participant * samples with sample dimension given by the maximum event duration
+    brp_data : xr.Dataset
+        Xarray dataset with electrode value (data) and trial event time (time) and with trial_x_participant * samples dimension
     '''
     if n_samples is None:
         n_samples = max(times.sel(event=event+cut_after_event).data- 
@@ -848,6 +848,7 @@ def centered_activity(data, times, channel, event, n_samples=None, cut_after_eve
     brp_data = np.tile(np.nan, (len(data.trial_x_participant), 
             int(round(baseline+n_samples+1))))
     i = 0
+    trial_times = np.zeros(len(data.trial_x_participant))*np.nan
     for trial, trial_dat in data.groupby('trial_x_participant', squeeze=False):
         if event > 0 and cut_before_event>0:
             lower_lim = np.max([-
@@ -872,9 +873,19 @@ def centered_activity(data, times, channel, event, n_samples=None, cut_after_eve
             brp_data[i, start_idx:start_idx+len(trial_elec)] = trial_elec
         else:#only one sample
             brp_data[i, baseline:baseline+1] = trial_elec
+        trial_times[i] = times.sel(event=event, trial_x_participant=trial)
         i += 1
+    
+    part, trial = data.coords['participant'].values, data.coords['epochs'].values
+    trial_x_part = xr.Coordinates.from_pandas_multiindex(MultiIndex.from_arrays([part,trial],\
+              names=('participant','trials')),'trial_x_participant')
+    brp_data = xr.Dataset({'data': (('trial_x_participant','samples'), brp_data),
+                          'times': (('trial_x_participant'), trial_times)},
+                            {'samples':range(brp_data.shape[-1])},                 
+                        attrs = {'channel':channel,
+                                 'event':event})
 
-    return brp_data    
+    return brp_data.assign_coords(trial_x_part)
     
 def condition_selection(hmp_data, epoch_data, condition_string, variable='event', method='equal'):
     '''
