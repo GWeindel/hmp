@@ -505,9 +505,11 @@ def _center(data):
     '''
     zscore of the data
     '''
-    non_nan_mask = ~np.isnan(data.values)
-    if non_nan_mask.any(): #if not everything is nan, calc zscore
-        data.values[non_nan_mask] = (data.values[non_nan_mask] - data.values[non_nan_mask].mean())
+    mean_last_dim = np.nanmean(data.values, axis=-1)
+    mean_last_dim_expanded = np.expand_dims(mean_last_dim, axis=-1)
+    centred = data.values - mean_last_dim_expanded
+    data.values = centred
+
     return data
 
 def zscore_xarray(data):
@@ -677,9 +679,7 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
     if isinstance(data, xr.Dataset):#needs to be a dataset if apply_standard is used
             data = data.data
     if centering or method=='mcca':
-        ori_coords = data.coords
-        data = data.stack(trial=[participants_variable,'epochs','channels']).groupby('trial', squeeze=False).map(_center).unstack()
-        data = data.assign_coords(ori_coords)
+        data = _center(data)
     if apply_zscore == True:
         apply_zscore = 'trial' #defaults to trial
     data = data.transpose('participant','epochs','channels','samples')
