@@ -18,6 +18,8 @@ import mne
 import os
 
 filterwarnings('ignore', 'Degrees of freedom <= 0 for slice.', )#weird warning, likely due to nan in xarray, not important but better fix it later 
+filterwarnings('ignore', 'Mean of empty slice')#When trying to center all-nans trials
+
 def gamma_scale_to_mean(scale, shape): 
     return scale*shape
 def gamma_mean_to_scale(mean, shape): 
