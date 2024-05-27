@@ -1041,7 +1041,7 @@ class hmp:
         return np.nanmean(event_values,axis=1)
 
 
-    def estim_probs(self, magnitudes, parameters, locations, n_events=None, subset_epochs=None, lkh_only=False):
+    def estim_probs(self, magnitudes, parameters, locations, n_events=None, subset_epochs=None, lkh_only=False, by_trial_lkh=False):
         '''
         parameters
         ----------
@@ -1162,6 +1162,8 @@ class hmp:
 
         if lkh_only:
             return likelihood
+        elif by_trial_lkh:
+            return forward * backward
         else:
             return [likelihood, eventprobs]
 
