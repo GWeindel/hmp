@@ -1379,7 +1379,7 @@ class hmp:
 
 
     @staticmethod        
-    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=False, extra_dim=None, as_time=False, errorbars=None, center_measure='mean',estimate_method='max'):
+    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=False, extra_dim=None, as_time=False, errorbars=None, center_measure='mean',estimate_method='max', onset=False):
         '''
         Compute the likeliest onset times for each event
 
@@ -1415,6 +1415,8 @@ class hmp:
         estimate_method : string
             'max' or 'mean', either take the max probability of each event on each trial, or the weighted 
             average.
+        onset : bool
+            Whether to compute time at peak (False, Default) or onset of the Event (True)
 
         Returns
         -------
@@ -1427,8 +1429,9 @@ class hmp:
 
         if estimate_method is None:
             estimate_method = 'max'
-
-        event_shift = init.event_width_samples//2
+        event_shift = 0
+        if onset
+            event_shift = init.event_width_samples//2
         eventprobs = estimates.eventprobs.fillna(0).copy()
         if estimate_method == "max":
             times = eventprobs.argmax('samples') - event_shift #Most likely event location
