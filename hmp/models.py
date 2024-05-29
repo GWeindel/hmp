@@ -1430,7 +1430,7 @@ class hmp:
         if estimate_method is None:
             estimate_method = 'max'
         event_shift = 0
-        if onset
+        if onset:
             event_shift = init.event_width_samples//2
         eventprobs = estimates.eventprobs.fillna(0).copy()
         if estimate_method == "max":
