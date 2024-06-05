@@ -9,6 +9,7 @@ import xarray as xr
 import multiprocessing as mp
 import itertools
 import pandas as pd
+from pandas import MultiIndex
 import warnings
 from warnings import warn, filterwarnings
 from seaborn.algorithms import bootstrap
@@ -560,7 +561,7 @@ def stack_data(data, subjects_variable='participant', channel_variable='componen
     data = data.stack(all_samples=['participant','epochs',"samples"]).dropna(dim="all_samples")
     return data
 
-def _filtering(data, filter, sfreq):
+def _filtering(data, filter, sfreq):from pandas import MultiIndex
     print("NOTE: filtering at this step is suboptimal, filter before epoching if at all possible, see")
     print("also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html")
     from mne.filter import filter_data
