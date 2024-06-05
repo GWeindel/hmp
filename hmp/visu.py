@@ -235,9 +235,9 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
                 #top of row - 5% if n_iter > 1
                 yhigh = (iteration + 1) * rowheight if n_iter == 1 else (iteration + 1) * rowheight - .05 * rowheight
 
-                ax.vlines(times_iteration[event]-topo_size/2,ylow2,yhigh, linestyles='dotted',color=event_color,alpha=.5,transform=ax.get_xaxis_transform())
-                ax.vlines(times_iteration[event]+topo_size/2,ylow2, yhigh, linestyles='dotted',color=event_color,alpha=.5, transform=ax.get_xaxis_transform())
-                ax.fill_between(np.array([times_iteration[event]-topo_size/2,times_iteration[event]+topo_size/2]), ylow2, yhigh, alpha=0.15,color=event_color, transform=ax.get_xaxis_transform(),edgecolor=None)
+                ax.vlines(times_iteration[event]-event_size/2,ylow2,yhigh, linestyles='dotted',color=event_color,alpha=.5,transform=ax.get_xaxis_transform())
+                ax.vlines(times_iteration[event]+event_size/2,ylow2, yhigh, linestyles='dotted',color=event_color,alpha=.5, transform=ax.get_xaxis_transform())
+                ax.fill_between(np.array([times_iteration[event]-topo_size/2,times_iteration[event]+event_size/2]), ylow2, yhigh, alpha=0.15,color=event_color, transform=ax.get_xaxis_transform(),edgecolor=None)
 
         #add lines per condition
         if cond_plot and times_to_display is not None:
