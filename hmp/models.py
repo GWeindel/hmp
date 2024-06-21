@@ -26,7 +26,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 class hmp:
     
-    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, template=None, location=None, distribution='gamma', location_corr_threshold=None, location_corr_duration=200):
+    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, template=None, location=None, distribution='gamma', location_corr_threshold=None):
         '''
         This function intializes an HMP model by providing the data, the expected probability distribution for the by-trial variation in stage onset, and the expected duration of the transition event.
 
@@ -52,13 +52,11 @@ class hmp:
         distribution : str
             Probability distribution for the by-trial onset of stages can be one of 'gamma','lognormal','wald', or 'weibull'
         location_corr_threshold : None | float
-            correlation threshold for subsequent events. If correlation exceeds this threshold,
+            correlation threshold for subsequent events. If correlation between eventprobs of two
+            subsequent events exceeds this threshold,
             the location of the first event will be increased. If None (default), correlations 
-            are not checked. To use location_corr_threshold, epoch_data is required, as the 
-            correlations are calculated on the underlying data, not on the PC components.
-        location_corr_duration : integer
-            max duration between events (ms) for which location_corr_treshold affects the location. 
-            Only has an effect if lcoation_corr_threshold is not None.
+            are not checked.
+
         '''
         match distribution:
             case 'gamma':
@@ -121,7 +119,6 @@ class hmp:
         self.location_corr_threshold = location_corr_threshold
         if location_corr_threshold is not None: #if location_corr_threshold, epoch_data is required
             assert epoch_data is not None, 'If location_corr_threshold used, epoch_data is required.'
-        self.location_corr_duration = location_corr_duration
         
         durations = data.unstack().sel(component=0).rename({'epochs':'trials'})\
             .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
@@ -898,7 +895,7 @@ class hmp:
                         break
 
                 else: #threshold adapted for location correlation threshold:
-                      #EM only stops if location was not change on last iteration
+                      #EM only stops if location was not changed on last iteration
                       #and events moved less than .1 sample. This ensures EM continues
                       #when new locations are set or correlation is still too high.
                       #(see also get_locations)
@@ -962,10 +959,10 @@ class hmp:
                 i += 1
                 
         # Getting eventprobs without locations
-        if n_cond is not None:
-            _, eventprobs = self.estim_probs_conds(magnitudes, parameters, np.zeros(locations.shape).astype(int), mags_map, pars_map, conds, cpus=cpus)
-        else:
-            _, eventprobs = self.estim_probs(magnitudes, parameters, np.zeros(locations.shape).astype(int), n_events)
+        # if n_cond is not None:
+        #     _, eventprobs = self.estim_probs_conds(magnitudes, parameters, np.zeros(locations.shape).astype(int), mags_map, pars_map, conds, cpus=cpus)
+        # else:
+        #     _, eventprobs = self.estim_probs(magnitudes, parameters, np.zeros(locations.shape).astype(int), n_events)
         if i == max_iteration:
             warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
         return lkh, magnitudes, parameters, eventprobs, locations, np.array(traces), np.array(locations_dev), np.array(param_dev)
@@ -1001,44 +998,33 @@ class hmp:
         #else, locations are only set for stages that exceed location_corr_threshold
 
         n_events = magnitudes.shape[magnitudes.ndim-2]
+        n_trials = eventprobs.shape[1]
+        n_samples = eventprobs.shape[0]
         
         if self.location_corr_threshold is None:
             locations[1:-1] = self.location
         else:
             if n_events > 1 and not (magnitudes == 0).all(): #if not on first iteration
 
-                topos = self.compute_topos_locations(eventprobs,subset_epochs) #compute the topologies of the events
-                    
-                corr = np.corrcoef(topos.T)[:-1,1:].diagonal() #only interested in sequential corrs
+                #eventprobs = samples x trials x events
+                
+                #calculate correlations between events in eventprobs
+                
+                #based on mean:
+                #corr = np.corrcoef(np.mean(eventprobs,1).T)[:-1,1:].diagonal()
+
+                #based on raw trial data:
+                eventprobs = np.reshape(eventprobs, (n_samples * n_trials, n_events), order='F')
+                corr = np.corrcoef(eventprobs.T)[:-1,1:].diagonal()
+                
                 stage_durations = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters[1:-1,:]])
                 stage_durations_prev = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters_prev[1:-1,:]])
 
                 for ev in range(n_events-1):
                     #high correlation and moving away from each other,
                     if corr[ev] > self.location_corr_threshold and stage_durations[ev] - stage_durations_prev[ev] < .1:
-                        #and either close to each other or location_corr_duration is None
-                        if self.location_corr_duration is None or stage_durations[ev] < self.location_corr_duration / self.steps:
-                            locations[ev + 1] += 1 #indexes stages
+                        locations[ev + 1] += 1 #indexes stages
         return locations
-
-    def compute_topos_locations(self, eventprobs, subset_epochs=None):
-        #compute locations for correlation threshold calculations
-
-        n_events = eventprobs.shape[2]
-        n_trials = eventprobs.shape[1]
-        if subset_epochs is None: #all trials
-            subset_epochs = range(n_trials)
-
-        #estimating mid of event, so go to start, then shift back to max (by default this is 0)
-        shift = -(self.event_width_samples // 2) + np.argmax(self.template)
-        times = np.round(np.dot(eventprobs.T, np.arange(eventprobs.shape[0]))) - shift
-
-        event_values = np.zeros((self.stacked_epoch_data.values.shape[0],n_trials,n_events))
-        for ev in range(n_events):
-            for tr in range(n_trials):
-                event_values[:,tr,ev] = self.stacked_epoch_data.values[:,int(times[ev,tr]),subset_epochs[tr]]
-
-        return np.nanmean(event_values,axis=1)
 
 
     def estim_probs(self, magnitudes, parameters, locations, n_events=None, subset_epochs=None, lkh_only=False, by_trial_lkh=False):
