@@ -1091,6 +1091,70 @@ def plot_estimate_development(estimates, init, epoch_data, info, print_correlati
             corr = np.corrcoef(topos[est_idx])[:-1,1:].diagonal()
             print(corr[~np.isnan(corr)])
 
+def plot_event_distributions(estimates, init, print_correlations=False, plot_estimated_distris=False):
+    '''
+    Plot the estimated eventprobs until mean trial duration.
+     
+    Parameters
+     ----------
+     	estimates : estimated hmp model
+        init : initialized hmp model
+        print_correlations : bool
+            whether to print the correlations between sequential event distributions
+        correlations_trial : bool
+            whether to calculate the correlations at the average level (default) or at the trial level
+        plot_estimated_distris : bool
+            overlay estimated distributions based on parameters
+    '''
+    
+    #plot eventprobs
+    plt.plot(estimates.eventprobs.mean('trial_x_participant'))
+    plt.xlim((0,init.mean_d*1.1)) #xlim at 110% of RT
+    plt.axvline(init.mean_d,linestyle=':')
+
+    #plot estimated distributions
+    if plot_estimated_distris:
+        #distri_onsets = np.concatenate(([0], np.cumsum(init.scale_to_mean(estimates.parameters.values[:,0],estimates.parameters.values[:,1]))))
+        delta = .01
+        distri_x = np.arange (0, init.mean_d*1.1, delta)
+        
+        for ev in range(np.max(estimates.event.values)+1):
+            distri_y = init.pdf(distri_x, estimates.parameters[ev,0], loc=0, scale=estimates.parameters[ev,1]) * delta
+            distri_y[:estimates.locations[ev].values+1] = 0
+            
+            distri_plot = np.convolve(distri_plot*delta, distri_y) if ev > 0 else distri_y
+            distri_plot = distri_plot / delta
+
+            plt.plot(distri_x, distri_plot[:len(distri_x)], ':',color="C{}".format(ev))
+
+        cur_ylim = plt.gca().get_ylim()
+        plt.ylim((-.01, np.min(np.array([cur_ylim[1], 2 * np.max(estimates.eventprobs.mean('trial_x_participant').values)]))))
+
+    #calculate correlations
+    if print_correlations:
+
+        #get data, mean and stack trial level
+        dat = estimates.eventprobs.mean('trial_x_participant').values.T
+        dat_trial = estimates.eventprobs.unstack().stack(z=('participant','trials','samples')).dropna('z').values 
+
+        #calculate correlations per event (for loop because of optional non-zero samples | can be removed)
+        corrs_dat = []
+        corrs_dat_trial = []
+        for ev in range(dat.shape[0]-1):
+
+            dat_tmp = dat[ev:ev+2,:]
+            dat_trial_tmp = dat_trial[ev:ev+2,:]
+
+            corrs_dat.append(np.round(np.corrcoef(dat_tmp)[:-1,1:][0][0],2))
+            corrs_dat_trial.append(np.round(np.corrcoef(dat_trial_tmp)[:-1,1:][0][0],2))
+
+        print('Correlations:')
+        print(corrs_dat)
+        print()
+        print('Correlations at trial level:')
+        print(corrs_dat_trial)
+
+
 def erp_data(epoched_data, times, channel,n_samples=None, pad=1):
     '''
     Create a data array compatible with the plot ERP function. Optionnally this function can resample the epochs to fit some provided times (e.g. onset of the events)
