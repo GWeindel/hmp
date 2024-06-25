@@ -998,8 +998,8 @@ class hmp:
         #else, locations are only set for stages that exceed location_corr_threshold
 
         n_events = magnitudes.shape[magnitudes.ndim-2]
-        #n_trials = eventprobs.shape[1]
-        #n_samples = eventprobs.shape[0]
+        n_trials = eventprobs.shape[1]
+        n_samples = eventprobs.shape[0]
         
         if self.location_corr_threshold is None:
             locations[1:-1] = self.location
@@ -1011,11 +1011,11 @@ class hmp:
                 #calculate correlations between events in eventprobs
                 
                 #based on mean:
-                corr = np.corrcoef(np.mean(eventprobs,1).T)[:-1,1:].diagonal()
+                #corr = np.corrcoef(np.mean(eventprobs,1).T)[:-1,1:].diagonal()
 
                 #based on raw trial data:
-                #eventprobs = np.reshape(eventprobs, (n_samples * n_trials, n_events), order='F')
-                #corr = np.corrcoef(eventprobs.T)[:-1,1:].diagonal()
+                eventprobs = np.reshape(eventprobs, (n_samples * n_trials, n_events), order='F')
+                corr = np.corrcoef(eventprobs.T)[:-1,1:].diagonal()
                 
                 stage_durations = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters[1:-1,:]])
                 stage_durations_prev = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters_prev[1:-1,:]])
