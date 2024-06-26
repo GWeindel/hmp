@@ -154,7 +154,6 @@ class hmp:
         else: self.template = template
         self.events = self.cross_correlation(data.data.T)#adds event morphology
         self.max_d = self.durations.max()
-
         self.data_matrix = np.zeros((self.max_d, self.n_trials, self.n_dims), dtype=np.float64)
         for trial in range(self.n_trials):
             self.data_matrix[:self.durations[trial],trial,:] = \
@@ -2123,7 +2122,6 @@ class hmp:
             cycol = cycle(default_colors)
         pbar = tqdm(total = int(np.rint(end)))#progress bar
         n_events, j, time = 1, 1, 0 #j = sample after last placed event
-
         #Init pars (need this for min_model)
         pars = np.zeros((max_event_n+1,2))
         pars[:,0] = self.shape #final gamma parameters during estimation, shape x scale
@@ -2145,7 +2143,8 @@ class hmp:
         
         if return_estimates:
             estimates = [] #store all n_event solutions
-        while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples and n_events <= max_event_n:
+        # Iterative fit, stop at half an event width as otherwise can get stuck for a while
+        while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples//2 and n_events <= max_event_n:
 
             prev_time = time
             
