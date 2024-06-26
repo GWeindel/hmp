@@ -26,7 +26,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 class hmp:
     
-    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, template=None, location=None, distribution='gamma', location_corr_threshold=None):
+    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, template=None, min_shape=None, distribution='gamma', corr_threshold=None):
         '''
         This function intializes an HMP model by providing the data, the expected probability distribution for the by-trial variation in stage onset, and the expected duration of the transition event.
 
@@ -46,12 +46,11 @@ class hmp:
             shape of the probability distributions of the by-trial stage onset (one shape for all stages)
         template: ndarray
             Expected shape for the transition event used in the cross-correlation, should be a vector of values capturing the expected shape over the sampling frequency of the data. If None, the template is created as a half-sine shape with a frequency derived from the event_width argument
-        location : float
-            Minimum duration between events in samples. Default is half the event_width. If
-            location_corr_threshold is not None, location sets the initial location of all events.
+        min_shape : float
+            Minimum shape for all distributions.
         distribution : str
             Probability distribution for the by-trial onset of stages can be one of 'gamma','lognormal','wald', or 'weibull'
-        location_corr_threshold : None | float
+        corr_threshold : None | float
             correlation threshold for subsequent events. If correlation between eventprobs of two
             subsequent events exceeds this threshold,
             the location of the first event will be increased. If None (default), correlations 
@@ -107,18 +106,10 @@ class hmp:
         self.sfreq = sfreq
         self.steps = 1000/self.sfreq
         self.shape = float(shape)
+        self.min_shape = float(min_shape)
         self.event_width = event_width
         self.event_width_samples = int(np.round(self.event_width / self.steps))
-        if location is None:
-            self.location = int(self.event_width / self.steps)
-        else:
-            self.location = int(np.rint(location))
-            if location_corr_threshold is None: #
-                if self.location == 0:
-                    print('We strongly advise to use a location > 0, if no correlation threshold is set.')
-        self.location_corr_threshold = location_corr_threshold
-        if location_corr_threshold is not None: #if location_corr_threshold, epoch_data is required
-            assert epoch_data is not None, 'If location_corr_threshold used, epoch_data is required.'
+        self.corr_threshold = corr_threshold
         
         durations = data.unstack().sel(component=0).rename({'epochs':'trials'})\
             .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
@@ -210,7 +201,7 @@ class hmp:
 
     def fit_single(self, n_events=None, magnitudes=None, parameters=None, parameters_to_fix=None, 
                    magnitudes_to_fix=None, tolerance=1e-4, max_iteration=1e3, maximization=True, min_iteration = 1,
-                   starting_points=1, method='random', return_max=True, verbose=True, cpus=None, locations=None):
+                   starting_points=1, method='random', return_max=True, verbose=True, cpus=None, min_shapes=None):
         '''
         Fit HMP for a single n_events model
         
@@ -248,17 +239,17 @@ class hmp:
             True displays output useful for debugging, recommended for first use
         cpus: int
             number of cores to use in the multiprocessing functions
-        locations : ndarray
-            1D ndarray n_events * 1, initial locations per event. If None (default), default location will be used in EM(), based 
-            on self.location and/or location_corr_threshold.
+        min_shapes : ndarray
+            1D ndarray n_events + 1, minimum shape per stage. If None (default), default shape will be used in EM(), based 
+            on self.shape and/or corr_threshold.
         '''
         assert n_events is not None, 'The fit_single() function needs to be provided with a number of expected transition events'
-        if self.location_corr_threshold is None:
-            assert self.location*(n_events-2) < min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
-        else:
-            if self.location*(n_events-2) > min(self.durations):
-                print(f'{n_events} events might not fit given the minimum duration of {min(self.durations)} and an initial location of {self.location},')
-                print('depending on correlations between magnitudes and the setting of the location_threshold.\n')
+        # if self.corr_threshold is None:
+        #     assert self.location*(n_events-2) < min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
+        # else:
+        #     if self.location*(n_events-2) > min(self.durations):
+        #         print(f'{n_events} events might not fit given the minimum duration of {min(self.durations)} and an initial location of {self.location},')
+        #         print('depending on correlations between magnitudes and the setting of the location_threshold.\n')
         if verbose:
             if parameters is None:
                 print(f'Estimating {n_events} events model with {starting_points} starting point(s)')
@@ -321,7 +312,7 @@ class hmp:
                     parameters = np.tile(parameters, (len(magnitudes),1,1))
             if cpus>1: 
                 inputs = zip(magnitudes, parameters, itertools.repeat(maximization),
-                        itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(min_iteration), itertools.repeat(None), itertools.repeat(None),itertools.repeat(None), itertools.repeat(1), itertools.repeat(locations))
+                        itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(min_iteration), itertools.repeat(None), itertools.repeat(None),itertools.repeat(None), itertools.repeat(1), itertools.repeat(min_shapes))
                 with mp.Pool(processes=cpus) as pool:
                     if starting_points > 1:
                         estimates = list(tqdm(pool.imap(self._EM_star, inputs), total=len(magnitudes)))
@@ -332,15 +323,15 @@ class hmp:
                 estimates = []
                 for pars, mags in zip(parameters, magnitudes):
                     estimates.append(self.EM(mags, pars, maximization,\
-                    magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration, locations=locations))
+                    magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration, min_shapes=min_shapes))
                 resetwarnings()
             lkhs_sp = [x[0] for x in estimates]
             mags_sp = [x[1] for x in estimates]
             pars_sp = [x[2] for x in estimates]
             eventprobs_sp = [x[3] for x in estimates]
-            locations_sp = [x[4] for x in estimates]
+            min_shapes_sp = [x[4] for x in estimates]
             traces_sp = [x[5] for x in estimates]
-            locations_dev_sp = [x[6] for x in estimates]
+            min_shapes_dev_sp = [x[6] for x in estimates]
             param_dev_sp = [x[7] for x in estimates]
 
             if return_max:
@@ -349,30 +340,30 @@ class hmp:
                 mags = mags_sp[max_lkhs]
                 pars = pars_sp[max_lkhs]
                 eventprobs = eventprobs_sp[max_lkhs]
-                locations = locations_sp[max_lkhs]
+                min_shapes = min_shapes_sp[max_lkhs]
                 traces = traces_sp[max_lkhs]
-                locations_dev = locations_dev_sp[max_lkhs]
+                min_shapes_dev = min_shapes_dev_sp[max_lkhs]
                 param_dev = param_dev_sp[max_lkhs]
             else:
                 lkh = lkhs_sp
                 mags = mags_sp
                 pars = pars_sp
                 eventprobs = eventprobs_sp
-                locations = locations_sp
+                min_shapes = min_shapes_sp
                 traces = np.zeros((len(lkh),  max([len(x) for x in traces_sp])))*np.nan
                 for i, _i in enumerate(traces_sp):
                     traces[i, :len(_i)] = _i
-                locations_dev = np.zeros((len(lkh),  max([len(x) for x in locations_dev_sp]),n_events + 1 ))*np.nan
-                for i, _i in enumerate(locations_dev_sp):
-                    locations_dev[i, :len(_i), :] = _i
+                min_shapes_dev = np.zeros((len(lkh),  max([len(x) for x in min_shapes_dev_sp]),n_events + 1 ))*np.nan
+                for i, _i in enumerate(min_shapes_dev_sp):
+                    min_shapes_dev[i, :len(_i), :] = _i
                 param_dev = np.zeros((len(lkh),  max([len(x) for x in param_dev_sp]), n_events + 1, 2))*np.nan
                 for i, _i in enumerate(param_dev_sp):
                     param_dev[i, :len(_i),:,:] = _i
             
         elif starting_points==1:#informed starting point
-            lkh, mags, pars, eventprobs, locations, traces, locations_dev, param_dev = self.EM(initial_m, initial_p,\
+            lkh, mags, pars, eventprobs, min_shapes, traces, min_shapes_dev, param_dev = self.EM(initial_m, initial_p,\
                                          maximization, magnitudes_to_fix, parameters_to_fix, \
-                                         max_iteration, tolerance, min_iteration, locations=locations)
+                                         max_iteration, tolerance, min_iteration, min_shapes=min_shapes)
 
         else:#uninitialized    
             if np.any(parameters)== None:
@@ -380,8 +371,8 @@ class hmp:
             initial_p = parameters
             if np.any(magnitudes)== None:
                 magnitudes = np.zeros((n_events, self.n_dims), dtype=np.float64)
-            lkh, mags, pars, eventprobs, locations, traces, locations_dev, param_dev = self.EM(magnitudes, parameters, maximization, magnitudes_to_fix, parameters_to_fix,\
-                                        max_iteration, tolerance, min_iteration, locations=locations)
+            lkh, mags, pars, eventprobs, min_shapes, traces, min_shapes_dev, param_dev = self.EM(magnitudes, parameters, maximization, magnitudes_to_fix, parameters_to_fix,\
+                                        max_iteration, tolerance, min_iteration, min_shapes=min_shapes)
         if len(np.shape(eventprobs)) == 3:
             n_event_xr = n_event_xreventprobs = len(mags)
             n_stage = n_event_xr+1
@@ -394,7 +385,7 @@ class hmp:
         if len(np.shape(eventprobs)) == 3:
             xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
             xrtraces = xr.DataArray(traces, dims=("em_iteration"), name="traces", coords={'em_iteration':range(len(traces))})
-            xrlocations_dev = xr.DataArray(locations_dev, dims=("em_iteration", "stage"), name="locations_dev", coords={'em_iteration':range(len(locations_dev)),'stage':range(n_event_xr+1)})
+            xrmin_shapes_dev = xr.DataArray(min_shapes_dev, dims=("em_iteration", "stage"), name="min_shapes_dev", coords={'em_iteration':range(len(min_shapes_dev)),'stage':range(n_event_xr+1)})
             xrparam_dev = xr.DataArray(param_dev, dims=("em_iteration","stage",'parameter'), name="param_dev", coords=[range(len(param_dev)), range(n_stage), ['shape','scale']])
             xrparams = xr.DataArray(pars, dims=("stage",'parameter'), name="parameters", 
                             coords = [range(n_stage), ['shape','scale']])
@@ -410,7 +401,7 @@ class hmp:
                               'samples':range(np.shape(eventprobs)[0])})
             xreventprobs = xreventprobs.assign_coords(trial_x_part)            
             xreventprobs = xreventprobs.transpose('trial_x_participant','samples','event')
-            xrlocations = xr.DataArray(locations, dims=("stage"), name="locations", 
+            xrmin_shapes = xr.DataArray(min_shapes, dims=("stage"), name="min_shapes", 
                             coords = [range(n_stage)])
         else: 
             n_event_xr = len(mags[0])
@@ -418,7 +409,7 @@ class hmp:
                 warn(f'Last iteration of the estimation procedure lead to a decrease in log-likelihood, convergence issue. The resulting fit likely contains a duplicated event', RuntimeWarning)
             xrlikelihoods = xr.DataArray(lkh , dims=("iteration"), name="likelihoods", coords={'iteration':range(len(lkh))})
             xrtraces = xr.DataArray(traces, dims=("iteration","em_iteration"), name="traces", coords={'iteration':range(len(lkh)), 'em_iteration':range(len(traces[0]))})
-            xrlocations_dev = xr.DataArray(locations_dev, dims=("iteration","em_iteration","stage"), name="locations_dev", coords={'iteration':range(len(lkh)), 'em_iteration':range(len(locations_dev[0])), 'stage':range(n_event_xr+1)})   
+            xrlmin_shapes_dev = xr.DataArray(min_shapes_dev, dims=("iteration","em_iteration","stage"), name="min_shapes_dev", coords={'iteration':range(len(lkh)), 'em_iteration':range(len(min_shapes_dev[0])), 'stage':range(n_event_xr+1)})   
             xrparam_dev = xr.DataArray(param_dev, dims=("iteration","em_iteration","stage",'parameter'), name="param_dev", coords={'iteration':range(len(lkh)), 'em_iteration':range(len(param_dev[0])), 'stage':range(n_event_xr+1), 'parameter':['shape','scale']})
             xrparams = xr.DataArray(pars, dims=("iteration","stage",'parameter'), name="parameters", 
                             coords = {'iteration': range(len(lkh)), 'parameter':['shape','scale']})
@@ -435,9 +426,9 @@ class hmp:
                               'samples':np.arange(np.shape(eventprobs)[1])})
             xreventprobs = xreventprobs.assign_coords(trial_x_part)
             xreventprobs = xreventprobs.transpose('iteration','trial_x_participant','samples','event')
-            xrlocations = xr.DataArray(locations, dims=("iteration","stage"), name="locations", 
+            xrmin_shapes = xr.DataArray(min_shapes, dims=("iteration","stage"), name="min_shapes", 
                             coords = {'iteration': range(len(lkh))})
-        estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrlocations, xrtraces, xrlocations_dev, xrparam_dev))
+        estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrmin_shapes, xrtraces, xrmin_shapes_dev, xrparam_dev))
 
         if verbose:
             print(f"parameters estimated for {n_events} events model")
@@ -492,7 +483,7 @@ class hmp:
             SP-right, AC-left, AC-right.
         locations : ndarray
             2D ndarray n_conds * n_events, initial locations per event and condition. If None (default), 
-            default location will be used in EM(), based on self.location and/or location_corr_threshold.
+            default location will be used in EM(), based on self.location and/or corr_threshold.
         '''
         #Conditions
         assert mags_map is not None or pars_map is not None, 'fit_single_conds() requires a magnitude and/or parameter map'
@@ -582,7 +573,7 @@ class hmp:
         assert n_conds == mags_map.shape[0] == pars_map.shape[0], 'number of unique conditions should correspond to number of rows in map(s)'
 
         n_events = mags_map.shape[1]
-        if self.location_corr_threshold is None:
+        if self.corr_threshold is None:
             assert self.location*(n_events) < min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
         else:
             if self.location*(n_events-2) > min(self.durations):
@@ -788,7 +779,7 @@ class hmp:
     def _EM_star(self, args): #for tqdm usage
         return self.EM(*args)
     
-    def EM(self, magnitudes, parameters, maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1, mags_map=None, pars_map=None,conds=None, cpus=1, locations=None):  
+    def EM(self, magnitudes, parameters, maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1, mags_map=None, pars_map=None,conds=None, cpus=1, min_shapes=None):  
         '''
         Expectation maximization function underlying fit
 
@@ -816,8 +807,8 @@ class hmp:
             Tolerance applied to the expectation maximization
         min_iteration: int
             Minimum number of iteration for the expectation maximization in the EM() function
-        locations : ndarray
-            Initial locations (1D for normal model, 2D for condition based model (cond * n_events)
+        min_shapes : ndarray
+            Minimum shape parameter for stages (1D for normal model, 2D for condition based model (cond * n_events + 1)
 
         Returns
         -------
@@ -829,12 +820,12 @@ class hmp:
             parameters for the gammas of each stage
         eventprobs: ndarray
             Probabilities with shape max_samples*n_trials*n_events
-        locations : ndarray
-            locations for each event
+        min_shapes : ndarray
+            min_shapes for each event
         traces: ndarray
             Values of the log-likelihood for each EM iteration
-        locations_dev : ndarray
-            locations for each interation of EM
+        min_shapes_dev : ndarray
+            min_shapes for each interation of EM
         param_dev : ndarray
             paramters for each iteration of EM
         ''' 
@@ -864,21 +855,20 @@ class hmp:
             raise ValueError(f'At least one event has to be required')
         initial_magnitudes = magnitudes.copy()
         initial_parameters = parameters.copy()
-        if locations is None:
-            locations = np.zeros((n_events+1,),dtype=int) #location per stage
-            locations[1:-1] = self.location #default/starting point is self.location
+        if min_shapes is None:
+            min_shapes = np.zeros((n_events+1,),dtype=int) #minimum shape per stage
+            min_shapes[0:] = self.min_shape #default is min_shape
             if n_cond is not None:
-                locations = np.tile(locations, (n_cond, 1))
-        else:
-            locations = locations.astype(int)
+                min_shapes = np.tile(min_shapes, (n_cond, 1))
+
         
         if n_cond is not None:
-            lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, locations, mags_map, pars_map, conds, cpus=cpus)
+            lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, min_shapes, mags_map, pars_map, conds, cpus=cpus)
         else:
-            lkh, eventprobs = self.estim_probs(magnitudes, parameters, locations, n_events)
+            lkh, eventprobs = self.estim_probs(magnitudes, parameters, min_shapes, n_events)
 
         traces = [lkh]
-        locations_dev = [locations.copy()] #store development of locations
+        min_shapes_dev = [min_shapes.copy()] #store development of min_shapes
         param_dev = [parameters.copy()] #... and parameters
 
         i = 0
@@ -887,22 +877,22 @@ class hmp:
         else:
             lkh_prev = lkh
             parameters_prev = parameters.copy()
-            locations_prev = locations.copy()
+            min_shapes_prev = min_shapes.copy()
 
             while i < max_iteration :#Expectation-Maximization algorithm
-                if self.location_corr_threshold is None: #standard threshold
+                if self.corr_threshold is None: #standard threshold
                     if i >= min_iteration and (np.isneginf(lkh) or tolerance > (lkh-lkh_prev)/np.abs(lkh_prev)):
                         break
 
-                else: #threshold adapted for location correlation threshold:
-                      #EM only stops if location was not changed on last iteration
+                else: #threshold adapted for correlation threshold:
+                      #EM only stops if min_shapes was not changed on last iteration
                       #and events moved less than .1 sample. This ensures EM continues
-                      #when new locations are set or correlation is still too high.
-                      #(see also get_locations)
+                      #when new min_shapes are set or correlation is still too high.
+                      #(see also get_magnitudes_parameters_expectation)
                     stage_durations = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters])
                     stage_durations_prev = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters_prev])
 
-                    if i >= min_iteration and (np.isneginf(lkh) or (locations == locations_prev).all() and tolerance > (lkh-lkh_prev)/np.abs(lkh_prev) and (np.abs(stage_durations-stage_durations_prev) < .1).all()):
+                    if i >= min_iteration and (np.isneginf(lkh) or (min_shapes == min_shapes_prev).all() and tolerance > (lkh-lkh_prev)/np.abs(lkh_prev) and (np.abs(stage_durations-stage_durations_prev) < .1).all()):
                         if np.isneginf(lkh): #print a warning if log-likelihood is -inf, 
                                              #as this typically happens when no good solution exits
                             print('-!- Estimation stopped because of -inf log-likelihood: this typically indicates requesting too many and/or too closely spaced events -!-')
@@ -910,7 +900,7 @@ class hmp:
                 
                 #As long as new run gives better likelihood, go on  
                 lkh_prev = lkh.copy()
-                locations_prev = locations.copy()
+                min_shapes_prev = min_shapes.copy()
                 parameters_prev = parameters.copy()
 
                 if n_cond is not None: #condition dependent
@@ -922,7 +912,7 @@ class hmp:
                         
                         #get mags/pars/locs by condition
                         magnitudes[c,mags_map_cond,:], parameters[c,pars_map_cond,:] = self.get_magnitudes_parameters_expectation(eventprobs[np.ix_(range(self.max_d),epochs_cond, mags_map_cond)], subset_epochs=epochs_cond)
-                        if self.location_corr_threshold is not None: #update location when location correlation threshold is used
+                        if self.corr_threshold is not None: #update location when location correlation threshold is used
                             locations[c,pars_map_cond] = self.get_locations(locations[c,pars_map_cond], magnitudes[c,mags_map_cond,:], parameters[c,pars_map_cond,:], parameters_prev[c,pars_map_cond,:], eventprobs[np.ix_(range(self.max_d),epochs_cond, mags_map_cond)], subset_epochs=epochs_cond)
 
                         magnitudes[c,magnitudes_to_fix,:] = initial_magnitudes[c,magnitudes_to_fix,:].copy()
@@ -942,33 +932,26 @@ class hmp:
                                 locations[pars_map[:,p] == p_set,p] = np.max(locations[pars_map[:,p] == p_set,p],axis=0)
 
                 else: #general
-                    magnitudes, parameters = self.get_magnitudes_parameters_expectation(eventprobs)
+                    magnitudes, parameters, min_shapes = self.get_magnitudes_parameters_expectation(eventprobs, parameters, parameters_prev, min_shapes)
                     magnitudes[magnitudes_to_fix,:] = initial_magnitudes[magnitudes_to_fix,:].copy()
                     parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
-                    if self.location_corr_threshold is not None: #update location when location correlation threshold is used
-                        locations = self.get_locations(locations, magnitudes, parameters, parameters_prev, eventprobs)
-                
+
                 if n_cond is not None:
-                    lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, locations, mags_map, pars_map, conds, cpus=cpus)
+                    lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, min_shapes, mags_map, pars_map, conds, cpus=cpus)
                 else:
-                    lkh, eventprobs = self.estim_probs(magnitudes, parameters, locations, n_events)
+                    lkh, eventprobs = self.estim_probs(magnitudes, parameters, min_shapes, n_events)
                 
                 traces.append(lkh)
-                locations_dev.append(locations.copy())
+                min_shapes_dev.append(min_shapes.copy())
                 param_dev.append(parameters.copy())
                 i += 1
                 
-        # Getting eventprobs without locations
-        # if n_cond is not None:
-        #     _, eventprobs = self.estim_probs_conds(magnitudes, parameters, np.zeros(locations.shape).astype(int), mags_map, pars_map, conds, cpus=cpus)
-        # else:
-        #     _, eventprobs = self.estim_probs(magnitudes, parameters, np.zeros(locations.shape).astype(int), n_events)
         if i == max_iteration:
             warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
-        return lkh, magnitudes, parameters, eventprobs, locations, np.array(traces), np.array(locations_dev), np.array(param_dev)
+        return lkh, magnitudes, parameters, eventprobs, min_shapes, np.array(traces), np.array(min_shapes_dev), np.array(param_dev)
 
 
-    def get_magnitudes_parameters_expectation(self,eventprobs,subset_epochs=None):
+    def get_magnitudes_parameters_expectation(self, eventprobs, parameters, parameters_prev, min_shapes, subset_epochs=None):
         n_events = eventprobs.shape[2]
         n_trials = eventprobs.shape[1]
         if subset_epochs is None: #all trials
@@ -985,49 +968,48 @@ class hmp:
             # sum by-trial these scaled activation for each transition events
             # average across trials
         
+        #Check correlations, increase shapes if necessary
+        if self.corr_threshold is not None: #update location when location correlation threshold is used
+            min_shapes, parameters = self.update_parameters_correlation(min_shapes, parameters, parameters_prev, eventprobs)
+
         #Gamma parameters from Expectation
-        #calc averagepos here as mean_d can be condition dependent, whereas scale_parameters() assumes it's general
-        event_times_mean = np.concatenate([np.arange(self.max_d) @ eventprobs.mean(axis=1), [np.mean(self.durations[subset_epochs])-1]])
-        parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=event_times_mean)                            
+        parameters = self.get_parameters(parameters, eventprobs, subset_epochs)
+        #parameters[:,0] = min_shapes
 
-        return [magnitudes, parameters]
+        return [magnitudes, parameters, min_shapes]
     
-    def get_locations(self, locations, magnitudes, parameters, parameters_prev, eventprobs, subset_epochs=None):
-        #if no correlation threshold is set, locations are set for all stages except first and last stage
-        #to self.location (this function should not even be called in that case)
-        #else, locations are only set for stages that exceed location_corr_threshold
+    def update_parameters_correlation(self, min_shapes, parameters, parameters_prev, eventprobs):
 
-        n_events = magnitudes.shape[magnitudes.ndim-2]
+        n_events = eventprobs.shape[2]
         n_trials = eventprobs.shape[1]
         n_samples = eventprobs.shape[0]
         
-        if self.location_corr_threshold is None:
-            locations[1:-1] = self.location
-        else:
-            if n_events > 1 and not (magnitudes == 0).all(): #if not on first iteration
+        if n_events > 1 and not np.all(parameters[:,1] == parameters[0,1]): #if not on first iteration
 
-                #eventprobs = samples x trials x events
-                
-                #calculate correlations between events in eventprobs
-                
-                #based on mean:
-                #corr = np.corrcoef(np.mean(eventprobs,1).T)[:-1,1:].diagonal()
+            #eventprobs = samples x trials x events
+            
+            #calculate correlations between events in eventprobs
+            
+            #based on mean:
+            #corr = np.corrcoef(np.mean(eventprobs,1).T)[:-1,1:].diagonal()
 
-                #based on raw trial data:
-                eventprobs = np.reshape(eventprobs, (n_samples * n_trials, n_events), order='F')
-                corr = np.corrcoef(eventprobs.T)[:-1,1:].diagonal()
-                
-                stage_durations = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters[1:-1,:]])
-                stage_durations_prev = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters_prev[1:-1,:]])
+            #based on raw trial data:
+            eventprobs = np.reshape(eventprobs, (n_samples * n_trials, n_events), order='F')
+            corr = np.corrcoef(eventprobs.T)[:-1,1:].diagonal()
+            
+            stage_durations = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters[1:-1,:]])
+            stage_durations_prev = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters_prev[1:-1,:]])
 
-                for ev in range(n_events-1):
-                    #high correlation and moving away from each other,
-                    if corr[ev] > self.location_corr_threshold and stage_durations[ev] - stage_durations_prev[ev] < .1:
-                        locations[ev + 1] += 1 #indexes stages
-        return locations
+            for ev in range(n_events-1):
+                #high correlation and not moving away from each other,
+                if corr[ev] > self.corr_threshold and stage_durations[ev] - stage_durations_prev[ev] < .1:
+                    min_shapes[ev + 1] += 1 #indexes stages
+                    parameters[ev + 1, 0] = min_shapes[ev + 1] if parameters[ev + 1, 0] < min_shapes[ev + 1] else parameters[ev + 1, 0]
+
+        return min_shapes, parameters
 
 
-    def estim_probs(self, magnitudes, parameters, locations, n_events=None, subset_epochs=None, lkh_only=False, by_trial_lkh=False):
+    def estim_probs(self, magnitudes, parameters, min_shapes, n_events=None, subset_epochs=None, lkh_only=False, by_trial_lkh=False):
         '''
         parameters
         ----------
@@ -1091,8 +1073,7 @@ class hmp:
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage scale
         for stage in range(n_stages):
-            pmf[:,stage] = np.concatenate((np.repeat(0,locations[stage]), \
-                self.distribution_pmf(parameters[stage,0], parameters[stage,1])[locations[stage]:]))
+            pmf[:,stage] = self.distribution_pmf(parameters[stage,0], parameters[stage,1])
         pmf_b = pmf[:,::-1] # Stage reversed gamma pmf, same order as prob_b
 
         forward = np.zeros((self.max_d, n_trials, n_events), dtype=np.float64)
@@ -1228,6 +1209,35 @@ class hmp:
             p[np.isnan(p)] = 0 #remove potential nans
         return p
     
+    def get_parameters(self, parameters, eventprobs, subset_epochs=None):
+        '''
+        Used for the re-estimation in the EM procedure. The likeliest location of 
+        the event is computed from eventprobs. The scale parameter are then taken as the average 
+        distance between the events, taking the shape into account.
+        
+        parameters
+        ----------
+        eventprobs : ndarray
+            [samples(max_d)*n_trials*n_events]
+        parameters : ndarray
+            shape and scale for the gamma distributions
+        
+        Returns
+        -------
+        parameters : ndarray
+            shape and scale for the gamma distributions
+        '''
+         
+        #calculate mean location
+        event_times_mean = np.concatenate([np.arange(self.max_d) @ eventprobs.mean(axis=1), [np.mean(self.durations[subset_epochs])-1]])
+
+        #take difference for average durations
+        durations = np.diff(event_times_mean, prepend=0)
+        for i, dur in enumerate(durations):
+            parameters[i,1] = self.mean_to_scale(dur, parameters[i,0])
+        
+        return parameters       
+    
     def scale_parameters(self, eventprobs=None, n_events=None, averagepos=None):
         '''
         Used for the re-estimation in the EM procdure. The likeliest location of 
@@ -1354,7 +1364,7 @@ class hmp:
         '''
         Compute the maximum possible number of events given event width and mean or minimum reaction time
         '''
-        if self.location_corr_threshold is not None:
+        if self.corr_threshold is not None:
             print('Note that more events might fit, as long as they are not highly correlating.')
             return int(np.rint(np.min(self.durations)//(self.event_width_samples/2)))
         else:
@@ -2253,7 +2263,7 @@ class hmp:
                 locations_props = locations[:n_events].copy()
                 locations_props[-1] = 0
                 locations_props = np.insert(locations_props, n_event_j, 0)
-                if self.location_corr_threshold is None:
+                if self.corr_threshold is None:
                     locations_props[1:-1] = self.location
 
                 mags_props = np.zeros((1,n_events, self.n_dims)) #always 0?
@@ -2271,7 +2281,7 @@ class hmp:
             #New location proposition
             locations_props = locations[:n_events+1].copy()
             locations_props[-1] = 0
-            if self.location_corr_threshold is None:
+            if self.corr_threshold is None:
                 locations_props[1:-1] = self.location
             mags_props = np.zeros((1,n_events, self.n_dims)) #always 0?
             mags_props[:,:n_events-1,:] = np.tile(mags[:n_events-1,:], (len(mags_props), 1, 1))

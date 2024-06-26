@@ -1120,8 +1120,6 @@ def plot_event_distributions(estimates, init, print_correlations=False, plot_est
         
         for ev in range(np.max(estimates.event.values)+1):
             distri_y = init.pdf(distri_x, estimates.parameters[ev,0], loc=0, scale=estimates.parameters[ev,1]) * delta
-            distri_y[:estimates.locations[ev].values+1] = 0
-            
             distri_plot = np.convolve(distri_plot*delta, distri_y) if ev > 0 else distri_y
             distri_plot = distri_plot / delta
 
