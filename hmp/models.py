@@ -256,7 +256,7 @@ class hmp:
         '''
         assert n_events is not None, 'The fit_single() function needs to be provided with a number of expected transition events'
         if self.location_corr_threshold is None:
-            assert self.location*(n_events-2) < min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
+            assert n_events <= self.compute_max_events(), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
         else:
             if self.location*(n_events-2) > min(self.durations):
                 print(f'{n_events} events might not fit given the minimum duration of {min(self.durations)} and an initial location of {self.location},')
@@ -1365,16 +1365,16 @@ class hmp:
 
     def compute_max_events(self):
         '''
-        Compute the maximum possible number of events given event width and mean or minimum reaction time
+        Compute the maximum possible number of events given event width  minimum reaction time
         '''
         if self.location_corr_threshold is not None:
             print('Note that more events might fit, as long as they are not highly correlating.')
-            return int(np.rint(np.min(self.durations)//(self.event_width_samples/2)))
+            return int(np.rint(np.percentile(self.durations, 10)//(self.event_width_samples/2)))+2
         else:
             if self.location > 0:
-                return int(np.rint(np.min(self.durations)//(self.location)))
+                return int(np.rint(np.percentile(self.durations, 10)//(self.location)))+2
             else:
-                return int(np.rint(np.min(self.durations)))
+                return int(np.rint(np.percentile(self.durations, 10)))+2
 
 
     @staticmethod        
@@ -2117,7 +2117,7 @@ class hmp:
             end = self.mean_d
         if step is None:
             step = self.event_width_samples
-        max_event_n = self.compute_max_events()
+        max_event_n = self.compute_max_events()*10#not really nedded, if it fits it fits
         if diagnostic:
             cycol = cycle(default_colors)
         pbar = tqdm(total = int(np.rint(end)))#progress bar
