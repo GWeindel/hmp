@@ -850,68 +850,78 @@ def centered_activity(data, times, channels, event, n_samples=None, center=True,
 
     Returns
     -------
-    brp_data : xr.Dataset
+    centered_data : xr.Dataset
         Xarray dataset with electrode value (data) and trial event time (time) and with trial_x_participant * samples dimension
     '''
-    if event == 0:
-        baseline = 0#no samples before stim onset
+    if event == 0:#no samples before stim onset
+        baseline = 0
     elif event == 1:#no event at stim onset
         event_width = 0
-    if n_samples is None:
-        n_samples = max(times.sel(event=event+cut_after_event).data- 
-                                   times.sel(event=event).data)+1
     if cut_before_event == 0:#avoids searching before stim onset
         cut_before_event = event
+    if n_samples is None:
+        if cut_after_event is None:
+            raise ValueError('One of ```n_samples``` or ```cut_after_event``` has to be filled to use an upper limit')
+        n_samples = max(times.sel(event=event+cut_after_event).data- 
+                                   times.sel(event=event).data)+1
     if impute is None:
         impute = np.nan
     if center:
-        brp_data = np.tile(impute, (len(data.trial_x_participant), len(channels),
-            int(round(-baseline+n_samples+1))))
+        centered_data = np.tile(impute, (len(data.trial_x_participant), len(channels),
+            int(round(n_samples-baseline+1))))
     else:
-        brp_data = np.tile(impute, (len(data.trial_x_participant), len(channels),
+        centered_data = np.tile(impute, (len(data.trial_x_participant), len(channels),
             len(data.samples)))
         
     i = 0
     trial_times = np.zeros(len(data.trial_x_participant))*np.nan
+    valid_indices = list(times.groupby('trial_x_participant').groups.keys())
     for trial, trial_dat in data.groupby('trial_x_participant', squeeze=False):
-        if event > 0 and cut_before_event>0:
-            lower_lim = np.max([
-                -np.max([times.sel(event=event, trial_x_participant=trial)-
-                        times.sel(event=event-cut_before_event, trial_x_participant=trial)-
-                    event_width,0]), baseline])
-        elif event == 0:
-            lower_lim = 0
-        else:
-            lower_lim = baseline
-        if event < times.event.max() and cut_after_event>0:
-            upper_lim = np.max([np.min([times.sel(event=event+cut_after_event, trial_x_participant=trial) - times.sel(event=event, trial_x_participant=trial)-1- event_width, \
-                                        n_samples]), 0])
-        else:
-            upper_lim = n_samples
-        trial_time = slice(int(times.sel(event=event, trial_x_participant=trial)+lower_lim), int(times.sel(event=event, trial_x_participant=trial)+upper_lim))
-        trial_time_arr = slice(int(round(abs(baseline-lower_lim))), int(round(upper_lim-baseline)+1))
-        trial_time_idx = slice(int(times.sel(event=event, trial_x_participant=trial)+lower_lim), int(times.sel(event=event, trial_x_participant=trial)+upper_lim+1))
-        trial_elec = trial_dat.sel(channels = channels, samples=trial_time).squeeze('trial_x_participant')
+        if trial in valid_indices:
+            if cut_before_event>0:
+                #Lower lim is baseline or the last sample of the previous event
+                lower_lim = np.max([
+                    -np.max([times.sel(event=event, trial_x_participant=trial)-
+                            times.sel(event=event-cut_before_event, trial_x_participant=trial)-
+                        event_width//2,0]), baseline])
+            else:
+                lower_lim = 0
+            if cut_after_event>0:
+                upper_lim = np.max([np.min([times.sel(event=event+cut_after_event, trial_x_participant=trial) - times.sel(event=event, trial_x_participant=trial)- event_width//2, \
+                                            n_samples]), 0])
+            else:
+                upper_lim = n_samples
+            
+            # Determine samples in the signal to store
+            start_idx = int(times.sel(event=event, trial_x_participant=trial) + lower_lim)
+            end_idx = int(times.sel(event=event, trial_x_participant=trial) + upper_lim)
+            trial_time = slice(start_idx, end_idx)
+            trial_time_idx =  slice(start_idx, end_idx+1)
+            trial_elec = trial_dat.sel(channels = channels, samples=trial_time).squeeze('trial_x_participant')
+            # If center, adjust to always center on the same sample if lower_lim < baseline
+            baseline_adjusted_start = int(abs(baseline - lower_lim))
+            baseline_adjusted_end = baseline_adjusted_start + trial_elec.shape[-1]
+            trial_time_arr = slice(baseline_adjusted_start, baseline_adjusted_end)
 
-        if center:
-            brp_data[i, :,  trial_time_arr] = trial_elec 
-        else:
-            brp_data[i, :, trial_time_idx] = trial_elec
-        trial_times[i] = times.sel(event=event, trial_x_participant=trial)
-        i += 1
+            if center:
+                centered_data[i, :,  trial_time_arr] = trial_elec 
+            else:
+                centered_data[i, :, trial_time_idx] = trial_elec
+            trial_times[i] = times.sel(event=event, trial_x_participant=trial)
+            i += 1
     
     part, trial = data.coords['participant'].values, data.coords['epochs'].values
     trial_x_part = xr.Coordinates.from_pandas_multiindex(MultiIndex.from_arrays([part,trial],\
               names=('participant','trials')),'trial_x_participant')
-    brp_data = xr.Dataset({'data': (('trial_x_participant','channel','samples'), brp_data),
+    centered_data = xr.Dataset({'data': (('trial_x_participant','channel','samples'), centered_data),
                           'times': (('trial_x_participant'), trial_times)},
                             {'channel':channels,
-                            'samples':np.arange(brp_data.shape[-1])+baseline},
+                            'samples':np.arange(centered_data.shape[-1])+baseline},
                           
                         attrs = {
                                  'event':event})
 
-    return brp_data.assign_coords(trial_x_part)
+    return centered_data.assign_coords(trial_x_part)
     
 def condition_selection(hmp_data, epoch_data, condition_string, variable='event', method='equal'):
     '''
