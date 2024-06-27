@@ -875,7 +875,7 @@ def centered_activity(data, times, channels, event, n_samples=None, center=True,
         
     i = 0
     trial_times = np.zeros(len(data.trial_x_participant))*np.nan
-    valid_indices = list(times.groupby('trial_x_participant').groups.keys())
+    valid_indices = list(times.groupby('trial_x_participant', squeeze=False).groups.keys())
     for trial, trial_dat in data.groupby('trial_x_participant', squeeze=False):
         if trial in valid_indices:
             if cut_before_event>0:
