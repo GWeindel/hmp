@@ -48,14 +48,14 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
 
     #Building models
     if init.stacked_epoch_data is not None: #maintain epoch data if present, but allow for it not being there
-        model_without_pp = hmp.models.hmp(data_without_pp, epoch_data=init.stacked_epoch_data.where(init.stacked_epoch_data.participant.isin(participants_idx[participants_idx != participant]), drop=True), sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution,  location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
+        model_without_pp = hmp.models.hmp(data_without_pp, epoch_data=init.stacked_epoch_data.where(init.stacked_epoch_data.participant.isin(participants_idx[participants_idx != participant]), drop=True), sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, min_shape=init.min_shape, distribution=init.distribution,  corr_threshold = init.corr_threshold)
 
-        model_pp = hmp.models.hmp(data_pp, epoch_data=init.stacked_epoch_data.where(init.stacked_epoch_data.participant == participant,drop=True), sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
+        model_pp = hmp.models.hmp(data_pp, epoch_data=init.stacked_epoch_data.where(init.stacked_epoch_data.participant == participant,drop=True), sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, min_shape=init.min_shape, distribution=init.distribution, corr_threshold = init.corr_threshold)
 
     else:
-        model_without_pp = hmp.models.hmp(data_without_pp, epoch_data=None, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
+        model_without_pp = hmp.models.hmp(data_without_pp, epoch_data=None, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, min_shape=init.min_shape, distribution=init.distribution, corr_threshold = init.corr_threshold)
 
-        model_pp = hmp.models.hmp(data_pp, epoch_data=None, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
+        model_pp = hmp.models.hmp(data_pp, epoch_data=None, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, min_shape=init.min_shape, distribution=init.distribution, corr_threshold = init.corr_threshold)
 
 
     #fit the HMP using previously estimated parameters as initial parameters, and estimate likelihood
@@ -69,16 +69,16 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
         params = fit_without_pp.parameters.values
         params[:,:,1] = params[:,:,1] * dur_ratio
         conds_pp = initial_fit.sel(participant=participant)['cond'].values
-        likelihood = model_pp.estim_probs_conds(fit_without_pp.magnitudes.values, params, fit_without_pp.locations.values, initial_fit.mags_map, initial_fit.pars_map, conds_pp, lkh_only=True)
+        likelihood = model_pp.estim_probs_conds(fit_without_pp.magnitudes.values, params, initial_fit.mags_map, initial_fit.pars_map, conds_pp, lkh_only=True)
     else:
         #fit model
         n_eve = np.max(initial_fit.event.values)+1
-        fit_without_pp = model_without_pp.fit_single(n_eve, initial_fit.magnitudes.dropna('event',how='all').values, initial_fit.parameters.dropna('stage').values, locations=initial_fit.locations.dropna('stage').values.astype(int), verbose=False)
+        fit_without_pp = model_without_pp.fit_single(n_eve, initial_fit.magnitudes.dropna('event',how='all').values, initial_fit.parameters.dropna('stage').values, verbose=False)
         #calc lkh
         #adjust params to fit average duration of subject
         params = fit_without_pp.parameters.dropna('stage').values
         params[:,1] = params[:,1] * dur_ratio
-        likelihood = model_pp.estim_probs(fit_without_pp.magnitudes.dropna('event',how='all').values, params, fit_without_pp.locations.dropna('stage').values.astype(int), n_eve, None, True)
+        likelihood = model_pp.estim_probs(fit_without_pp.magnitudes.dropna('event',how='all').values, params, n_eve, None, True)
 
     return likelihood
 
@@ -321,7 +321,7 @@ def loocv_estimate_func(data, init, participant, func_estimate, func_args=None, 
         epoch_without_pp = init.stacked_epoch_data.where(init.stacked_epoch_data.participant.isin(participants_idx[participants_idx != participant]), drop=True)
     else:
         epoch_without_pp = None
-    model_without_pp = hmp.models.hmp(data_without_pp, epoch_data=epoch_without_pp, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
+    model_without_pp = hmp.models.hmp(data_without_pp, epoch_data=epoch_without_pp, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, min_shape=init.min_shape, distribution=init.distribution, corr_threshold = init.corr_threshold)
 
     #Apply function and return
     estimates = func_estimate(model_without_pp, *func_args)
@@ -372,7 +372,7 @@ def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False
         epoch_pp = init.stacked_epoch_data.where(init.stacked_epoch_data.participant == participant, drop=True)
     else:
         epoch_pp = None
-    model_pp = hmp.models.hmp(data_pp, epoch_data=epoch_pp, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
+    model_pp = hmp.models.hmp(data_pp, epoch_data=epoch_pp, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, min_shape=init.min_shape, distribution=init.distribution, corr_threshold = init.corr_threshold)
 
     #calc ratio average duration and subj duration
     nsubj = len(np.unique(data.participant.values))
@@ -409,7 +409,7 @@ def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False
         parameters = estimate.parameters.values
         parameters[:,:,1] = parameters[:,:,1] * dur_ratio
 
-        likelihood = model_pp.estim_probs_conds(estimate.magnitudes.values, parameters, estimate.locations.dropna('stage').values.astype(int), estimate.mags_map, estimate.pars_map, conds, lkh_only=True)
+        likelihood = model_pp.estim_probs_conds(estimate.magnitudes.values, parameters, estimate.mags_map, estimate.pars_map, conds, lkh_only=True)
     else:
         n_eve = np.max(estimate.event.dropna('event', how='all').values)+1
 
@@ -417,7 +417,7 @@ def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False
         parameters = estimate.parameters.dropna('stage').values
         parameters[:,1] = parameters[:,1] * dur_ratio
 
-        likelihood = model_pp.estim_probs(estimate.magnitudes.dropna('event', how='all').values, parameters, estimate.locations.dropna('stage').values.astype(int), n_eve, None, True)
+        likelihood = model_pp.estim_probs(estimate.magnitudes.dropna('event', how='all').values, parameters, n_eve, None, True)
 
     return likelihood
         
@@ -691,44 +691,37 @@ def get_average_parameters(all_estimates):
 
             magnitudes = np.zeros(estimates[0].magnitudes.shape)        
             parameters = np.zeros(estimates[0].parameters.shape)        
-            locations = np.zeros(estimates[0].locations.shape)        
 
             for pp in range(len(estimates)):
                 magnitudes += estimates[pp].magnitudes
                 parameters += estimates[pp].parameters
-                locations += estimates[pp].locations
 
             mags_average = magnitudes.values / len(estimates)
             params_average = parameters.values / len(estimates)
-            locations_average = locations.values / len(estimates)
 
-            all_average_parameters.append([mags_average, params_average, locations_average])
+            all_average_parameters.append([mags_average, params_average])
 
         #option 3: backward
         elif 'n_events' in estimates[0].dims:
 
             mags_average = [] 
             params_average = [] 
-            locations_average = []
 
             for ev in estimates[0].n_events:
 
                 #get averages
                 magnitudes = np.zeros(estimates[0].sel(n_events=ev).magnitudes.shape)        
                 parameters = np.zeros(estimates[0].sel(n_events=ev).parameters.shape)        
-                locations = np.zeros(estimates[0].sel(n_events=ev).locations.shape)        
 
                 for pp in range(len(estimates)):
                     selected_backward = estimates[pp].sel(n_events=ev)
                     magnitudes += selected_backward.magnitudes
                     parameters += selected_backward.parameters
-                    locations += selected_backward.locations
 
                 mags_average.append(magnitudes.dropna('event').values / len(estimates))
                 params_average.append(parameters.dropna('stage').values / len(estimates))
-                locations_average.append(locations.dropna('stage').values / len(estimates))
 
-            all_average_parameters.append([mags_average, params_average, locations_average])
+            all_average_parameters.append([mags_average, params_average])
     
     if len(all_average_parameters) == 1:
         all_average_parameters = all_average_parameters[0]

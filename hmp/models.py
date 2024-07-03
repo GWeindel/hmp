@@ -60,8 +60,9 @@ class hmp:
         match distribution:
             case 'gamma':
                 from scipy.stats import gamma as sp_dist
-                from hmp.utils import gamma_scale_to_mean, gamma_mean_to_scale
+                from hmp.utils import gamma_scale_to_mean, gamma_mean_to_scale, gamma_mean_to_shape
                 self.scale_to_mean, self.mean_to_scale = gamma_scale_to_mean, gamma_mean_to_scale
+                self.mean_to_shape = gamma_mean_to_shape
             case 'lognormal':
                 from scipy.stats import lognorm as sp_dist
                 from hmp.utils import logn_scale_to_mean,logn_mean_to_scale
@@ -106,6 +107,8 @@ class hmp:
         self.sfreq = sfreq
         self.steps = 1000/self.sfreq
         self.shape = float(shape)
+        if min_shape is None:
+            min_shape = shape
         self.min_shape = float(min_shape)
         self.event_width = event_width
         self.event_width_samples = int(np.round(self.event_width / self.steps))
@@ -947,7 +950,7 @@ class hmp:
                 min_shapes_dev.append(min_shapes.copy())
                 param_dev.append(parameters.copy())
                 i += 1
-                
+        
         if i == max_iteration:
             warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
         return lkh, magnitudes, parameters, eventprobs, min_shapes, np.array(traces), np.array(min_shapes_dev), np.array(param_dev)
@@ -977,24 +980,15 @@ class hmp:
         if self.corr_threshold is not None: #update location when location correlation threshold is used
             min_shapes, parameters = self.update_parameters_correlation(min_shapes, parameters, parameters_prev, eventprobs)
 
-
-        #print(parameters)
-
         return [magnitudes, parameters, min_shapes]
     
     def update_parameters_correlation(self, min_shapes, parameters, parameters_prev, eventprobs):
 
         n_events = eventprobs.shape[2]
-        n_trials = eventprobs.shape[1]
-        n_samples = eventprobs.shape[0]
         
         if n_events > 1 and not np.all(np.isclose(parameters[:,1], parameters[0,1])): #if not on first iteration
 
-            #eventprobs = samples x trials x events
-            
             #calculate correlations between events in eventprobs
-            
-            #based on mean:
             corr = np.corrcoef(np.mean(eventprobs,1).T)[:-1,1:].diagonal()
 
             stage_durations = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters[1:,:]])
@@ -1004,13 +998,10 @@ class hmp:
                 #high correlation and not moving away from each other,
                 if corr[ev] > self.corr_threshold and stage_durations[ev] - stage_durations_prev[ev] < .1:
                     
-                    min_shapes[ev + 1] += .5 #1/parameters[ev + 1, 1] #indexes stages, update by one sample given current param
+                    #increase shape in order to move mean by event_width_samples
+                    min_shapes[ev + 1] = self.mean_to_shape(stage_durations[ev] + self.event_width_samples, parameters[ev + 1, 1])
                     parameters[ev + 1, 0] = min_shapes[ev + 1] if parameters[ev + 1, 0] < min_shapes[ev + 1] else parameters[ev + 1, 0]
     
-                    # make sure new solution is wider than previous iteration
-                    if self.scale_to_mean(parameters[ev + 1, 1],parameters[ev + 1, 0]) <= stage_durations_prev[ev]:
-                        #recalculate scale, make combination with shape 1 sample higher than past solution
-                        parameters[ev + 1, 1] = self.mean_to_scale(stage_durations[ev] + 1, parameters[ev + 1, 0])
                     #NB: correction of other stages not possible, as we don't know in what direction
 
         return min_shapes, parameters
@@ -1222,7 +1213,7 @@ class hmp:
         '''
         Used for the re-estimation in the EM procedure. The likeliest location of 
         the event is computed from eventprobs. The scale parameter are then taken as the average 
-        distance between the events, taking the shape into account.
+        distance between the events, taking the shape into account. The scale parameter is >= 1.
         
         parameters
         ----------
@@ -1244,7 +1235,9 @@ class hmp:
         durations = np.diff(event_times_mean, prepend=0)
         for i, dur in enumerate(durations):
             parameters[i,1] = self.mean_to_scale(dur, parameters[i,0])
-        
+            if parameters[i,1] < 1:
+                parameters[i,1] = 1
+
         return parameters       
     
     def scale_parameters(self, eventprobs=None, n_events=None, averagepos=None):
@@ -1321,9 +1314,7 @@ class hmp:
                         
                 flats_prev = event_loo_results[-1].dropna('stage').parameters.values
                 mags_prev = event_loo_results[-1].dropna('event').magnitudes.values
-                locs_prev = event_loo_results[-1].dropna('stage').locations.values
-
-                events_temp, pars_temp,locs_temp = [],[], []
+                events_temp, pars_temp = [],[]
                 
                 for event in np.arange(n_events + 1):#creating all possible solutions
 
@@ -1333,16 +1324,11 @@ class hmp:
                     temp_flat[event,1] = temp_flat[event,1] + temp_flat[event+1,1] #combine two stages into one
                     temp_flat = np.delete(temp_flat, event+1, axis=0)
                     pars_temp.append(temp_flat)
-
-                    temp_locs = np.copy(locs_prev)
-                    temp_locs = np.delete(temp_locs, event+1, axis=0)
-                    temp_locs[event] = 0
-                    locs_temp.append(temp_locs) 
                 
                 if self.cpus == 1:
                     event_loo_likelihood_temp = []
                     for i in range(len(events_temp)):
-                        event_loo_likelihood_temp.append(self.fit_single(n_events, events_temp[i],pars_temp[i],tolerance=tolerance,max_iteration=max_iteration,maximization=maximization,verbose=False)) #do not specify locs, too restrictive in some situations
+                        event_loo_likelihood_temp.append(self.fit_single(n_events, events_temp[i],pars_temp[i],tolerance=tolerance,max_iteration=max_iteration,maximization=maximization,verbose=False))
                 else:
                     inputs = zip(itertools.repeat(n_events), events_temp, pars_temp,\
                                 itertools.repeat([]), itertools.repeat([]),\
@@ -2126,23 +2112,13 @@ class hmp:
         # #Init pars
         pars = np.zeros((max_event_n+1,2))
         pars[:,0] = self.shape #final gamma parameters during estimation, shape x scale
-        # pars_prop = pars[:n_events+1].copy() #gamma params of current estimation
-        # pars_prop[0,1] = self.mean_to_scale(j*step, self.shape) #initialize gamma_parameters at 1 sample
-        # last_stage = self.mean_to_scale(end-j*step, self.shape) #remainder of time
-        # pars_prop[-1,1] = last_stage
 
         # #Init mags
         mags = np.zeros((max_event_n, self.n_dims)) #final mags during estimation
 
-        #Init min_shapes
-        min_shapes = np.zeros((max_event_n+1,))
-        min_shapes[0:] = self.min_shape
-
         # The first new detected event should be higher than the bias induced by splitting the RT in two random partition
-        #lkhs = self.sliding_event(fix_pars=True, fix_mags=True, method='max', verbose=False)[0]
-        #lkh_prev = np.max(lkhs)
-        lkh_prev =  self.fit_single(n_events, parameters_to_fix=[0,1], magnitudes_to_fix=0, maximization=False, verbose=False).likelihoods.values
-
+        lkhs = self.sliding_event(fix_pars=True, fix_mags=True, method='max', verbose=False)[0]
+        lkh_prev = np.max(lkhs)
 
         if return_estimates:
             estimates = [] #store all n_event solutions
@@ -2151,17 +2127,16 @@ class hmp:
             prev_time = time
             
             #get new parameters
-            mags_props, pars_prop, min_shapes_props = self.propose_fit_params(n_events, by_sample, step, j, mags, pars, min_shapes, end)
+            mags_props, pars_prop = self.propose_fit_params(n_events, by_sample, step, j, mags, pars, end)
             last_stage = pars_prop[n_events,1]
             #Estimate model based on these propositions
             solutions = self.fit_single(n_events, mags_props, pars_prop, None, None,\
                             verbose=False, cpus=1,\
-                            tolerance=tolerance, min_shapes=min_shapes_props)
-
-            #hmp.visu.plot_event_distributions(solutions,self,print_correlations=True,plot_estimated_distris=True)
+                            tolerance=tolerance)
 
             sol_lkh = solutions.likelihoods.values
             sol_sample_new_event = int(np.round(np.sum(self.scale_to_mean(solutions.parameters.values[:n_events,1],solutions.parameters.values[:n_events,0]))))
+
             #Diagnostic plot
             if diagnostic:
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
@@ -2169,6 +2144,7 @@ class hmp:
                 print('Event found at sample ' + str(sol_sample_new_event))
                 print(f'Events at {np.round(np.cumsum(self.scale_to_mean(solutions.parameters.values[:,1], solutions.parameters.values[:,0]))).astype(int)}')
                 print('lkh change: ' + str(solutions.likelihoods.values - lkh_prev))
+
             #check solution
             if sol_lkh - lkh_prev > 0:#accept solution if likelihood improved
             
@@ -2177,16 +2153,10 @@ class hmp:
                 #update mags, params, and min_shapes
                 mags[:n_events] = solutions.magnitudes.values
                 pars[:n_events+1] = solutions.parameters.values
-                min_shapes[:n_events+1] = solutions.min_shapes.values
 
-                print(min_shapes)
-
-                #gamma shape of last estimated event might be artifcially high, reset to min_shape
-                pars[n_events-1,1] = self.mean_to_scale(self.scale_to_mean(pars[n_events-1,1],pars[n_events-1,0]), self.min_shape)
-                pars[n_events-1,0] = self.min_shape
-                min_shapes[n_events-1] = self.min_shape
-
-                print(min_shapes)
+                #reset all pars shapes back to min_shape
+                pars[:,1] = self.mean_to_scale(self.scale_to_mean(pars[:,1],pars[:,0]), self.min_shape)
+                pars[:,0] = self.min_shape
 
                 #store solution
                 if return_estimates:
@@ -2197,7 +2167,7 @@ class hmp:
                 n_events += 1
                 if by_sample:
                     j += 1
-                    time = j * step
+                    time = (j-1) * step
                 else:
                     j = 1
                     time = sol_sample_new_event #sample that is done.
@@ -2216,7 +2186,7 @@ class hmp:
                     time = prev_sample #sample that is done
                 else:
                     j += 1
-                    time = j*step
+                    time = (j-1)*step
             
             pbar.update(int(np.rint(time-prev_time)))
 
@@ -2232,11 +2202,10 @@ class hmp:
             plt.show()
         mags = mags[:n_events, :]
         pars = pars[:n_events+1, :]
-        min_shapes = min_shapes[:n_events+1]
         if n_events > 0:
             pars[:,1] = self.mean_to_scale(self.scale_to_mean(pars[:,1],pars[:,0]), self.min_shape)
             pars[:,0] = self.min_shape
-            fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, min_shapes=min_shapes, verbose=verbose, cpus=1)
+            fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose, cpus=1)
         else:
             warn('Failed to find more than two stages, returning None')
             fit = None
@@ -2250,36 +2219,30 @@ class hmp:
     
 
 
-    def propose_fit_params(self, n_events, by_sample, step, j, mags, pars, min_shapes, end):
+    def propose_fit_params(self, n_events, by_sample, step, j, mags, pars, end):
 
         if by_sample and n_events > 1: #go through the whole range sample-by-sample, j is sample since start
                 
-                scale_j = self.mean_to_scale(step*j, self.shape)
+            scale_j = self.mean_to_scale(step*j, self.shape)
 
-                #New parameter proposition
-                pars_prop = pars[:n_events].copy() #pars so far
-                n_event_j = np.argwhere(scale_j > np.cumsum(pars_prop[:,1])) + 2 #counting from 1
-                n_event_j = np.max(n_event_j) if len(n_event_j) > 0 else 1
-                n_event_j = np.min([n_event_j, n_events]) #do not insert even after last stage
+            #New parameter proposition
+            pars_prop = pars[:n_events].copy() #pars so far
+            n_event_j = np.argwhere(scale_j > np.cumsum(pars_prop[:,1])) + 2 #counting from 1
+            n_event_j = np.max(n_event_j) if len(n_event_j) > 0 else 1
+            n_event_j = np.min([n_event_j, n_events]) #do not insert event after last stage
 
-                #insert j at right spot, subtract prev scales
-                pars_prop = np.insert(pars_prop, n_event_j-1, [self.shape, scale_j - np.sum(pars_prop[:n_event_j-1,1])],axis=0)
-                #subtract inserted scale from next event
-                pars_prop[n_event_j, 1] =  pars_prop[n_event_j, 1] - pars_prop[n_event_j-1, 1]
-                last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:-1,1])
-                pars_prop[n_events,1] = last_stage
+            #insert j at right spot, subtract prev scales
+            pars_prop = np.insert(pars_prop, n_event_j-1, [self.shape, scale_j - np.sum(pars_prop[:n_event_j-1,1])],axis=0)
+            #subtract inserted scale from next event
+            pars_prop[n_event_j, 1] =  pars_prop[n_event_j, 1] - pars_prop[n_event_j-1, 1]
+            last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:-1,1])
+            pars_prop[n_events,1] = last_stage
 
-                #New location proposition
-                locations_props = locations[:n_events].copy()
-                locations_props[-1] = 0
-                locations_props = np.insert(locations_props, n_event_j, 0)
-                if self.corr_threshold is None:
-                    locations_props[1:-1] = self.location
-
-                mags_props = np.zeros((1,n_events, self.n_dims)) #always 0?
-                mags_props[:,:n_events-1,:] = np.tile(mags[:n_events-1,:], (len(mags_props), 1, 1))
-                #shift new event to correct position
-                mags_props = np.insert(mags_props[:,:-1,:],n_event_j-1,mags_props[:,-1,:],axis=1)
+            # new mags props
+            mags_props = np.zeros((1,n_events, self.n_dims)) #always 0?
+            mags_props[:,:n_events-1,:] = np.tile(mags[:n_events-1,:], (len(mags_props), 1, 1))
+            #shift new event to correct position
+            mags_props = np.insert(mags_props[:,:-1,:],n_event_j-1,mags_props[:,-1,:],axis=1)
 
         else: 
             #New parameter proposition
@@ -2288,10 +2251,6 @@ class hmp:
             scale_last_stage = self.mean_to_scale(end - np.sum(self.scale_to_mean(pars_prop[:-1,1], pars_prop[:-1,0])), self.shape)
             pars_prop[n_events,1] = scale_last_stage
             
-            #New location proposition
-            min_shapes_props = min_shapes[:n_events+1].copy()
-            min_shapes_props[-1] = self.min_shape
-
             #New mags prop
             mags_props = np.zeros((1,n_events, self.n_dims)) 
             mags_props[:,:n_events-1,:] = np.tile(mags[:n_events-1,:], (len(mags_props), 1, 1))
@@ -2299,4 +2258,4 @@ class hmp:
         #in edge cases scale can get negative, make sure that doesn't happen:
         pars_prop[:,1] = np.maximum(pars_prop[:,1],self.mean_to_scale(1, pars_prop[:,0])) 
        
-        return mags_props, pars_prop, min_shapes_props
+        return mags_props, pars_prop
