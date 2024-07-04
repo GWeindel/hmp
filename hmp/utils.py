@@ -232,7 +232,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
                 metadata_i = metadata[y]
             epochs = mne.Epochs(data, meta_events, event_id, tmin, tmax, proj=False,
                     baseline=baseline, preload=True, picks=pick_channels, decim=decim,
-                    verbose=verbose, detrend=1, on_missing = 'warn', event_repeated='drop',
+                    verbose=verbose, detrend=None, on_missing = 'warn', event_repeated='drop',
                     metadata=metadata_i, reject_by_annotation=True, reject=reject_threshold)
             epochs.metadata.rename({'response':'rt'}, axis=1, inplace=True)
             metadata_i = epochs.metadata
