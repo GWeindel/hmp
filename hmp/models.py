@@ -63,6 +63,7 @@ class hmp:
                 from hmp.utils import gamma_scale_to_mean, gamma_mean_to_scale, gamma_mean_to_shape
                 self.scale_to_mean, self.mean_to_scale = gamma_scale_to_mean, gamma_mean_to_scale
                 self.mean_to_shape = gamma_mean_to_shape
+                self.sp_dist = sp_dist
             case 'lognormal':
                 from scipy.stats import lognorm as sp_dist
                 from hmp.utils import logn_scale_to_mean,logn_mean_to_scale
@@ -974,7 +975,7 @@ class hmp:
             # average across trials
         
         #Gamma parameters from Expectation
-        parameters = self.get_parameters(parameters, eventprobs, subset_epochs)
+        parameters = self.get_parameters(parameters, eventprobs, subset_epochs, min_shapes)
 
         #Check correlations, increase shapes if necessary
         if self.corr_threshold is not None: #update location when location correlation threshold is used
@@ -1209,11 +1210,9 @@ class hmp:
             p[np.isnan(p)] = 0 #remove potential nans
         return p
     
-    def get_parameters(self, parameters, eventprobs, subset_epochs=None):
+    def get_parameters(self, parameters, eventprobs, subset_epochs=None, min_shapes=None):
         '''
-        Used for the re-estimation in the EM procedure. The likeliest location of 
-        the event is computed from eventprobs. The scale parameter are then taken as the average 
-        distance between the events, taking the shape into account. The scale parameter is >= 1.
+        Used for the re-estimation in the EM procedure. Best fitting shape and scale parameters are estimated, under the condition that the scale parameter is >= 1 and shape is >= min_shapes.
         
         parameters
         ----------
@@ -1229,14 +1228,34 @@ class hmp:
         '''
          
         #calculate mean location
-        event_times_mean = np.concatenate([np.arange(self.max_d) @ eventprobs.mean(axis=1), [np.mean(self.durations[subset_epochs])-1]])
+        #event_times_mean = np.concatenate([np.arange(self.max_d) @ eventprobs.mean(axis=1), [np.mean(self.durations[subset_epochs])-1]])
 
         #take difference for average durations
-        durations = np.diff(event_times_mean, prepend=0)
-        for i, dur in enumerate(durations):
-            parameters[i,1] = self.mean_to_scale(dur, parameters[i,0])
-            if parameters[i,1] < 1:
-                parameters[i,1] = 1
+        #durations = np.diff(event_times_mean, prepend=0)
+
+        #calculate times of events by trial
+        event_times = np.concatenate((np.arange(self.max_d) @ np.swapaxes(eventprobs,0,1), np.expand_dims(self.durations[subset_epochs]-1,axis=1)),axis=1)
+
+        #take difference for durations
+        durations = np.diff(event_times, prepend=0)
+        
+
+        for ev in range(durations.shape[1]):
+
+            shape, _, scale = self.sp_dist.fit(durations[:,ev],floc=0)
+            parameters[ev,:] = (shape,scale)
+    
+            if parameters[ev,1] < 1: #scale >= 1, adjust shape and set to 1
+                parameters[ev,0] = self.mean_to_shape(self.scale_to_mean(parameters[ev,1],parameters[ev,0]),1)
+                parameters[ev,1] = 1
+
+            if parameters[ev,0] < min_shapes[ev]: #shape >= min_shapes            
+                parameters[ev,1] = self.mean_to_scale(self.scale_to_mean(parameters[ev,1],parameters[ev,0]),min_shapes[ev])
+                parameters[ev,0] = min_shapes[ev]
+
+            #in case scale is again < 0, set to 1
+            if parameters[ev,1] < 1:
+                parameters[ev,1] = 1
 
         return parameters       
     
@@ -2155,8 +2174,8 @@ class hmp:
                 pars[:n_events+1] = solutions.parameters.values
 
                 #reset all pars shapes back to min_shape
-                pars[:,1] = self.mean_to_scale(self.scale_to_mean(pars[:,1],pars[:,0]), self.min_shape)
-                pars[:,0] = self.min_shape
+                pars[:,1] = self.mean_to_scale(self.scale_to_mean(pars[:,1],pars[:,0]), self.shape)
+                pars[:,0] = self.shape
 
                 #store solution
                 if return_estimates:
@@ -2203,8 +2222,8 @@ class hmp:
         mags = mags[:n_events, :]
         pars = pars[:n_events+1, :]
         if n_events > 0:
-            pars[:,1] = self.mean_to_scale(self.scale_to_mean(pars[:,1],pars[:,0]), self.min_shape)
-            pars[:,0] = self.min_shape
+            pars[:,1] = self.mean_to_scale(self.scale_to_mean(pars[:,1],pars[:,0]), self.shape)
+            pars[:,0] = self.shape
             fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose, cpus=1)
         else:
             warn('Failed to find more than two stages, returning None')
