@@ -177,12 +177,12 @@ def simulate(sources, n_trials, n_jobs, file, relations=None, data_type='eeg', n
             trial_time_nonseq =  np.sum(rand_times[~seq_index], axis=0)
             trial_time = np.maximum(trial_time_seq, trial_time_nonseq)
         trial_time /= 1000 #to seconds
-        trial_time[1:] += trial_time[:-1]
+        trial_time[1:] += trial_time[:-1]+.5
         trial_time = np.cumsum(trial_time)
         #Build simulator
         files_subj = []
         source_simulator = mne.simulation.SourceSimulator(src, tstep=tstep, first_samp=0, \
-                    duration=trial_time[-1]+ np.sum(rand_times[:,-1])/1000+2)#add 2sec to the end of the last trial
+                    duration=trial_time[-1]+10)#add 10sec to the end of the last trial
         if n_subj == 1: subj_file = file + f'_raw.fif'
         else: subj_file = file + f'_{subj}_raw.fif'
         if subj_file in os.listdir(path) and not overwrite:
