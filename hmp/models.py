@@ -2085,7 +2085,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=None, verbose=True, end=None, tolerance=1e-3, diagnostic=False, return_estimates=False, by_sample=False, pval = .001):
+    def fit(self, step=None, verbose=True, end=None, tolerance=1e-3, diagnostic=False, return_estimates=False, by_sample=False, pval = .1):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
