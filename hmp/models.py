@@ -14,6 +14,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from hmp import utils
 from itertools import cycle, product
 from scipy.stats import sem
+from scipy.stats import norm as norm_pval 
 import gc
 
 try:
@@ -2084,7 +2085,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=None, verbose=True, end=None, tolerance=1e-3, diagnostic=False, return_estimates=False, by_sample=False):
+    def fit(self, step=None, verbose=True, end=None, tolerance=1e-3, diagnostic=False, return_estimates=False, by_sample=False, pval = .001):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -2109,6 +2110,8 @@ class hmp:
              by_sample : bool
                 try every sample as the starting point, even if a later event has already
                 been identified. This in case the method jumped over a local maximum in an earlier estimation.
+             pval: float
+                 p-value for the detection of the first event, test the first location for significance compared to a distribution of noise estimates
          
          Returns: 
          	 A the fitted HMP mo
@@ -2138,9 +2141,8 @@ class hmp:
         locations[1:-1] = self.location
 
         # The first new detected event should be higher than the bias induced by splitting the RT in two random partition
-        lkhs = self.sliding_event(fix_pars=True, fix_mags=True, method='max', verbose=False)[0]
-        lkh_prev = np.max(lkhs)
-        
+        lkh = self.fit_single(1, maximization=False, starting_points=100, return_max=False, verbose=False)
+        lkh_prev = lkh.likelihoods.mean() + lkh.likelihoods.std()*norm_pval.ppf(1-pval)
         if return_estimates:
             estimates = [] #store all n_event solutions
         # Iterative fit, stop at half an event width as otherwise can get stuck for a while
