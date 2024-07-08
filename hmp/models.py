@@ -15,6 +15,7 @@ from hmp import utils
 from itertools import cycle, product
 from scipy.stats import sem
 import gc
+import scipy as sp
 
 try:
     __IPYTHON__
@@ -976,6 +977,7 @@ class hmp:
         
         #Gamma parameters from Expectation
         parameters = self.get_parameters(parameters, eventprobs, subset_epochs, min_shapes)
+        #print(parameters)
 
         #Check correlations, increase shapes if necessary
         if self.corr_threshold is not None: #update location when location correlation threshold is used
@@ -998,7 +1000,7 @@ class hmp:
             for ev in range(n_events-1):
                 #high correlation and not moving away from each other,
                 if corr[ev] > self.corr_threshold and stage_durations[ev] - stage_durations_prev[ev] < .1:
-                    
+                    print('CORRELATION CORRECTION')
                     #increase shape in order to move mean by event_width_samples
                     min_shapes[ev + 1] = self.mean_to_shape(stage_durations[ev] + self.event_width_samples, parameters[ev + 1, 1])
                     parameters[ev + 1, 0] = min_shapes[ev + 1] if parameters[ev + 1, 0] < min_shapes[ev + 1] else parameters[ev + 1, 0]
@@ -1234,28 +1236,77 @@ class hmp:
         #durations = np.diff(event_times_mean, prepend=0)
 
         #calculate times of events by trial
-        event_times = np.concatenate((np.arange(self.max_d) @ np.swapaxes(eventprobs,0,1), np.expand_dims(self.durations[subset_epochs]-1,axis=1)),axis=1)
+        # event_times = np.concatenate((np.arange(self.max_d) @ np.swapaxes(eventprobs,0,1), np.expand_dims(self.durations[subset_epochs]-1,axis=1)),axis=1)
+        # durations = np.diff(event_times, prepend=0)
+        #sample on mean eventprobs
+        # n_events = parameters.shape[0]
+        # eventprobs_mean = eventprobs.mean(axis=1) #get mean event probs
+        # my_cdf = np.cumsum(eventprobs_mean,axis=0) #get cdfs
 
-        #take difference for durations
-        durations = np.diff(event_times, prepend=0)
+        # event_times = np.zeros((100000,n_events)) #get 10k random 'trials'
+        # for ev in range(n_events-1):
+        #     func_ppf = sp.interpolate.interp1d(my_cdf[:,ev], np.arange(self.max_d), fill_value='extrapolate')
+        #     event_times[:,ev] = func_ppf(np.random.uniform(size=100000))
+
+        # #add RT
+        # event_times[:,n_events-1] = np.random.choice(self.durations[:]-1, 100000)
+
+        # #take difference for durations
+        # durations = np.diff(event_times, prepend=0)
+        # durations = durations[durations.min(axis=1)>0,:] #remove trials with negatives
+        # print(durations.shape)
+
+
+        #sample by trial
+        n_samp = 10
+        n_events = parameters.shape[0] - 1
+        n_trials = eventprobs.shape[1]
+        if subset_epochs is None: #all trials
+            subset_epochs = range(n_trials)
+            
         
+        #eventprobs_mean = eventprobs.mean(axis=1) #get mean event probs
+        durations = np.zeros((n_samp * n_trials,n_events+1))
+        for trial in range(n_trials):
+           
+            trial_cdfs = np.cumsum(eventprobs[:,trial,:],axis=0) #get cdfs
+            #print(trial_cdfs.shape)
+
+            event_times = np.zeros((n_samp,n_events+1))
+            #x = np.random.uniform(size=(n_samp,n_events)) #get random numbers for samples
+            #use the same random number for all events on trial to make sure seriality
+            x = np.tile(np.random.uniform(size=(n_samp,1)), (1,n_events))
+            for i, y in enumerate(x): #for each random sample, get time sample for each event
+                event_times[i,:n_events] = np.argmin(np.abs(trial_cdfs - y),axis=0)
+            
+            #add RT
+            event_times[:,-1] = self.durations[subset_epochs][trial]-1
+            
+            #make this into durations by trial, so we can filter out negative ones and replace
+            durations[(trial*n_samp):((trial+1)*n_samp),:] = np.diff(event_times, prepend=0)
+     
+
+
+        durations = durations[durations.min(axis=1)>0,:] #remove trials with negatives
+        print(durations.shape[0])
 
         for ev in range(durations.shape[1]):
 
-            shape, _, scale = self.sp_dist.fit(durations[:,ev],floc=0)
+            shape, _, scale = self.sp_dist.fit(durations[:,ev], parameters[ev,0],floc=0, scale=parameters[ev,1], method='MM') #,f0=2)
             parameters[ev,:] = (shape,scale)
     
-            if parameters[ev,1] < 1: #scale >= 1, adjust shape and set to 1
-                parameters[ev,0] = self.mean_to_shape(self.scale_to_mean(parameters[ev,1],parameters[ev,0]),1)
-                parameters[ev,1] = 1
+            scale_lim = 1
+            if parameters[ev,1] < scale_lim: #scale >= 1, adjust shape and set to 1
+                parameters[ev,0] = self.mean_to_shape(self.scale_to_mean(parameters[ev,1],parameters[ev,0]),scale_lim)
+                parameters[ev,1] = scale_lim
 
             if parameters[ev,0] < min_shapes[ev]: #shape >= min_shapes            
                 parameters[ev,1] = self.mean_to_scale(self.scale_to_mean(parameters[ev,1],parameters[ev,0]),min_shapes[ev])
                 parameters[ev,0] = min_shapes[ev]
 
             #in case scale is again < 0, set to 1
-            if parameters[ev,1] < 1:
-                parameters[ev,1] = 1
+            if parameters[ev,1] < scale_lim:
+                parameters[ev,1] = scale_lim
 
         return parameters       
     
