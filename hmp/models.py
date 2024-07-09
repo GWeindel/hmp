@@ -1249,57 +1249,49 @@ class hmp:
             scale_default = self.mean_to_scale(durations_mean[ev], parameters[ev,0])
             if scale_default < scale_lim:
                 scale_default = scale_lim
-            shape_step_size = self.mean_to_shape(self.event_width_samples*2, scale_default)
-
+           
+            shape_step_size = self.mean_to_shape(self.event_width_samples, scale_default)
+            
             #allow shape change every 5th iteration
-            #if iteration == None or (iteration+1) % 5 > 0:
-            #    parameters[ev,1] = scale_default
-            #else:
-            tmp_params = parameters.copy()
-            tmp_params[ev,1] = scale_default
-            default_lkh, _ = self.estim_probs(magnitudes, tmp_params, parameters.shape[0]-1)
+            if iteration == None or (iteration+1) % 5 > 0:
+                parameters[ev,1] = scale_default
+            else:
 
-            #default_lkh = self.sp_dist.logpdf(durations[:,ev], parameters[ev,0], loc=0, scale=scale_default).sum()
+                default_lkh = self.sp_dist.logpdf(durations[:,ev], parameters[ev,0], loc=0, scale=scale_default).sum()
 
-            #options:
-            #current shape = min_shape => can only try up
-            shape_up = parameters[ev,0] + shape_step_size
-            scale_up = self.mean_to_scale(durations_mean[ev], shape_up)
-
-            #make sure scale >= scale_lim
-            if scale_up < scale_lim:
-                scale_up = scale_lim
-
-            #up_lkh = self.sp_dist.logpdf(durations[:,ev], shape_up, loc=0, scale=scale_up).sum()
-            tmp_params[ev,1] = scale_up
-            tmp_params[ev,0] = shape_up
-            up_lkh, _ = self.estim_probs(magnitudes, tmp_params, parameters.shape[0]-1)
-
-            #current shape > min_shape, also down
-            down_lkh = -np.inf
-            if parameters[ev,0] > min_shapes[ev]:
-                shape_down = np.max([parameters[ev,0] - shape_step_size, min_shapes[ev]])
-                scale_down = self.mean_to_scale(durations_mean[ev], shape_down)
+                #options:
+                #current shape = min_shape => can only try up
+                shape_up = parameters[ev,0] + shape_step_size
+                scale_up = self.mean_to_scale(durations_mean[ev], shape_up)
 
                 #make sure scale >= scale_lim
-                if scale_down < scale_lim: #probably unnecessary
-                    scale_down = scale_lim
+                if scale_up < scale_lim:
+                    scale_up = scale_lim
 
-                #down_lkh = self.sp_dist.logpdf(durations[:,ev], shape_down, loc=0, scale=scale_down).sum()
-                tmp_params[ev,1] = scale_down
-                tmp_params[ev,0] = shape_down
-                down_lkh, _ = self.estim_probs(magnitudes, tmp_params, parameters.shape[0]-1)
+                up_lkh = self.sp_dist.logpdf(durations[:,ev], shape_up, loc=0, scale=scale_up).sum()
 
-            #select best outcome
-            match np.argmax([default_lkh, up_lkh, down_lkh]):
-                case 0:
-                    parameters[ev,1] = scale_default
-                case 1:
-                    parameters[ev,0] = shape_up
-                    parameters[ev,1] = scale_up
-                case 2:
-                    parameters[ev,0] = shape_down
-                    parameters[ev,1] = scale_down
+                #current shape > min_shape, also down
+                down_lkh = -np.inf
+                if parameters[ev,0] > min_shapes[ev]:
+                    shape_down = np.max([parameters[ev,0] - shape_step_size, min_shapes[ev]])
+                    scale_down = self.mean_to_scale(durations_mean[ev], shape_down)
+
+                    #make sure scale >= scale_lim
+                    if scale_down < scale_lim: #probably unnecessary
+                        scale_down = scale_lim
+
+                    down_lkh = self.sp_dist.logpdf(durations[:,ev], shape_down, loc=0, scale=scale_down).sum()
+
+                #select best outcome
+                match np.argmax([default_lkh, up_lkh, down_lkh]):
+                    case 0:
+                        parameters[ev,1] = scale_default
+                    case 1:
+                        parameters[ev,0] = shape_up
+                        parameters[ev,1] = scale_up
+                    case 2:
+                        parameters[ev,0] = shape_down
+                        parameters[ev,1] = scale_down
 
         return parameters       
     
