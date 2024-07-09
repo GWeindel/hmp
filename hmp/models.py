@@ -939,7 +939,7 @@ class hmp:
                                 locations[pars_map[:,p] == p_set,p] = np.max(locations[pars_map[:,p] == p_set,p],axis=0)
 
                 else: #general
-                    magnitudes, parameters, min_shapes = self.get_magnitudes_parameters_expectation(eventprobs, parameters, parameters_prev, min_shapes)
+                    magnitudes, parameters, min_shapes = self.get_magnitudes_parameters_expectation(eventprobs, parameters, parameters_prev, min_shapes,i)
                     magnitudes[magnitudes_to_fix,:] = initial_magnitudes[magnitudes_to_fix,:].copy()
                     parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
 
@@ -958,7 +958,7 @@ class hmp:
         return lkh, magnitudes, parameters, eventprobs, min_shapes, np.array(traces), np.array(min_shapes_dev), np.array(param_dev)
 
 
-    def get_magnitudes_parameters_expectation(self, eventprobs, parameters, parameters_prev, min_shapes, subset_epochs=None):
+    def get_magnitudes_parameters_expectation(self, eventprobs, parameters, parameters_prev, min_shapes, i, subset_epochs=None):
         n_events = eventprobs.shape[2]
         n_trials = eventprobs.shape[1]
         if subset_epochs is None: #all trials
@@ -976,12 +976,13 @@ class hmp:
             # average across trials
         
         #Gamma parameters from Expectation
-        parameters = self.get_parameters(parameters, eventprobs, subset_epochs, min_shapes)
-        #print(parameters)
+        parameters = self.get_parameters(parameters, eventprobs, subset_epochs, min_shapes,i,magnitudes)
+        print(parameters)
 
         #Check correlations, increase shapes if necessary
         if self.corr_threshold is not None: #update location when location correlation threshold is used
             min_shapes, parameters = self.update_parameters_correlation(min_shapes, parameters, parameters_prev, eventprobs)
+            print(parameters)
 
         return [magnitudes, parameters, min_shapes]
     
@@ -1212,7 +1213,7 @@ class hmp:
             p[np.isnan(p)] = 0 #remove potential nans
         return p
     
-    def get_parameters(self, parameters, eventprobs, subset_epochs=None, min_shapes=None):
+    def get_parameters(self, parameters, eventprobs, subset_epochs=None, min_shapes=None,iteration=None,magnitudes=None):
         '''
         Used for the re-estimation in the EM procedure. Best fitting shape and scale parameters are estimated, under the condition that the scale parameter is >= 1 and shape is >= min_shapes.
         
@@ -1235,78 +1236,70 @@ class hmp:
         #take difference for average durations
         #durations = np.diff(event_times_mean, prepend=0)
 
+        scale_lim = 1
+
         #calculate times of events by trial
-        # event_times = np.concatenate((np.arange(self.max_d) @ np.swapaxes(eventprobs,0,1), np.expand_dims(self.durations[subset_epochs]-1,axis=1)),axis=1)
-        # durations = np.diff(event_times, prepend=0)
-        #sample on mean eventprobs
-        # n_events = parameters.shape[0]
-        # eventprobs_mean = eventprobs.mean(axis=1) #get mean event probs
-        # my_cdf = np.cumsum(eventprobs_mean,axis=0) #get cdfs
-
-        # event_times = np.zeros((100000,n_events)) #get 10k random 'trials'
-        # for ev in range(n_events-1):
-        #     func_ppf = sp.interpolate.interp1d(my_cdf[:,ev], np.arange(self.max_d), fill_value='extrapolate')
-        #     event_times[:,ev] = func_ppf(np.random.uniform(size=100000))
-
-        # #add RT
-        # event_times[:,n_events-1] = np.random.choice(self.durations[:]-1, 100000)
-
-        # #take difference for durations
-        # durations = np.diff(event_times, prepend=0)
-        # durations = durations[durations.min(axis=1)>0,:] #remove trials with negatives
-        # print(durations.shape)
-
-
-        #sample by trial
-        n_samp = 10
-        n_events = parameters.shape[0] - 1
-        n_trials = eventprobs.shape[1]
-        if subset_epochs is None: #all trials
-            subset_epochs = range(n_trials)
-            
-        
-        #eventprobs_mean = eventprobs.mean(axis=1) #get mean event probs
-        durations = np.zeros((n_samp * n_trials,n_events+1))
-        for trial in range(n_trials):
-           
-            trial_cdfs = np.cumsum(eventprobs[:,trial,:],axis=0) #get cdfs
-            #print(trial_cdfs.shape)
-
-            event_times = np.zeros((n_samp,n_events+1))
-            #x = np.random.uniform(size=(n_samp,n_events)) #get random numbers for samples
-            #use the same random number for all events on trial to make sure seriality
-            x = np.tile(np.random.uniform(size=(n_samp,1)), (1,n_events))
-            for i, y in enumerate(x): #for each random sample, get time sample for each event
-                event_times[i,:n_events] = np.argmin(np.abs(trial_cdfs - y),axis=0)
-            
-            #add RT
-            event_times[:,-1] = self.durations[subset_epochs][trial]-1
-            
-            #make this into durations by trial, so we can filter out negative ones and replace
-            durations[(trial*n_samp):((trial+1)*n_samp),:] = np.diff(event_times, prepend=0)
-     
-
-
-        durations = durations[durations.min(axis=1)>0,:] #remove trials with negatives
-        print(durations.shape[0])
-
+        event_times = np.concatenate((np.arange(self.max_d) @ np.swapaxes(eventprobs,0,1), np.expand_dims(self.durations[subset_epochs]-1,axis=1)),axis=1)
+        durations = np.diff(event_times, prepend=0)
+        durations_mean = durations.mean(axis=0)
+                
         for ev in range(durations.shape[1]):
 
-            shape, _, scale = self.sp_dist.fit(durations[:,ev], parameters[ev,0],floc=0, scale=parameters[ev,1], method='MM') #,f0=2)
-            parameters[ev,:] = (shape,scale)
-    
-            scale_lim = 1
-            if parameters[ev,1] < scale_lim: #scale >= 1, adjust shape and set to 1
-                parameters[ev,0] = self.mean_to_shape(self.scale_to_mean(parameters[ev,1],parameters[ev,0]),scale_lim)
-                parameters[ev,1] = scale_lim
+            #calculate standard solution
+            scale_default = self.mean_to_scale(durations_mean[ev], parameters[ev,0])
+            if scale_default < scale_lim:
+                scale_default = scale_lim
+            shape_step_size = self.mean_to_shape(self.event_width_samples*2, scale_default)
 
-            if parameters[ev,0] < min_shapes[ev]: #shape >= min_shapes            
-                parameters[ev,1] = self.mean_to_scale(self.scale_to_mean(parameters[ev,1],parameters[ev,0]),min_shapes[ev])
-                parameters[ev,0] = min_shapes[ev]
+            #allow shape change every 5th iteration
+            #if iteration == None or (iteration+1) % 5 > 0:
+            #    parameters[ev,1] = scale_default
+            #else:
+            tmp_params = parameters.copy()
+            tmp_params[ev,1] = scale_default
+            default_lkh, _ = self.estim_probs(magnitudes, tmp_params, parameters.shape[0]-1)
 
-            #in case scale is again < 0, set to 1
-            if parameters[ev,1] < scale_lim:
-                parameters[ev,1] = scale_lim
+            #default_lkh = self.sp_dist.logpdf(durations[:,ev], parameters[ev,0], loc=0, scale=scale_default).sum()
+
+            #options:
+            #current shape = min_shape => can only try up
+            shape_up = parameters[ev,0] + shape_step_size
+            scale_up = self.mean_to_scale(durations_mean[ev], shape_up)
+
+            #make sure scale >= scale_lim
+            if scale_up < scale_lim:
+                scale_up = scale_lim
+
+            #up_lkh = self.sp_dist.logpdf(durations[:,ev], shape_up, loc=0, scale=scale_up).sum()
+            tmp_params[ev,1] = scale_up
+            tmp_params[ev,0] = shape_up
+            up_lkh, _ = self.estim_probs(magnitudes, tmp_params, parameters.shape[0]-1)
+
+            #current shape > min_shape, also down
+            down_lkh = -np.inf
+            if parameters[ev,0] > min_shapes[ev]:
+                shape_down = np.max([parameters[ev,0] - shape_step_size, min_shapes[ev]])
+                scale_down = self.mean_to_scale(durations_mean[ev], shape_down)
+
+                #make sure scale >= scale_lim
+                if scale_down < scale_lim: #probably unnecessary
+                    scale_down = scale_lim
+
+                #down_lkh = self.sp_dist.logpdf(durations[:,ev], shape_down, loc=0, scale=scale_down).sum()
+                tmp_params[ev,1] = scale_down
+                tmp_params[ev,0] = shape_down
+                down_lkh, _ = self.estim_probs(magnitudes, tmp_params, parameters.shape[0]-1)
+
+            #select best outcome
+            match np.argmax([default_lkh, up_lkh, down_lkh]):
+                case 0:
+                    parameters[ev,1] = scale_default
+                case 1:
+                    parameters[ev,0] = shape_up
+                    parameters[ev,1] = scale_up
+                case 2:
+                    parameters[ev,0] = shape_down
+                    parameters[ev,1] = scale_down
 
         return parameters       
     
