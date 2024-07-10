@@ -27,7 +27,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 class hmp:
     
-    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, template=None, min_shape=None, distribution='gamma', corr_threshold=None):
+    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, template=None, min_shape=None, distribution='gamma', corr_threshold=None, estimate_shape=False):
         '''
         This function intializes an HMP model by providing the data, the expected probability distribution for the by-trial variation in stage onset, and the expected duration of the transition event.
 
@@ -115,6 +115,7 @@ class hmp:
         self.event_width = event_width
         self.event_width_samples = int(np.round(self.event_width / self.steps))
         self.corr_threshold = corr_threshold
+        self.estimate_shape = estimate_shape
         
         durations = data.unstack().sel(component=0).rename({'epochs':'trials'})\
             .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
@@ -885,6 +886,7 @@ class hmp:
             lkh_prev = lkh
             parameters_prev = parameters.copy()
             min_shapes_prev = min_shapes.copy()
+            shape_updated = False
 
             while i < max_iteration :#Expectation-Maximization algorithm
                 if self.corr_threshold is None: #standard threshold
@@ -899,7 +901,7 @@ class hmp:
                     stage_durations = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters])
                     stage_durations_prev = np.array([self.scale_to_mean(x[0],x[1]) for x in parameters_prev])
 
-                    if i >= min_iteration and (np.isneginf(lkh) or (min_shapes == min_shapes_prev).all() and tolerance > (lkh-lkh_prev)/np.abs(lkh_prev) and (np.abs(stage_durations-stage_durations_prev) < .1).all()):
+                    if i >= min_iteration and (np.isneginf(lkh) or (min_shapes == min_shapes_prev).all() and tolerance > (lkh-lkh_prev)/np.abs(lkh_prev) and (np.abs(stage_durations-stage_durations_prev) < .1).all() and (parameters[:,0] == parameters_prev[:,0]).all()):
                         if np.isneginf(lkh): #print a warning if log-likelihood is -inf, 
                                              #as this typically happens when no good solution exits
                             print('-!- Estimation stopped because of -inf log-likelihood: this typically indicates requesting too many and/or too closely spaced events -!-')
@@ -939,7 +941,7 @@ class hmp:
                                 locations[pars_map[:,p] == p_set,p] = np.max(locations[pars_map[:,p] == p_set,p],axis=0)
 
                 else: #general
-                    magnitudes, parameters, min_shapes = self.get_magnitudes_parameters_expectation(eventprobs, parameters, parameters_prev, min_shapes,i)
+                    magnitudes, parameters, min_shapes = self.get_magnitudes_parameters_expectation(eventprobs, parameters, parameters_prev, min_shapes)
                     magnitudes[magnitudes_to_fix,:] = initial_magnitudes[magnitudes_to_fix,:].copy()
                     parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
 
@@ -948,6 +950,17 @@ class hmp:
                 else:
                     lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
                 
+                #check lkh, if no significant improvement, also estimate shapes
+                if self.estimate_shape:
+                    #do stuff
+                    if i >= min_iteration and (min_shapes == min_shapes_prev).all() and tolerance > (lkh-lkh_prev)/np.abs(lkh_prev) and not shape_updated:
+                        print("SHAPE UPDATE")
+                        parameters = self.get_parameters(parameters, eventprobs, subset_epochs=range(eventprobs.shape[1]), min_shapes=min_shapes,estimate_shape=True)
+                        lkh, eventprobs = self.estim_probs(magnitudes, parameters, n_events)
+                        shape_updated = True
+                    else:
+                        shape_updated = False
+
                 traces.append(lkh)
                 min_shapes_dev.append(min_shapes.copy())
                 param_dev.append(parameters.copy())
@@ -958,7 +971,7 @@ class hmp:
         return lkh, magnitudes, parameters, eventprobs, min_shapes, np.array(traces), np.array(min_shapes_dev), np.array(param_dev)
 
 
-    def get_magnitudes_parameters_expectation(self, eventprobs, parameters, parameters_prev, min_shapes, i, subset_epochs=None):
+    def get_magnitudes_parameters_expectation(self, eventprobs, parameters, parameters_prev, min_shapes, subset_epochs=None):
         n_events = eventprobs.shape[2]
         n_trials = eventprobs.shape[1]
         if subset_epochs is None: #all trials
@@ -976,13 +989,12 @@ class hmp:
             # average across trials
         
         #Gamma parameters from Expectation
-        parameters = self.get_parameters(parameters, eventprobs, subset_epochs, min_shapes,i,magnitudes)
-        print(parameters)
+        parameters = self.get_parameters(parameters, eventprobs, subset_epochs, min_shapes)
+        #print(parameters)
 
         #Check correlations, increase shapes if necessary
         if self.corr_threshold is not None: #update location when location correlation threshold is used
             min_shapes, parameters = self.update_parameters_correlation(min_shapes, parameters, parameters_prev, eventprobs)
-            print(parameters)
 
         return [magnitudes, parameters, min_shapes]
     
@@ -1213,7 +1225,7 @@ class hmp:
             p[np.isnan(p)] = 0 #remove potential nans
         return p
     
-    def get_parameters(self, parameters, eventprobs, subset_epochs=None, min_shapes=None,iteration=None,magnitudes=None):
+    def get_parameters(self, parameters, eventprobs, subset_epochs=None, min_shapes=None,estimate_shape=False):
         '''
         Used for the re-estimation in the EM procedure. Best fitting shape and scale parameters are estimated, under the condition that the scale parameter is >= 1 and shape is >= min_shapes.
         
@@ -1245,54 +1257,26 @@ class hmp:
                 
         for ev in range(durations.shape[1]):
 
-            #calculate standard solution
-            scale_default = self.mean_to_scale(durations_mean[ev], parameters[ev,0])
-            if scale_default < scale_lim:
-                scale_default = scale_lim
-           
-            shape_step_size = self.mean_to_shape(self.event_width_samples, scale_default)
-            
-            #allow shape change every 5th iteration
-            if iteration == None or (iteration+1) % 5 > 0:
-                parameters[ev,1] = scale_default
+            if estimate_shape == False:
+                #calculate standard solution
+                parameters[ev,1] = np.max([self.mean_to_scale(durations_mean[ev], parameters[ev,0]), scale_lim])
+
             else:
+                #estimate optimal scale AND shape
+                shape, _, scale = self.sp_dist.fit(durations[:,ev], parameters[ev,0],floc=0, scale=parameters[ev,1])
+                parameters[ev,:] = (shape,scale)
 
-                default_lkh = self.sp_dist.logpdf(durations[:,ev], parameters[ev,0], loc=0, scale=scale_default).sum()
+                if parameters[ev,1] < scale_lim: #scale >= 1, adjust shape and set to 1
+                    parameters[ev,0] = self.mean_to_shape(self.scale_to_mean(parameters[ev,1],parameters[ev,0]),scale_lim)
+                    parameters[ev,1] = scale_lim
 
-                #options:
-                #current shape = min_shape => can only try up
-                shape_up = parameters[ev,0] + shape_step_size
-                scale_up = self.mean_to_scale(durations_mean[ev], shape_up)
+                if parameters[ev,0] < min_shapes[ev]: #shape >= min_shapes            
+                    parameters[ev,1] = self.mean_to_scale(self.scale_to_mean(parameters[ev,1],parameters[ev,0]),min_shapes[ev])
+                    parameters[ev,0] = min_shapes[ev]
 
-                #make sure scale >= scale_lim
-                if scale_up < scale_lim:
-                    scale_up = scale_lim
-
-                up_lkh = self.sp_dist.logpdf(durations[:,ev], shape_up, loc=0, scale=scale_up).sum()
-
-                #current shape > min_shape, also down
-                down_lkh = -np.inf
-                if parameters[ev,0] > min_shapes[ev]:
-                    shape_down = np.max([parameters[ev,0] - shape_step_size, min_shapes[ev]])
-                    scale_down = self.mean_to_scale(durations_mean[ev], shape_down)
-
-                    #make sure scale >= scale_lim
-                    if scale_down < scale_lim: #probably unnecessary
-                        scale_down = scale_lim
-
-                    down_lkh = self.sp_dist.logpdf(durations[:,ev], shape_down, loc=0, scale=scale_down).sum()
-
-                #select best outcome
-                match np.argmax([default_lkh, up_lkh, down_lkh]):
-                    case 0:
-                        parameters[ev,1] = scale_default
-                    case 1:
-                        parameters[ev,0] = shape_up
-                        parameters[ev,1] = scale_up
-                    case 2:
-                        parameters[ev,0] = shape_down
-                        parameters[ev,1] = scale_down
-
+                    if parameters[ev,1] < scale_lim: #could theoretically happen again...
+                        parameters[ev,1] = scale_lim
+    
         return parameters       
     
     def scale_parameters(self, eventprobs=None, n_events=None, averagepos=None):
