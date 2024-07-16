@@ -244,7 +244,6 @@ def simulate(sources, n_trials, n_jobs, file, relations=None, data_type='eeg', n
                 if len(rand_i[rand_i<0]) > 0:
                     warn(f'Negative stage duration were found, 1 is imputed for the {len(rand_i[rand_i<0])} trial(s)', UserWarning)
                     rand_i[rand_i<0] = 1
-                print(rand_i)
                 events[random_indices, 0] = events[random_indices,0] + rand_i[random_indices] # Events sample.
                 events[:, 2] = trigger  # All events have the sample id.
                 trigger += 1
@@ -394,6 +393,7 @@ def classification_true(true_topologies,test_topologies):
     corresp_true_idx = np.array(list(mapping_true.keys()))-1#Corresponding true index, excluding 0 event
     idx_true_positive = np.array(list(mapping_true.values()))
     return idx_true_positive, corresp_true_idx 
+    
 def simulated_times_and_parameters(generating_events, init, resampling_freq=None, data=None):
     sfreq = init.sfreq
     n_stages = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
