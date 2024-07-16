@@ -395,7 +395,7 @@ def classification_true(true_topologies,test_topologies):
     return idx_true_positive, corresp_true_idx 
 
 
-def simulated_times_and_parameters(generating_events, init, resampling_freq=None):
+def simulated_times_and_parameters(generating_events, init, resampling_freq=None, data=None):
     sfreq = init.sfreq
     n_stages = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
     n_events = n_stages-1 
@@ -426,6 +426,9 @@ def simulated_times_and_parameters(generating_events, init, resampling_freq=None
                 sample_times[trial,event] = trial_time
             else:
                 sample_times[trial,event] = init.ends[trial]
-    true_activities = init.events[sample_times[:,:]]
+    if data is None: #use crosscorrelated data
+        true_activities = init.events[sample_times[:,:]]
+    else:
+        true_activities = data[sample_times[:,:]]
     true_magnitudes = np.mean(true_activities, axis=0)
     return random_source_times.astype(int), true_parameters, true_magnitudes, true_activities
