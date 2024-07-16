@@ -244,6 +244,7 @@ def simulate(sources, n_trials, n_jobs, file, relations=None, data_type='eeg', n
                 if len(rand_i[rand_i<0]) > 0:
                     warn(f'Negative stage duration were found, 1 is imputed for the {len(rand_i[rand_i<0])} trial(s)', UserWarning)
                     rand_i[rand_i<0] = 1
+                print(rand_i)
                 events[random_indices, 0] = events[random_indices,0] + rand_i[random_indices] # Events sample.
                 events[:, 2] = trigger  # All events have the sample id.
                 trigger += 1
@@ -372,18 +373,18 @@ def classification_true(true_topologies,test_topologies):
         index in the test estimate that correspond to the indexes in corresp_true_idx
         
     '''
-    test_topologies = (test_topologies.copy()-test_topologies.mean())/test_topologies.std()
-    true_topologies = (true_topologies.copy()-true_topologies.mean())/true_topologies.std()
+    test_topologies = (test_topologies.copy()-test_topologies.mean(axis=1))/ test_topologies.std(axis=1)
+    true_topologies = (true_topologies.copy()-true_topologies.mean(axis=1))/true_topologies.std(axis=1)
     true0 = np.vstack((np.zeros(true_topologies.shape[1]), true_topologies))#add a zero electrode event
     classif = np.zeros(test_topologies.shape[0], dtype=int)#array of categorization in true events
     classif_vals = np.zeros(test_topologies.shape[0])#values of the squared diff
     for i, test_ev in enumerate(test_topologies):
         all_distances = np.zeros(len(true0))
         for j, true_ev in enumerate(true0):
-            all_distances[j] = np.sum((test_ev - true_ev)**2)
+            all_distances[j] = np.median(np.abs(true_ev-test_ev))
         classif[i] = np.argmin(all_distances)
         classif_vals[i] = all_distances[classif[i]]
-
+        
     mapping_true = {}
     for test_idx, (idx, val) in enumerate(zip(classif, classif_vals)):
         if idx > 0:
@@ -393,8 +394,6 @@ def classification_true(true_topologies,test_topologies):
     corresp_true_idx = np.array(list(mapping_true.keys()))-1#Corresponding true index, excluding 0 event
     idx_true_positive = np.array(list(mapping_true.values()))
     return idx_true_positive, corresp_true_idx 
-
-
 def simulated_times_and_parameters(generating_events, init, resampling_freq=None, data=None):
     sfreq = init.sfreq
     n_stages = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
