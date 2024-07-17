@@ -982,8 +982,7 @@ class hmp:
         #Magnitudes from Expectation
         for event in range(n_events):
             for comp in range(self.n_dims):
-                magnitudes[event,comp] = np.mean(np.sum( \
-                    eventprobs[:,:,event]*self.data_matrix[:,subset_epochs,comp], axis=0))
+                magnitudes[event,comp] = np.mean(np.sum(eventprobs[:,:,event]*self.data_matrix[:,subset_epochs,comp], axis=0))
             # scale cross-correlation with likelihood of the transition
             # sum by-trial these scaled activation for each transition events
             # average across trials
@@ -1069,23 +1068,34 @@ class hmp:
             durations = self.durations
             starts = self.starts
             ends = self.ends
+            subset_epochs = range(n_trials)
+
 
         gains = np.zeros((self.n_samples, n_events), dtype=np.float64)
         for i in range(self.n_dims):
             # computes the gains, i.e. congruence between the pattern shape
             # and the data given the magnitudes of the sensors
-            gains = gains + self.events[:,i][np.newaxis].T * magnitudes[:,i]-magnitudes[:,i]**2/2
+            gains = gains + (self.events[:,i][np.newaxis].T * magnitudes[:,i]-magnitudes[:,i]**2/2)
+
         gains = np.exp(gains)
+
+        #gains are probabilities, so why not max at 1?
+        #gains = gains / np.max(gains,axis=0)
+
+        #what's happening at 90000 ??
+
         probs = np.zeros([self.max_d, n_trials,n_events], dtype=np.float64) # prob per trial
         probs_b = np.zeros([self.max_d, n_trials,n_events], dtype=np.float64)# Sample and state reversed
         for trial in np.arange(n_trials):
             # Following assigns gain per trial to variable probs 
-            probs[:durations[trial],trial,:] = \
-                gains[starts[trial]:ends[trial]+1,:] 
+            probs[:durations[trial],trial,:] = gains[starts[trial]:ends[trial]+1,:] 
+            #probs[:durations[trial],trial,:] /= np.max(probs[:durations[trial],trial,:],axis=0)
             # Same but samples and events are reversed, this allows to compute
             # fwd and bwd in the same way in the following steps
-            probs_b[:durations[trial],trial,:] = \
-                gains[starts[trial]:ends[trial]+1,:][::-1,::-1]
+            # note that probs_b do start at 0 (so only trial content is mirrored, not NAs)
+            probs_b[:durations[trial],trial,:] = gains[starts[trial]:ends[trial]+1,:][::-1,::-1]
+            #probs_b[:durations[trial],trial,:] /= np.max(probs_b[:durations[trial],trial,:],axis=0)
+
 
         pmf = np.zeros([self.max_d, n_stages], dtype=np.float64) # Gamma pmf for each stage scale
         for stage in range(n_stages):
@@ -1096,10 +1106,8 @@ class hmp:
         backward = np.zeros((self.max_d, n_trials, n_events), dtype=np.float64)
         # Computing forward and backward helper variable
         #  when stage = 0:
-        forward[:,:,0] = np.tile(pmf[:,0][np.newaxis].T,\
-            (1,n_trials))*probs[:,:,0] #first stage transition is p(B) * p(d)
-        backward[:,:,0] = np.tile(pmf_b[:,0][np.newaxis].T,\
-                    (1,n_trials)) #Reversed gamma (i.e. last stage) without probs as last event ends at time T
+        forward[:,:,0] = np.tile(pmf[:,0][np.newaxis].T, (1,n_trials))*probs[:,:,0] #first stage transition is p(B) * p(d)
+        backward[:,:,0] = np.tile(pmf_b[:,0][np.newaxis].T, (1,n_trials)) #Reversed gamma (i.e. last stage) without probs as last event ends at time T
 
         for event in np.arange(1,n_events):#Following stage transitions integrate previous transitions
             add_b = backward[:,:,event-1]*probs_b[:,:,event-1]#Next stage in back
@@ -1109,11 +1117,11 @@ class hmp:
                 # same but backwards
                 backward[:,trial,event] = self.convolution(add_b[:,trial], pmf_b[:, event])[:self.max_d]
             forward[:,:,event] = forward[:,:,event]*probs[:,:,event]
+        
         #re-arranging backward to the expected variable
         backward = backward[:,:,::-1]#undoes stage inversion
         for trial in np.arange(n_trials):#Undoes sample inversion
-            backward[:durations[trial],trial,:] = \
-                backward[:durations[trial],trial,:][::-1]
+            backward[:durations[trial],trial,:] = backward[:durations[trial],trial,:][::-1]
         
         eventprobs = forward * backward
         eventprobs = np.clip(eventprobs, 0, None) #floating point precision error
@@ -1137,11 +1145,24 @@ class hmp:
             else:
                 eventprobs = eventprobs / eventprobs.sum(axis=0)
 
-        else:
 
-            likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
+
+
+
+        else:
+            likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0))) #sum over max_samples to avoid 0s in log
+
             eventprobs = eventprobs / eventprobs.sum(axis=0)
         #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
+
+        #include likelihood of stage times give pmf            
+        event_times = np.concatenate((np.arange(self.max_d) @ np.swapaxes(eventprobs,0,1), np.expand_dims(self.durations[subset_epochs]-1,axis=1)),axis=1)
+        durations = np.diff(event_times, prepend=0)
+        lkh_dist = np.zeros((n_events+1))
+        for ev in range(n_events+1):
+            lkh_dist[ev] = self.sp_dist.logpdf(durations[:,ev], parameters[ev,0], loc=0, scale=parameters[ev,1]).sum()
+
+        likelihood = likelihood * n_events + np.sum(lkh_dist)
 
         if lkh_only:
             return likelihood
