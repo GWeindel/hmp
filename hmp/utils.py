@@ -513,7 +513,7 @@ def _standardize(x):
 
 def _center(data):
     '''
-    zscore of the data
+    center the data
     '''
     mean_last_dim = np.nanmean(data.values, axis=-1)
     mean_last_dim_expanded = np.expand_dims(mean_last_dim, axis=-1)
@@ -623,7 +623,7 @@ def _pca(pca_ready_data, n_comp, channels):
     pca_weights = xr.DataArray(pca.components_.T, dims=("channels","component"), coords=coords)
     return pca_weights
 
-def transform_data(data, participants_variable="participant", apply_standard=False, averaged=False, apply_zscore='trial', zscore_acrossPCs=False, method='pca', cov=True, centering=True, n_comp=None, n_ppcas=None, pca_weights=None, bandfilter=None, mcca_reg=0):
+def transform_data(epoch_data, participants_variable="participant", apply_standard=False, averaged=False, apply_zscore='trial', zscore_acrossPCs=False, method='pca', cov=True, centering=True, n_comp=None, n_ppcas=None, pca_weights=None, bandfilter=None, mcca_reg=0):
     '''
     Adapts EEG epoched data (in xarray format) to the expected data format for hmps. 
     First this code can apply standardization of individual variances (if apply_standard=True).
@@ -668,7 +668,10 @@ def transform_data(data, participants_variable="participant", apply_standard=Fal
     data : xarray.Dataset
         xarray dataset [n_samples * n_comp] data expressed in the PC space, ready for HMP fit
     '''
-    data = data.copy()
+    # With xarray '2024.2.0' copying is failing, to be on the safe side the data is re-injected into a new dataset
+    np_data = epoch_data.values
+    data = xr.DataArray(np_data, dims=epoch_data.dims, coords=epoch_data.coords)
+    
     if isinstance(data, xr.DataArray):
         raise ValueError('Expected a xarray Dataset with data and event as DataArrays, check the data format')
     if not apply_zscore in ['all', 'participant', 'trial'] and not isinstance(apply_zscore,bool):
