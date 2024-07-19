@@ -271,7 +271,7 @@ def simulate(sources, n_trials, n_jobs, file, relations=None, data_type='eeg', n
             data = raw.get_data()
             for event in range(n_events):
                 times_out = generating_events[generating_events[:,2] == event+2,0]
-                snr[0,:,event,:] = data[:, times_out+event_duration//2+1]
+                snr[0,:,event,:] = data[:, times_out]
             if noise:
                 cov = mne.make_ad_hoc_cov(raw.info, verbose=verbose)
                 mne.simulation.add_noise(raw, cov,  verbose=verbose,iir_filter=[0.2, -0.2, 0.04], random_state=random_state)
