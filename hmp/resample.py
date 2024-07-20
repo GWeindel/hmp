@@ -42,6 +42,7 @@ def _gen_dataset(data, dim, n_iterations):
 
 def _bootstrapped_run(fit, data, dim, indexes, order, init, n_iter, use_starting_points, rerun_pca, pca_weights, summarize, verbose, cpus, trace, path):
     sfreq = init.sfreq
+    print(true)
     resampled_data = data.loc[{dim:list(indexes)}].unstack().transpose(*order)
     if '_x_' in dim:
         dim = dim.split('_x_')
@@ -66,7 +67,8 @@ def _bootstrapped_run(fit, data, dim, indexes, order, init, n_iter, use_starting
         init_boot = classhmp(hmp_data_boot, sfreq=sfreq, event_width=init.event_width, cpus=1,
                         shape=init.shape, template=init.template,
                         location=init.location, distribution=init.distribution)
-    estimates_boot = init_boot.fit_single(fit.magnitudes.shape[0], verbose=verbose, parameters=fit.parameters,
+    print(true)
+    estimates_boot = init_boot.fit_single(fit.magnitudes.sizes['event'], verbose=verbose, parameters=fit.parameters,
                                          magnitudes=fit.magnitudes)
     if trace:
         save_eventprobs(estimates_boot.eventprobs, path+str(n_iter)+'.nc')
@@ -132,7 +134,7 @@ def bootstrapping(fit, data, dim, n_iterations, init, use_starting_points=True,
     if verbose:
         print(f'Bootstrapping {data_type} on {n_iterations} iterations')
     data_views, data, dim, order = _gen_dataset(data, dim, n_iterations)
-    
+
     inputs = zip(itertools.repeat(fit), itertools.repeat(data), itertools.repeat(dim), data_views, itertools.repeat(order), 
                 itertools.repeat(init),  np.arange(n_iterations),
                 itertools.repeat(use_starting_points),
