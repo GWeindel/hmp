@@ -8,6 +8,7 @@ import numpy as np
 import mne
 from mne.datasets import sample
 from warnings import warn
+from copy import deepcopy
 
 def available_sources(subselection=True):
     '''
@@ -267,23 +268,25 @@ def simulate(sources, n_trials, n_jobs, file, relations=None, data_type='eeg', n
                 raw = raw.pick_types(meg=True, eeg=False, stim=True)
             elif data_type == 'eeg/meg':
                 raw = raw.pick_types(meg=True, eeg=True, stim=True)
-            snr = np.zeros((2,len(info['ch_names']), n_events, n_trials))
-            data = raw.get_data()
-            for event in range(n_events):
-                times_out = generating_events[generating_events[:,2] == event+2,0]
-                snr[0,:,event,:] = data[:, times_out]
+            if save_snr:
+                snr = np.zeros((len(info['ch_names']), n_events))
+                data = deepcopy(raw.get_data())
+                for event in range(n_events):
+                    times_out = generating_events[generating_events[:,2] == event+2,0]
+                    snr[:,event] = np.mean((data[:, times_out])**2, axis=-1)
             if noise:
                 cov = mne.make_ad_hoc_cov(raw.info, verbose=verbose)
                 mne.simulation.add_noise(raw, cov,  verbose=verbose,iir_filter=[0.2, -0.2, 0.04], random_state=random_state)
-            data = raw.get_data()
-            for event in range(n_events):
-                times_out = generating_events[generating_events[:,2] == event+2,0]
-                snr[1,:,event,:] = data[:, times_out+event_duration//2+1]
+
             raw.save(subj_file, overwrite=True)
             files_subj.append(subj_file)
             np.save(subj_file.split('.fif')[0]+'_generating_events.npy', generating_events)
             files_subj.append(subj_file.split('.fif')[0]+'_generating_events.npy')
             if save_snr:
+                data = raw.get_data()
+                for event in range(n_events):
+                    times_out = generating_events[generating_events[:,2] == event+2,0]
+                    snr[:,event] /= np.var(data[:, times_out], axis=-1)
                 np.save(subj_file.split('.fif')[0]+'_snr.npy', snr)
                 files_subj.append(subj_file.split('.fif')[0]+'_snr.npy')
             files.append(files_subj)
