@@ -18,36 +18,19 @@ jobs:
         with:
           python-version: '3.x'
       - name: Install dependencies
-        run: >-
-          python3 -m
-          pip install
-          build
-          --user
-      - run: python3 -m build
-      - uses: actions/upload-artifact@v3
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+      - run: python -m build --sdist --wheel
+      - run: twine check --strict dist/*
+      - uses: actions/upload-artifact@v4
         with:
-          name: python-package-distributions
-          path: dist/
+          name: dist
+          path: dist
 
-
-
-  pypi-upload:
-    needs: package
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write  # for trusted publishing
-    environment:
-      name: pypi
-      url: https://pypi.org/p/hmp
-    steps:
-      - uses: actions/upload-artifact@v3
-        with:
-          name: python-package-distributions
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
 
   release-new-version:
-    needs: pyi-upload
+    needs: package
     runs-on: ubuntu-latest
     permissions:
       contents: write # for making GitHub Releases
@@ -57,8 +40,8 @@ jobs:
           version_number: .github/labeler.yml
       - uses: actions/download-artifact@v3
         with:
-          name: python-package-distributions
-          path: dist/
+          name: dist
+          path: dist
       - name: Create Release
         uses: actions/create-release@v1
         env:
@@ -66,3 +49,20 @@ jobs:
         with:
           tag_name: ${{ version_number }}
           release_name: Release ${{ version_number }}
+
+  pypi-upload:
+    needs: release-new-version
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # for trusted publishing
+    environment:
+      name: pypi
+      url: https://pypi.org/p/hmp
+    steps:
+      - uses: actions/upload-artifact@v3
+        with:
+          name: dist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+
