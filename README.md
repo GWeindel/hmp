@@ -19,10 +19,6 @@ As a summary of the method, an HMP model parses the reaction time into a number 
 
 # Documentation
 
-> [!WARNING]
-> An update is coming soon, to have the exact same behavior as in this README install by cloning the Github repo (last option)!
-
-
 The package is available through *pip*.
 A way of using the package is to use a conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
 
