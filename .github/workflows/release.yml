@@ -11,7 +11,11 @@ on:  # yamllint disable-line rule:truthy
     branches:
       - main
 
+<<<<<<< Updated upstream
       
+=======
+
+>>>>>>> Stashed changes
 jobs:
   package:
     runs-on: ubuntu-latest
