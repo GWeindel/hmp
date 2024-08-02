@@ -2085,7 +2085,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=None, verbose=True, end=None, tolerance=1e-3, diagnostic=False, return_estimates=False, by_sample=False, pval = .1):
+    def fit(self, step=None, verbose=True, end=None, tolerance=1e-3, diagnostic=False, return_estimates=False, by_sample=False, pval = None):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -2141,8 +2141,11 @@ class hmp:
         locations[1:-1] = self.location
 
         # The first new detected event should be higher than the bias induced by splitting the RT in two random partition
-        lkh = self.fit_single(1, maximization=False, starting_points=100, return_max=False, verbose=False)
-        lkh_prev = lkh.likelihoods.mean() + lkh.likelihoods.std()*norm_pval.ppf(1-pval)
+        if pval is not None:
+            lkh = self.fit_single(1, maximization=False, starting_points=100, return_max=False, verbose=False)
+            lkh_prev = lkh.likelihoods.mean() + lkh.likelihoods.std()*norm_pval.ppf(1-pval)
+        else:
+            lkh_prev = -np.inf
         if return_estimates:
             estimates = [] #store all n_event solutions
         # Iterative fit, stop at half an event width as otherwise can get stuck for a while
