@@ -300,6 +300,8 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
         cropped_trigger = []
         epochs_idx = []
         j = 0
+        if reject_threshold is None:
+            reject_threshold = np.inf
         rej = 0
         time0 = epochs.time_as_index(0)[0]
         for i in range(len(data_epoch)):
@@ -316,7 +318,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
                     rts_arr[i] = 0 
         while np.isnan(cropped_data_epoch[-1]).all():#Remove excluded epochs based on rejection
             cropped_data_epoch = cropped_data_epoch[:-1]
-        if reject_threshold is not None:
+        if ~np.isinf(reject_threshold):
             print(f'{rej} trial rejected based on threshold of {reject_threshold}')
         print(f'{len(cropped_data_epoch)} trials were retained for participant {participant}')
         if verbose:
