@@ -133,7 +133,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
     lower_limit_RT : float
         Lower limit for RTs. Shorter RTs are discarded
     reject_threshold : float
-        Rejection threshold to apply when creating epochs, expressed in microvolt
+        Rejection threshold to apply after cropping the epoch to the end of the sequence (e.g. RT), expressed in the unit of the data
     scale: float
         Scale to apply to the RT data (e.g. 1000 if ms)
     reference:
@@ -233,7 +233,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
             epochs = mne.Epochs(data, meta_events, event_id, tmin, tmax, proj=False,
                     baseline=baseline, preload=True, picks=pick_channels, decim=decim,
                     verbose=verbose, detrend=None, on_missing = 'warn', event_repeated='drop',
-                    metadata=metadata_i, reject_by_annotation=True, reject=reject_threshold)
+                    metadata=metadata_i, reject_by_annotation=True)
             epochs.metadata.rename({'response':'rt'}, axis=1, inplace=True)
             metadata_i = epochs.metadata
         else:
@@ -300,21 +300,24 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
         cropped_trigger = []
         epochs_idx = []
         j = 0
+        rej = 0
         time0 = epochs.time_as_index(0)[0]
         for i in range(len(data_epoch)):
             if rts_arr[i] > 0:
-                cropped_trigger.append(triggers[i])
-            #Crops the epochs to time 0 (stim onset) up to RT
-                cropped_data_epoch[j,:,:rts_arr[i]+offset_after_resp_samples] = \
-                (data_epoch[i,:,time0:time0+rts_arr[i]+offset_after_resp_samples])
-                epochs_idx.append(valid_epoch_index[i])#Keeps trial number
-                j += 1
-        x = 0
-        while np.isnan(cropped_data_epoch[-1]).all():#Weird bug I guess it is perhps due to too long last epoch? update: cannot reproduce
+                #Crops the epochs to time 0 (stim onset) up to RT
+                if (np.abs(data_epoch[i,:,time0:time0+rts_arr[i]+offset_after_resp_samples]) < reject_threshold).all():
+                    cropped_data_epoch[j,:,:rts_arr[i]+offset_after_resp_samples] = \
+                    (data_epoch[i,:,time0:time0+rts_arr[i]+offset_after_resp_samples])
+                    epochs_idx.append(valid_epoch_index[i])#Keeps trial number
+                    cropped_trigger.append(triggers[i])
+                    j += 1
+                else:
+                    rej += 1
+                    rts_arr[i] = 0 
+        while np.isnan(cropped_data_epoch[-1]).all():#Remove excluded epochs based on rejection
             cropped_data_epoch = cropped_data_epoch[:-1]
-            x += 1
-        if x > 0:
-            print(f'RTs > 0 longer than expected ({x})')
+        if reject_threshold is not None:
+            print(f'{rej} trial rejected based on threshold of {reject_threshold}')
         print(f'{len(cropped_data_epoch)} trials were retained for participant {participant}')
         if verbose:
             print(f'End sampling frequency is {sfreq} Hz')
@@ -762,12 +765,12 @@ def transform_data(epoch_data, participants_variable="participant", apply_standa
                 if zscore_acrossPCs:
                     data = zscore_xarray(data)
                 else:
-                    data = data.stack(comp=['component']).groupby('comp').map(zscore_xarray).unstack()
+                    data = data.stack(comp=['component']).groupby('comp', squeeze=False).map(zscore_xarray).unstack()
             case 'participant':
                 if zscore_acrossPCs:
                     data = data.groupby('participant').map(zscore_xarray)
                 else:
-                    data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp').map(zscore_xarray).unstack()
+                    data = data.stack(participant_comp=[participants_variable,'component']).groupby('participant_comp', squeeze=False).map(zscore_xarray).unstack()
             case 'trial':
                 if zscore_acrossPCs:
                     data = data.stack(trial=[participants_variable,'epochs']).groupby('trial').map(zscore_xarray).unstack()
