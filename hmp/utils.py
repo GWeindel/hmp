@@ -675,11 +675,7 @@ def transform_data(epoch_data, participants_variable="participant", apply_standa
     data : xarray.Dataset
         xarray dataset [n_samples * n_comp] data expressed in the PC space, ready for HMP fit
     '''
-<<<<<<< HEAD
-    data = data.copy()
-=======
     data = epoch_data.copy(deep=True)
->>>>>>> main
     if isinstance(data, xr.DataArray):
         raise ValueError('Expected a xarray Dataset with data and event as DataArrays, check the data format')
     if not apply_zscore in ['all', 'participant', 'trial'] and not isinstance(apply_zscore,bool):
