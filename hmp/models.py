@@ -14,6 +14,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from hmp import utils
 from itertools import cycle, product
 from scipy.stats import sem
+from scipy.stats import norm as norm_pval 
 import gc
 import scipy as sp
 
@@ -419,7 +420,7 @@ class hmp:
                 warn(f'Last iteration of the estimation procedure lead to a decrease in log-likelihood, convergence issue. The resulting fit likely contains a duplicated event', RuntimeWarning)
             xrlikelihoods = xr.DataArray(lkh , dims=("iteration"), name="likelihoods", coords={'iteration':range(len(lkh))})
             xrtraces = xr.DataArray(traces, dims=("iteration","em_iteration"), name="traces", coords={'iteration':range(len(lkh)), 'em_iteration':range(len(traces[0]))})
-            xrlmin_shapes_dev = xr.DataArray(min_shapes_dev, dims=("iteration","em_iteration","stage"), name="min_shapes_dev", coords={'iteration':range(len(lkh)), 'em_iteration':range(len(min_shapes_dev[0])), 'stage':range(n_event_xr+1)})   
+            xrmin_shapes_dev = xr.DataArray(min_shapes_dev, dims=("iteration","em_iteration","stage"), name="min_shapes_dev", coords={'iteration':range(len(lkh)), 'em_iteration':range(len(min_shapes_dev[0])), 'stage':range(n_event_xr+1)})   
             xrparam_dev = xr.DataArray(param_dev, dims=("iteration","em_iteration","stage",'parameter'), name="param_dev", coords={'iteration':range(len(lkh)), 'em_iteration':range(len(param_dev[0])), 'stage':range(n_event_xr+1), 'parameter':['shape','scale']})
             xrparams = xr.DataArray(pars, dims=("iteration","stage",'parameter'), name="parameters", 
                             coords = {'iteration': range(len(lkh)), 'parameter':['shape','scale']})
@@ -789,7 +790,7 @@ class hmp:
     def _EM_star(self, args): #for tqdm usage
         return self.EM(*args)
     
-    def EM(self, magnitudes, parameters, maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1, mags_map=None, pars_map=None,conds=None, cpus=1, min_shapes=None):  
+    def EM(self, magnitudes, parameters, maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1, mags_map=None, pars_map=None,conds=None, cpus=1, min_shapes=None,lkh_only=False):  
         '''
         Expectation maximization function underlying fit
 
@@ -1161,7 +1162,7 @@ class hmp:
             
         #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
 
-        #include likelihood of stage times give pmf            
+        #include likelihood of stage times given pmf            
         event_times = np.concatenate((np.arange(self.max_d) @ np.swapaxes(eventprobs,0,1), np.expand_dims(self.durations[subset_epochs]-1,axis=1)),axis=1)
         durations = np.diff(event_times, prepend=0)
         lkh_dist = np.zeros((n_events+1))
@@ -2148,7 +2149,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=None, verbose=True, end=None, tolerance=1e-3, diagnostic=False, return_estimates=False, by_sample=False):
+    def fit(self, step=None, verbose=True, end=None, tolerance=1e-3, diagnostic=False, return_estimates=False, by_sample=False, pval = .1):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -2195,8 +2196,23 @@ class hmp:
         mags = np.zeros((max_event_n, self.n_dims)) #final mags during estimation
 
         # The first new detected event should be higher than the bias induced by splitting the RT in two random partition
-        lkhs = self.sliding_event(fix_pars=True, fix_mags=True, method='max', verbose=False)[0]
-        lkh_prev = np.max(lkhs)
+        #lkhs = self.sliding_event(fix_pars=True, fix_mags=True, method='max', verbose=False)[0]
+        #lkh_prev = np.max(lkhs)
+        #lkh = self.fit_single(1, maximization=False, starting_points=100, return_max=False, verbose=False)
+        #lkh_prev = lkh.likelihoods.mean() + lkh.likelihoods.std()*norm_pval.ppf(1-pval)
+
+        sp=100
+        parameters = []
+        for _ in np.arange(sp):
+            proposal_p = self.gen_random_stages(1)
+            parameters.append(proposal_p)
+        magnitudes = self.gen_mags(1, sp, method='random', verbose=False)
+                
+        lkhs = []
+        for parstmp, magstmp in zip(parameters, magnitudes):
+            lkhs.append(self.estim_probs(magstmp, parstmp, subset_epochs=None, lkh_only=True))
+        lkh_prev = np.mean(lkhs) + np.std(lkhs)*norm_pval.ppf(1-pval)
+
 
         if return_estimates:
             estimates = [] #store all n_event solutions
