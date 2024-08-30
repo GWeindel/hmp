@@ -149,7 +149,6 @@ class hmp:
         else: self.template = template
         self.events = self.cross_correlation(data.data.T)#adds event morphology
         self.max_d = self.durations.max()
-
         self.data_matrix = np.zeros((self.max_d, self.n_trials, self.n_dims), dtype=np.float64)
         for trial in range(self.n_trials):
             #self.data_matrix[:self.durations[trial],trial,:] = \
@@ -1436,7 +1435,7 @@ class hmp:
 
     def compute_max_events(self):
         '''
-        Compute the maximum possible number of events given event width and mean or minimum reaction time
+        Compute the maximum possible number of events given event width  minimum reaction time
         '''
         return int(np.rint(np.min(self.durations)//(self.event_width_samples/2)))
 
@@ -2149,7 +2148,7 @@ class hmp:
         resetwarnings()
         return lkhs_sp, mags_sp, pars_sp, times_sp
     
-    def fit(self, step=None, verbose=True, end=None, tolerance=1e-3, diagnostic=False, return_estimates=False, by_sample=False, pval = .1):
+    def fit(self, step=None, verbose=True, end=None, tolerance=1e-3, diagnostic=False, return_estimates=False, by_sample=False, pval = None):
         """
          Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT. 
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point. 
@@ -2174,6 +2173,8 @@ class hmp:
              by_sample : bool
                 try every sample as the starting point, even if a later event has already
                 been identified. This in case the method jumped over a local maximum in an earlier estimation.
+             pval: float
+                 p-value for the detection of the first event, test the first location for significance compared to a distribution of noise estimates
          
          Returns: 
          	 A the fitted HMP mo
@@ -2182,7 +2183,7 @@ class hmp:
             end = self.mean_d
         if step is None:
             step = self.event_width_samples
-        max_event_n = self.compute_max_events()
+        max_event_n = self.compute_max_events()*10#not really nedded, if it fits it fits
         if diagnostic:
             cycol = cycle(default_colors)
         pbar = tqdm(total = int(np.rint(end)))#progress bar
@@ -2196,27 +2197,15 @@ class hmp:
         mags = np.zeros((max_event_n, self.n_dims)) #final mags during estimation
 
         # The first new detected event should be higher than the bias induced by splitting the RT in two random partition
-        #lkhs = self.sliding_event(fix_pars=True, fix_mags=True, method='max', verbose=False)[0]
-        #lkh_prev = np.max(lkhs)
-        #lkh = self.fit_single(1, maximization=False, starting_points=100, return_max=False, verbose=False)
-        #lkh_prev = lkh.likelihoods.mean() + lkh.likelihoods.std()*norm_pval.ppf(1-pval)
-
-        sp=100
-        parameters = []
-        for _ in np.arange(sp):
-            proposal_p = self.gen_random_stages(1)
-            parameters.append(proposal_p)
-        magnitudes = self.gen_mags(1, sp, method='random', verbose=False)
-                
-        lkhs = []
-        for parstmp, magstmp in zip(parameters, magnitudes):
-            lkhs.append(self.estim_probs(magstmp, parstmp, subset_epochs=None, lkh_only=True))
-        lkh_prev = np.mean(lkhs) + np.std(lkhs)*norm_pval.ppf(1-pval)
-
-
+        if pval is not None:
+            lkh = self.fit_single(1, maximization=False, starting_points=100, return_max=False, verbose=False)
+            lkh_prev = lkh.likelihoods.mean() + lkh.likelihoods.std()*norm_pval.ppf(1-pval)
+        else:
+            lkh_prev = -np.inf
         if return_estimates:
             estimates = [] #store all n_event solutions
-        while time == 0 or (self.scale_to_mean(last_stage, pars_prop[-1,0]) >= self.event_width_samples and n_events <= max_event_n):
+        # Iterative fit, stop at half an event width as otherwise can get stuck for a while
+        while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples//2 and n_events <= max_event_n:
 
             prev_time = time
             

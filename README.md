@@ -19,20 +19,14 @@ As a summary of the method, an HMP model parses the reaction time into a number 
 
 # Documentation
 
-The package is available through *pip*. 
-A recommended way of using the package is to use a conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
+The package is available through *pip*.
+A way of using the package is to use a conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
 
 ```bash
     conda create -n hmp 
     conda activate hmp
     conda install pip #if not already installed
-    pip install hmp
-```
-
-Then import hmp in your favorite python IDE through:
-
-```python
-    import hmp
+    pip install hmp #or cloning from github, see below
 ```
 
 For the cutting edge version you can clone the repository using *git*
@@ -45,6 +39,11 @@ Then move to the clone repository and run
     
     $ pip install -e .
 
+After either installation path you can import hmp in your favorite python IDE through:
+
+```python
+    import hmp
+```
 
 ## To get started
 To get started with the code:
@@ -73,23 +72,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import gamma
 import seaborn as sns
+from hmp import simulations#that module is only to simulate things, no need to import when analyzing data
 
-## Importing HMP
+## Importing HMP as you would to analyze data
 import hmp
-from hmp import simulations
+
 ```
 
 ### Simulating data
 
 In the following code block we simulate 50 trials with four HMP events defined as the activation of four neural sources (in the source space of MNE's sample participant). This is not code you would need for your own analysis except if you'd want to simulate and test properties of HMP models. All four sources are defined by a location in sensor space, an activation amplitude and a distribution in time (here a gamma with shape and scale parameters) for the onsets of the events on each trial. The simulation functions are based on this [MNE tutorial ](https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html).
 
-_If you're running this for the first time a 1.65 G file will be downloaded in order to perform the simulation but this will be done only once (alternatively you can just download the corresponding simulation file and place it in the same folder from where you are running this notebook)_
+_If you're running this for the first time a 1.65 G file will be downloaded in order to perform the simulation but this will be done only once (alternatively you can just download the corresponding simulation file and place it in the same folder from where you are running this notebook)
 
 
 ```python
 cpus = 1 # For multiprocessing, usually a good idea to use multiple CPUs as long as you have enough RAM
 
-n_trials = 50 #Number of trials to simulate
+n_trials = 200 #Number of trials to simulate, we use 200 to get nice ERPs but you can reduce for speed
 
 ##### Here we define the sources of the brain activity (event) for each trial
 sfreq = 500#sampling frequency of the signal
@@ -110,7 +110,7 @@ file = simulations.simulate(sources, n_trials, cpus, 'dataset_README',  overwrit
 positions = simulations.simulation_positions()
 ```
 
-    /home/gweindel/owncloud/projects/RUGUU/main_hmp/hmp/simulations.py:164: UserWarning: ./dataset_README_raw.fif exists no new simulation performed
+    /home/gweindel/owncloud/projects/RUGUU/main_hmp/hmp/simulations.py:190: UserWarning: ./dataset_README_raw.fif exists no new simulation performed
       warn(f'{subj_file} exists no new simulation performed', UserWarning)
 
 
@@ -133,16 +133,6 @@ import mne
 raw = mne.io.read_raw_fif(file[0], preload=False, verbose=False)
 raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events, block=True);
 ```
-
-    NOTE: pick_types() is a legacy function. New code should use inst.pick(...).
-
-
-    Using qt as 2D backend.
-
-
-    Channels marked as bad:
-    none
-
 
 ![png](README_files/README_7_1.png)
 
@@ -172,14 +162,13 @@ eeg_data = hmp.utils.read_mne_data(file[0], event_id=event_id, resp_id=resp_id, 
 ```
 
     Processing participant ./dataset_README_raw.fif's continuous eeg
-    Reading 0 ... 237845  =      0.000 ...   475.690 secs...
 
 
     /home/gweindel/miniconda3/envs/main_hmp/lib/python3.12/site-packages/mne/epochs.py:2986: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise in a future error of pandas. Value '' has dtype incompatible with float64, please explicitly cast to a compatible dtype first.
       metadata.iloc[:, 0] = ""
 
 
-    50 trials were retained for participant ./dataset_README_raw.fif
+    200 trials were retained for participant ./dataset_README_raw.fif
 
 
 
@@ -195,24 +184,24 @@ eeg_data.sel(channels=['EEG 001','EEG 002','EEG 003'], samples=range(400))\
     .data.groupby('samples').mean(['participant','epochs']).plot.line(hue='channels');
 ```
 
-    <xarray.Dataset> Size: 15MB
-    Dimensions:      (participant: 1, epochs: 50, channels: 59, samples: 627)
+    <xarray.Dataset> Size: 87MB
+    Dimensions:      (participant: 1, epochs: 200, channels: 59, samples: 917)
     Coordinates:
-      * epochs       (epochs) int64 400B 0 1 2 3 4 5 6 7 ... 42 43 44 45 46 47 48 49
+      * epochs       (epochs) int64 2kB 0 1 2 3 4 5 6 ... 194 195 196 197 198 199
       * channels     (channels) <U7 2kB 'EEG 001' 'EEG 002' ... 'EEG 059' 'EEG 060'
-      * samples      (samples) int64 5kB 0 1 2 3 4 5 6 ... 621 622 623 624 625 626
-        event_name   (epochs) object 400B 'stimulus' 'stimulus' ... 'stimulus'
-        rt           (epochs) float64 400B 0.962 0.828 0.82 ... 1.102 0.798 0.99
+      * samples      (samples) int64 7kB 0 1 2 3 4 5 6 ... 911 912 913 914 915 916
+        event_name   (epochs) object 2kB 'stimulus' 'stimulus' ... 'stimulus'
+        rt           (epochs) float64 2kB 0.394 0.926 0.802 ... 1.082 0.312 0.376
       * participant  (participant) <U2 8B 'S0'
     Data variables:
-        data         (participant, epochs, channels, samples) float64 15MB 7.608e...
+        data         (participant, epochs, channels, samples) float64 87MB 5.033e...
     Attributes:
         sfreq:           500.0
         offset:          0
         lowpass:         40.0
         highpass:        0.10000000149011612
         lower_limit_RT:  0
-        upper_limit_RT:  inf
+        upper_limit_RT:  5.002
 
 
 
@@ -251,20 +240,26 @@ estimates = init.fit()
 ```
 
 
-      0%|          | 0/379 [00:00<?, ?it/s]
+      0%|          | 0/388 [00:00<?, ?it/s]
 
 
-    Transition event 1 found around sample 37
-    Transition event 2 found around sample 114
+    Transition event 1 found around sample 25
 
 
-    Transition event 3 found around sample 217
+    Transition event 2 found around sample 110
 
 
-    Transition event 4 found around sample 331
+    Transition event 3 found around sample 213
+
+
+    Transition event 4 found around sample 341
+
+
     
     All events found, refitting final combination.
     Estimating 4 events model
+
+
     parameters estimated for 4 events model
 
 
@@ -295,20 +290,13 @@ But HMP doesn't provide point estimate but location probability of each of the d
 
 
 ```python
-hmp.visu.plot_distribution(estimates.eventprobs.sel(trial_x_participant=('S0',49)), 
-                            xlims=(0,np.percentile(sim_event_times.sum(axis=1), q=90)))
+hmp.visu.plot_distribution(estimates.eventprobs.sel(trial_x_participant=('S0',1)), 
+                            xlims=(0,np.percentile(sim_event_times.sum(axis=1), q=90)));
 ```
 
 
-
-
-    <Axes: xlabel='Time (in samples)', ylabel='p(event)'>
-
-
-
-
     
-![png](README_files/README_22_1.png)
+![png](README_files/README_22_0.png)
     
 
 
@@ -386,16 +374,17 @@ for channel in  ['EEG 031', 'EEG 039', 'EEG 040', 'EEG 048']:
     BRP_times = init.compute_times(init, fakefit, fill_value=0, add_rt=True)
     times = BRP_times.sel(event=[0,3])#Stim and response only
     times['event'] = [0,1]
-    test = hmp.visu.erp_data(eeg_data.stack(trial_x_participant=["participant","epochs"]), times, channel)
-    hmp.visu.plot_erp(times, test, c, ax[0], upsample=2, label=channel)
+    erp_data = hmp.visu.erp_data(eeg_data.stack(trial_x_participant=["participant","epochs"]), times, channel)
+    hmp.visu.plot_erp(times, erp_data, c, ax[0], upsample=2, label=channel)
     BRP_times = init.compute_times(init, estimates, fill_value=0, add_rt=True)#Real estimate
-    test = hmp.visu.erp_data(eeg_data.stack(trial_x_participant=["participant","epochs"]), BRP_times, channel,100)
-    hmp.visu.plot_erp(BRP_times, test, c, ax[1], upsample=2)
+    erp_data = hmp.visu.erp_data(eeg_data.stack(trial_x_participant=["participant","epochs"]), BRP_times, channel,100)
+    hmp.visu.plot_erp(BRP_times, erp_data, c, ax[1], upsample=2)
 ev_colors = iter(['red', 'purple','brown','black',])
 for event in range(4):
     c = next(ev_colors)
     ax[1].vlines(sim_event_times_cs[:,event].mean()*2, ymin=-3e-6, ymax=3e-6, color=c, alpha=.75)
-
+ax[0].set_xlabel('Time (ms) from stimulus')
+ax[1].set_xlabel('(Resampled) Time (ms) from stimulus')
 plt.xlim(0,800)
 ax[0].legend(bbox_to_anchor=(2.9,.85))
 plt.show()
@@ -414,24 +403,24 @@ Now in order to display both ERPs side-by-side we had to transform the signal by
 
 ```python
 import pandas as pd
-fig, ax = plt.subplots(1,5, figsize=(7.5,2), sharey=True, sharex=True, dpi=200)
+fig, ax = plt.subplots(1,4, figsize=(9,2), sharey=True, sharex=True, dpi=200)
 colors = iter([plt.cm.tab10(i) for i in range(10)])
 
-data_speed = eeg_data.stack({'trial_x_participant':['participant','epochs']}).data.dropna('trial_x_participant', how="all")
-times_speed = init.compute_times(init, estimates.dropna('event'), fill_value=0, add_rt=True)
-for channel in  ['EEG 031', 'EEG 039', 'EEG 040', 'EEG 048']:
-    c = next(colors)
-    ev_colors = iter(['gray', 'red', 'purple','brown','black'])
-    for event in range(5):
-        ev_c = next(ev_colors)
-        BRP = hmp.utils.event_times(data_speed, times_speed,channel,stage=event)
-        df = pd.DataFrame(BRP).melt(var_name='Time')
-        df.Time = df.Time*2
-        sns.lineplot(x="Time", y="value", data=df,ax=ax[event], color=c)
-        ax[event].vlines(0,-7e-6,7e-6, color=ev_c, alpha=.75)
-        ax[event].set_xlabel(f'Time Event {int(event)}')
-ax[0].set_xlabel('Time stimulus')
-plt.xlim(-5,100);
+data = eeg_data.stack({'trial_x_participant':['participant','epochs']}).data.dropna('trial_x_participant', how="all")
+times = init.compute_times(init, estimates, fill_value=0, add_rt=True)
+
+# Plotting the single trial aligned events
+baseline, n_samples = -50, 50#Take 50 samples on both sides, i.e. 100ms in a 500Hz signal
+ev_colors = iter(['red', 'purple','brown','black',])
+for i, event in enumerate(times.event[1:-1]):
+    c = next(ev_colors)
+    centered = hmp.utils.centered_activity(data, times, ['EEG 031',  'EEG 040', 'EEG 048'], event=event, baseline=baseline, n_samples=n_samples)
+    ax[i].plot(centered.samples*2, centered.data.unstack().mean(['trials', 'channel', 'participant']).data, color=c)
+    ax[i].set(title=f"Event {event.values}", ylim=(-5.5e-6, 5.5e-6), xlabel=f'Time (ms) around {event.values}')
+    if i == 0:
+        ax[i].set_ylabel("Voltage")
+
+plt.xlim(-100,100);
 ```
 
 

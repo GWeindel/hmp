@@ -8,6 +8,7 @@ import numpy as np
 import mne
 from mne.datasets import sample
 from warnings import warn
+from copy import deepcopy
 
 def available_sources(subselection=True):
     '''
@@ -57,7 +58,7 @@ def event_shape(event_width, event_width_samples, steps):
     template = template/np.sum(template**2)#Weight normalized
     return template
 
-def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, seed=None, sfreq=100, save_snr=False, save_noiseless=False):
+def simulate(sources, n_trials, n_jobs, file, relations=None, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, seed=None, sfreq=100, save_snr=False, save_noiseless=False, event_length_samples=None, proportions=None):
     '''
     Simulates n_trials of EEG and/or MEG using MNE's tools based on the specified sources
     
@@ -76,6 +77,8 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
         Number of jobs to use with MNE's function (multithreading)
     file: str
         Name of the file to be saved (number of the subject will be added)
+    relations: list
+        list of int describing to which previous event is each event connected, 1 means stimulus, 2 means one event after stimulus, ... One event cannot be connected to an upcoming one
     data_type: str
         Whether to simulate "eeg" or "meg"
     n_subj: int
@@ -101,24 +104,24 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
     files: list
         list of file names (file + number of subject)
     '''
+    if not verbose:
+        mne.set_log_level('warning')
+    else:
+        mne.set_log_level(True)
     if seed is not None:
         random_state = np.random.RandomState(seed)
     else:
-        random_state = None
+        random_state = np.random.RandomState(np.random.randint(low=0, high=3000))
     sources = np.array(sources, dtype=object)
     if len(np.shape(sources)) == 2:
         sources = [sources]#If only one subject
+    if relations is None:
+        relations = np.arange(len(sources[0])+1)+1
+    if proportions is None:
+        proportions = np.repeat(1, len(sources[0])+1)
     if np.shape(sources)[0] != n_subj:
         raise ValueError('Number of subject is not coherent with the sources provided')
-    #Infer max duration of a trial from the specified sources
-    percentiles = np.empty(len(sources[0]))
-    for source in range(len(sources[0])):
-        if times is None:
-            stage_dur_fun = sources[0][source][-1]
-            percentiles[source] = np.percentile(stage_dur_fun.rvs(size=n_trials), q=99)
-        else:
-            percentiles[source] = np.max(times[:,source])
-    max_trial_length = np.sum(percentiles)+2000 #add 2000 ms between trials
+
     # Following code and comments largely comes from MNE examples (e.g. \
     # https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html)
     # It loads the data, info structure and forward solution for one example subject,
@@ -130,32 +133,57 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
     evoked_fname = op.join(data_path, 'MEG', subject, 'sample_audvis-ave.fif')
     #mne read raw
     info = mne.io.read_info(evoked_fname, verbose=verbose)
-    with info._unlock():
-        info['sfreq'] = sfreq
-    if data_type == 'eeg':
-        picked_type = mne.pick_types(info, meg=False, eeg=True)
-    elif data_type == 'meg':
-        picked_type = mne.pick_types(info, meg=True, eeg=False)
-    elif data_type == 'eeg/meg':
-        picked_type = mne.pick_types(info, meg=True, eeg=True)
-    else:
-        raise ValueError(f'Invalid data type {data_type}, expected "eeg", "meg" or "eeg/meg"')
-    info = mne.pick_info(info, picked_type)
-    tstep = 1. / info['sfreq'] #sample duration
     # To simulate sources, we also need a source space. It can be obtained from the
     # forward solution of the sample subject.
     fwd_fname = op.join(data_path, 'MEG', subject,'sample_audvis-meg-eeg-oct-6-fwd.fif')
     fwd = mne.read_forward_solution(fwd_fname, verbose=verbose)
+    with info._unlock():
+        info['sfreq'] = sfreq
+    if data_type == 'eeg':
+        picked_type = mne.pick_types(info, meg=False, eeg=True)
+        fwd = mne.pick_types_forward(fwd, meg=False, eeg=True)
+    elif data_type == 'meg':
+        picked_type = mne.pick_types(info, meg=True, eeg=False)
+        fwd = mne.pick_types_forward(fwd, meg=True, eeg=False)
+    elif data_type == 'eeg/meg':
+        picked_type = mne.pick_types(info, meg=True, eeg=True)
+        fwd = mne.pick_types_forward(fwd, meg=True, eeg=True)
+    else:
+        raise ValueError(f'Invalid data type {data_type}, expected "eeg", "meg" or "eeg/meg"')
     src = fwd['src']
+    info = mne.pick_info(info, picked_type)
+    tstep = 1. / info['sfreq'] #sample duration
 
     
     #For each subject, simulate associated sources
     files = []
     for subj in range(n_subj):
+        sources_subj = sources[subj]
+        #Pre-allocate the random times to avoid generating too long 'recordings'
+        
+        rand_times = np.zeros((len(sources_subj),n_trials))
+        random_indices_list = []
+        for s, source in enumerate(sources_subj):
+            #How many trials wil have the event, default is all
+            props_trial = int(np.round(n_trials*proportions[s]))
+            if proportions[s] < 1:
+                random_indices_list.append(random_state.choice(np.arange(n_trials), size=props_trial, replace=False))
+            else: random_indices_list.append(np.arange(n_trials))
+            rand_times[s, random_indices_list[-1]] = source[-1].rvs(size=len(random_indices_list[-1]), random_state=random_state)
+        seq_index = np.diff(relations, prepend=0)>0
+        if seq_index.all():#If all events are sequential
+            trial_time = np.sum(rand_times, axis=0)
+        else:
+            trial_time_seq =  np.sum(rand_times[seq_index], axis=0)
+            trial_time_nonseq =  np.sum(rand_times[~seq_index], axis=0)
+            trial_time = np.maximum(trial_time_seq, trial_time_nonseq)
+        trial_time /= 1000 #to seconds
+        trial_time[1:] += trial_time[:-1]+.5
+        trial_time = np.cumsum(trial_time)
         #Build simulator
         files_subj = []
         source_simulator = mne.simulation.SourceSimulator(src, tstep=tstep, first_samp=0, \
-                    duration=(2+1*n_trials+3)*max_trial_length*tstep)
+                    duration=trial_time[-1]+10)#add 10sec to the end of the last trial
         if n_subj == 1: subj_file = file + f'_raw.fif'
         else: subj_file = file + f'_{subj}_raw.fif'
         if subj_file in os.listdir(path) and not overwrite:
@@ -171,11 +199,10 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
         else:
             subj_file = op.join(path, subj_file)
             print(f'Simulating {subj_file}')
-            sources_subj = sources[subj]
             # stim_onset occurs every x samples.
             events = np.zeros((n_trials, 3), int)
-            stim_onsets =  2000 + max_trial_length * np.arange(n_trials) / (tstep*1000) #2000 = offset of first stim / in samples!
-            events[:,0] = stim_onsets#last event 
+            stim_onsets =  1 + trial_time #offset of first stim is 1 s
+            events[:,0] = stim_onsets/tstep#last event 
             events[:,2] = 1#trigger 1 = stimulus 
 
             #Fake source, actually stimulus onset
@@ -184,12 +211,10 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
             label = mne.label.select_sources(subject, selected_label, subjects_dir=subjects_dir, random_state=random_state)
             source_time_series = np.array([1e-20])#stim trigger
             source_simulator.add_data(label, source_time_series, events)
-            #source_simulator.add_data(label, source_time_series, events)
 
             trigger = 2
-            #random_source_times = []
             generating_events = events
-            for source in sources_subj:
+            for s, source in enumerate(sources_subj):
                 if trigger == len(sources_subj)+1:
                     source[2] = 1e-20#Last source defines RT and is not an event per se
                 selected_label = mne.read_labels_from_annot(
@@ -198,27 +223,36 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
                 #last two parameters ensure sources that are different enough
                 # Define the time course of the activity for each source of the region to
                 # activate
-                event_duration = int(((1/source[1])/2)*info['sfreq'])
+                if event_length_samples is None:
+                    event_duration = int(((1/source[1])/2)*info['sfreq'])
+                    #Shift the trigger for the simulations 
+                    shift = event_duration//2
+                else:
+                    event_duration = event_length_samples[s]
+                    # Assumes the shortest event duration is a half-sine
+                    shift = min(event_length_samples)//2
                 source_time_series = event_shape(((1000/source[1])/2),event_duration,1000/info['sfreq']) * source[2]
-
-                #adding source event
-                events = events.copy()
+                
+                #adding source event, take as previous time the event defined by relation (default is previous event)
+                events = generating_events[generating_events[:,-1] == relations[s]].copy()
+                random_indices = random_indices_list[s]
                 if times is None:
-                    rand_i = np.round(source[-1].rvs(size=n_trials, random_state=random_state)/(tstep*1000),decimals=0)
+                    # Always at least one sample later
+                    rand_i = np.maximum(1,rand_times[s]/(tstep*1000))
+                    rand_i = np.round(rand_i,decimals=0)
                 else:
                     rand_i = times[:,trigger-2]/(tstep*1000)
                 if len(rand_i[rand_i<0]) > 0:
                     warn(f'Negative stage duration were found, 1 is imputed for the {len(rand_i[rand_i<0])} trial(s)', UserWarning)
                     rand_i[rand_i<0] = 1
-                
-                events[:, 0] = events[:,0] + rand_i # Events sample.
+                events[random_indices, 0] = events[random_indices,0] + rand_i[random_indices] # Events sample.
                 events[:, 2] = trigger  # All events have the sample id.
                 trigger += 1
                 generating_events = np.concatenate([generating_events, events.copy()])
                 #Shift event to onset when simulating pattern
-                events[:, 0] = events[:,0] - event_duration//2
+                events[random_indices, 0] = events[random_indices,0] - shift
                 #add these events
-                source_simulator.add_data(label, source_time_series, events)
+                source_simulator.add_data(label, source_time_series, events[random_indices])
 
             generating_events = generating_events[generating_events[:, 0].argsort()]
             # Project the source time series to sensor space and add some noise. The source
@@ -234,23 +268,25 @@ def simulate(sources, n_trials, n_jobs, file, data_type='eeg', n_subj=1, path='.
                 raw = raw.pick_types(meg=True, eeg=False, stim=True)
             elif data_type == 'eeg/meg':
                 raw = raw.pick_types(meg=True, eeg=True, stim=True)
-            snr = np.zeros((2,len(info['ch_names']), n_events, n_trials))
-            data = raw.get_data()
-            for event in range(n_events):
-                times_out = generating_events[generating_events[:,2] == event+2,0]
-                snr[0,:,event,:] = data[:, times_out+event_duration//2+1]
+            if save_snr:
+                snr = np.zeros((len(info['ch_names']), n_events))
+                data = deepcopy(raw.get_data())
+                for event in range(n_events):
+                    times_out = generating_events[generating_events[:,2] == event+2,0]
+                    snr[:,event] = np.mean((data[:, times_out])**2, axis=-1)
             if noise:
                 cov = mne.make_ad_hoc_cov(raw.info, verbose=verbose)
                 mne.simulation.add_noise(raw, cov,  verbose=verbose,iir_filter=[0.2, -0.2, 0.04], random_state=random_state)
-            data = raw.get_data()
-            for event in range(n_events):
-                times_out = generating_events[generating_events[:,2] == event+2,0]
-                snr[1,:,event,:] = data[:, times_out+event_duration//2+1]
+
             raw.save(subj_file, overwrite=True)
             files_subj.append(subj_file)
             np.save(subj_file.split('.fif')[0]+'_generating_events.npy', generating_events)
             files_subj.append(subj_file.split('.fif')[0]+'_generating_events.npy')
             if save_snr:
+                data = raw.get_data()
+                for event in range(n_events):
+                    times_out = generating_events[generating_events[:,2] == event+2,0]
+                    snr[:,event] /= np.var(data[:, times_out], axis=-1)
                 np.save(subj_file.split('.fif')[0]+'_snr.npy', snr)
                 files_subj.append(subj_file.split('.fif')[0]+'_snr.npy')
             files.append(files_subj)
@@ -339,18 +375,18 @@ def classification_true(true_topologies,test_topologies):
         index in the test estimate that correspond to the indexes in corresp_true_idx
         
     '''
-    test_topologies = (test_topologies.copy()-test_topologies.mean())/test_topologies.std()
-    true_topologies = (true_topologies.copy()-true_topologies.mean())/true_topologies.std()
+    test_topologies = (test_topologies.copy()-test_topologies.mean(axis=1))/ test_topologies.std(axis=1)
+    true_topologies = (true_topologies.copy()-true_topologies.mean(axis=1))/true_topologies.std(axis=1)
     true0 = np.vstack((np.zeros(true_topologies.shape[1]), true_topologies))#add a zero electrode event
     classif = np.zeros(test_topologies.shape[0], dtype=int)#array of categorization in true events
     classif_vals = np.zeros(test_topologies.shape[0])#values of the squared diff
     for i, test_ev in enumerate(test_topologies):
         all_distances = np.zeros(len(true0))
         for j, true_ev in enumerate(true0):
-            all_distances[j] = np.sum((test_ev - true_ev)**2)
+            all_distances[j] = np.median(np.abs(true_ev-test_ev))
         classif[i] = np.argmin(all_distances)
         classif_vals[i] = all_distances[classif[i]]
-
+        
     mapping_true = {}
     for test_idx, (idx, val) in enumerate(zip(classif, classif_vals)):
         if idx > 0:
@@ -360,9 +396,8 @@ def classification_true(true_topologies,test_topologies):
     corresp_true_idx = np.array(list(mapping_true.keys()))-1#Corresponding true index, excluding 0 event
     idx_true_positive = np.array(list(mapping_true.values()))
     return idx_true_positive, corresp_true_idx 
-
-
-def simulated_times_and_parameters(generating_events, init, resampling_freq=None):
+    
+def simulated_times_and_parameters(generating_events, init, resampling_freq=None, data=None):
     sfreq = init.sfreq
     n_stages = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
     n_events = n_stages-1 
@@ -393,6 +428,9 @@ def simulated_times_and_parameters(generating_events, init, resampling_freq=None
                 sample_times[trial,event] = trial_time
             else:
                 sample_times[trial,event] = init.ends[trial]
-    true_activities = init.events[sample_times[:,:]]
+    if data is None: #use crosscorrelated data
+        true_activities = init.events[sample_times[:,:]]
+    else:
+        true_activities = data[sample_times[:,:]]
     true_magnitudes = np.mean(true_activities, axis=0)
     return random_source_times.astype(int), true_parameters, true_magnitudes, true_activities
