@@ -309,7 +309,7 @@ def demo(cpus, n_events, seed=123):
     random_gen =  np.random.default_rng(seed=seed)
 
     ## Parameters for the simulations
-    frequency, amplitude = 10., .1e-6 #Frequency of the transition event and its amplitude in Volt
+    frequency, amplitude = 10., .8e-7 #Frequency of the transition event and its amplitude in Volt
     shape = 2#shape of the gamma distribution
 
     #Storing electrode position, specific to the simulations
