@@ -1631,26 +1631,23 @@ class hmp:
 
         epoch_data = epoch_data.sel(trial_x_participant=estimated.trial_x_participant) #subset to estimated
 
-        if peak:
-            peak_shift = np.argmax(init.template)
-        else:
+        if not peak:
             normed_template = init.template/np.sum(init.template)
 
-        event_shift = init.event_width_samples // 2
         if not extra_dim or extra_dim == 'condition': #also in the condition case, only one fit per trial
             if estimate_method == "max":
-                times = estimated.argmax('samples') - event_shift #Most likely event location
+                times = estimated.argmax('samples') #Most likely event location
             else:
-                times = np.round(xr.dot(estimated, estimated.samples, dims='samples')) - event_shift
+                times = np.round(xr.dot(estimated, estimated.samples, dims='samples'))
         
             event_values = np.zeros((n_channels,n_trials,n_events))
             for ev in range(n_events):
                 for tr in range(n_trials):
                     samp = int(times.values[tr,ev])
                     if peak:
-                        event_values[:,tr,ev] = epoch_data.values[:,samp+peak_shift,tr]
+                        event_values[:,tr,ev] = epoch_data.values[:,samp,tr]
                     else:
-                        vals = epoch_data.values[:,samp:samp+init.event_width_samples,tr]
+                        vals = epoch_data.values[:,samp:samp+init.event_width_samples//2,tr]
                         event_values[:,tr,ev] = np.dot(vals, normed_template[:vals.shape[1]])          
                     
             event_values = xr.DataArray(event_values, 
@@ -1664,7 +1661,7 @@ class hmp:
             if not extra_dim:
                 #set to nan if stage missing
                 times = times.mean('trial_x_participant').values
-                for e in np.argwhere(times == -event_shift):
+                for e in np.argwhere(times == 0):
                     event_values[:,e,:] = np.nan
                         
             if extra_dim == 'condition':
@@ -1674,7 +1671,7 @@ class hmp:
 
                 #set to nan if stage missing
                 times = times.groupby('cond').mean('trial_x_participant').values
-                for c, e in np.argwhere(times == -event_shift):
+                for c, e in np.argwhere(times == 0):
                     event_values[event_values['cond']==c,e,:] = np.nan
 
         elif extra_dim == 'n_events': #here we need values per fit
@@ -1682,21 +1679,21 @@ class hmp:
             event_values = np.zeros((n_dim, n_channels, n_trials, n_events))*np.nan
             for x in range(n_dim):
                 if estimate_method == "max":
-                    times = estimated[x].argmax('samples') - init.event_width_samples//2
+                    times = estimated[x].argmax('samples')
                 else:
-                    times = np.round(xr.dot(estimated[x], estimated.samples, dims='samples')) - init.event_width_samples//2
+                    times = np.round(xr.dot(estimated[x], estimated.samples, dims='samples'))
                 for ev in range(n_events):
                     for tr in range(n_trials):
                         samp = int(times.values[tr,ev])
                         if peak:
-                            event_values[x,:,tr,ev] = epoch_data.values[:,samp+peak_shift,tr]  
+                            event_values[x,:,tr,ev] = epoch_data.values[:,samp,tr]  
                         else:
-                            vals = epoch_data.values[:,samp:samp+init.event_width_samples,tr]
+                            vals = epoch_data.values[:,samp:samp+init.event_width_samples//2,tr]
                             event_values[x,:,tr,ev] = np.dot(vals, normed_template[:vals.shape[1]]) 
 
                 #set to nan if missing
                 times = times.mean('trial_x_participant').values
-                for e in np.argwhere(times == -event_shift):
+                for e in np.argwhere(times == 0):
                     event_values[x,:,:,e] = np.nan
                 
             event_values = xr.DataArray(event_values, 
@@ -2149,7 +2146,7 @@ class hmp:
         if return_estimates:
             estimates = [] #store all n_event solutions
         # Iterative fit, stop at half an event width as otherwise can get stuck for a while
-        while self.scale_to_mean(last_stage, self.shape) > self.event_width_samples//2+1 and n_events <= max_event_n:
+        while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples//2 and n_events <= max_event_n:
 
             prev_time = time
             
