@@ -2146,7 +2146,7 @@ class hmp:
         if return_estimates:
             estimates = [] #store all n_event solutions
         # Iterative fit, stop at half an event width as otherwise can get stuck for a while
-        while self.scale_to_mean(last_stage, self.shape) >= self.event_width_samples//2 and n_events <= max_event_n:
+        while self.scale_to_mean(last_stage, self.shape) >= self.location and n_events <= max_event_n:
 
             prev_time = time
             
