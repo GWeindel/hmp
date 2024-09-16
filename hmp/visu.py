@@ -104,9 +104,9 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     cond_plot = False
     estimated = estimated.copy()
     channels = channels.copy()
-
-    #Select common indices between data and estimated
-    channels = channels.rename({'epochs':'trials'}).\
+    # Stacking is necessary to retain the common indices, otherwise absent trials are just Nan'd out
+    if 'trial_x_participant' not in channels.dims:
+        channels = channels.rename({'epochs':'trials'}).\
                           stack(trial_x_participant=['participant','trials'])
     common_trials = np.intersect1d(estimated['trial_x_participant'].values, channels['trial_x_participant'].values)
     estimated = estimated.sel(trial_x_participant=common_trials)
