@@ -102,7 +102,16 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         as_time = False
     
     cond_plot = False
+    estimated = estimated.copy()
+    channels = channels.copy()
 
+    #Select common indices between data and estimated
+    channels = channels.rename({'epochs':'trials'}).\
+                          stack(trial_x_participant=['participant','trials'])
+    common_trials = np.intersect1d(estimated['trial_x_participant'].values, channels['trial_x_participant'].values)
+    estimated = estimated.sel(trial_x_participant=common_trials)
+    channels = channels.sel(trial_x_participant=common_trials).unstack().rename({'trials':'epochs'})
+    
     #if condition estimates, prep conds
     if isinstance(estimated, xr.Dataset) and 'condition' in estimated.dims:
         cond_plot = True
@@ -134,7 +143,6 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     if times_to_display is None:
         times_to_display = init.mean_d
 
-    #set xlabel depending on time_step
     if xlabel is None:
         if time_step == 1 and as_time == False:
             xlabel = 'Time (in samples)'
@@ -914,8 +922,8 @@ def plot_bootstrap_results(bootstrapped, info, init, model_to_compare=None, epoc
      	 init: 
             The initialized HMP model
      	 model_to_compare: 
-            If None ( default ) the model to compare is taken as the maximal n_event model among the bootstrapped models 
-     	 epoch_data: If None ( default
+            If None ( default ) the model to compare is taken as the model with the maximum likelihood among the bootstrapped models 
+     	 epoch_data: If model to compare is not among the bootstrapped models, provide the associated epoch_data
     """
     from hmp.resample import event_occurence
     maxboot_model, labels, counts, event_number, label_event_num = event_occurence(bootstrapped, model_to_compare)
