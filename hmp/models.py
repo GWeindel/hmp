@@ -168,7 +168,9 @@ class hmp:
             self.convolution = np.convolve
         self.trial_coords = data.unstack().sel(component=0,samples=0).rename({'epochs':'trials'}).\
             stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",how="all").coords
-        if epoch_data is not None:
+        
+        # Only add stacked_epoch_data to self when location_corr_threshold is used
+        if epoch_data is not None and self.location_corr_threshold is not None:
             if len(epoch_data.dims) == 4:
                 self.stacked_epoch_data = epoch_data.rename({'epochs':'trials'}).stack(trial_x_participant=('participant','trials')).data.fillna(0).drop_duplicates('trial_x_participant')
             else: #assume already stacked
