@@ -155,11 +155,6 @@ class hmp:
         else: self.template = template
         self.events = self.cross_correlation(data.data.T)#adds event morphology
         self.max_d = self.durations.max()
-        self.data_matrix = np.zeros((self.max_d, self.n_trials, self.n_dims), dtype=np.float64)
-        for trial in range(self.n_trials):
-            self.data_matrix[:self.durations[trial],trial,:] = \
-                self.events[self.starts[trial]:self.ends[trial]+1,:]
-            #Reorganize samples crosscorrelated with template on trial basis
         
         if self.max_d > 500:#FFT conv from scipy faster in this case
             from scipy.signal import fftconvolve
@@ -168,7 +163,9 @@ class hmp:
             self.convolution = np.convolve
         self.trial_coords = data.unstack().sel(component=0,samples=0).rename({'epochs':'trials'}).\
             stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",how="all").coords
-        if epoch_data is not None:
+        
+        # Only add stacked_epoch_data to self when location_corr_threshold is used
+        if epoch_data is not None and self.location_corr_threshold is not None:
             if len(epoch_data.dims) == 4:
                 self.stacked_epoch_data = epoch_data.rename({'epochs':'trials'}).stack(trial_x_participant=('participant','trials')).data.fillna(0).drop_duplicates('trial_x_participant')
             else: #assume already stacked
@@ -982,8 +979,12 @@ class hmp:
         #Magnitudes from Expectation
         for event in range(n_events):
             for comp in range(self.n_dims):
-                magnitudes[event,comp] = np.mean(np.sum( \
-                    eventprobs[:,:,event]*self.data_matrix[:,subset_epochs,comp], axis=0))
+                event_data = np.zeros((self.max_d, len(subset_epochs)))
+                for trial_idx, trial in enumerate(subset_epochs):
+                    start, end = self.starts[trial], self.ends[trial]
+                    duration = end - start + 1
+                    event_data[:duration, trial_idx] = self.events[start:end+1, comp]
+                magnitudes[event, comp] = np.mean(np.sum(eventprobs[:, :, event] * event_data, axis=0))
             # scale cross-correlation with likelihood of the transition
             # sum by-trial these scaled activation for each transition events
             # average across trials
