@@ -81,9 +81,9 @@ import hmp
 
 ### Simulating data
 
-In the following code block we simulate 50 trials with four HMP events defined as the activation of four neural sources (in the source space of MNE's sample participant). This is not code you would need for your own analysis except if you'd want to simulate and test properties of HMP models. All four sources are defined by a location in sensor space, an activation amplitude and a distribution in time (here a gamma with shape and scale parameters) for the onsets of the events on each trial. The simulation functions are based on this [MNE tutorial ](https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html).
+In the following code block we simulate 200 trials with four HMP events defined as the activation of four neural sources (in the source space of MNE's sample participant). This is not code you would need for your own analysis except if you'd want to simulate and test properties of HMP models. All four sources are defined by a location in sensor space, an activation amplitude and a distribution in time (here a gamma with shape and scale parameters) for the onsets of the events on each trial. The simulation functions are based on this [MNE tutorial ](https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html).
 
-_If you're running this for the first time a 1.65 G file will be downloaded in order to perform the simulation but this will be done only once (alternatively you can just download the corresponding simulation file and place it in the same folder from where you are running this notebook)
+[!IMPORTANT] If you're running this for the first time a 1.65 G file will be downloaded in order to perform the simulation but this will be done only once (alternatively you can just download the corresponding simulation file and place it in the same folder from where you are running this notebook)
 
 
 ```python
@@ -95,7 +95,7 @@ n_trials = 200 #Number of trials to simulate, we use 200 to get nice ERPs but yo
 sfreq = 500#sampling frequency of the signal
 n_events = 4
 frequency = 10.#Frequency of the event defining its duration, half-sine of 10Hz = 50ms
-amplitude = .35e-6 #Amplitude of the event in nAm, defining signal to noise ratio
+amplitude = .25e-7 #Amplitude of the event in nAm, defining signal to noise ratio
 shape = 2 #shape of the gamma distribution
 scales = np.array([50, 150, 200, 250, 100])/shape #Mean duration of the time between each event in ms
 names = simulations.available_sources()[[22,33,55,44,0]]#Which source to activate for each event (see atlas when calling simulations.available_sources())
@@ -194,7 +194,7 @@ eeg_data.sel(channels=['EEG 001','EEG 002','EEG 003'], samples=range(400))\
         rt           (epochs) float64 2kB 0.394 0.926 0.802 ... 1.082 0.312 0.376
       * participant  (participant) <U2 8B 'S0'
     Data variables:
-        data         (participant, epochs, channels, samples) float64 87MB 5.033e...
+        data         (participant, epochs, channels, samples) float64 87MB 4.786e...
     Attributes:
         sfreq:           500.0
         offset:          0
@@ -246,10 +246,10 @@ estimates = init.fit()
     Transition event 1 found around sample 25
 
 
-    Transition event 2 found around sample 110
+    Transition event 2 found around sample 111
 
 
-    Transition event 3 found around sample 213
+    Transition event 3 found around sample 212
 
 
     Transition event 4 found around sample 341
