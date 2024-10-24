@@ -259,9 +259,9 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         #axins = ax.inset_axes(width="0.5%", height=cheight, loc="lower left", bbox_to_anchor=(1.025, 0, 2, 1), bbox_transform=ax.transAxes, borderpad=0)
         axins = ax.inset_axes([1.025, 0, .03,cheight])
         if isinstance(channel_position, Info):
-            lab = 'Voltage' if channel_position['chs'][0]['unit'] == 107 else channel_position['chs'][0]['unit']._name
+            lab = 'Voltage (V)' if channel_position['chs'][0]['unit'] == 107 else channel_position['chs'][0]['unit']._name
         else:
-            lab = 'Voltage'
+            lab = 'Voltage (V)'
         plot_brain_colorbar(axins, dict(kind='value', lims = [vmin,0,vmax]),colormap=cmap, label = lab, bgcolor='.5', transparent=None)
 
     #plot ylabels
@@ -426,9 +426,9 @@ def save_model_topos(channels, estimated, channel_position, init, fname='topo', 
     #legend
     if colorbar:
         if isinstance(channel_position, Info):
-            lab = 'Voltage' if channel_position['chs'][0]['unit'] == 107 else channel_position['chs'][0]['unit']._name
+            lab = 'Voltage (V)' if channel_position['chs'][0]['unit'] == 107 else channel_position['chs'][0]['unit']._name
         else:
-            lab = 'Voltage'
+            lab = 'Voltage (V)'
         fig, ax = plt.subplots(figsize=(.5,2))
         plot_brain_colorbar(ax, dict(kind='value', lims = [vmin,0,vmax]),colormap=cmap, label = lab, bgcolor='.5', transparent=None)
         fig.savefig(fname + '_colorbar.png',dpi=dpi,transparent=True,bbox_inches='tight')    
