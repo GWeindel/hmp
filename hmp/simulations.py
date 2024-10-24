@@ -55,7 +55,6 @@ def event_shape(event_width, event_width_samples, steps):
     event_idx = np.arange(event_width_samples)*steps+steps/2
     event_frequency = 1000/(event_width*2)#gives event frequency given that events are defined as half-sines
     template = np.sin(2*np.pi*event_idx/1000*event_frequency)#event morph based on a half sine with given event width and sampling frequency
-    template = template/np.sum(template**2)#Weight normalized
     return template
 
 def simulate(sources, n_trials, n_jobs, file, relations=None, data_type='eeg', n_subj=1, path='./', overwrite=False, verbose=False, noise=True, times=None, seed=None, sfreq=100, save_snr=False, save_noiseless=False, event_length_samples=None, proportions=None):
@@ -232,7 +231,6 @@ def simulate(sources, n_trials, n_jobs, file, relations=None, data_type='eeg', n
                     # Assumes the shortest event duration is a half-sine
                     shift = min(event_length_samples)//2
                 source_time_series = event_shape(((1000/source[1])/2),event_duration,1000/info['sfreq']) * source[2]
-                
                 #adding source event, take as previous time the event defined by relation (default is previous event)
                 events = generating_events[generating_events[:,-1] == relations[s]].copy()
                 random_indices = random_indices_list[s]
@@ -309,7 +307,7 @@ def demo(cpus, n_events, seed=123):
     random_gen =  np.random.default_rng(seed=seed)
 
     ## Parameters for the simulations
-    frequency, amplitude = 10., .8e-7 #Frequency of the transition event and its amplitude in Volt
+    frequency, amplitude = 10., .2e-7 #Frequency of the transition event and its amplitude in Volt
     shape = 2#shape of the gamma distribution
 
     #Storing electrode position, specific to the simulations
