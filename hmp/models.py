@@ -438,7 +438,8 @@ class hmp:
             xrlocations = xr.DataArray(locations, dims=("iteration","stage"), name="locations", 
                             coords = {'iteration': range(len(lkh))})
         estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrlocations, xrtraces, xrlocations_dev, xrparam_dev))
-
+        estimated = estimated.assign_attrs(sfreq=self.sfreq, event_width_samples=self.event_width_samples, location=self.location,  
+                                           shape=self.shape, distribution=self.distribution, tolerance=tolerance, maximization=maximization)
         if verbose:
             print(f"parameters estimated for {n_events} events model")
         return estimated
@@ -2238,7 +2239,7 @@ class hmp:
             fit = None
 
         pbar.update(int(np.rint(end)-int(np.rint(time))))
-
+        fit = fit.assign_attrs(step=step, by_sample=by_sample)
         if return_estimates:
             return fit, estimates
         else:
