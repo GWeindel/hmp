@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hmp"
-version = "0.4.0"
+version = "0.4.1"
 authors = [
   { name="Gabriel Weindel", email="gabriel.weindel@gmail.com" },
   { name="Leendert van Maanen", email="e@mail.com" },
