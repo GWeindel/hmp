@@ -329,8 +329,11 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
         y += 1
     epoch_data = xr.concat(epoch_data, dim = xr.DataArray(subj_idx, dims='participant'),
                           fill_value={'event':'', 'data':np.nan})
+    n_trials = (~np.isnan(epoch_data.data[:,:, :, 0].data)).sum(axis=1)[:,0].sum()#Compute number of trials based on trials where first sample is nan
     epoch_data = epoch_data.assign_attrs(lowpass=epochs.info['lowpass'], highpass=epochs.info['highpass'],
-                                         lower_limit_RT=lower_limit_RT,  upper_limit_RT=upper_limit_RT, 
+                                         lower_limit_RT=lower_limit_RT, upper_limit_RT=upper_limit_RT, 
+                                         reject_threshold=reject_threshold, n_trials=n_trials,
+                                         
 
 )
     return epoch_data
