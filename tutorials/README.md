@@ -1,4 +1,5 @@
-- Load EEG data (tutorial 1)
+- Loading data
+- Main concepts behind HMP (tutorial 1)
 - Estimating a given number of bumps (tutorial 2)
 - Test for the number of bumps that best explains the data (tutorial 3)
 - Testing differences across conditions (tutorial 4)
