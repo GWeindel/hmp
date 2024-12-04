@@ -47,38 +47,37 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
     data_pp = hmp.utils.stack_data(data.sel(participant=participant, drop=False))
 
     #Building models
-    if init.stacked_epoch_data is not None: #maintain epoch data if present, but allow for it not being there
-        model_without_pp = hmp.models.hmp(data_without_pp, epoch_data=init.stacked_epoch_data.where(init.stacked_epoch_data.participant.isin(participants_idx[participants_idx != participant]), drop=True), sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution,  location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
+    model_without_pp = hmp.models.hmp(data_without_pp, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution)
 
-        model_pp = hmp.models.hmp(data_pp, epoch_data=init.stacked_epoch_data.where(init.stacked_epoch_data.participant == participant,drop=True), sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
-
-    else:
-        model_without_pp = hmp.models.hmp(data_without_pp, epoch_data=None, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
-
-        model_pp = hmp.models.hmp(data_pp, epoch_data=None, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
+    model_pp = hmp.models.hmp(data_pp, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution)
 
 
     #fit the HMP using previously estimated parameters as initial parameters, and estimate likelihood
     dur_ratio = model_pp.mean_d / model_without_pp.mean_d
-    
     if 'condition' in initial_fit.dims:
-        #fit model
+        locations = np.zeros(initial_fit.pars_map.shape, dtype=int)
+        for c in range(len(initial_fit.pars_map)):
+            indexes = np.arange(len(initial_fit.pars_map[c]))[initial_fit.pars_map[c,:]>=0] #Actual estimated event
+            if len(indexes[1:-1]) > 0:
+                locations[c,indexes[1:-1]] = init.location#add location at every non first or last estimated event
         fit_without_pp = model_without_pp.fit_single_conds(initial_fit.magnitudes.values, initial_fit.parameters.values, mags_map=initial_fit.mags_map, pars_map=initial_fit.pars_map, conds=initial_fit.conds_dict, verbose=False)
         #calc lkh
         #adjust params to fit average duration of subject
         params = fit_without_pp.parameters.values
         params[:,:,1] = params[:,:,1] * dur_ratio
         conds_pp = initial_fit.sel(participant=participant)['cond'].values
-        likelihood = model_pp.estim_probs_conds(fit_without_pp.magnitudes.values, params, fit_without_pp.locations.values, initial_fit.mags_map, initial_fit.pars_map, conds_pp, lkh_only=True)
+        likelihood = model_pp.estim_probs_conds(fit_without_pp.magnitudes.values, params, locations, initial_fit.mags_map, initial_fit.pars_map, conds_pp, lkh_only=True)
     else:
-        #fit model
         n_eve = np.max(initial_fit.event.values)+1
-        fit_without_pp = model_without_pp.fit_single(n_eve, initial_fit.magnitudes.dropna('event',how='all').values, initial_fit.parameters.dropna('stage').values, locations=initial_fit.locations.dropna('stage').values.astype(int), verbose=False)
+        locations = np.zeros(n_eve+1, dtype=int)
+        locations[1:-1] = init.location
+        #fit model
+        fit_without_pp = model_without_pp.fit_single(n_eve, initial_fit.magnitudes.dropna('event',how='all').values, initial_fit.parameters.dropna('stage').values, verbose=False)
         #calc lkh
         #adjust params to fit average duration of subject
         params = fit_without_pp.parameters.dropna('stage').values
         params[:,1] = params[:,1] * dur_ratio
-        likelihood = model_pp.estim_probs(fit_without_pp.magnitudes.dropna('event',how='all').values, params, fit_without_pp.locations.dropna('stage').values.astype(int), n_eve, None, True)
+        likelihood = model_pp.estim_probs(fit_without_pp.magnitudes.dropna('event',how='all').values, params, locations, n_eve, None, True)
 
     return likelihood
 
@@ -221,15 +220,6 @@ def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
     return likelihoods
 
 
-def loocv_mp(init, stacked_data, bests, func=loocv_calcs, cpus=2, verbose=True):
-    '''
-    Deprecated, use loocv instead.
-    '''
-    warn('This method is deprecated, use loocv() instead', DeprecationWarning, stacklevel=2) 
-    
-    return loocv(init, stacked_data, bests, cpus=cpus, verbose=verbose)
-
-
 def example_fit_single_func(hmp_model, n_events, magnitudes=None, parameters=None, verbose=False):
     '''
     Example of simple function that can be used with loocv_func.
@@ -317,11 +307,7 @@ def loocv_estimate_func(data, init, participant, func_estimate, func_args=None, 
     data_without_pp = hmp.utils.stack_data(data.sel(participant = participants_idx[participants_idx != participant], drop=False))
 
     #Building model
-    if init.stacked_epoch_data is not None: #maintain epoch data if present, but allow for it not being there
-        epoch_without_pp = init.stacked_epoch_data.where(init.stacked_epoch_data.participant.isin(participants_idx[participants_idx != participant]), drop=True)
-    else:
-        epoch_without_pp = None
-    model_without_pp = hmp.models.hmp(data_without_pp, epoch_data=epoch_without_pp, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
+    model_without_pp = hmp.models.hmp(data_without_pp,  sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution)
 
     #Apply function and return
     estimates = func_estimate(model_without_pp, *func_args)
@@ -368,20 +354,16 @@ def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False
     data_pp = hmp.utils.stack_data(data.sel(participant=participant, drop=False))
 
     #Building model 
-    if init.stacked_epoch_data is not None: #maintain epoch data if present, but allow for it not being there
-        epoch_pp = init.stacked_epoch_data.where(init.stacked_epoch_data.participant == participant, drop=True)
-    else:
-        epoch_pp = None
-    model_pp = hmp.models.hmp(data_pp, epoch_data=epoch_pp, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution, location_corr_threshold = init.location_corr_threshold, location_corr_duration=init.location_corr_duration)
+    model_pp = hmp.models.hmp(data_pp, sfreq=init.sfreq, event_width=init.event_width, cpus=cpus, shape=init.shape, template=init.template, location=init.location, distribution=init.distribution)
 
     #calc ratio average duration and subj duration
     nsubj = len(np.unique(data.participant.values))
     mean_d_without_subj = (init.mean_d * nsubj - model_pp.mean_d) / (nsubj-1)
     dur_ratio = model_pp.mean_d / mean_d_without_subj
-
-    #estimate likelihood with previously estimated parameters
+    locations = np.zeros(estimate.parameters.dropna('stage').values.shape[-2],dtype=int)
+    locations[1:-1] = init.location
     if 'condition' in estimate.dims:
-
+        locations = np.tile(locations, (initial_fit.parameters.shape[0], 1))
         from itertools import product    
 
         #create conds for this participant based on estimate.conds_dict and model_pp 
@@ -409,7 +391,7 @@ def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False
         parameters = estimate.parameters.values
         parameters[:,:,1] = parameters[:,:,1] * dur_ratio
 
-        likelihood = model_pp.estim_probs_conds(estimate.magnitudes.values, parameters, estimate.locations.dropna('stage').values.astype(int), estimate.mags_map, estimate.pars_map, conds, lkh_only=True)
+        likelihood = model_pp.estim_probs_conds(estimate.magnitudes.values, parameters, locations, estimate.mags_map, estimate.pars_map, conds, lkh_only=True)
     else:
         n_eve = np.max(estimate.event.dropna('event', how='all').values)+1
 
@@ -417,7 +399,7 @@ def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False
         parameters = estimate.parameters.dropna('stage').values
         parameters[:,1] = parameters[:,1] * dur_ratio
 
-        likelihood = model_pp.estim_probs(estimate.magnitudes.dropna('event', how='all').values, parameters, estimate.locations.dropna('stage').values.astype(int), n_eve, None, True)
+        likelihood = model_pp.estim_probs(estimate.magnitudes.dropna('event', how='all').values, parameters, locations, n_eve, None, True)
 
     return likelihood
         
@@ -675,62 +657,3 @@ def loocv_fit_backward(init, data, by_sample=False, min_events=0, tolerance=1e-4
 
     return loocv_func(init, data, fit_backward_func, func_args=[by_sample, min_events, tolerance, max_iteration], cpus=cpus, verbose=verbose)
 
-
-def get_average_parameters(all_estimates):
-    #calculate average parameters of models estimated with loocv
-
-    #make sure we have 'nested models', even if only one
-    if not isinstance(all_estimates[0], list): #then nested
-        all_estimates = [all_estimates]
-
-    all_average_parameters = []    
-    for estimates in all_estimates:
-
-        #single or conditions
-        if not 'n_events' in estimates[0].dims:
-
-            magnitudes = np.zeros(estimates[0].magnitudes.shape)        
-            parameters = np.zeros(estimates[0].parameters.shape)        
-            locations = np.zeros(estimates[0].locations.shape)        
-
-            for pp in range(len(estimates)):
-                magnitudes += estimates[pp].magnitudes
-                parameters += estimates[pp].parameters
-                locations += estimates[pp].locations
-
-            mags_average = magnitudes.values / len(estimates)
-            params_average = parameters.values / len(estimates)
-            locations_average = locations.values / len(estimates)
-
-            all_average_parameters.append([mags_average, params_average, locations_average])
-
-        #option 3: backward
-        elif 'n_events' in estimates[0].dims:
-
-            mags_average = [] 
-            params_average = [] 
-            locations_average = []
-
-            for ev in estimates[0].n_events:
-
-                #get averages
-                magnitudes = np.zeros(estimates[0].sel(n_events=ev).magnitudes.shape)        
-                parameters = np.zeros(estimates[0].sel(n_events=ev).parameters.shape)        
-                locations = np.zeros(estimates[0].sel(n_events=ev).locations.shape)        
-
-                for pp in range(len(estimates)):
-                    selected_backward = estimates[pp].sel(n_events=ev)
-                    magnitudes += selected_backward.magnitudes
-                    parameters += selected_backward.parameters
-                    locations += selected_backward.locations
-
-                mags_average.append(magnitudes.dropna('event').values / len(estimates))
-                params_average.append(parameters.dropna('stage').values / len(estimates))
-                locations_average.append(locations.dropna('stage').values / len(estimates))
-
-            all_average_parameters.append([mags_average, params_average, locations_average])
-    
-    if len(all_average_parameters) == 1:
-        all_average_parameters = all_average_parameters[0]
-
-    return all_average_parameters

@@ -981,30 +981,6 @@ def plot_expected_distribution(distribution, mean, shape, location=0, xmax=300, 
             from scipy.stats import weibull_min as sp_dist
             from hmp.utils import weibull_scale_to_mean,weibull_mean_to_scale
             scale_to_mean, mean_to_scale = weibull_scale_to_mean,weibull_mean_to_scale
-        case 'maxwell-boltzmann':
-            from scipy.stats import chi as sp_dist
-            from hmp.utils import maxb_scale_to_mean,maxb_mean_to_scale
-            shape = 3
-            scale_to_mean, mean_to_scale = maxb_scale_to_mean,maxb_mean_to_scale
-        case 'log-logistic':
-            from scipy.stats import fisk as sp_dist
-            from hmp.utils import fisk_scale_to_mean,fisk_mean_to_scale
-            scale_to_mean, mean_to_scale = fisk_scale_to_mean,fisk_mean_to_scale
-        case 'rayleigh':
-            from scipy.stats import chi as sp_dist
-            from hmp.utils import ray_scale_to_mean,ray_mean_to_scale
-            shape = 2
-            scale_to_mean, mean_to_scale = ray_scale_to_mean,ray_mean_to_scale
-        case 'half-normal':
-            from scipy.stats import chi as sp_dist
-            from hmp.utils import halfn_scale_to_mean,halfn_mean_to_scale
-            shape = 1
-            scale_to_mean, mean_to_scale = halfn_scale_to_mean,halfn_mean_to_scale
-        case 'uniform':
-            from scipy.stats import uniform as sp_dist
-            from hmp.utils import uniform_scale_to_mean,uniform_mean_to_scale
-            scale_to_mean, mean_to_scale = uniform_scale_to_mean,uniform_mean_to_scale
-            location=None
         case _:
                 raise ValueError(f'Unknown Distribution {distribution}')
     if ax is None:

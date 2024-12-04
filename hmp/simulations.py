@@ -307,18 +307,18 @@ def demo(cpus, n_events, seed=123):
     random_gen =  np.random.default_rng(seed=seed)
 
     ## Parameters for the simulations
-    frequency, amplitude = 10., .2e-7 #Frequency of the transition event and its amplitude in Volt
+    frequency, amplitude = 10., .3e-7 #Frequency of the transition event and its amplitude in Volt
     shape = 2#shape of the gamma distribution
 
     #Storing electrode position, specific to the simulations
     positions = simulation_info()#Electrode position
-    sfreq = 100
+    sfreq = 250
     all_source_names = available_sources()#all brain sources you can play with
     n_trials = 50 #Number of trials to simulate
     
     # Randomly specify the transition events
     name_sources = random_gen.choice(all_source_names,n_events+1, replace=False)#randomly pick source without replacement
-    times = np.array([100,150,200,50,50,50,150,200,50])/shape #designed to fail with default starting points
+    times = np.random.uniform(40,150, n_events+1)/shape
 
     sources = []
     for source in range(len(name_sources)):
@@ -331,8 +331,6 @@ def demo(cpus, n_events, seed=123):
     files = simulate(sources, n_trials, cpus,file, overwrite=False, seed=seed, noise=True, sfreq=sfreq)
     
     generating_events = np.load(files[1])
-    #events_resamp = generating_events.copy()
-    #events_resamp[:, 0] = events_resamp[:, 0] * float(resample_freq) / sfreq
 
     number_of_sources = len(np.unique(generating_events[:,2])[1:])#one trigger = one source
     random_source_times = np.reshape(np.diff(generating_events[:,0], prepend=0),(n_trials,number_of_sources+1))[:,1:] #By-trial generated event times

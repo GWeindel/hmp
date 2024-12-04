@@ -41,30 +41,6 @@ def weibull_scale_to_mean(scale, shape):
 def weibull_mean_to_scale(mean, shape): 
     return mean/gamma_func(1+1/shape)
 
-def maxb_scale_to_mean(scale, shape):
-    return 2*scale*np.sqrt(2/np.pi)
-def maxb_mean_to_scale(mean, shape): 
-    return mean/2/np.sqrt(2/np.pi)
-
-def ray_scale_to_mean(scale, shape):
-    return scale*np.sqrt(np.pi/2)
-def ray_mean_to_scale(mean, shape): 
-    return mean/np.sqrt(np.pi/2)
-
-def halfn_scale_to_mean(scale, shape):
-    return (scale*np.sqrt(2))/np.sqrt(np.pi)
-def halfn_mean_to_scale(mean, shape): 
-    return mean/np.sqrt(2/np.pi)
-
-def fisk_scale_to_mean(scale, shape):
-    return  (scale*np.pi/shape)/np.sin(np.pi/shape)
-def fisk_mean_to_scale(mean, shape): 
-    return  shape*(mean*np.sin(np.pi/shape))/np.pi
-
-def uniform_scale_to_mean(scale, shape): 
-    return (scale-shape)/2
-def uniform_mean_to_scale(mean, shape): 
-    return 2*(mean-shape)
 
 def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None, 
                  subj_idx=None, metadata=None, events_provided=None, rt_col='rt', rts=None,
@@ -790,22 +766,6 @@ def transform_data(epoch_data, participants_variable="participant", apply_standa
     return data
     
 
-def stage_durations(times):
-    '''
-    Returns the stage durations from the event onset times by substracting each stage to the previous
-    
-    Parameters
-    ----------
-    times : ndarray
-        2D ndarray with [n_trials * n_events]
-    
-    Returns
-    -------
-    times : ndarray
-        2D ndarray with [n_trials * n_events]
-    '''
-    times = np.diff(times, axis=1, prepend=0)
-    return times
 
 def save_fit(data, filename):
     '''
@@ -994,93 +954,6 @@ def filter_non_converged(estimates):
             estimates = estimates.drop_sel({'iteration':iteration})
     estimates["iteration"] = range(len(estimates.iteration))
     return estimates
-
-
-#Save eeg/meg data with separate event file, and event_ids
-def save_raw_events(fname, data, events, event_dict=None, overwrite=False):
-    '''
-    Saves raw MNE EEG/MEG data with a separate event file and event_ids, as:
-    fname.fif (data)
-    fname-eve.fif (events)
-    fname-eve.txt (event_ids)
-
-    Parameters
-    ----------
-    fname : str
-        file name, following convention should end in eeg.fif
-    data : mne.io.Raw
-        EEG/MEG data object
-    events : array of int, shape (n_events, 3)
-        The array of events. The first column contains the event time in samples, 
-        with first_samp included. The third column contains the event id.
-    event_dict : dict
-        Dictionary of {str: int} mappings of event IDs.
-    overwrite : bool
-        If True (default False), overwrite the destination file if it exists.
-    '''
-
-    #save data
-    data.save(fname, overwrite=overwrite)
-    
-    #save events, same fname + -eve
-    ftype = fname[-4:]
-    fname_events = fname[:-4] + '-eve' + ftype
-    mne.write_events(fname_events, events, overwrite=overwrite)
-    
-    #save event_dict if given
-    if event_dict:
-        with open(fname_events[:-4] + '.txt', 'w') as fp:
-            json.dump(event_dict, fp)
-
-
-#Load eeg/meeg data with event file and event_ids if exist
-def load_raw_events(fname,preload=False):
-    '''
-    Load eeg/meeg data with event file and event_ids if exist, saved with save_raw_events
-
-    Parameters
-    ----------
-    fname : str
-        file name, following convention should end in eeg.fif, event file is then assumed
-        to end in eeg-eve.fif, event dict in eeg-eve.txt
-    preload : bool
-        Preload data into memory for data manipulation and faster indexing. If True, the 
-        data will be preloaded into memory (fast, requires large amount of memory). 
-        If preload is a string, preload is the file name of a memory-mapped file which 
-        is used to store the data on the hard drive (slower, requires less memory).
-
-    Returns
-    -------
-    raw : mne.io.Raw
-        Raw object with EEG/MEG data
-    events : array of int, shape (n_events, 3)
-        The array of events. The first column contains the event time in samples, with 
-        first_samp included. The third column contains the event id.
-    event_id : dict
-        Dictionary of {str: int} mappings of event IDs.
-    '''
-    #load data
-    raw = mne.io.read_raw(fname, preload=preload)
-
-    #load events
-    ftype = fname[-4:]
-    fname_events = fname[:-4] + '-eve' + ftype
-    if os.path.exists(fname_events):
-        events = mne.read_events(fname_events)
-    else:
-        warnings.warn('No event file, data still loaded.')
-        events = None
-
-    #load event_dict
-    fname_event_dict = fname_events[:-4] + '.txt'
-    if os.path.exists(fname_event_dict):
-        with open(fname_event_dict, 'r') as fp:
-            event_dict = json.load(fp)
-    else:
-        warnings.warn('No event dictionary found.')
-        event_dict = None
-
-    return raw, events, event_dict
 
 
 def epoch_between_events(raw, events, event_id_from, event_id_to, baseline=None, picks=None, reject=None, tmin=0, tmax=0, decim=1, reject_by_annotation=True, proj='delayed', metadata=None, resample_freq = None, verbose=None):
