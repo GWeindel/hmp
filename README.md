@@ -5,7 +5,7 @@ HMP
 ![](plots/general_illustration.png)
 
 > [!NOTE]
-> The preprint is now live : [Trial-by-trial detection of cognitive events in neural time-series](https://www.biorxiv.org/content/10.1101/2024.02.13.580102v1)
+> The paper on HMP was accepted at Imaging Neuroscience, see the latest version on BiorXiv: [Trial-by-trial detection of cognitive events in neural time-series](https://www.biorxiv.org/content/10.1101/2024.02.13.580102v3)
 
 
 HMP is an open-source Python package to analyze neural time-series (e.g. EEG) to estimate Hidden Multivariate Patterns (HMP).  HMP is described in Weindel, van Maanen & Borst (2024, [see the preprint on biorXiv](https://www.biorxiv.org/content/10.1101/2024.02.13.580102v1)) and is a generalized and simplified version of the HsMM-MVPA method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)).
@@ -164,7 +164,7 @@ eeg_data = hmp.utils.read_mne_data(file[0], event_id=event_id, resp_id=resp_id, 
     Processing participant ./dataset_README_raw.fif's continuous eeg
 
 
-    /home/gweindel/miniconda3/envs/main_hmp/lib/python3.12/site-packages/mne/epochs.py:2986: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise in a future error of pandas. Value '' has dtype incompatible with float64, please explicitly cast to a compatible dtype first.
+    /home/gweindel/miniconda3/lib/python3.12/site-packages/mne/epochs.py:2986: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise in a future error of pandas. Value '' has dtype incompatible with float64, please explicitly cast to a compatible dtype first.
       metadata.iloc[:, 0] = ""
 
 
@@ -196,12 +196,14 @@ eeg_data.sel(channels=['EEG 001','EEG 002','EEG 003'], samples=range(400))\
     Data variables:
         data         (participant, epochs, channels, samples) float64 87MB 4.786e...
     Attributes:
-        sfreq:           500.0
-        offset:          0
-        lowpass:         40.0
-        highpass:        0.10000000149011612
-        lower_limit_RT:  0
-        upper_limit_RT:  5.002
+        sfreq:             500.0
+        offset:            0
+        lowpass:           40.0
+        highpass:          0.10000000149011612
+        lower_limit_RT:    0
+        upper_limit_RT:    5.002
+        reject_threshold:  inf
+        n_trials:          200
 
 
 
@@ -253,6 +255,10 @@ estimates = init.fit()
 
 
     Transition event 4 found around sample 341
+
+
+    /home/gweindel/miniconda3/lib/python3.12/site-packages/tqdm/std.py:465: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+      if rate and total else datetime.utcfromtimestamp(0))
 
 
     
