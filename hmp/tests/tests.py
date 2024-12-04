@@ -103,7 +103,7 @@ plt.xlim(-10,10);
 
 # EEG data
 epoch_data = xr.load_dataset(os.path.join('../../tutorials/sample_data/sample_data.nc'))
-epoch_data = epoch_data.sel(participant=['processed_0025_epo', 'processed_0023_epo',])
+epoch_data = epoch_data.sel(participant=['processed_0025_epo', 'processed_0023_epo',], epochs=range(5))
 # channel information
 info = read_info(os.path.join('../../tutorials/sample_data/eeg/processed_0022_epo.fif'), verbose=False)
 # select the data
@@ -137,3 +137,11 @@ init = hmp.models.hmp(hmp_data, epoch_data, sfreq=epoch_data.sfreq, cpus=cpus)
 #fit the model - note that we use the full data again
 model_stage_removed = init.fit_single_conds(magnitudes=mags4, parameters=pars4, pars_map=pars_map, mags_map=mags_map, conds=conds,  cpus=1, tolerance=1e-1, verbose=False)
 hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, init, magnify=1, sensors=False, time_step=1000/init.sfreq,xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event") 
+correct_loocv_model = hmp.loocv.loocv_backward(init, hmp_data, max_events=4)
+hmp.visu.plot_loocv(correct_loocv_model[0], pvals=True, test='sign', indiv=True, mean=True)
+
+hmp.utils.save_fit(selected, 'selected.nc')
+hmp.utils.save_eventprobs(selected.eventprobs, 'selected_eventprobs.nc')
+estimates = hmp.utils.load_fit('selected.nc')
+loocv_combined = hmp.loocv.loocv(init, hmp_data, model_stage_removed, print_warning=False)
+hmp.visu.plot_latencies(model_stage_removed, init, errs='se',kind='bar')
