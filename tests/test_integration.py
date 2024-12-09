@@ -72,9 +72,6 @@ def test_integration():
         times['event'] = [0,1]
         erp_data = hmp.visu.erp_data(eeg_data.stack(trial_x_participant=["participant","epochs"]), times, channel)
         hmp.visu.plot_erp(times, erp_data, c, ax[0], upsample=2, label=channel)
-        BRP_times = init.compute_times(init, estimates, fill_value=0, add_rt=True)#Real estimate
-        erp_data = hmp.visu.erp_data(eeg_data.stack(trial_x_participant=["participant","epochs"]), BRP_times, channel,100)
-        hmp.visu.plot_erp(BRP_times, erp_data, c, ax[1], upsample=2)
     ev_colors = iter(['red', 'purple','brown','black',])
     sim_event_times_cs = np.cumsum(sim_source_times, axis=1)
     for event in range(2):
