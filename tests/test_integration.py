@@ -153,3 +153,10 @@ def test_integration():
     estimates = hmp.utils.load_fit('selected.nc')
     loocv_combined = hmp.loocv.loocv(init, hmp_data, model_stage_removed, print_warning=False)
     #hmp.visu.plot_latencies(model_stage_removed, init, errs='se',kind='bar')
+
+for filename in os.listdir("tests"):
+    file_path = os.path.join("tests", filename)
+    # Check if it's a file (not a subdirectory)
+    if os.path.isfile(file_path) and ".py" not in filename:
+        os.remove(file_path)  # Remove the file
+        print(f"Deleted: {file_path}")
