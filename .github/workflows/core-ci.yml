@@ -35,7 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
         include:
             - os: macos-latest
               python-version: "3.13"
@@ -69,4 +69,4 @@ jobs:
   #       python -m pip install --upgrade pip
   #       python -m pip install ".[docs]"
   #   - name: Build docs
-  #     run: sphinx-build -M html docs/source docs/build 
+  #     run: sphinx-build -M htmx`x`l docs/source docs/build 
