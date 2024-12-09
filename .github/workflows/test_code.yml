@@ -1,7 +1,7 @@
 # Test is the main functions still work as they should after every push
 name: Test if the code is working
 on: #Whenever there is a push to the main branch
- # push:
+  push:
     branches:
       - main
 
