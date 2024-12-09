@@ -149,7 +149,12 @@ def test_integration():
 
     hmp.utils.save_fit(selected, 'selected.nc')
     hmp.utils.save_eventprobs(selected.eventprobs, 'selected_eventprobs.nc')
-    with hmp.utils.load_fit('selected.nc') as estimates:
+    with xr.open_dataset('selected.nc') as selected_data:
+        if 'trials' in selected_data:
+            estimates = selected_data.stack(trial_x_participant=["participant","trials"]).dropna(dim="trial_x_participant", how='all')
+        else:
+            estimates = selected_data
+    # with hmp.utils.load_fit('selected.nc') as estimates:
     # estimates = 
         _loocv_combined = hmp.loocv.loocv(init, hmp_data, model_stage_removed, print_warning=False)
     #hmp.visu.plot_latencies(model_stage_removed, init, errs='se',kind='bar')
