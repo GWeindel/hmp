@@ -34,10 +34,9 @@ def test_integration():
         sources.append([cur_name, frequency, amplitude, gamma(shape, scale=cur_mean)])
         
     # Function used to generate the data
-    file = simulations.simulate(sources, n_trials, 1, 'dataset_raw', overwrite=False, sfreq=sfreq, seed=1)
+    raw, events = simulations.simulate(sources, n_trials, 1, 'dataset_raw', overwrite=False, sfreq=sfreq, seed=1)
     #load electrode position, specific to the simulations
-    raw, events = simulations.simulation_positions()
-
+    positions = simulations.simulation_positions()
     # Reading the data
     events = np.load(events)
     resp_trigger = int(np.max(np.unique(events[:,2])))#Resp trigger is the last source in each trial
