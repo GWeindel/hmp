@@ -139,7 +139,7 @@ def test_integration():
     pars4 = backward_speed.sel(n_events=2).parameters.dropna('stage').data
 
     fig, ax = plt.subplots(1)#captures plots
-    init = hmp.models.hmp(hmp_data, epoch_data, sfreq=epoch_data.sfreq, cpus=cpus)
+    init = hmp.models.hmp(hmp_data, epoch_data, sfreq=epoch_data.sfreq, cpus=1)
     #fit the model - note that we use the full data again
     
     model_stage_removed = init.fit_single_conds(magnitudes=mags4, parameters=pars4, pars_map=pars_map, mags_map=mags_map, conds=conds,  cpus=1, tolerance=1e-1, verbose=False)
