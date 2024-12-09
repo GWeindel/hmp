@@ -19,7 +19,6 @@ info_data_file = Path("tutorials", "sample_data", "eeg", "processed_0022_epo.fif
 
 def test_integration():
     fig, ax = plt.subplots(1)#captures plots
-    cpus = 1 # For multiprocessing, usually a good idea to use multiple CPUs as long as you have enough RAM
 
     n_trials = 2 #Mini for testing
     sfreq = 100
