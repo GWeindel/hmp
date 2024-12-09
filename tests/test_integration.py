@@ -31,20 +31,20 @@ def test_integration():
     names = ['inferiortemporal-lh','caudalanteriorcingulate-rh','bankssts-lh']#Which source to activate for each event (see atlas when calling simulations.available_sources())
 
     sources = []
-    for source in zip(names, means): #One source = one frequency, one amplitude and a given by-trial variability distribution
-        sources.append([source[0], frequency, amplitude, gamma(shape, scale=source[1])])
-
+    for cur_name, cur_mean in zip(names, means): #One source = one frequency, one amplitude and a given by-trial variability distribution
+        sources.append([cur_name, frequency, amplitude, gamma(shape, scale=cur_mean)])
+        
     # Function used to generate the data
-    file = simulations.simulate(sources, n_trials, cpus, 'dataset_raw', overwrite=False, sfreq=sfreq, seed=1)
+    file = simulations.simulate(sources, n_trials, 1, 'dataset_raw', overwrite=False, sfreq=sfreq, seed=1)
     #load electrode position, specific to the simulations
-    positions = simulations.simulation_positions()
+    raw, events = simulations.simulation_positions()
 
     # Reading the data
-    events = np.load(file[1])
+    events = np.load(events)
     resp_trigger = int(np.max(np.unique(events[:,2])))#Resp trigger is the last source in each trial
     event_id = {'stimulus':1}#trigger 1 = stimulus
     resp_id = {'response':resp_trigger}
-    eeg_data = hmp.utils.read_mne_data(file[0], event_id=event_id, resp_id=resp_id, sfreq=sfreq, 
+    eeg_data = hmp.utils.read_mne_data(raw, event_id=event_id, resp_id=resp_id, sfreq=sfreq, 
                 events_provided=events, verbose=False)
     hmp_data = hmp.utils.transform_data(eeg_data, apply_standard=False, n_comp=2)
     init = hmp.models.hmp(data=hmp_data, epoch_data=eeg_data, sfreq=eeg_data.sfreq,
@@ -111,12 +111,17 @@ def test_integration():
     fig, ax = plt.subplots(1)#captures plots
     hmp_data = hmp.utils.transform_data(epoch_data, apply_zscore='trial', n_comp=2)
     hmp_speed_data = hmp.utils.condition_selection(hmp_data, epoch_data, 'SP', variable='cue') # select the conditions where participants needs to be fast
-    init_speed = hmp.models.hmp(hmp_speed_data, epoch_data, sfreq=epoch_data.sfreq, cpus=cpus)
+    init_speed = hmp.models.hmp(hmp_speed_data, epoch_data, sfreq=epoch_data.sfreq, cpus=1)
     estimates_speed = init_speed.fit(tolerance=1e-1, step=50)
     hmp.visu.plot_topo_timecourse(epoch_data, estimates_speed, info, init_speed, as_time=True, sensors=False, contours=False, event_lines=None, colorbar=False, ax=ax)
     backward_speed = init_speed.backward_estimation(max_fit=estimates_speed, tolerance=1e-1, max_events=2)
     fig, ax = plt.subplots(1)#captures plots
     hmp.visu.plot_topo_timecourse(epoch_data, backward_speed, info, init_speed, ax=ax)
+    #LOOCV
+    loocv_model_speed = hmp.loocv.loocv(init_speed, hmp_speed_data, backward_speed, print_warning=False, verbose=False)
+    #Same but testing multiproc.
+    init_speed = hmp.models.hmp(hmp_speed_data, epoch_data, sfreq=epoch_data.sfreq, cpus=2)
+    backward_speed = init_speed.backward_estimation(max_fit=estimates_speed, tolerance=1e-1, max_events=2)
     #LOOCV
     loocv_model_speed = hmp.loocv.loocv(init_speed, hmp_speed_data, backward_speed, print_warning=False, verbose=False)
     #hmp.visu.plot_loocv(loocv_model_speed, pvals=True, test='sign', indiv=True, mean=True)
