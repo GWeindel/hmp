@@ -14,8 +14,8 @@ from pathlib import Path
 import hmp
 from hmp import simulations
 
-epoch_data_file = Path("..", "tutorials", "sample_data", "sample_data.nc")
-info_data_file = Path("..", "tutorials", "sample_data", "eeg", "processed_0022_epo.fif")
+epoch_data_file = Path("tutorials", "sample_data", "sample_data.nc")
+info_data_file = Path("tutorials", "sample_data", "eeg", "processed_0022_epo.fif")
 
 def test_integration():
     fig, ax = plt.subplots(1)#captures plots
