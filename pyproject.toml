@@ -46,6 +46,9 @@ keywords = [
     "brain",
 ]
 
+[project.optional-dependencies]
+test = ["pytest"]
+
 [tool.hatch.build]
 exclude = [
     "/.*",
@@ -60,3 +63,19 @@ exclude = [
 [project.urls]
 "Homepage" = "https://github.com/GWeindel/hmp"
 "Bug Tracker" = "https://github.com/GWeindel/hmp/issues"
+
+[tool.ruff]
+exclude = ["_version.py", "experimental.py"]
+line-length = 100
+lint.select = ["E", "F", "W", "I", "N", "D", "PL", "ARG"]
+lint.ignore = ["PLR2004", "D107", "D105", "D102"]
+
+# [tool.ruff.lint.pep8-naming]
+# ignore-names = ["a", "b", "mu"]
+
+[tool.ruff.lint.pylint]
+max-args=10
+max-locals=35
+
+[tool.ruff.lint.pydocstyle]
+convention="numpy"

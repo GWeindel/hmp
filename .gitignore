@@ -14,4 +14,5 @@ __pycache__/
 !tutorials/sample_data/sample_data.nc
 .DS_Store
 .vscode
+.python-version
 tutorials/sample_data/eeg/*_raw.fif
