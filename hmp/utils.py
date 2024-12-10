@@ -778,7 +778,8 @@ def load_fit(filename):
     '''
     Load fit
     '''
-    data = xr.open_dataset(filename)
+    with xr.open_dataset(filename) as data:
+        data.load()
     if 'trials' in data:
         data = data.stack(trial_x_participant=["participant","trials"]).dropna(dim="trial_x_participant", how='all')
     return data

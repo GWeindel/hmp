@@ -145,14 +145,12 @@ def test_integration():
     model_stage_removed = init.fit_single_conds(magnitudes=mags4, parameters=pars4, pars_map=pars_map, mags_map=mags_map, conds=conds,  cpus=1, tolerance=1e-1, verbose=False)
     hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, init, magnify=1, sensors=False, time_step=1000/init.sfreq,xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax) 
     correct_loocv_model = hmp.loocv.loocv_backward(init, hmp_data, max_events=2)
-    #hmp.visu.plot_loocv(correct_loocv_model[0], pvals=True, test='sign', indiv=True, mean=True)
-
     hmp.utils.save_fit(selected, 'selected.nc')
     hmp.utils.save_eventprobs(selected.eventprobs, 'selected_eventprobs.nc')
-    estimates = hmp.utils.load_fit('selected.nc')
-    loocv_combined = hmp.loocv.loocv(init, hmp_data, model_stage_removed, print_warning=False)
-    #hmp.visu.plot_latencies(model_stage_removed, init, errs='se',kind='bar')
+    _estimates = hmp.utils.load_fit('selected.nc')
+    _loocv_combined = hmp.loocv.loocv(init, hmp_data, model_stage_removed, print_warning=False)
 
+    # Remove temporary files
     os.remove("dataset_raw_raw_generating_events.npy")
     os.remove("dataset_raw_raw.fif")
     os.remove("selected_eventprobs.nc")
