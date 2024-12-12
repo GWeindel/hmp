@@ -19,7 +19,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
                 colorbar=True, topo_size_scaling=False, as_time=False,
                 linecolors='black',center_measure='mean',estimate_method=None):
     '''
-    Plotting the event topologies at the average time of the onset of the next stage.
+    Plotting the event topographies at the average time of the onset of the next stage.
     
     Parameters
     ----------
@@ -43,7 +43,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     dpi : float
         DPI of the  matplotlib plot
     magnify : float
-        How much should the events be enlarged, useful to zoom on topologies, providing any other value than 1 will 
+        How much should the events be enlarged, useful to zoom on topographies, providing any other value than 1 will 
         however change the displayed size of the event
     times_to_display : ndarray
         Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
@@ -67,9 +67,9 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         Matplotlib object on which to draw the plot, can be useful if you want to control specific aspects of the plots
         outside of this function
     sensors : bool
-        Whether to plot the sensors on the topologies
+        Whether to plot the sensors on the topographies
     skip_channel_contribution: bool
-        if True assumes that the provided channel argument is already topologies for each channel
+        if True assumes that the provided channel argument is already topographies for each channel
     contours : int / array_like
         The number of contour lines to draw (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
     event_lines : bool / color
@@ -78,7 +78,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     colorbar : bool
         Whether a colorbar is plotted.
     topo_size_scaling : bool
-        Whether to scale the size of the topologies with the event size. If True, size of topologies depends
+        Whether to scale the size of the topographies with the event size. If True, size of topographies depends
         on total plotted time interval, if False it is only dependent on magnify.
     as_time : bool
         if true, plot time (ms) instead of samples (time_step takes precedence). Ignored if times are provided as array.
@@ -165,10 +165,10 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
             elif 'condition' in estimated.dims:
                 ydim = 'condition'
         if not skip_channels_computation:
-            channels = init.compute_topologies(channels, estimated, init, ydim, estimate_method=estimate_method).data #compute topologies
+            channels = init.compute_topographies(channels, estimated, init, ydim, estimate_method=estimate_method).data #compute topographies
         times = init.compute_times(init, estimated, mean=True, extra_dim=ydim, as_time=as_time, center_measure=center_measure,estimate_method=estimate_method).data #compute corresponding times
 
-    else:#assumes times/topologies already computed
+    else:#assumes times/topographies already computed
         times = estimated 
     times = times * time_step
     if len(np.shape(channels)) == 2:
@@ -188,7 +188,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         time_step = 1000/init.sfreq #time_step still needed below
     event_size = init.event_width_samples * time_step
     
-    #based the size of the topologies on event_size and magnify or only on magnify
+    #based the size of the topographies on event_size and magnify or only on magnify
     if topo_size_scaling: #does topo width scale with time interval of plot?
         topo_size = event_size * magnify
     else:
@@ -225,10 +225,10 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         n_event = len(times_iteration)
         ylow = iteration * rowheight
 
-        #plot topology per event
+        #plot topography per event
         for event in np.arange(n_event):
 
-            #topology
+            #topography
             axes.append(ax.inset_axes([times_iteration[event]-topo_size/2, ylow+.1*rowheight,
                                 topo_size, rowheight*.8], transform=ax.get_xaxis_transform())) 
             plot_topomap(channels_[event,:], channel_position, axes=axes[-1], show=False,
@@ -301,7 +301,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
 def save_model_topos(channels, estimated, channel_position, init, fname='topo', figsize=None, dpi=300, cmap='Spectral_r',
                 vmin=None, vmax=None, sensors=False, contours=6, colorbar=True):
     '''
-    Saving the event topologies to files, one per topology. Typically used for saving high quality topos.
+    Saving the event topographies to files, one per topography. Typically used for saving high quality topos.
     
     Parameters
     ----------
@@ -329,7 +329,7 @@ def save_model_topos(channels, estimated, channel_position, init, fname='topo', 
         Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html). If not explicitly
         set, uses max across all topos while keeping colormap symmetric.
     sensors : bool
-        Whether to plot the sensors on the topologies
+        Whether to plot the sensors on the topographies
     contours : int / array_like
         The number of contour lines to draw (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
     colorbar : bool
@@ -355,7 +355,7 @@ def save_model_topos(channels, estimated, channel_position, init, fname='topo', 
         ydim = 'n_events'
 
     #calculate topos
-    channels = init.compute_topologies(channels, estimated, init, ydim).data #compute topologies
+    channels = init.compute_topographies(channels, estimated, init, ydim).data #compute topographies
     
     #fix vmin/vmax across topos, while keeping symmetric
     if vmax == None: #vmax = absolute max, unless no positive values
@@ -1037,7 +1037,7 @@ def plot_estimate_development(estimates, init, epoch_data, info, print_correlati
     #get topos
     topos = []
     for est in all_estimates:
-        topos.append(init.compute_topologies(epoch_data,est,init,estimate_method=estimate_method).values)
+        topos.append(init.compute_topographies(epoch_data,est,init,estimate_method=estimate_method).values)
     vm = np.nanmax([np.nanmax(np.abs(x)) for x in topos])
 
     for est_idx, est in enumerate(all_estimates):
