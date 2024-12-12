@@ -1398,9 +1398,9 @@ class hmp:
         return times
    
     @staticmethod
-    def compute_topologies(epoch_data, estimated, init, extra_dim=None, mean=True, mean_in_participant=True, peak=True, estimate_method='max'):
+    def compute_topographies(epoch_data, estimated, init, extra_dim=None, mean=True, mean_in_participant=True, peak=True, estimate_method='max'):
         """
-        Compute topologies for each trial. 
+        Compute topographies for each trial. 
          
         parameters
         ----------
@@ -1411,13 +1411,13 @@ class hmp:
          	init : 
                 Initialized HMP object 
          	extra_dim: str 
-                if True the topology is computed in the extra dimension
+                if True the topography is computed in the extra dimension
          	mean: bool 
                 if True mean will be computed instead of single-trial channel activities
             mean_in_partipant : bool
                 Whether the mean is first computed within participant before calculating the overall mean.
             peak : bool
-                if true, return topology at peak of the event. If false, return topologies weighted by a normalized template.
+                if true, return topography at peak of the event. If false, return topographies weighted by a normalized template.
             estimate_method : string
                 'max' or 'mean', either take the max probability of each event on each trial, or the weighted 
                 average.

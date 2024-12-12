@@ -108,7 +108,7 @@ def test_integration():
     # select the data
     fig, ax = plt.subplots(1)#captures plots
     hmp_data = hmp.utils.transform_data(epoch_data, apply_zscore='trial', n_comp=2)
-    hmp_speed_data = hmp.utils.condition_selection(hmp_data, epoch_data, 'SP', variable='cue') # select the conditions where participants needs to be fast
+    hmp_speed_data = hmp.utils.condition_selection(hmp_data, 'SP', variable='cue') # select the conditions where participants needs to be fast
     init_speed = hmp.models.hmp(hmp_speed_data, epoch_data, sfreq=epoch_data.sfreq, cpus=1)
     estimates_speed = init_speed.fit(tolerance=1e-1, step=50)
     hmp.visu.plot_topo_timecourse(epoch_data, estimates_speed, info, init_speed, as_time=True, sensors=False, contours=False, event_lines=None, colorbar=False, ax=ax)
