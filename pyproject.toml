@@ -50,17 +50,6 @@ keywords = [
 [project.optional-dependencies]
 test = ["pytest"]
 
-[tool.hatch.build]
-exclude = [
-    "/.*",
-    "/*.npy",
-    "/*.fif",
-    "/*.toml",
-    "/*.txt",
-    "/plots",
-    "/tutorials",
-] 
-
 [project.urls]
 "Homepage" = "https://github.com/GWeindel/hmp"
 "Bug Tracker" = "https://github.com/GWeindel/hmp/issues"
@@ -71,6 +60,7 @@ obsoletes = ["hsmm_mvpy"]
 
 [tool.setuptools_scm]
 write_to = "hmp/_version.py"
+
 
 [tool.ruff]
 exclude = ["_version.py", "experimental.py"]

@@ -1,0 +1,6 @@
+prune tutorials
+prune plots
+prune README_files
+exclude *.fif
+exclude *.npy
+
