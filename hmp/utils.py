@@ -782,9 +782,12 @@ def load(filename):
         data.load()
     if 'trials' in data:
         data = data.stack(trial_x_participant=["participant","trials"]).dropna(dim="trial_x_participant", how='all')
-    if all(key in data for key in ['trial_x_participant','samples','event']) and 'eventprobs' in data:
+    if 'eventprobs' in data and all(key in data for key in ['trial_x_participant','samples','event']) :
         # Ensures correct order of dimensions for later index use
-        data['eventprobs'] = data.eventprobs.transpose('trial_x_participant','samples','event')
+        if 'iteration' in data:
+            data['eventprobs'] = data.eventprobs.transpose('iteration','trial_x_participant','samples','event')
+        else:
+            data['eventprobs'] = data.eventprobs.transpose('trial_x_participant','samples','event')
     return data
 
 def save_eventprobs(eventprobs, filename):
