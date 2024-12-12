@@ -154,5 +154,5 @@ def test_integration():
     # Remove temporary files
     os.remove("dataset_raw_raw_generating_events.npy")
     os.remove("dataset_raw_raw.fif")
-    os.remove("selected_eventprobs.nc")
+    os.remove("selected_eventprobs.csv")
     os.remove("selected.nc")
