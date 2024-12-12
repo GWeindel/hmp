@@ -16,3 +16,5 @@ __pycache__/
 .vscode
 .python-version
 tutorials/sample_data/eeg/*_raw.fif
+hmp/_version.py
+.coverage

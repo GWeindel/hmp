@@ -1,11 +1,11 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=45", "setuptools-scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
 
 
 [project]
+
 name = "hmp"
-version = "0.4.1"
 authors = [
   { name="Gabriel Weindel", email="gabriel.weindel@gmail.com" },
   { name="Leendert van Maanen", email="e@mail.com" },
@@ -36,6 +36,7 @@ dependencies=["mne >=1.0.0",
 "ipywidgets",
 "nibabel"]
 
+dynamic = ["version"]
 
 keywords = [
     "neuroscience",
@@ -63,6 +64,13 @@ exclude = [
 [project.urls]
 "Homepage" = "https://github.com/GWeindel/hmp"
 "Bug Tracker" = "https://github.com/GWeindel/hmp/issues"
+
+[tool.setuptools]
+packages = ["hmp"]
+obsoletes = ["hsmm_mvpy"]
+
+[tool.setuptools_scm]
+write_to = "hmp/_version.py"
 
 [tool.ruff]
 exclude = ["_version.py", "experimental.py"]
