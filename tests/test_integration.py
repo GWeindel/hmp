@@ -148,8 +148,7 @@ def test_integration():
     hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, init, magnify=1, sensors=False, time_step=1000/init.sfreq,xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax) 
     correct_loocv_model = hmp.loocv.loocv_backward(init, hmp_data, max_events=2)
 
-    hmp.utils.save_eventprobs(selected.eventprobs, 'selected_eventprobs.nc')
-    _estimates = hmp.utils.load_fit('selected.nc')
+    hmp.utils.save_eventprobs(selected.eventprobs, 'selected_eventprobs.csv')
     _loocv_combined = hmp.loocv.loocv(init, hmp_data, model_stage_removed, print_warning=False)
 
     # Remove temporary files
