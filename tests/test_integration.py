@@ -53,6 +53,8 @@ def test_integration():
     estimates = init.fit_single(n_events, verbose=False)
     selected = init.fit_single(n_events, method='random', starting_points=2,
                             return_max=False,verbose=False)#funct
+    hmp.utils.save(selected, 'selected.nc')
+    hmp.utils.load('selected.nc')
     hmp.visu.plot_topo_timecourse(eeg_data, estimates, positions, init, magnify=1, sensors=True, times_to_display = np.mean(np.cumsum(sim_source_times,axis=1),axis=0),ax=ax)
     assert np.abs(np.sum(init.compute_times(eeg_data,true_estimates) - init.compute_times(eeg_data,estimates)))<1.1 #If error is reasonable
     #fig, ax = plt.subplots(1)#captures plots
@@ -145,13 +147,12 @@ def test_integration():
     model_stage_removed = init.fit_single_conds(magnitudes=mags4, parameters=pars4, pars_map=pars_map, mags_map=mags_map, conds=conds,  cpus=1, tolerance=1e-1, verbose=False)
     hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, init, magnify=1, sensors=False, time_step=1000/init.sfreq,xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax) 
     correct_loocv_model = hmp.loocv.loocv_backward(init, hmp_data, max_events=2)
-    hmp.utils.save_fit(selected, 'selected.nc')
-    hmp.utils.save_eventprobs(selected.eventprobs, 'selected_eventprobs.nc')
-    _estimates = hmp.utils.load_fit('selected.nc')
+
+    hmp.utils.save_eventprobs(selected.eventprobs, 'selected_eventprobs.csv')
     _loocv_combined = hmp.loocv.loocv(init, hmp_data, model_stage_removed, print_warning=False)
 
     # Remove temporary files
     os.remove("dataset_raw_raw_generating_events.npy")
     os.remove("dataset_raw_raw.fif")
-    os.remove("selected_eventprobs.nc")
+    os.remove("selected_eventprobs.csv")
     os.remove("selected.nc")

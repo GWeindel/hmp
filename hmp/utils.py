@@ -767,21 +767,27 @@ def transform_data(epoch_data, participants_variable="participant", apply_standa
     
 
 
-def save_fit(data, filename):
+def save(data, filename):
     '''
     Save fit
     '''
     data.unstack().to_netcdf(filename)
     print(f"{filename} saved")
 
-def load_fit(filename):
+def load(filename):
     '''
-    Load fit
+    Load fit or data
     '''
     with xr.open_dataset(filename) as data:
         data.load()
     if 'trials' in data:
         data = data.stack(trial_x_participant=["participant","trials"]).dropna(dim="trial_x_participant", how='all')
+    if 'eventprobs' in data and all(key in data for key in ['trial_x_participant','samples','event']) :
+        # Ensures correct order of dimensions for later index use
+        if 'iteration' in data:
+            data['eventprobs'] = data.eventprobs.transpose('iteration','trial_x_participant','samples','event')
+        else:
+            data['eventprobs'] = data.eventprobs.transpose('trial_x_participant','samples','event')
     return data
 
 def save_eventprobs(eventprobs, filename):
@@ -938,10 +944,6 @@ def condition_selection_epoch(epoch_data, condition_string, variable='event', me
     elif method == 'contains':
         stacked_epoch_data = stacked_epoch_data.where(stacked_epoch_data[variable].str.contains(condition_string),drop=True)
     return stacked_epoch_data.unstack()
-
-def load_data(path):
-    return xr.load_dataset(path)
-
     
 def participant_selection(hmp_data, participant):
     unstacked = hmp_data.unstack().sel(participant = participant)
