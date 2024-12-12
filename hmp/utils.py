@@ -892,7 +892,7 @@ def centered_activity(data, times, channels, event, n_samples=None, center=True,
 
     return centered_data.assign_coords(trial_x_part)
     
-def condition_selection(hmp_data, epoch_data, condition_string, variable='event', method='equal'):
+def condition_selection(hmp_data, condition_string, variable='event', method='equal'):
     '''
     condition_selection select a subset from hmp_data. It selects epochs for which
     'condition_string' is in 'variable' based on 'method'.
@@ -901,7 +901,6 @@ def condition_selection(hmp_data, epoch_data, condition_string, variable='event'
     ----------
     hmp_data : xr.Dataset
         transformed EEG data for hmp, from utils.transform_data
-    epoch_data : deprecated
     condition_string : str | num
         condition indicator for selection
     variable : str
