@@ -5,7 +5,6 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import xarray as xr
 from mne.io import read_info
 from scipy.stats import gamma

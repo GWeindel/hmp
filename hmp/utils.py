@@ -12,7 +12,6 @@ import pandas as pd
 from pandas import MultiIndex
 import warnings
 from warnings import warn, filterwarnings
-from seaborn.algorithms import bootstrap
 from hmp import mcca
 import json
 import mne
@@ -516,13 +515,6 @@ def zscore_xarray(data):
     if non_nan_mask.any(): #if not everything is nan, calc zscore
         data.values[non_nan_mask] = (data.values[non_nan_mask] - data.values[non_nan_mask].mean()) / data.values[non_nan_mask].std()
     return data
-
-def compute_ci(times):
-    '''
-    Compute confidence intervals
-    '''
-    return np.abs(np.squeeze([np.nanpercentile(bootstrap(times), q=[2.5,97.5])]) - np.mean(times))
-
 
 def stack_data(data, subjects_variable='participant', channel_variable='component', single=False):
     '''
