@@ -18,6 +18,7 @@ epoch_data_file = Path("tutorials", "sample_data", "sample_data.nc")
 info_data_file = Path("tutorials", "sample_data", "eeg", "processed_0022_epo.fif")
 
 def test_integration():
+    epoch_data, sim_source_times, info = simulations.demo(1, 1)
     fig, ax = plt.subplots(1)#captures plots
 
     n_trials = 2 #Mini for testing
@@ -32,9 +33,9 @@ def test_integration():
     sources = []
     for cur_name, cur_mean in zip(names, means): #One source = one frequency, one amplitude and a given by-trial variability distribution
         sources.append([cur_name, frequency, amplitude, gamma(shape, scale=cur_mean)])
-        
+    simulations.simulation_sfreq()
     # Function used to generate the data
-    raw, events = simulations.simulate(sources, n_trials, 1, 'dataset_raw', overwrite=False, sfreq=sfreq, seed=1)
+    raw, events = simulations.simulate(sources, n_trials, 1, 'dataset_raw', overwrite=True, sfreq=sfreq, seed=1)
     #load electrode position, specific to the simulations
     positions = simulations.simulation_positions()
     # Reading the data
@@ -51,6 +52,7 @@ def test_integration():
 
     true_estimates = init.fit_single(n_events, parameters = true_pars, magnitudes=true_magnitudes, maximization=False, verbose=False)
     estimates = init.fit_single(n_events, verbose=False)
+    simulations.classification_true(init.compute_topographies(epoch_data, true_estimates, init, mean=True),init.compute_topographies(epoch_data, estimates, init, mean=True))
     selected = init.fit_single(n_events, method='random', starting_points=2,
                             return_max=False,verbose=False)#funct
     hmp.utils.save(selected, 'selected.nc')

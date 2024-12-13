@@ -351,16 +351,16 @@ def demo(cpus, n_events, seed=123):
     positions = mne.pick_info(positions, sel=chan_list)
     return eeg_dat, random_source_times, positions
 
-def classification_true(true_topologies,test_topologies):
+def classification_true(true_topographies,test_topographies):
     '''
     Classifies event as belonging to one of the true events
 
     Parameters,
     ----------
-    true_topologies : xarray.DataArray
-        topologies for the true events simulated obtained from `init.compute_topologies(epoch_data, test_estimates, test_init, mean=True)`
+    true_topographies : xarray.DataArray
+        topographies for the true events simulated obtained from `init.compute_topographies(epoch_data, test_estimates, test_init, mean=True)`
     test_tolopogies : xarray.DataArray
-        topologies for the events found in the estimation procedure obtained from `init.compute_topologies(epoch_data, true_estimates, true_init, mean=True)`
+        topographies for the events found in the estimation procedure obtained from `init.compute_topographies(epoch_data, true_estimates, true_init, mean=True)`
 
     
     Returns
@@ -371,12 +371,12 @@ def classification_true(true_topologies,test_topologies):
         index in the test estimate that correspond to the indexes in corresp_true_idx
         
     '''
-    test_topologies = (test_topologies.copy()-test_topologies.mean(axis=1))/ test_topologies.std(axis=1)
-    true_topologies = (true_topologies.copy()-true_topologies.mean(axis=1))/true_topologies.std(axis=1)
-    true0 = np.vstack((np.zeros(true_topologies.shape[1]), true_topologies))#add a zero electrode event
-    classif = np.zeros(test_topologies.shape[0], dtype=int)#array of categorization in true events
-    classif_vals = np.zeros(test_topologies.shape[0])#values of the squared diff
-    for i, test_ev in enumerate(test_topologies):
+    test_topographies = (test_topographies.copy()-test_topographies.mean(axis=1))/ test_topographies.std(axis=1)
+    true_topographies = (true_topographies.copy()-true_topographies.mean(axis=1))/true_topographies.std(axis=1)
+    true0 = np.vstack((np.zeros(true_topographies.shape[1]), true_topographies))#add a zero electrode event
+    classif = np.zeros(test_topographies.shape[0], dtype=int)#array of categorization in true events
+    classif_vals = np.zeros(test_topographies.shape[0])#values of the squared diff
+    for i, test_ev in enumerate(test_topographies):
         all_distances = np.zeros(len(true0))
         for j, true_ev in enumerate(true0):
             all_distances[j] = np.median(np.abs(true_ev-test_ev))
