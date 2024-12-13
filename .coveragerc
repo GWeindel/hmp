@@ -1,2 +1,4 @@
 [run]
-omit = experimental.py
+omit = 
+    experimental.py
+    mcca.py
