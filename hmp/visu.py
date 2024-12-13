@@ -582,11 +582,6 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
         plt.show()
         if return_pvals:
             return pvalues
-        
-
-def plot_latencies_average(times, time_step=1, labels=[], colors=default_colors,
-    figsize=None, errs='ci', max_time=None, times_to_display=None):
-    print('Deprecated. Use plot_latencies() instead.')
     
 
 def plot_distribution(times, colors=default_colors, xlims=False, figsize=(8, 3), survival=False):
@@ -634,72 +629,6 @@ def __display_times(ax, times_to_display, yoffset, time_step, max_time, times, l
         ax.set_xlim(-1*time_step, max_time)
     return ax
 
-def plot_latencies_gamma(gammas, event_width=0, time_step=1, labels=[''], colors=default_colors, 
-                         figsize=False, times_to_display=None, max_time=None, kind='bar', legend=False):
-    '''
-    Plots the average of stage latencies based on the estimated scale parameter of the gamma distributions
-
-    Parameters
-    ----------
-    gammas : ndarray
-        instance of hmp.hmp.parameters
-    event_width : float
-        Size of the event in time unit given sampling frequency, if drawing a fitted object using hmp you 
-        can provide the event_width_sample of fitted hmp (e.g. init.event_width_sample)
-    time_step : float
-        What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
-        1/sf or 1000/sf where sf is the sampling frequency of the data
-    labels : tuples | list
-        labels to draw on the y axis
-    colors : ndarray
-        array of colors for the different stages
-    figsize : list | tuple | ndarray
-        Length and heigth of the matplotlib plot
-    times_to_display : ndarray
-        Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
-    max_time : float
-        limit of the x (time) axe
-    kind : str
-        Whether to draw a bar plot ('bar') or line connected point plot ('point')
-    legend : bool
-        Whether to draw legend handle or not
-    '''
-    j = 0
-    
-    if len(np.shape(gammas)) == 2:
-        gammas = [gammas]#np.reshape([gammas], (1, np.shape(gammas)[0],np.shape(gammas)[1]))
-    if not figsize:
-        figsize = (8, 1*len(gammas)+2)
-    f, axs = plt.subplots(1,1, figsize=figsize, dpi=100)
-    for time in gammas:
-        cycol = cycle(colors)
-        try:
-            time = time[np.isfinite(time)]
-        except:
-            print('todo')
-        time = np.reshape(time, (np.shape(gammas)[1],np.shape(gammas)[2]))
-        n_stages = int(len(time))
-        colors = [next(cycol) for x in np.arange(n_stages)]
-        colors.append(next(cycol))
-        if kind=='bar':
-            axs.bar(np.arange(n_stages)+1, time[:,0] *  time[:,1], color='w', edgecolor=colors)
-        elif kind == 'point':
-            axs.plot(np.arange(n_stages)+1, time[:,0] * time[:,1],'o-', label=labels[j], color=colors[j])
-        j += 1
-    #plt.xticks(np.arange(len(labels)),labels)
-    #plt.xlim(0-1,j)
-    #__display_times(axs, mean_d, np.arange(np.shape(gammas)[0]), time_step, max_time, gammas)
-    axs.set_ylabel('Stages durations (Gamma)')
-    axs.set_xlabel('Stage number')
-    # Hide the right and top spines
-    axs.spines.right.set_visible(False)
-    axs.spines.top.set_visible(False)
-    # Only show ticks on the left and bottom spines
-    axs.yaxis.set_ticks_position('left')
-    if legend:
-        axs.legend()
-    return axs
-
 def plot_latencies(times, init=None, time_step=1, labels=[], colors=default_colors,
     figsize=False, errs=None, kind='bar', legend=False, max_time=None, as_time=True):
     '''
@@ -725,7 +654,7 @@ def plot_latencies(times, init=None, time_step=1, labels=[], colors=default_colo
     figsize : list | tuple | ndarray
         Length and heigth of the matplotlib plot
     errs : str
-        Whether to display no error bars (None), 95% confidence interval ('ci'), standard deviation ('std'),
+        Whether to display no error bars (None), standard deviation ('std'),
         or standard error ('se')
     times_to_display : ndarray
         Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
@@ -736,8 +665,6 @@ def plot_latencies(times, init=None, time_step=1, labels=[], colors=default_colo
     as_time : bool
         if true, plot time (ms) instead of samples (time_step takes precedence). Ignored if times are provided as array.
     '''
-
-    from seaborn.algorithms import bootstrap #might be too much to ask for seaborn install?
        
     if as_time and time_step != 1:
         print('time_step takes precedence over as_time')
@@ -812,11 +739,7 @@ def plot_latencies(times, init=None, time_step=1, labels=[], colors=default_colo
             avg_durations_model = np.mean(duration, axis=0)
             n_stages = len(avg_durations_model)
             errorbars_model = None if errs is None else np.zeros((2,n_stages))
-            if errs == 'ci':
-                for st in range(n_stages):
-                    errorbars_model[:, st] = np.squeeze([np.nanpercentile(bootstrap(duration[:,st]), q=[2.5,97.5])])
-                    errorbars_model[:, st] = np.abs(errorbars_model[:, st]-avg_durations_model[st])
-            elif errs == 'std':
+            if errs == 'std':
                 errorbars_model = np.tile(np.std(duration, axis=0), (2,1))
             elif errs == 'se':
                 print('Cannot calculate SE for non-hmp object')
