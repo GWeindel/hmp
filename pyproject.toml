@@ -31,7 +31,6 @@ dependencies=["mne >=1.0.0",
 "statsmodels",
 "scipy",
 "netcdf4",
-"seaborn",
 "more_itertools",
 "ipywidgets",
 "nibabel"]
