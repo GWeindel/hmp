@@ -16,6 +16,7 @@ from hmp import simulations
 
 epoch_data_file = Path("tutorials", "sample_data", "sample_data.nc")
 info_data_file = os.path.join("tutorials", "sample_data", "eeg", "processed_0022_epo.fif")
+raw_data_file = os.path.join("tutorials", "sample_data", "eeg", "processed_0023_epo.fif")
 
 def test_integration():
     epoch_data, sim_source_times, info = simulations.demo(1, 1)
@@ -23,10 +24,11 @@ def test_integration():
 
         ## REading data
     # print(info_data_file2 )
-    epoch_data = hmp.utils.read_mne_data(info_data_file , epoched=True, sfreq=81,
-                                lower_limit_RT=0.2, upper_limit_RT=2, high_pass=1, low_pass=40,
-                                verbose=True, reference='average', pick_channels='eeg')#Turning verbose off for the documentation but it is recommended to leave it on as some output from MNE might be useful
-
+    epoch_data = hmp.utils.read_mne_data([info_data_file, raw_data_file] , epoched=True, sfreq=81,
+                                verbose=True, pick_channels='eeg', lower_limit_RT=0.2,  
+                                         upper_limit_RT=2, )
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', apply_zscore='all')
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', cov=False, apply_zscore='participant', mcca_reg=1)
 
     
     n_trials = 2 #Mini for testing
@@ -52,9 +54,14 @@ def test_integration():
     event_id = {'stimulus':1}#trigger 1 = stimulus
     resp_id = {'response':resp_trigger}
     sfreq = 100
+    # epoch_data = hmp.utils.read_mne_data(raw , event_id=event_id, resp_id=resp_id, sfreq=sfreq, 
+    #                             verbose=True, pick_channels=['Cz', 'Pz'])
     epoch_data = hmp.utils.read_mne_data(raw, event_id=event_id, resp_id=resp_id, sfreq=sfreq, 
-                events_provided=events, verbose=True, subj_idx='S0', reference='average')
+                events_provided=events, verbose=True, subj_idx='S0', reference='average', high_pass=1, low_pass=45,)
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=False, method=None, apply_zscore=False)
     hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, bandfilter=(1,40))
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, bandfilter=(1,40),cov=False)
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, bandfilter=(1,40),cov=False, averaged=True)
     for distribution in  ['lognormal','wald','weibull','gamma']:
         init = hmp.models.hmp(data=hmp_data, epoch_data=epoch_data, 
                             event_width=50, distribution=distribution, shape=2)
@@ -113,7 +120,7 @@ def test_integration():
     ev_colors = iter(['red', 'purple','brown','black',])
     for i, event in enumerate(times.event[1:3]):
         c = next(ev_colors)
-        centered = hmp.utils.centered_activity(data, times, ['EEG 031',  'EEG 040', 'EEG 048'], event=event, baseline=baseline, n_samples=n_samples, cut_before_event=1, cut_after_event=0)
+        centered = hmp.utils.centered_activity(data, times, ['EEG 031',  'EEG 040', 'EEG 048'], event=event, baseline=baseline, n_samples=None, cut_before_event=1, cut_after_event=0)
         ax[i].plot(centered.samples*2, centered.data.unstack().mean(['trials', 'channel', 'participant']).data, color=c)
         ax[i].set(title=f"Event {event.values}", ylim=(-5.5e-6, 5.5e-6), xlabel=f'Time (ms) around {event.values}')
         if i == 0:
