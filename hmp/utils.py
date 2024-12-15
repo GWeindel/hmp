@@ -147,9 +147,9 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
         # loading data
         if epoched == False:# performs epoching on raw data
             if '.fif' in participant:
-                data = mne.io.read_raw_fif(participant, preload=False, verbose=verbose)
+                data = mne.io.read_raw_fif(participant, preload=True, verbose=verbose)
             elif '.bdf' in participant:
-                data = mne.io.read_raw_bdf(participant, preload=False, verbose=verbose)
+                data = mne.io.read_raw_bdf(participant, preload=True, verbose=verbose)
             else:
                 raise ValueError(f'Unknown EEG file format for participant {participant}')
             if sfreq is None: 
