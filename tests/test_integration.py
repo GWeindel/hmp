@@ -15,14 +15,22 @@ import hmp
 from hmp import simulations
 
 epoch_data_file = Path("tutorials", "sample_data", "sample_data.nc")
-info_data_file = Path("tutorials", "sample_data", "eeg", "processed_0022_epo.fif")
+info_data_file = os.path.join("tutorials", "sample_data", "eeg", "processed_0022_epo.fif")
 
 def test_integration():
     epoch_data, sim_source_times, info = simulations.demo(1, 1)
     fig, ax = plt.subplots(1)#captures plots
 
+        ## REading data
+    # print(info_data_file2 )
+    epoch_data = hmp.utils.read_mne_data(info_data_file , epoched=True, sfreq=81,
+                                lower_limit_RT=0.2, upper_limit_RT=2, high_pass=1, low_pass=40,
+                                verbose=True, reference='average', pick_channels='eeg')#Turning verbose off for the documentation but it is recommended to leave it on as some output from MNE might be useful
+
+
+    
     n_trials = 2 #Mini for testing
-    sfreq = 100
+    sfreq = 110
     n_events = 2
     frequency = 10. #Frequency of the event defining its duration, half-sine of 10Hz = 50ms
     amplitude = 1 #Amplitude of the event in nAm, defining signal to noise ratio
@@ -43,14 +51,16 @@ def test_integration():
     resp_trigger = int(np.max(np.unique(events[:,2])))#Resp trigger is the last source in each trial
     event_id = {'stimulus':1}#trigger 1 = stimulus
     resp_id = {'response':resp_trigger}
+    sfreq = 100
     epoch_data = hmp.utils.read_mne_data(raw, event_id=event_id, resp_id=resp_id, sfreq=sfreq, 
-                events_provided=events, verbose=False)
-    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2)
-    init = hmp.models.hmp(data=hmp_data, epoch_data=epoch_data, sfreq=epoch_data.sfreq,
-                        event_width=50, distribution='gamma', shape=2)
-    sim_source_times, true_pars, true_magnitudes, _ = simulations.simulated_times_and_parameters(events, init)
-
-    true_estimates = init.fit_single(n_events, parameters = true_pars, magnitudes=true_magnitudes, maximization=False, verbose=False)
+                events_provided=events, verbose=True, subj_idx='S0', reference='average')
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, bandfilter=(1,40))
+    for distribution in  ['lognormal','wald','weibull','gamma']:
+        init = hmp.models.hmp(data=hmp_data, epoch_data=epoch_data, 
+                            event_width=50, distribution=distribution, shape=2)
+        sim_source_times, true_pars, true_magnitudes, _ = simulations.simulated_times_and_parameters(events, init)
+    
+        true_estimates = init.fit_single(n_events, parameters = true_pars, magnitudes=true_magnitudes, maximization=False, verbose=False)
     estimates = init.fit_single(n_events, verbose=False)
     simulations.classification_true(init.compute_topographies(epoch_data, true_estimates, init, mean=True),init.compute_topographies(epoch_data, estimates, init, mean=True))
     selected = init.fit_single(n_events, method='random', starting_points=2,
@@ -92,7 +102,6 @@ def test_integration():
     plt.xlim(0,80)
     ax[0].legend(bbox_to_anchor=(2.9,.85))
     plt.close()
-
     fig, ax = plt.subplots(1,2, figsize=(9,2), sharey=True, sharex=True)
     colors = iter([plt.cm.tab10(i) for i in range(10)])
 
@@ -104,7 +113,7 @@ def test_integration():
     ev_colors = iter(['red', 'purple','brown','black',])
     for i, event in enumerate(times.event[1:3]):
         c = next(ev_colors)
-        centered = hmp.utils.centered_activity(data, times, ['EEG 031',  'EEG 040', 'EEG 048'], event=event, baseline=baseline, n_samples=n_samples)
+        centered = hmp.utils.centered_activity(data, times, ['EEG 031',  'EEG 040', 'EEG 048'], event=event, baseline=baseline, n_samples=n_samples, cut_before_event=1, cut_after_event=0)
         ax[i].plot(centered.samples*2, centered.data.unstack().mean(['trials', 'channel', 'participant']).data, color=c)
         ax[i].set(title=f"Event {event.values}", ylim=(-5.5e-6, 5.5e-6), xlabel=f'Time (ms) around {event.values}')
         if i == 0:
@@ -119,8 +128,13 @@ def test_integration():
     info = read_info(info_data_file, verbose=False)
     # select the data
     fig, ax = plt.subplots(1)#captures plots
+    
+    hmp.utils.condition_selection_epoch(epoch_data, 'SP', variable='cue', method='equal')
+    hmp.utils.condition_selection_epoch(epoch_data, 'SP', variable='cue', method='contains')
     hmp_data = hmp.utils.transform_data(epoch_data, apply_zscore='trial', n_comp=2)
+    hmp.utils.participant_selection(hmp_data, 'processed_0025_epo')
     hmp_speed_data = hmp.utils.condition_selection(hmp_data, 'SP', variable='cue') # select the conditions where participants needs to be fast
+    hmp.utils.condition_selection(hmp_data, 'SP', variable='cue', method='contains')
     init_speed = hmp.models.hmp(hmp_speed_data, epoch_data, sfreq=epoch_data.sfreq, cpus=1)
     estimates_speed = init_speed.fit(tolerance=1e-1, step=50)
     hmp.visu.plot_topo_timecourse(epoch_data, estimates_speed, info, init_speed, as_time=True, sensors=False, contours=False, event_lines=None, colorbar=False, ax=ax)
