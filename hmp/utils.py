@@ -147,9 +147,9 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
         # loading data
         if epoched == False:# performs epoching on raw data
             if '.fif' in participant:
-                data = mne.io.read_raw_fif(participant, preload=False, verbose=verbose)
+                data = mne.io.read_raw_fif(participant, preload=True, verbose=verbose)
             elif '.bdf' in participant:
-                data = mne.io.read_raw_bdf(participant, preload=False, verbose=verbose)
+                data = mne.io.read_raw_bdf(participant, preload=True, verbose=verbose)
             else:
                 raise ValueError(f'Unknown EEG file format for participant {participant}')
             if sfreq is None: 
@@ -699,7 +699,7 @@ def transform_data(epoch_data, participants_variable="participant", apply_standa
         ori_coords = data.drop_vars('channels').coords
         if n_ppcas is None:
             n_ppcas = n_comp*3
-        mcca_m = mcca.MCCA(n_components_pca=n_ppcas, n_components_mcca=n_comp)
+        mcca_m = mcca.MCCA(n_components_pca=n_ppcas, n_components_mcca=n_comp, r=mcca_reg)
         if cov:
             fitted_data = data.transpose('participant','epochs','samples','channels').data
             ccs = mcca_m.obtain_mcca_cov(fitted_data)
@@ -709,7 +709,7 @@ def transform_data(epoch_data, participants_variable="participant", apply_standa
             else:
                 fitted_data = data.stack({'all':['epochs','samples']})\
                 .transpose('participant','all','channels').data
-            ccs = mcca_m.obtain_mcca(fitted_data, r=mcca_reg)
+            ccs = mcca_m.obtain_mcca(fitted_data)
         trans_ccs = np.tile(np.nan, (data.sizes['participant'], data.sizes['epochs'], data.sizes['samples'], ccs.shape[-1]))
         for i, part in enumerate(data.participant):
                 trans_ccs[i] = mcca_m.transform_trials(data.sel(participant=part).transpose('epochs','samples', 'channels').data.copy())

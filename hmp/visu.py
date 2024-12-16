@@ -12,7 +12,7 @@ import warnings
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold']
 
 
-def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=1, ydim=None,
+def plot_topo_timecourse(channels, estimated, channel_position, init,  ydim=None,
                 figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
                 ylabels=[], xlabel = None, max_time = None, vmin=None, vmax=None, title=False, ax=None, 
                 sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange',
@@ -33,9 +33,6 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         the mne package containning digit. points for channel location
     init : float
         initialized HMP object
-    time_step : float
-        What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
-        1/sf or 1000/sf where sf is the sampling frequency of the data
     ydim: str
         name for the extra dimensions (e.g. iteration)
     figsize : list | tuple | ndarray
@@ -50,7 +47,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     cmap : str
         Colormap of matplotlib
     xlabel : str
-        label of x-axis, default = None, which give "Time (samples)" or "Time" in case time_step != 1
+        label of x-axis, default = None, which give "Time (samples)" or "Time (ms)" in case as_time = True
     ylabels : dict
         dictonary with {label_name : label_values}. E.g. {'Condition': ['Speed','Accuracy']}
     max_time : float
@@ -81,7 +78,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         Whether to scale the size of the topographies with the event size. If True, size of topographies depends
         on total plotted time interval, if False it is only dependent on magnify.
     as_time : bool
-        if true, plot time (ms) instead of samples (time_step takes precedence). Ignored if times are provided as array.
+        if true, plot time (ms) instead of samples. Ignored if times are provided as array.
     center_measure : string
         mean (default) or median, used to calculate the time within participant
     estimate_method : string
@@ -96,10 +93,6 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
     from mne.viz import plot_brain_colorbar, plot_topomap
     from mne import Info
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-
-    if as_time and time_step != 1:
-        print('time_step takes precedence over as_time')
-        as_time = False
     
     cond_plot = False
     estimated = estimated.copy()
@@ -144,12 +137,10 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         times_to_display = init.mean_d
 
     if xlabel is None:
-        if time_step == 1 and as_time == False:
-            xlabel = 'Time (in samples)'
-        elif as_time:
+        if as_time:
             xlabel = 'Time (ms)'
         else:
-            xlabel = 'Time'
+            xlabel = 'Time (in samples)'
 
     #set color of event_lines 
     if event_lines == True:
@@ -158,19 +149,17 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         event_color=event_lines
 
     #if estimated is an fitted HMP instance, calculate topos and times 
-    if isinstance(estimated, (xr.DataArray, xr.Dataset)) and 'event' in estimated:
-        if ydim is None:
-            if 'n_events' in estimated.dims and estimated.n_events.count() > 1: #and there are multiple different fits (eg backward estimation)
-                ydim = 'n_events' #set ydim to 'n_events'
-            elif 'condition' in estimated.dims:
-                ydim = 'condition'
-        if not skip_channels_computation:
-            channels = init.compute_topographies(channels, estimated, init, ydim, estimate_method=estimate_method).data #compute topographies
-        times = init.compute_times(init, estimated, mean=True, extra_dim=ydim, as_time=as_time, center_measure=center_measure,estimate_method=estimate_method).data #compute corresponding times
+    assert 'event' in estimated
+    if ydim is None:
+        if 'n_events' in estimated.dims and estimated.n_events.count() > 1: #and there are multiple different fits (eg backward estimation)
+            ydim = 'n_events' #set ydim to 'n_events'
+        elif 'condition' in estimated.dims:
+            ydim = 'condition'
+    if not skip_channels_computation:
+        channels = init.compute_topographies(channels, estimated, init, ydim, estimate_method=estimate_method).data #compute topographies
+    times = init.compute_times(init, estimated, mean=True, extra_dim=ydim, as_time=as_time, center_measure=center_measure,estimate_method=estimate_method).data #compute corresponding times
 
-    else:#assumes times/topographies already computed
-        times = estimated 
-    times = times * time_step
+    times = times
     if len(np.shape(channels)) == 2:
         channels = channels[np.newaxis]
     
@@ -186,6 +175,8 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
 
     if as_time:
         time_step = 1000/init.sfreq #time_step still needed below
+    else:
+        time_step = 1
     event_size = init.event_width_samples * time_step
     
     #based the size of the topographies on event_size and magnify or only on magnify
@@ -203,7 +194,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
 
     #make axis
     if ax is None:
-        if figsize == None:
+        if figsize is None:
             if n_iter == 1:
                 figsize = (12, .7 * np.max([magnify,1.8])) #make sure they don't get too flat
             else:
@@ -287,17 +278,12 @@ def plot_topo_timecourse(channels, estimated, channel_position, init, time_step=
         ax.set_xlabel(xlabel)
         if title:
             ax.set_title(title)
-        if np.any(max_time) == None and np.any(times_to_display) == None:
-            ax.set_xlim(0, np.nanmax(times)+np.nanmax(times)/10)
     if plt.get_backend()[0:2] == 'Qt' or plt.get_backend() == 'nbAgg': #fixes issue with yscaling
-    #    plt.tight_layout()
         plt.gcf().subplots_adjust(top=0.85,bottom=.2)   #tight layout didn't work anymore
     if return_ax:
         ax.set_ylim(0, n_iter) #-1
         return ax
-    else:
-        plt.show()    
-
+        
 def save_model_topos(channels, estimated, channel_position, init, fname='topo', figsize=None, dpi=300, cmap='Spectral_r',
                 vmin=None, vmax=None, sensors=False, contours=6, colorbar=True):
     '''
@@ -338,7 +324,7 @@ def save_model_topos(channels, estimated, channel_position, init, fname='topo', 
     '''
 
     from mne.viz import plot_brain_colorbar, plot_topomap
-    from mne.io.meas_info import Info
+    from mne import Info
 
     plot_type = 'default'
     ydim = None
@@ -453,10 +439,9 @@ def plot_components_sensor(hmp_data, positions):
     fig, ax = plt.subplots(1,len(hmp_data.attrs['pca_weights'].component))
     for comp in hmp_data.attrs['pca_weights'].component:
         plot_topomap(hmp_data.attrs['pca_weights'].values[:,comp], positions, axes=ax[comp], show=False, cmap='Spectral_r')
-    plt.show()
 
 
-def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=None, mean=False, additional_points=None, return_pvals=False):
+def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv=True, ax=None, mean=False, additional_points=None):
     '''
     Plotting the LOOCV results
     
@@ -480,17 +465,13 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
     additional_points : 
         Additional likelihood points to be plotted. Should be provided as a list of tuples 
         containing the x coordinate and loocv estimates with a single event, e.g. [(5,estimates)].
-    return_pvals : bool 
-        Whether to return the pvalues
 
     Returns
     -------
     ax : matplotlib.pyplot.ax
         if ax was specified otherwise returns the plot
     '''
-    ax=None
-    if return_pvals:
-        pvals = True
+
     if pvals:
         if test == 'sign':
             from statsmodels.stats.descriptivestats import sign_test 
@@ -530,10 +511,6 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
         errs = (np.nanstd(loocv_estimates.data,axis=1)/np.sqrt(len(loocv_estimates.participant)))[::-1]
         ax[0].errorbar(x=np.arange(len(means))+1, y=means, \
                  yerr= errs, marker='o', color='k')
-        #if pvals:
-        #    for n_event in np.arange(2,loocv_estimates.n_event.max()+1):       
-        #        mean = means[n_event-1] * 1.1
-        #        ax[0].text(x=n_event-.25, y=mean, s=str(int(np.nansum(diff_bin[n_event-2])))+'/'+ str(len(diffs[-1])) + ': ' + str(np.around(pvalues[n_event-2][-1],3)), ha='right')
     else:
         alpha=1
         marker_indiv='o'
@@ -573,14 +550,13 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
             ax[1].text(x=n_event-2, y=ymintext, s=str(int(np.nansum(diff_bin[n_event-2])))+'/'+ str(len(diffs[-1])) + ': ' + str(np.around(pvalues[n_event-2][-1],3)), ha='center')
     
     if return_ax:
-        if return_pvals:
+        if pvals:
             return [ax, pvalues]
         else:
             return ax
     else:
         plt.tight_layout()
-        plt.show()
-        if return_pvals:
+        if pvals:
             return pvalues
     
 
@@ -629,7 +605,7 @@ def __display_times(ax, times_to_display, yoffset, time_step, max_time, times, l
         ax.set_xlim(-1*time_step, max_time)
     return ax
 
-def plot_latencies(times, init=None, time_step=1, labels=[], colors=default_colors,
+def plot_latencies(times, init=None, labels=[], colors=default_colors,
     figsize=False, errs=None, kind='bar', legend=False, max_time=None, as_time=True):
     '''
     Plots the average of stage latencies with choosen errors bars
@@ -644,9 +620,6 @@ def plot_latencies(times, init=None, time_step=1, labels=[], colors=default_colo
     event_width : float
         Display size of the event in time unit given sampling frequency, if drawing a fitted object using hmp you 
         can provide the event_width_sample of fitted hmp (e.g. init.event_width_sample)
-    time_step : float
-        What unit to multiply all the times with, if you want to go on the second or millisecond scale you can provide 
-        1/sf or 1000/sf where sf is the sampling frequency of the data
     labels : tuples | list
         labels to draw on the y axis
     colors : ndarray
@@ -666,9 +639,10 @@ def plot_latencies(times, init=None, time_step=1, labels=[], colors=default_colo
         if true, plot time (ms) instead of samples (time_step takes precedence). Ignored if times are provided as array.
     '''
        
-    if as_time and time_step != 1:
-        print('time_step takes precedence over as_time')
-        as_time = False
+    if as_time and init is not None:
+        time_step = 1000/init.sfreq #time_step still needed below
+    else:
+        time_step = 1
 
     #if hmp estimates are provided, calculate time
     hmp_obj = False
@@ -780,24 +754,20 @@ def plot_latencies(times, init=None, time_step=1, labels=[], colors=default_colo
         if not max_time:
             max_time = (np.nanmax(avg_times) + np.nanmax(errorbars) if errs else np.nanmax(avg_times)) * 1.05               
         axs.set_xlim(0, max_time)
-        if time_step == 1 and not as_time:
-            plt.xlabel('Cumulative stage durations from stimulus onset (samples)')
-        elif as_time:
+        if as_time:
             plt.xlabel('Cumulative stage durations from stimulus onset (ms)')
         else:
-            plt.xlabel('Cumulative stage durations from stimulus onset')
+            plt.xlabel('Cumulative stage durations from stimulus onset (samples)')
     elif kind == 'point':                 
         plt.xlim(1-.5, n_stages+.5)
 
         max_y = (np.nanmax(avg_durations) + np.nanmax(errorbars) if errs else np.nanmax(avg_durations)) * 1.05
         axs.set_ylim(0, max_y)
 
-        if time_step == 1 and as_time == False:
-            plt.ylabel('Stage durations (samples)')
-        elif as_time:
+        if  as_time:
             plt.ylabel('Stage durations (ms)')
         else:
-            plt.ylabel('Stage durations')
+            plt.ylabel('Stage durations (samples)')
         plt.xlabel('Stage')
     
     plt.tight_layout()
