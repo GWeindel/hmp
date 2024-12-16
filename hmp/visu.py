@@ -324,7 +324,7 @@ def save_model_topos(channels, estimated, channel_position, init, fname='topo', 
     '''
 
     from mne.viz import plot_brain_colorbar, plot_topomap
-    from mne.io.meas_info import Info
+    from mne import Info
 
     plot_type = 'default'
     ydim = None
