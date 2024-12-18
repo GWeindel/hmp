@@ -305,13 +305,6 @@ class hmp:
         if len(np.shape(eventprobs)) == 3:
             n_event_xr = n_event_xreventprobs = len(mags)
             n_stage = n_event_xr+1
-        elif len(np.shape(eventprobs)) == 2:#0 event case
-            eventprobs = np.transpose(eventprobs[np.newaxis], axes=(1,2,0))
-            mags = np.transpose(mags[np.newaxis], axes=(1,0))
-            n_event_xr = 0
-            n_event_xreventprobs = 1
-            n_stage = 1
-        if len(np.shape(eventprobs)) == 3:
             xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
             xrtraces = xr.DataArray(traces, dims=("em_iteration"), name="traces", coords={'em_iteration':range(len(traces))})
             xrparam_dev = xr.DataArray(param_dev, dims=("em_iteration","stage",'parameter'), name="param_dev", coords=[range(len(param_dev)), range(n_stage), ['shape','scale']])
