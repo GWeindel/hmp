@@ -5,14 +5,16 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import xarray as xr
-from mne.io import read_info
 from scipy.stats import gamma
 from pathlib import Path
 import gc
 
 import hmp
 from hmp import simulations
+
+real_data = os.path.join("tutorials", "sample_data", "eeg", "processed_0022_epo.fif")
+real_metadata = os.path.join("tutorials", "sample_data", "eeg", "0022.csv")
+
 
 def test_integration():
 
@@ -21,33 +23,41 @@ def test_integration():
     epoch_data, sim_source_times, info = simulations.demo(1, 1)
     # Data creation/reading
     ## Simulation parameters
-    sfreq = 100
+    sfreq = 102
     n_events = 3
     n_trials = 2
     cpus=1
-    means = np.array([60, 150, 80])/2
-    names = ['inferiortemporal-lh','caudalanteriorcingulate-rh','bankssts-lh']
+    times_a = np.array([[50, 100, 100, 50],
+             [50, 100, 100, 50],])
+    names = ['bankssts-rh','bankssts-lh','bankssts-rh','bankssts-lh']
+    sources = []
+    for cur_name in names:
+        sources.append([cur_name, 10., 2.8e-8, gamma(2, scale=1)])
+    raw_a, event_a,_ = simulations.simulate(sources, n_trials, cpus, 'dataset_a_raw', overwrite=True,
+                                          sfreq=sfreq, times=times_a, noise=True, seed=1, save_snr=True)
+    means = np.array([50, 100, 100, 50])/2
     sources = []
     for cur_name, cur_mean in zip(names, means):
-        sources.append([cur_name, 10., 1e-7, gamma(2, scale=cur_mean)])
-    raw_a, event_a = simulations.simulate(sources, n_trials, cpus, 'dataset_a_raw', overwrite=False, sfreq=sfreq, seed=1)
-    means = np.array([60, 300, 80])/2
-    names = ['inferiortemporal-lh','caudalanteriorcingulate-rh','bankssts-lh']
-    sources = []
-    for cur_name, cur_mean in zip(names, means):
-        sources.append([cur_name, 10., 1e-7, gamma(2, scale=cur_mean)])
-    raw_b, event_b = simulations.simulate(sources, n_trials, cpus, 'dataset_b_raw', overwrite=False, sfreq=sfreq, seed=2)
+        sources.append([cur_name, 10., 1, gamma(2, scale=cur_mean)])
+    raw_b, event_b = simulations.simulate(sources, n_trials, cpus, 'dataset_b_raw', seed=1, overwrite=True, 
+        sfreq=sfreq, verbose=True, proportions=[.99,1,1,1], noise=False)
 
     events = []
     raws = []
     event_id = {'stimulus':1}#trigger 1 = stimulus
-    resp_id = {'response':4}
+    resp_id = {'response':5}
     
     for raw_file, event_file in zip([raw_a, raw_b],
                     [event_a, event_b]):
         events.append(np.load(event_file))
         raws.append(raw_file)
-    
+    sfreq = 100
+
+    # Data reading
+    df_real_metadata = pd.read_csv(real_metadata) 
+    epoch_data = hmp.utils.read_mne_data(real_data,  epoched=True, sfreq=10, verbose=True, high_pass=1, low_pass=45,
+                                         reference='average',ignore_rt=True, reject_threshold=1e1, 
+                                         metadata=df_real_metadata, pick_channels=['Cz'])
     epoch_data = hmp.utils.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq,
             events_provided=events, verbose=True, reference='average', high_pass=1, low_pass=45,
                 subj_idx=['a','b'],pick_channels='eeg', lower_limit_RT=0.01, upper_limit_RT=2 )
@@ -57,72 +67,75 @@ def test_integration():
     
     
     # Testing transform data
-    hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, method=None, apply_zscore=False)
-    hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, bandfilter=(1,40),cov=False)
-    hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, bandfilter=(1,40),cov=False, averaged=True)
-    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', apply_zscore='all', bandfilter=(1,40))
-    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', cov=False, apply_zscore='participant', mcca_reg=1)
-    hmp_data = hmp.utils.transform_data(epoch_data, apply_zscore='trial', n_comp=2)
+    hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, method=None, apply_zscore=True, centering=False)
+    hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, apply_zscore=False, centering=False, zscore_acrossPCs=True)
+    hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, bandfilter=(1,40),cov=False,apply_zscore='all', centering=False)
+    hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, bandfilter=(1,40),cov=False, averaged=True, apply_zscore='participant', centering=False)
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', apply_zscore='all', bandfilter=(1,40), zscore_acrossPCs=True, centering=False)
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', cov=False, apply_zscore='participant', mcca_reg=1, zscore_acrossPCs=True, centering=False)
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', cov=False, apply_zscore='participant', mcca_reg=1, zscore_acrossPCs=True, centering=False, averaged=True)
+    hmp_data = hmp.utils.transform_data(epoch_data, n_comp=2,)
 
     # Testing condition selection functions and methods      
+    hmp.utils.condition_selection(epoch_data, 'a', variable='condition', method='equal')
+    hmp.utils.condition_selection(epoch_data, 'a', variable='condition', method='contains')
     hmp.utils.condition_selection_epoch(epoch_data, 'a', variable='condition', method='equal')
     hmp.utils.condition_selection_epoch(epoch_data, 'a', variable='condition', method='contains')
-    hmp.utils.participant_selection(hmp_data, 'a')
     hmp_speed_data = hmp_data
 
-    # Initializing models
+    # Comparing to simulated data, asserting that results are the one simulated
+    events_a = np.load(event_a)
+    data_a = hmp.utils.participant_selection(hmp_data, 'a')
+    init_sim = hmp.models.hmp(data=data_a)
+    sim_source_times, true_pars, true_magnitudes, _ = simulations.simulated_times_and_parameters(events_a, init_sim)
+    true_estimates = init_sim.fit_single(n_events, parameters = true_pars, magnitudes=true_magnitudes, maximization=False, verbose=True)
+    true_topos = init_sim.compute_topographies(epoch_data, true_estimates, init_sim, mean=True)
+    estimates = init_sim.fit_single(n_events, verbose=True)
+    test_topos = init_sim.compute_topographies(epoch_data, estimates, init_sim, mean=True)
+    assert (np.array(simulations.classification_true(true_topos,test_topos)) == np.array(([0,1,2],[0,1,2]))).all()
+    assert np.sum(np.abs(true_topos.data - test_topos.data)) == 2.641345635962629e-05
+    assert np.round(estimates.likelihoods.values,4) == np.array(-0.1755)
     
+    
+    # Initializing models
     ## Testing different distribution implementation
     for distribution in  ['lognormal','wald','weibull','gamma']:
         init_sim = hmp.models.hmp(data=hmp_data_sim, epoch_data=epoch_data, 
                             event_width=50, distribution=distribution, shape=2)
         estimates = init_sim.fit_single(n_events, verbose=True)
-    # sim_source_times, true_pars, true_magnitudes, _ = simulations.simulated_times_and_parameters(events, init_sim)
-    # true_estimates = init_sim.fit_single(n_events, parameters = true_pars, magnitudes=true_magnitudes, maximization=False, verbose=True)
 
     ## different init parameters
     init = hmp.models.hmp(hmp_data, epoch_data, sfreq=epoch_data.sfreq)
     init_speed = hmp.models.hmp(hmp_speed_data, epoch_data, sfreq=epoch_data.sfreq)
     
     # Testing fit 
-    
-    ## Comparing to simulated data, asserting that results are the one simulated
-    # true_topos = init_sim.compute_topographies(epoch_data, true_estimates, init_sim, mean=True).values
-    # test_topos = init_sim.compute_topographies(epoch_data, estimates, init_sim, mean=True).values
-    # assert (np.array(simulations.classification_true(true_topos,test_topos)) == np.array(([0,1],[0,1]))).all()
-    # assert np.abs(np.sum(true_topos.data - test_topos.data))<1e-10 #If error is reasonable
-    
-    ## Method tests
+    ## fit_single tests
     selected = init_sim.fit_single(n_events, method='random', starting_points=2,
                             return_max=False,verbose=True)#funct
+    elected = init_sim.fit_single(parameters=estimates.parameters, magnitudes=estimates.magnitudes)#funct
+    selected = init_sim.fit_single(parameters=np.array([estimates.parameters]), magnitudes=np.array([estimates.magnitudes]), cpus=2)#funct
     selected = init_sim.fit_single(1, method='grid', starting_points=2,
                             return_max=False,verbose=True)#funct
     selected = init_sim.fit_single(1, method='grid', starting_points=2,
                             return_max=False,verbose=True, cpus=2)#funct
-
     ## Fit function
     estimates_speed = init_speed.fit(tolerance=1e-1, step=10)
-
     ## Backward function 
     backward_speed = init_speed.backward_estimation(max_fit=estimates_speed, tolerance=1e-1, max_events=2)
-
     ## Condition fit
-    mags_map = np.array([[0, -1],
-                    [0, 0]])
-    pars_map = np.array([[0, -1, 0],
-                        [0, 0, 0]])
+    mags_map = np.array([[1, -1],
+                    [1, 0]])
+    pars_map = np.array([[0, -1, 1],
+                        [0, 0, 1]])
     conds = {'condition': ['a', 'b']} #dictionary with conditions to analyze as well as the levels.
     mags4 = backward_speed.sel(n_events=2).magnitudes.dropna('event').data
     pars4 = backward_speed.sel(n_events=2).parameters.dropna('stage').data
-    model_stage_removed = init.fit_single_conds(magnitudes=mags4, parameters=pars4, pars_map=pars_map,
-                                    mags_map=mags_map, conds=conds,  cpus=1, tolerance=1e-1, verbose=True)
-    # model_stage_removed = init.fit_single_conds( starting_points=2,#TODO
-    #                                 mags_map=mags_map, conds=conds,  cpus=1, tolerance=1e-1, verbose=True)
+    model_stage_removed = init.fit_single_conds(magnitudes=mags4, parameters=pars4, pars_map=pars_map, mags_map=mags_map, conds=conds,  cpus=1, tolerance=1e-1, verbose=True)
 
     # LOOCV
-    loocv_model_speed = hmp.loocv.loocv(init_speed, hmp_speed_data, backward_speed, print_warning=False, verbose=True)
+    loocv_model_speed = hmp.loocv.loocv(init_speed, hmp_speed_data, backward_speed, print_warning=True, verbose=True, cpus=2)
     correct_loocv_model = hmp.loocv.loocv_backward(init, hmp_data, max_events=2)
-    # _loocv_combined = hmp.loocv.loocv(init, hmp_data, model_stage_removed, print_warning=False)
+    hmp.loocv.loocv_fit_backward(init_speed, hmp_speed_data, by_sample=False, min_events=2, cpus=1, verbose=True)
 
     
     # testing plot_topo
@@ -167,6 +180,8 @@ def test_integration():
     # testing save functions
     hmp.utils.save(selected, 'selected.nc')
     hmp.utils.load('selected.nc')
+    hmp.utils.save(estimates_speed, 'estimates_speed.nc')
+    hmp.utils.load('estimates_speed.nc')
     hmp.visu.save_model_topos(epoch_data, estimates, positions, init, 
                               fname='topo', figsize=None, dpi=300, cmap='Spectral_r', 
                 vmin=None, vmax=None, sensors=False, contours=6, colorbar=True)
@@ -196,11 +211,13 @@ def test_integration():
     data = epoch_data.stack({'trial_x_participant':['participant','epochs']}).data.dropna('trial_x_participant', how="all")
     times = init_sim.compute_times(init, estimates, fill_value=0, add_rt=True)
     centered = hmp.utils.centered_activity(data, times, ['EEG 031'], event=1, baseline=1, n_samples=None, cut_before_event=1, cut_after_event=1)
+    centered = hmp.utils.centered_activity(data, times, ['EEG 031'], event=0, baseline=1, center=False, cut_before_event=0, cut_after_event=0)
 
 
     # Remove temporary files
     os.remove("dataset_a_raw_raw_generating_events.npy")
     os.remove("dataset_a_raw_raw.fif")
+    os.remove("dataset_a_raw_raw_snr.npy")
     os.remove("dataset_b_raw_raw_generating_events.npy")
     os.remove("dataset_b_raw_raw.fif")
     os.remove("selected_eventprobs.csv")
