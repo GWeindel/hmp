@@ -4,7 +4,6 @@
 
 import numpy as np
 from scipy.special import gamma as gamma_func
-from scipy.stats import lognorm
 import xarray as xr
 import multiprocessing as mp
 import itertools
@@ -13,7 +12,6 @@ from pandas import MultiIndex
 import warnings
 from warnings import warn, filterwarnings
 from hmp import mcca
-import json
 import mne
 import os
 
@@ -245,10 +243,7 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
             metadata_i[rt_col] = epochs.tmax
         offset_after_resp_samples = np.rint(offset_after_resp*sfreq).astype(int)
         valid_epoch_index = [x for x,y in enumerate(epochs.drop_log) if len(y) == 0]
-        try:#Differences among MNE's versions
-            data_epoch = epochs.get_data(copy=False)#preserves index
-        except:
-            data_epoch = epochs.get_data()#preserves index
+        data_epoch = epochs.get_data(copy=False)#preserves index
         rts = metadata_i[rt_col]
         if isinstance(metadata_i, pd.DataFrame):
             if len(metadata_i) > len(data_epoch):#assumes metadata contains rejected epochs
@@ -314,107 +309,11 @@ def read_mne_data(pfiles, event_id=None, resp_id=None, epoched=False, sfreq=None
     return epoch_data
 
 def _pick_channels(pick_channels,data,stim=True):
-    if isinstance(pick_channels, list):
-        try:
-            data = data.pick(pick_channels)
-        except:
-            raise ValueError('incorrect channel pick specified')
-    elif pick_channels == 'eeg' or pick_channels == 'meg':
-            data = data.pick(pick_channels)
-    else:
-         raise ValueError('incorrect channel pick specified')
+    try:
+        data = data.pick(pick_channels)
+    except:
+        raise ValueError('incorrect channel pick specified')
     return data
-
-def parsing_epoched_eeg(data, rts, conditions, sfreq, start_time=0, offset_after_resp=0.1):
-    '''
-    Function to parse epochs and crop them to start_time (usually stimulus onset so 0) up to the reaction time of the trial.
-    The returned object is a xarray Dataset allowing further processing using built-in methods
-
-    Importantly 
-    1) if you are considering some lower or upper limit on the RTs you should replace values outside of these ranges
-    by np.nan (e.g. rts[rts < 200] = np.nan) or 0
-    2) RTs and conditions need to be ordered in the same way as the epochs
-    
-    
-    Parameters
-    ----------
-    data: pandas.dataframe
-        pandas dataframe with columns time (in milliseconds), epoch number and one column for each channel 
-        (column name will be taken as channel names)
-    rts: list or 1d array
-        list of reaction times in milliseconds for each epoch 
-    epoch_index: list or 1d array
-        number of the index (important for eventual dropped trials during the prepro154,cessing
-    channel_index: list or 1d array
-        list of name of the channels
-    condition: list or 1d array
-        list of condition associated with each epoch
-    sfreq: float
-        sampling frequency of the data
-    start_time: float
-        time defining the onset of a trial (default is 0 as trial usually defined from event/stimulus onset) in milliseconds
-    offset_after_resp: float
-        eventual time added after the response (e.g. if we expect later components) in milliseconds
-    '''
-    tstep = 1000/sfreq#time step
-    offset_after_resp_samples = int(offset_after_resp/tstep)
-    epoch_size = len(data.time.unique())*tstep
-    if not isinstance(rts, np.ndarray):
-        try:#pandas or xarray
-            rts = rts.values
-        except:
-            raise ValueError('RTs should either be a numpy array or a pandas serie')
-    if not isinstance(conditions, np.ndarray):
-        try:#pandas or xarray
-            conditions = conditions.values
-        except:
-            raise ValueError('Conditions should either be a numpy array or a pandas serie')
-    if any(t > epoch_size for t in rts):
-        print('Zeroing out RTs longer than epoch size, you might want to zero out rts that are outside of the range of interest')
-        rts[rts > epoch_size] = 0
-    rts[np.isnan(rts)] = 0
-    rts = np.array([int(x) for x in rts/tstep])
-    data = data[data.time >= start_time]#remove all baseline values
-    epochs = data.epoch.unique()
-    rts = rts[epochs]
-    conditions = conditions[epochs]
-    times = data.time.unique()
-    data = data.drop(columns=['time', 'epoch'])
-    #channel names/columns are assumed to be remaining columns affter removing time and epoch columns
-    channel_columns = [x for x in data.columns]
-    data = data.values.flatten()
-    data = data.reshape((len(epochs), len(times),len(channel_columns)))
-    data = np.swapaxes(data,1,2)
-
-    nan_con = np.array([i for i,x in enumerate(conditions) if isinstance(x, float) and np.isnan(x)])
-    if len(nan_con) > 0:
-        print(f'NaN present in condition array, removing associated epoch and RT ({nan_con})')
-        data = np.delete(data, nan_con, axis=0)
-        conditions = np.delete(conditions, nan_con, axis=0)
-        rts = np.delete(rts, nan_con, axis=0)
-        epochs =  np.delete(epochs, nan_con, axis=0)
-    epoch = 0
-    for rt in rts:
-        if rt == 0:
-            data[epoch,:,:] = np.nan
-            conditions[epoch] = ''
-            #rts[epoch] = None#np.nan#np.delete(rts, epoch, axis=0)
-            #epochs[epoch] = np.nan#np.delete(epochs, epoch, axis=0)
-        epoch += 1
-    cropped_conditions = []
-    epoch_idx = []
-    cropped_data_epoch = np.empty([len(epochs), len(channel_columns), max(rts)+offset_after_resp_samples])
-    cropped_data_epoch[:] = np.nan
-    j = 0
-    for epoch in np.arange(len(data)):
-        #Crops the epochs up to RT
-        cropped_data_epoch[j,:,:rts[epoch]+offset_after_resp_samples] = \
-        (data[epoch,:,:rts[epoch]+offset_after_resp_samples])
-        j += 1
-    print(f'Totaling {len(cropped_data_epoch)} valid trials')
-
-    data_xr = hmp_data_format(cropped_data_epoch, sfreq, conditions, offset_after_resp_samples, epochs=epochs, channels = channel_columns)
-    return data_xr
 
 def hmp_data_format(data, sfreq, events=None, offset=0, participants=[], epochs=None, channels=None, metadata=None):
 
@@ -922,7 +821,7 @@ def condition_selection(hmp_data, condition_string, variable='event', method='eq
         unstacked = unstacked.where(unstacked[variable].str.contains(condition_string),drop=True)
         stacked = stack_data(unstacked)
     else:
-        print('unknown method, returning original data')
+        warn('unknown method, returning original data')
         stacked = hmp_data
     return stacked
 
@@ -941,163 +840,3 @@ def participant_selection(hmp_data, participant):
     unstacked = hmp_data.unstack().sel(participant = participant)
     stacked = stack_data(unstacked)
     return stacked
-
-def filter_non_converged(estimates):
-    for iteration in estimates.iteration.values:
-        if np.diff(estimates.sel(iteration=iteration).traces.dropna('em_iteration')[-2:]) < -1e-10:
-            estimates = estimates.drop_sel({'iteration':iteration})
-    estimates["iteration"] = range(len(estimates.iteration))
-    return estimates
-
-
-def epoch_between_events(raw, events, event_id_from, event_id_to, baseline=None, picks=None, reject=None, tmin=0, tmax=0, decim=1, reject_by_annotation=True, proj='delayed', metadata=None, resample_freq = None, verbose=None):
-    '''
-    Epoch data between a 'from event' and a 'to event', typically between stimulus and response.
-    Empty samples due to different epoch lengths are filled with nans. There must be the same 
-    number of from and to events.
-
-    NOTE: reject and resample of resulting Epochs object do not work properly!
-
-    Parameters
-    ----------
-    raw : mne.io.Raw object
-        An instance of Raw.
-    events : array of int, shape (n_events, 3)
-        The array of events. The first column contains the event time in samples, with first_samp included. 
-        The third column contains the event id.
-    event_id_from : dict
-        The id of the 'from events' to consider. The keys can later be used to access associated events. Example: dict(auditory=1, visual=3). 
-    event_id_to : dict
-        The id of the 'to events' to consider. The keys can later be used to access associated events. Example: dict(correct=11, incorrect=13).
-    baseline : None | tuple of length 2
-        The time interval to consider as “baseline” with respect to the 'from events' when applying baseline correction. If None, do not apply baseline correction. If a tuple (a, b), the interval is between a and b (in seconds), including the endpoints. If a is None, the beginning of the data is used; and if b is None, it is set to the end of the interval. If (None, None), the entire time interval is used.
-    picks : str | array_like | slice | None
-        Channels to include. Slices and lists of integers will be interpreted as channel indices. In lists, channel type strings (e.g., ['meg', 'eeg']) will pick channels of those types, channel name strings (e.g., ['MEG0111', 'MEG2623'] will pick the given channels. Can also be the string values “all” to pick all channels, or “data” to pick data channels. None (default) will pick all channels. Note that channels in info['bads'] will be included if their names or indices are explicitly provided.
-    reject : dict | None
-        Reject epochs based on maximum peak-to-peak signal amplitude (PTP), i.e. the absolute difference between the lowest and the highest signal value. In each individual epoch, the PTP is calculated for every channel. If the PTP of any one channel exceeds the rejection threshold, the respective epoch will be dropped. The dictionary keys correspond to the different channel types; valid keys can be any channel type present in the object. Example:
-        reject = dict(grad=4000e-13,  # unit: T / m (gradiometers)
-              mag=4e-12,      # unit: T (magnetometers)
-              eeg=40e-6,      # unit: V (EEG channels)
-              eog=250e-6      # unit: V (EOG channels)
-              )
-    tmin, tmax : float
-        Start and end time of the epochs in seconds, relative to respectively the from and the end events. The closest or matching samples corresponding to the start and end time are included. Defaults to 0.
-    decim : int
-        Factor by which to subsample the data.
-    reject_by_annotation : bool
-        Whether to reject based on annotations. If True (default), epochs overlapping with segments whose description begins with 'bad' are rejected. If False, no rejection based on annotations is performed.
-    proj : bool | ‘delayed’
-        Apply SSP projection vectors. If proj is ‘delayed’ and reject is not None the single epochs will be projected before the rejection decision, but used in unprojected state if they are kept. This way deciding which projection vectors are good can be postponed to the evoked stage without resulting in lower epoch counts and without producing results different from early SSP application given comparable parameters. Note that in this case baselining, detrending and temporal decimation will be postponed. If proj is False no projections will be applied which is the recommended value if SSPs are not used for cleaning the data.    
-    metadata : instance of pandas.DataFrame | None
-        A pandas.DataFrame specifying metadata about each epoch. If given, len(metadata) must equal len(events). The DataFrame may only contain values of type (str | int | float | bool). If metadata is given, then pandas-style queries may be used to select subsets of data, see mne.Epochs.__getitem__(). When a subset of the epochs is created in this (or any other supported) manner, the metadata object is subsetted accordingly, and the row indices will be modified to match epochs.selection.
-    resample_freq: float | None
-        Resample data to resample_freq.
-     verbose : bool | str | int | None
-        Control verbosity of the logging output. If None, use the default verbosity level. See the logging documentation and mne.verbose() for details. Should only be passed as a keyword argument.   
-
-    Returns
-    -------
-    epochs : mne.Epochs
-        mne.Epochs object with epoched data, missing samples are np.nan
-    '''
-
-    #set params for raw.get_data()
-    reject_by_annotation = 'NaN' if reject_by_annotation else None
-
-    #get data and fill matrix
-    from_id = list(event_id_from.values())
-    to_id = list(event_id_to.values())
-
-    n_epochs = np.count_nonzero(np.isin(events[:,2],from_id))
-    n_channels = len(raw.get_channel_types(picks=picks))
-
-    epochs_start_stop = np.zeros((n_epochs,4), dtype='int64') #start and stop samples, length, and event from id 
-
-    #find start ids in events and following to id, store
-    epochs_cnt = 0
-    for i, ev in enumerate(events):
-        if ev[2] in from_id:
-            end_ev = i
-            while events[end_ev,2] not in to_id:
-                end_ev += 1
-                if end_ev == len(events):
-                    raise ValueError(
-                        "Every from_id must have a following to_id"
-                    )
-            epochs_start_stop[epochs_cnt] = [ev[0], events[end_ev,0], 0, ev[2]]
-            epochs_cnt += 1
-
-    #apply tmin, tmax; calc len
-    epochs_start_stop[:,0] = epochs_start_stop[:,0] + round(tmin * raw.info["sfreq"])
-    epochs_start_stop[:,1] = epochs_start_stop[:,1] + round(tmax * raw.info["sfreq"])
-    epochs_start_stop[:,2] = epochs_start_stop[:,1] - epochs_start_stop[:,0]
-    if any(epochs_start_stop[:,2] < 0):
-        raise ValueError("Negative epoch length due to tmin/tmax application.")
-    
-    #make data matrix, epochs x channels x timepoint (e.g. 228, 25, 500)
-    nr_samples = max(epochs_start_stop[:,2])
-    dat = np.empty((n_epochs, n_channels, nr_samples))
-    dat[:] = np.nan
-    drop_log = [()] * n_epochs
-
-    #fill matrix
-    for i, ep in enumerate(epochs_start_stop):
-
-        #get data from raw, taking annotations into account
-        dat[i,:,:ep[2]] = raw.get_data(picks=picks, start = ep[0], stop = ep[1], reject_by_annotation=reject_by_annotation, verbose=verbose)
-
-        #check reject:
-        #missing data due to annotations:
-        if np.isnan(dat[i,:,:ep[2]]).any():
-            drop_log[i] = drop_log[i] + ('BAD_artifact',)
-
-        #reject based on range
-        if reject != None:
-            if not np.isnan(dat[i,:,:ep[2]]).all():
-                for k,v in reject.items():
-                    ch_types = raw.get_channel_types(picks=picks)
-                    for ch in np.where(np.array(ch_types) == k)[0]:
-                        if np.nanmax((dat[i,ch,:ep[2]])) - np.nanmin((dat[i,ch,:ep[2]])) > v:
-                            drop_log[i] = drop_log[i] + (raw.ch_names[ch],)
-    
-    #remove drops  
-    dat = np.delete(dat, [True if tmp != () else False for tmp in drop_log], 0)
-    events = mne.pick_events(events, include=from_id)
-    events_drop = np.delete(events, [True if tmp != () else False for tmp in drop_log], 0)
-
-    #resample
-    #based on Epochs.resample, but taking care of NaNs
-    if resample_freq != None:
-        
-        sfreq = float(resample_freq)
-        o_sfreq = raw.info["sfreq"]
-
-        nr_samples = int(round(dat.shape[2] * sfreq/o_sfreq)) #perhaps + 1 to make sure
-        dat_resampled = np.empty((dat.shape[0], dat.shape[1], nr_samples))
-        dat_resampled[:] = np.nan
-
-        #resample by epoch because NaNs need to be removed
-        for i, ep in enumerate(dat):
-            #filter non-nan samples
-            ep_resamp = mne.filter.resample(ep[:, ~np.isnan(ep[0,:])], sfreq, o_sfreq, npad="auto", window="boxcar", pad="edge")
-            dat_resampled[i,:,:ep_resamp.shape[1]] = ep_resamp
-
-        #check lowpass
-        lowpass = raw.info.get("lowpass")
-        lowpass = np.inf if lowpass is None else lowpass
-        with raw.info._unlock():
-            raw.info["lowpass"] = min(lowpass, sfreq / 2.0)
-            raw.info["sfreq"] = float(sfreq)
-        
-        dat = dat_resampled
-
-    #create epochs object
-    # NOTE using reject here does not work, it only rejects (if necessary) the first episode.
-    # This seems due to the NaNs.
-    epochs = mne.EpochsArray(dat, raw.info, events = events_drop, tmin=tmin, event_id=event_id_from, baseline=baseline, proj=proj, metadata=metadata, drop_log=tuple(drop_log), verbose=verbose)
-
-    #decimate if asked for
-    if decim > 1:
-        epochs = epochs.decimate(decim, offset=0, verbose=verbose)
-
-    return epochs
