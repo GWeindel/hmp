@@ -228,93 +228,80 @@ class hmp:
             if len(np.shape(magnitudes)) == 3:
                 starting_points = np.shape(magnitudes)[0]
         
-        if starting_points > 0:#Initialize with equally spaced option
-            if parameters is None:
-                parameters = np.tile([self.shape, self.mean_to_scale(np.mean(self.durations)/(n_events+1),self.shape)], (n_events+1,1))
-            initial_p = parameters
-            
-            if magnitudes is None:
-                magnitudes = np.zeros((n_events,self.n_dims), dtype=np.float64)
-            initial_m = magnitudes
-        if starting_points > 1 or len(np.shape(magnitudes)) == 3 or len(np.shape(parameters)) == 3:
-            filterwarnings('ignore', 'Convergence failed, estimation hitted the maximum ', )#will be the case but for a subset only hence ignore
-            if len(np.shape(initial_m)) == 2:
-                parameters = [initial_p]
-                magnitudes = np.zeros((starting_points, n_events, self.n_dims))
-                magnitudes[0] = initial_m
-                if method == 'random':
-                    for _ in np.arange(starting_points - 1):
-                        proposal_p = self.gen_random_stages(n_events)
-                        proposal_p[parameters_to_fix] = initial_p[parameters_to_fix]
-                        parameters.append(proposal_p)
-                    magnitudes[1:] = self.gen_mags(n_events, starting_points-1, method='random', verbose=False)
-                    magnitudes[:,magnitudes_to_fix,:] = np.tile(initial_m[magnitudes_to_fix], (len(magnitudes), 1, 1))
-                elif method == 'grid':
-                    parameters = self._grid_search(n_events+1, iter_limit=starting_points, method='grid')
-                    magnitudes = np.zeros((len(parameters), n_events, self.n_dims), dtype=np.float64)#Grid search is not yet done for mags
-                else:
-                    raise ValueError('Unknown starting point method requested, use "random" or "grid"')
-            elif len(np.shape(initial_m)) == 3:
-                magnitudes = initial_m
-                if len(np.shape(initial_p)) == 3:
-                    parameters = initial_p
-                else:
-                    parameters = np.tile(parameters, (len(magnitudes),1,1))
-            if cpus>1: 
-                inputs = zip(magnitudes, parameters, itertools.repeat(maximization),
-                        itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(min_iteration), itertools.repeat(None), itertools.repeat(None),itertools.repeat(None), itertools.repeat(1))
-                with mp.Pool(processes=cpus) as pool:
-                    if starting_points > 1:
-                        estimates = list(tqdm(pool.imap(self._EM_star, inputs), total=len(magnitudes)))
-                    else:
-                        estimates = pool.starmap(self.EM, inputs)
- 
-            else:#avoids problems if called in an already parallel function
-                estimates = []
-                for pars, mags in zip(parameters, magnitudes):
-                    estimates.append(self.EM(mags, pars, maximization,\
-                    magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration))
-                resetwarnings()
-            lkhs_sp = [x[0] for x in estimates]
-            mags_sp = [x[1] for x in estimates]
-            pars_sp = [x[2] for x in estimates]
-            eventprobs_sp = [x[3] for x in estimates]
-            traces_sp = [x[4] for x in estimates]
-            param_dev_sp = [x[5] for x in estimates]
-
-            if return_max:
-                max_lkhs = np.argmax(lkhs_sp)
-                lkh = lkhs_sp[max_lkhs]
-                mags = mags_sp[max_lkhs]
-                pars = pars_sp[max_lkhs]
-                eventprobs = eventprobs_sp[max_lkhs]
-                traces = traces_sp[max_lkhs]
-                param_dev = param_dev_sp[max_lkhs]
+        if parameters is None:
+            parameters = np.tile([self.shape, self.mean_to_scale(np.mean(self.durations)/(n_events+1),self.shape)], (n_events+1,1))
+        initial_p = parameters
+        
+        if magnitudes is None:
+            magnitudes = np.zeros((n_events,self.n_dims), dtype=np.float64)
+        initial_m = magnitudes
+        # if starting_points > 1:
+        filterwarnings('ignore', 'Convergence failed, estimation hitted the maximum ', )#will be the case but for a subset only hence ignore
+        if len(np.shape(initial_m)) == 2:
+            parameters = [initial_p]
+            magnitudes = np.zeros((starting_points, n_events, self.n_dims))
+            magnitudes[0] = initial_m
+            if method == 'random':
+                for _ in np.arange(starting_points - 1):
+                    proposal_p = self.gen_random_stages(n_events)
+                    proposal_p[parameters_to_fix] = initial_p[parameters_to_fix]
+                    parameters.append(proposal_p)
+                magnitudes[1:] = self.gen_mags(n_events, starting_points-1, method='random', verbose=False)
+                magnitudes[:,magnitudes_to_fix,:] = np.tile(initial_m[magnitudes_to_fix], (len(magnitudes), 1, 1))
+            elif method == 'grid':
+                parameters = self._grid_search(n_events+1, iter_limit=starting_points, method='grid')
+                magnitudes = np.zeros((len(parameters), n_events, self.n_dims), dtype=np.float64)#Grid search is not yet done for mags
             else:
-                lkh = lkhs_sp
-                mags = mags_sp
-                pars = pars_sp
-                eventprobs = eventprobs_sp
-                traces = np.zeros((len(lkh),  max([len(x) for x in traces_sp])))*np.nan
-                for i, _i in enumerate(traces_sp):
-                    traces[i, :len(_i)] = _i
-                param_dev = np.zeros((len(lkh),  max([len(x) for x in param_dev_sp]), n_events + 1, 2))*np.nan
-                for i, _i in enumerate(param_dev_sp):
-                    param_dev[i, :len(_i),:,:] = _i
-            
-        elif starting_points==1:#informed starting point
-            lkh, mags, pars, eventprobs, traces, param_dev = self.EM(initial_m, initial_p,\
-                                         maximization, magnitudes_to_fix, parameters_to_fix, \
-                                         max_iteration, tolerance, min_iteration)
+                raise ValueError('Unknown starting point method requested, use "random" or "grid"')
+        elif len(np.shape(initial_m)) == 3:
+            magnitudes = initial_m
+            if len(np.shape(initial_p)) == 3:
+                parameters = initial_p
+            else:
+                parameters = np.tile(parameters, (len(magnitudes),1,1))
+        if cpus>1: 
+            inputs = zip(magnitudes, parameters, itertools.repeat(maximization),
+                    itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(min_iteration), itertools.repeat(None), itertools.repeat(None),itertools.repeat(None), itertools.repeat(1))
+            with mp.Pool(processes=cpus) as pool:
+                if starting_points > 1:
+                    estimates = list(tqdm(pool.imap(self._EM_star, inputs), total=len(magnitudes)))
+                else:
+                    estimates = pool.starmap(self.EM, inputs)
 
-        else:#uninitialized    
-            if np.any(parameters)== None:
-                parameters = np.tile([self.shape, self.mean_to_scale(np.mean(self.durations)/(n_events+1),self.shape)], (n_events+1,1))
-            initial_p = parameters
-            if np.any(magnitudes)== None:
-                magnitudes = np.zeros((n_events, self.n_dims), dtype=np.float64)
-            lkh, mags, pars, eventprobs, traces, param_dev = self.EM(magnitudes, parameters, maximization, magnitudes_to_fix, parameters_to_fix,\
-                                        max_iteration, tolerance, min_iteration)
+        else:#avoids problems if called in an already parallel function
+            estimates = []
+            for pars, mags in zip(parameters, magnitudes):
+                estimates.append(self.EM(mags, pars, maximization,\
+                magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration))
+            resetwarnings()
+        lkhs_sp = [x[0] for x in estimates]
+        mags_sp = [x[1] for x in estimates]
+        pars_sp = [x[2] for x in estimates]
+        eventprobs_sp = [x[3] for x in estimates]
+        traces_sp = [x[4] for x in estimates]
+        param_dev_sp = [x[5] for x in estimates]
+
+        if return_max:
+            max_lkhs = np.argmax(lkhs_sp)
+            lkh = lkhs_sp[max_lkhs]
+            mags = mags_sp[max_lkhs]
+            pars = pars_sp[max_lkhs]
+            eventprobs = eventprobs_sp[max_lkhs]
+            traces = traces_sp[max_lkhs]
+            param_dev = param_dev_sp[max_lkhs]
+        else:
+            lkh = lkhs_sp
+            mags = mags_sp
+            pars = pars_sp
+            eventprobs = eventprobs_sp
+            traces = np.zeros((len(lkh),  max([len(x) for x in traces_sp])))*np.nan
+            for i, _i in enumerate(traces_sp):
+                traces[i, :len(_i)] = _i
+            param_dev = np.zeros((len(lkh),  max([len(x) for x in param_dev_sp]), n_events + 1, 2))*np.nan
+            for i, _i in enumerate(param_dev_sp):
+                param_dev[i, :len(_i),:,:] = _i
+            
+
         if len(np.shape(eventprobs)) == 3:
             n_event_xr = n_event_xreventprobs = len(mags)
             n_stage = n_event_xr+1
