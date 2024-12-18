@@ -115,11 +115,7 @@ class hmp:
         self.events = self.cross_correlation(data.data.T)#adds event morphology
         self.max_d = self.durations.max()
         
-        if self.max_d > 500:#FFT conv from scipy faster in this case
-            from scipy.signal import fftconvolve
-            self.convolution = fftconvolve
-        else:
-            self.convolution = np.convolve
+        self.convolution = np.convolve
         self.trial_coords = data.unstack().sel(component=0,samples=0).rename({'epochs':'trials'}).\
             stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",how="all").coords
         
@@ -740,12 +736,6 @@ class hmp:
             n_cond = mags_map.shape[0]
         else:
             n_cond = None
-        
-        if not isinstance(maximization, bool):#Backward compatibility with previous versions
-            warn('Deprecated use of the threshold function, use maximization and tolerance arguments. Setting tolerance at 1 for compatibility')
-            maximization = {1:True, 0:False}[maximization]
-            if maximization:#Backward compatibility, equivalent to previous threshold = 1
-                tolerance = 1
         
         null_stages = np.where(parameters[...,-1].flatten()<0)[0]
         wrong_shape = np.where(parameters[...,-2]!=self.shape)[0]
