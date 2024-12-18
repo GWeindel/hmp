@@ -194,7 +194,6 @@ class hmp:
         cpus: int
             number of cores to use in the multiprocessing functions
         '''
-        assert n_events is not None or parameters is not None or magnitudes is not None, 
         if n_events is None:
             if parameters is not None:
                 n_events = len(parameters)-1   
