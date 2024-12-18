@@ -194,7 +194,14 @@ class hmp:
         cpus: int
             number of cores to use in the multiprocessing functions
         '''
-        assert n_events is not None, 'The fit_single() function needs to be provided with a number of expected transition events'
+        assert n_events is not None or parameters is not None or magnitudes is not None, 
+        if n_events is None:
+            if parameters is not None:
+                n_events = len(parameters)-1   
+            elif magnitudes is not None:
+                n_events = len(magnitudes)
+            else:
+                raise ValueError('The fit_single() function needs to be provided with a number of expected transition events')
         assert n_events <= self.compute_max_events(), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
         if verbose:
             if parameters is None:
@@ -202,9 +209,7 @@ class hmp:
             else:
                 print(f'Estimating {n_events} events model')
         if cpus is None:
-            cpus = self.cpus
-        if n_events is None and parameters is not None:
-            n_events = len(parameters)-1          
+            cpus = self.cpus      
         #Formatting parameters
         if isinstance(parameters, (xr.DataArray,xr.Dataset)):
             parameters = parameters.dropna(dim='stage').values
