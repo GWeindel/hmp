@@ -27,12 +27,12 @@ def test_integration():
     n_events = 3
     n_trials = 2
     cpus=1
-    times_a = np.array([[50, 100, 100, 50],
+    times_a = np.array([[50, 50, 150, 50],
              [50, 100, 100, 50],])
     names = ['bankssts-rh','bankssts-lh','bankssts-rh','bankssts-lh']
     sources = []
     for cur_name in names:
-        sources.append([cur_name, 10., 2.8e-8, gamma(2, scale=1)])
+        sources.append([cur_name, 10., 3.1e-8, gamma(2, scale=1)])
     raw_a, event_a,_ = simulations.simulate(sources, n_trials, cpus, 'dataset_a_raw', overwrite=True,
                                           sfreq=sfreq, times=times_a, noise=True, seed=1, save_snr=True)
     means = np.array([50, 100, 100, 50])/2
@@ -89,11 +89,15 @@ def test_integration():
     init_sim = hmp.models.hmp(data=data_a)
     sim_source_times, true_pars, true_magnitudes, _ = simulations.simulated_times_and_parameters(events_a, init_sim)
     true_estimates = init_sim.fit_single(n_events, parameters = true_pars, magnitudes=true_magnitudes, maximization=False, verbose=True)
+    hmp.visu.plot_topo_timecourse(epoch_data, true_estimates, info, init_sim) 
+    plt.show()
     true_topos = init_sim.compute_topographies(epoch_data, true_estimates, init_sim, mean=True)
     estimates = init_sim.fit_single(n_events, verbose=True)
+    hmp.visu.plot_topo_timecourse(epoch_data, estimates, info, init_sim) 
+    plt.show()
     test_topos = init_sim.compute_topographies(epoch_data, estimates, init_sim, mean=True)
     assert (np.array(simulations.classification_true(true_topos,test_topos)) == np.array(([0,1,2],[0,1,2]))).all()
-    assert np.sum(np.abs(true_topos.data - test_topos.data)) < 2.65e-05
+    assert np.sum(np.abs(true_topos.data - test_topos.data)) == 2.65e-05
     assert np.round(estimates.likelihoods.values,4) > np.array(-1)
     
     
