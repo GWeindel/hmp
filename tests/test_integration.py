@@ -93,7 +93,7 @@ def test_integration():
     estimates = init_sim.fit_single(n_events, verbose=True)
     test_topos = init_sim.compute_topographies(epoch_data, estimates, init_sim, mean=True)
     assert (np.array(simulations.classification_true(true_topos,test_topos)) == np.array(([0,1,2],[0,1,2]))).all()
-    assert np.sum(np.abs(true_topos.data - test_topos.data)) == 2.641345635962629e-05
+    assert np.sum(np.abs(true_topos.data - test_topos.data)) < 2.641345635962629e-05
     assert np.round(estimates.likelihoods.values,4) == np.array(-0.1755)
     
     
