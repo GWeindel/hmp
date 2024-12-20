@@ -145,7 +145,7 @@ def test_integration():
     hmp.visu.plot_topo_timecourse(epoch_data, estimates, positions, init, sensors=False, 
                                   times_to_display = None, title='a', max_time=None)
     hmp.visu.plot_topo_timecourse(epoch_data, estimates_speed, info, init_speed, 
-                                  as_time=True, contours=False, event_lines=None, colorbar=False, ax=ax[0])60%
+                                  as_time=True, contours=False, event_lines=None, colorbar=False, ax=ax[0])
     hmp.visu.plot_topo_timecourse(epoch_data, backward_speed, info, init_speed, ax=ax[0])
     
     hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, init, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0],) 
