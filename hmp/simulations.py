@@ -239,7 +239,7 @@ def simulate(sources, n_trials, n_jobs, file, relations=None, data_type='eeg', n
                     rand_i = np.maximum(1,rand_times[s]/(tstep*1000))
                     rand_i = np.round(rand_i,decimals=0)
                 else:
-                    rand_i = times[:,trigger-2]/(tstep*1000)
+                    rand_i = times[:,s]/(tstep*1000)
                 if len(rand_i[rand_i<0]) > 0:
                     warn(f'Negative stage duration were found, 1 is imputed for the {len(rand_i[rand_i<0])} trial(s)', UserWarning)
                     rand_i[rand_i<0] = 1
@@ -351,16 +351,16 @@ def demo(cpus, n_events, seed=123):
     positions = mne.pick_info(positions, sel=chan_list)
     return eeg_dat, random_source_times, positions
 
-def classification_true(true_topographies,test_topographies):
+def classification_true(true_topologies,test_topologies):
     '''
     Classifies event as belonging to one of the true events
 
     Parameters,
     ----------
-    true_topographies : xarray.DataArray
-        topographies for the true events simulated obtained from `init.compute_topographies(epoch_data, test_estimates, test_init, mean=True)`
+    true_topologies : xarray.DataArray
+        topologies for the true events simulated obtained from `init.compute_topologies(epoch_data, test_estimates, test_init, mean=True)`
     test_tolopogies : xarray.DataArray
-        topographies for the events found in the estimation procedure obtained from `init.compute_topographies(epoch_data, true_estimates, true_init, mean=True)`
+        topologies for the events found in the estimation procedure obtained from `init.compute_topologies(epoch_data, true_estimates, true_init, mean=True)`
 
     
     Returns
@@ -371,12 +371,12 @@ def classification_true(true_topographies,test_topographies):
         index in the test estimate that correspond to the indexes in corresp_true_idx
         
     '''
-    test_topographies = (test_topographies.copy()-test_topographies.mean(axis=1))/ test_topographies.std(axis=1)
-    true_topographies = (true_topographies.copy()-true_topographies.mean(axis=1))/true_topographies.std(axis=1)
-    true0 = np.vstack((np.zeros(true_topographies.shape[1]), true_topographies))#add a zero electrode event
-    classif = np.zeros(test_topographies.shape[0], dtype=int)#array of categorization in true events
-    classif_vals = np.zeros(test_topographies.shape[0])#values of the squared diff
-    for i, test_ev in enumerate(test_topographies):
+    test_topologies = (test_topologies.copy()-test_topologies.mean(axis=1))/ test_topologies.std(axis=1)
+    true_topologies = (true_topologies.copy()-true_topologies.mean(axis=1))/true_topologies.std(axis=1)
+    true0 = np.vstack((np.zeros(true_topologies.shape[1]), true_topologies))#add a zero electrode event
+    classif = np.zeros(test_topologies.shape[0], dtype=int)#array of categorization in true events
+    classif_vals = np.zeros(test_topologies.shape[0])#values of the squared diff
+    for i, test_ev in enumerate(test_topologies):
         all_distances = np.zeros(len(true0))
         for j, true_ev in enumerate(true0):
             all_distances[j] = np.median(np.abs(true_ev-test_ev))
