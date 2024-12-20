@@ -115,11 +115,11 @@ def test_integration():
     elected = init_sim.fit_single(parameters=estimates.parameters, magnitudes=estimates.magnitudes)#funct
     selected = init_sim.fit_single(parameters=np.array([estimates.parameters]), magnitudes=np.array([estimates.magnitudes]), cpus=2)#funct
     selected = init_sim.fit_single(1, method='grid', starting_points=2,
-                            return_max=False,verbose=True)#funct
+                            return_max=True,verbose=True)#funct
     selected = init_sim.fit_single(1, method='grid', starting_points=2,
                             return_max=False,verbose=True, cpus=2)#funct
     ## Fit function
-    estimates_speed = init_speed.fit(tolerance=1e-1, step=10)
+    estimates_speed, _ = init_speed.fit(tolerance=1e-1, step=10, diagnostic=True, by_sample=True, pval=1, return_estimates=True)
     ## Backward function 
     backward_speed = init_speed.backward_estimation(max_fit=estimates_speed, tolerance=1e-1, max_events=2)
     ## Condition fit
@@ -145,13 +145,18 @@ def test_integration():
     hmp.visu.plot_topo_timecourse(epoch_data, estimates, positions, init, sensors=False, 
                                   times_to_display = None, title='a', max_time=None)
     hmp.visu.plot_topo_timecourse(epoch_data, estimates_speed, info, init_speed, 
-                                  as_time=True, contours=False, event_lines=None, colorbar=False, ax=ax[0])
+                                  as_time=True, contours=False, event_lines=None, colorbar=False, ax=ax[0])60%
     hmp.visu.plot_topo_timecourse(epoch_data, backward_speed, info, init_speed, ax=ax[0])
     
     hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, init, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0],) 
     hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, init, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0], times_to_display=[1,2]) 
     hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, init, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0], times_to_display=[[1,2]]) 
     hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, init, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0], times_to_display=np.array([1,2]))
+
+    # Testing comoput_times
+    init_speed.compute_times(init_speed, backward_speed.sel(n_events=1), duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=True, as_time=False, errorbars='se', center_measure='mean',estimate_method='max', onset=True)
+    init_speed.compute_times(init_speed, backward_speed, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=True, as_time=False, errorbars='se', center_measure='mean', onset=True)
+    init_speed.compute_times(init_speed, model_stage_removed, duration=True, fill_value=None, mean=False, mean_in_participant=True, cumulative=True, add_rt=True, as_time=True, errorbars='std', center_measure='median',estimate_method='mean', onset=False)
 
     
     # Testing diverse plotting functions
