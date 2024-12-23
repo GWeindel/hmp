@@ -425,7 +425,7 @@ def simulated_times_and_parameters(generating_events, init, resampling_freq=None
             else:
                 sample_times[trial,event] = init.ends[trial]
     if data is None: #use crosscorrelated data
-        true_activities = init.events[sample_times[:,:]]
+        true_activities = init.crosscorr[sample_times[:,:]]
     else:
         true_activities = data[sample_times[:,:]]
     true_magnitudes = np.mean(true_activities, axis=0)

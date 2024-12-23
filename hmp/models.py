@@ -151,7 +151,7 @@ class hmp:
     def fit_n(self, n_events=None, magnitudes=None, parameters=None, parameters_to_fix=None, 
                    magnitudes_to_fix=None, tolerance=1e-4, max_iteration=1e3, maximization=True, min_iteration=1,
                    starting_points=1, return_max=True, verbose=True, cpus=None,
-                   mags_map=None, pars_map=None, levels=None):
+                   mags_map=None, pars_map=None, level_dict=None):
         '''
         Fit HMP for a single n_events model
         
@@ -182,7 +182,7 @@ class hmp:
         starting_points: int
             How many starting points to use for the EM() function
         return_max: bool
-            In the case of multiple starting points, dictates whether to only return the max likelihood model (True, default) or all of the models (False)
+            In the case of multiple starting points, dictates whether to only return the max loglikelihood model (True, default) or all of the models (False)
         verbose: bool
             True displays output useful for debugging, recommended for first use
         cpus: int
@@ -211,18 +211,18 @@ class hmp:
                 n_events = len(magnitudes)
             else:
                 raise ValueError('The fit_n() function needs to be provided with a number of expected transition events')
-        
         assert n_events <= self.compute_max_events(), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
 
-        if levels is None:
+        if level_dict is None:
             n_levels, levels, = 1, np.zeros(self.n_trials)
-            pars_map, mags_map = np.ones((1,n_events+1)), np.ones((1,n_events))
+            pars_map, mags_map = np.zeros((1,n_events+1)), np.zeros((1,n_events))
         else:
-            n_levels, levels, clabels, levels_dict = self._level_constructor(magnitudes, parameters, mags_map, pars_map, levels, verbose)
+            n_levels, levels, clabels, pars_map, mags_map = \
+                self._level_constructor(magnitudes, parameters, mags_map, pars_map, level_dict, verbose)
             infos_to_store['mags_map'] = mags_map
             infos_to_store['pars_map'] = pars_map
             infos_to_store['clabels'] = clabels
-            infos_to_store['levels_dict'] = levels_dict
+            infos_to_store['level_dict'] = level_dict
         if verbose:
             if parameters is None:
                 print(f'Estimating {n_events} events model with {starting_points} starting point(s)')
@@ -337,7 +337,7 @@ class hmp:
         #make output object
         estimated = []
         for sp in range(starting_points):
-            xrlikelihoods = xr.DataArray(lkhs_sp[sp] , name="likelihoods")
+            xrlikelihoods = xr.DataArray(lkhs_sp[sp] , name="loglikelihood")
             xrtraces = xr.DataArray(traces_sp[sp], dims=("em_iteration"), name="traces",
                                     coords={'em_iteration':range(len(traces_sp[sp]))})
             xrparam_dev = xr.DataArray(param_dev_sp[sp], dims=("em_iteration","level","stage",'parameter'), 
@@ -349,26 +349,27 @@ class hmp:
                          coords={'level':range(n_levels), 'event':range(n_events), "component":range(self.n_dims)})
             part, trial = self.coords['participant'].values, self.coords['trials'].values
             trial_x_part = xr.Coordinates.from_pandas_multiindex(MultiIndex.from_arrays([part,trial],
-                                        names=('participant','trials')),'trial_x_participant')
-            
+                                    names=('participant','trials')),'trial_x_participant')
             xreventprobs = xr.Dataset({'eventprobs': (('event', 'trial_x_participant','samples'),
-                                                 eventprobs_sp[sp].T)},
-                                    {'event': ('event', range(n_events)),
-                                     'samples': ('samples', range(np.shape(eventprobs_sp[sp])[0])),
-                                     'level_x_participant': ('trial_x_participant', MultiIndex.from_arrays([part,levels],
-                                     names=('participant','level'))),
-                                     'level':('trial_x_participant',levels)})
+                                             eventprobs_sp[sp].T)},
+                                {'event': ('event', range(n_events)),
+                                 'samples': ('samples', range(np.shape(eventprobs_sp[sp])[0]))})
             xreventprobs = xreventprobs.assign_coords(trial_x_part)
+            if n_levels > 1:
+                xreventprobs = xreventprobs.assign_coords(levels=("trial_x_participant", levels))
             xreventprobs = xreventprobs.transpose('trial_x_participant','samples','event')
     
             estimated.append(xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrtraces, xrparam_dev)))
 
         if starting_points > 1:
             estimated = xr.concat(estimated, 'starting_points')
+            estimated = estimated.assign_coords(starting_points=("starting_points", np.arange(starting_points)))
         else:
             estimated = estimated[0]
 
         # Adding infos
+        estimated = estimated.assign_coords(rts=("trial_x_participant", self.named_durations.data))
+
         for x, y in infos_to_store.items():
             estimated.attrs[x] = y
 
@@ -388,7 +389,7 @@ class hmp:
         ## levels
         assert isinstance(levels, dict) or isinstance(levels[0], dict), 'levels have to be specified as a dictionary, or list of dictionaries'
         if isinstance(levels, dict): levels = [levels]
-        levels_dict = levels
+        level_dict = levels
 
         #collect level names, levels, and trial coding
         level_names = []
@@ -412,7 +413,7 @@ class hmp:
         if verbose:
             print('\nCoded as follows: ')
         for i, level in enumerate(level_levels):
-            assert len(np.where((level_trials == level).all(axis=1))[0]) > 0, f'Modality {level} of level does not occur in the data'
+            # assert len(np.where((level_trials == level).all(axis=1))[0]) > 0, f'Modality {level} of level does not occur in the data'
             levels[np.where((level_trials == level).all(axis=1))] = i
             if verbose:
                 print(str(i) + ': ' + str(level))
@@ -471,7 +472,7 @@ class hmp:
         assert n_levels == mags_map.shape[0] == pars_map.shape[0], 'number of unique levels should correspond to number of rows in map(s)'
 
         assert levels.shape[0] == self.durations.shape[0], 'levels parameter should contain the level per epoch.'
-        return n_levels, levels, clabels, levels_dict
+        return n_levels, levels, clabels, pars_map, mags_map
 
 
     def _EM_star(self, args): #for tqdm usage
@@ -637,7 +638,7 @@ class hmp:
         
         Returns
         -------
-        likelihood : float
+        loglikelihood : float
             Summed log probabilities
         eventprobs : ndarray
             Probabilities with shape max_samples*n_trials*n_events
@@ -712,10 +713,6 @@ class hmp:
         #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
 
         
-        likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
-        eventprobs = eventprobs / eventprobs.sum(axis=0)
-        #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
-
         if lkh_only:
             return likelihood
         elif by_trial_lkh:
@@ -744,7 +741,7 @@ class hmp:
         
         Returns
         -------
-        likelihood : float
+        loglikelihood : float
             Summed log probabilities
         eventprobs : ndarray
             Probabilities with shape max_samples*n_trials*n_events
@@ -824,7 +821,7 @@ class hmp:
         '''
         First read or estimate max_event solution then estimate max_event - 1 solution by 
         iteratively removing one of the event and pick the one with the highest 
-        likelihood
+        loglikelihood
         
         parameters
         ----------
@@ -857,7 +854,7 @@ class hmp:
         for n_events in np.arange(max_events-1,min_events,-1):
 
             #only take previous model forward when it's actually fitting ok
-            if event_loo_results[-1].likelihoods.values != -np.inf:                
+            if event_loo_results[-1].loglikelihood.values != -np.inf:                
 
                 print(f'Estimating all solutions for {n_events} events')
                         
@@ -888,7 +885,7 @@ class hmp:
                     with mp.Pool(processes=self.cpus) as pool:
                         event_loo_likelihood_temp = pool.starmap(self.fit_n, inputs)
 
-                lkhs = [x.likelihoods.values for x in event_loo_likelihood_temp]
+                lkhs = [x.loglikelihood.values for x in event_loo_likelihood_temp]
                 event_loo_results.append(event_loo_likelihood_temp[np.nanargmax(lkhs)])
 
                 #remove event_loo_likelihood
@@ -995,7 +992,7 @@ class hmp:
         # The first new detected event should be higher than the bias induced by splitting the RT in two random partition
         if pval is not None:
             lkh = self.fit_n(1, maximization=False, starting_points=100, return_max=False, verbose=False)
-            lkh_prev = lkh.likelihoods.mean() + lkh.likelihoods.std()*norm_pval.ppf(1-pval)
+            lkh_prev = lkh.loglikelihood.mean() + lkh.loglikelihood.std()*norm_pval.ppf(1-pval)
         else:
             lkh_prev = -np.inf
         if return_estimates:
@@ -1014,7 +1011,7 @@ class hmp:
             #Estimate model based on these propositions
             solutions = self.fit_n(n_events, mags_props, pars_prop, None, None,\
                             verbose=False, cpus=1, tolerance=tolerance)
-            sol_lkh = solutions.likelihoods.values
+            sol_lkh = solutions.loglikelihood.values
             sol_sample_new_event = int(np.round(self.scale_to_mean(np.sum(solutions.parameters.values[:n_events,1]), self.shape)))
             
             #Diagnostic plot
@@ -1023,7 +1020,7 @@ class hmp:
                 print()
                 print('Event found at sample ' + str(sol_sample_new_event))
                 print(f'Events at {np.round(self.scale_to_mean(np.cumsum(solutions.parameters.values[:,1]), self.shape)).astype(int)}')
-                print('lkh change: ' + str(solutions.likelihoods.values - lkh_prev))
+                print('lkh change: ' + str(solutions.loglikelihood.values - lkh_prev))
             #check solution
             if sol_lkh - lkh_prev > 0:#accept solution if likelihood improved
             
