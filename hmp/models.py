@@ -283,7 +283,6 @@ class hmp:
             if (mags_map < 0).any():
                 for c in range(n_levels):
                     magnitudes[c, np.where(mags_map[c,:]<0)[0],:] = np.nan
-    
         initial_p = parameters
         initial_m = magnitudes
         parameters = [initial_p]
@@ -391,32 +390,32 @@ class hmp:
 
         #collect level names, levels, and trial coding
         level_names = []
-        level_levels = []
+        level_mods = []
         level_trials = []
         for level in level_dict.keys():
             level_names.append(level)
-            level_levels.append(level_dict[level])
-            level_trials.append(self.trial_coords[level].data.copy())
+            level_mods.append(level_dict[level])
+            level_trials.append(self.trial_coords[level])
             if verbose:
-                print('Level \"' + level_names[-1] + '\" analyzed, with levels:', level_levels[-1])
+                print('Level \"' + level_names[-1] + '\" analyzed, with levels:', level_mods[-1])
 
-        level_levels = list(product(*level_levels))
-        level_levels = np.array(level_levels, dtype=object)
-        n_levels = len(level_levels)
+        level_mods = list(product(*level_mods))
+        level_mods = np.array(level_mods, dtype=object)
+        print(level_mods)
+        n_levels = len(level_mods)
 
         #build level array with digit indicating the combined levels
         level_trials = np.vstack(level_trials).T
         levels = np.zeros((level_trials.shape[0])) * np.nan
         if verbose:
             print('\nCoded as follows: ')
-        for i, level in enumerate(level_levels):
-            # assert len(np.where((level_trials == level).all(axis=1))[0]) > 0, f'Modality {level} of level does not occur in the data'
-            levels[np.where((level_trials == level).all(axis=1))] = i
+        for i, mod in enumerate(level_mods):
+            assert len(np.where((level_trials == mod).all(axis=1))[0]) > 0, f'Modality {mod} of level does not occur in the data'
+            levels[np.where((level_trials == mod).all(axis=1))] = i
             if verbose:
                 print(str(i) + ': ' + str(level))
         levels=np.int8(levels)
-
-        clabels = {'level ' + str(level_names): level_levels}
+        clabels = {'level ' + str(level_names): level_mods}
 
         #check maps
         n_levels_mags = 0 if mags_map is None else mags_map.shape[0]
@@ -533,7 +532,6 @@ class hmp:
         
         traces = [lkh]
         param_dev = [parameters.copy()] #... and parameters
-
         i = 0
         if not maximization:
             lkh_prev = lkh
@@ -705,11 +703,30 @@ class hmp:
         
         eventprobs = forward * backward
         eventprobs = np.clip(eventprobs, 0, None) #floating point precision error
-        likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
-        eventprobs = eventprobs / eventprobs.sum(axis=0)
-        #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
+        #eventprobs can be so low as to be 0, avoid dividing by 0
+        #this only happens when magnitudes are 0 and gammas are randomly determined
+        if (eventprobs.sum(axis=0) == 0).any() or (eventprobs[:,:,0].sum(axis=0) == 0).any(): 
 
-        
+            #set likelihood
+            eventsums = eventprobs[:,:,0].sum(axis=0)
+            eventsums[eventsums != 0] = np.log(eventsums[eventsums != 0])
+            eventsums[eventsums == 0] = -np.inf
+            likelihood = np.sum(eventsums)
+
+            #set eventprobs, check if any are 0   
+            eventsums = eventprobs.sum(axis=0)
+            if (eventsums == 0).any():
+                for i in range(eventprobs.shape[0]):
+                    eventprobs[i,:,:][eventsums == 0] = 0
+                    eventprobs[i,:,:][eventsums != 0] = eventprobs[i,:,:][eventsums != 0] / eventsums[eventsums != 0]
+            else:
+                eventprobs = eventprobs / eventprobs.sum(axis=0)
+
+        else:
+
+            likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
+            eventprobs = eventprobs / eventprobs.sum(axis=0)
+
         if lkh_only:
             return likelihood
         elif by_trial_lkh:
