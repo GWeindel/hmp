@@ -562,13 +562,13 @@ class hmp:
                 #set mags to mean if requested in map
                 for m in range(n_events):
                     for m_set in np.unique(mags_map[:,m]):
-                        if m_set >= 0:
+                        if m_set == 0:
                             magnitudes[mags_map[:,m] == m_set,m,:] = np.mean(magnitudes[mags_map[:,m] == m_set,m,:],axis=0)
 
                 #set param to mean if requested in map
                 for p in range(n_events+1):
                     for p_set in np.unique(pars_map[:,p]):
-                        if p_set >= 0:
+                        if p_set == 0:
                             parameters[pars_map[:,p] == p_set,p,:] = np.mean(parameters[pars_map[:,p] == p_set,p,:],axis=0)
                 lkh, eventprobs = self._estim_probs_levels(magnitudes, parameters, locations, mags_map, pars_map, levels, cpus=cpus)
                 traces.append(lkh)
