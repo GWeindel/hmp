@@ -382,24 +382,21 @@ class hmp:
             print(f"parameters estimated for {n_events} events model")
         return estimated
     
-    def _level_constructor(self, magnitudes, parameters, mags_map, pars_map, levels, verbose):
+    def _level_constructor(self, magnitudes, parameters, mags_map, pars_map, level_dict, verbose):
         '''
         Adapt model to levels
         '''
         ## levels
-        assert isinstance(levels, dict) or isinstance(levels[0], dict), 'levels have to be specified as a dictionary, or list of dictionaries'
-        if isinstance(levels, dict): levels = [levels]
-        level_dict = levels
+        assert isinstance(level_dict, dict) , 'levels have to be specified as a dictionary'
 
         #collect level names, levels, and trial coding
         level_names = []
         level_levels = []
         level_trials = []
-        for level in levels:
-            assert len(level) == 1, 'Each level dictionary can only contain one level (e.g. {\'cue\': [\'SP\', \'AC\']})'
-            level_names.append(list(level.keys())[0])
-            level_levels.append(level[level_names[-1]])
-            level_trials.append(self.trial_coords[level_names[-1]].data.copy())
+        for level in level_dict.keys():
+            level_names.append(level)
+            level_levels.append(level_dict[level])
+            level_trials.append(self.trial_coords[level].data.copy())
             if verbose:
                 print('Level \"' + level_names[-1] + '\" analyzed, with levels:', level_levels[-1])
 
