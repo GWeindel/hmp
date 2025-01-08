@@ -220,6 +220,44 @@ def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
 
     return likelihoods
 
+def example_fit_n_func(hmp_model, n_events, magnitudes=None, parameters=None, verbose=False):
+    '''
+    Example of simple function that can be used with loocv_func.
+    This fits a model with n_events and potentially provided mags and params.
+    Can be called, for example, as :
+        loocv_func(hmp_model, hmp_data, example_fit_single_func, func_args=[2])
+    '''
+    return hmp_model.fit_n(n_events, magnitudes=magnitudes, parameters=parameters, verbose=verbose) 
+
+def example_complex_fit_n_func(hmp_model, max_events=None, n_events=1, mags_map=None, pars_map=None, conds=None, verbose=False):
+    '''
+    Example of a complex function that can be used with loocv_func.
+    This function first performs backwards estimation up to max_events,
+    and follows this with a condition-based model of n_events, informed
+    by the selected backward model and the provided maps. It returns
+    both models, so for both the likelihood will be estimated.
+    Can be called, for example, as :
+        pars_map = np.array([[0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 1, 0],
+                     [0, 0, 0, 0, 2, 0],
+                     [0, 0, 0, 0, 3, 0],
+                     [0, 0, 0, 0, 4, 0]])
+        conds = {'rep': np.arange(5)+1}
+        loocv_func(hmp_model, hmp_data, example_complex_fit_n_func, func_args=[7, 5, None, pars_map,conds])
+    '''
+
+    #fit backward model up to max_events
+    backward_model = hmp_model.backward_estimation(max_events)
+
+    #select n_events model
+    n_event_model = backward_model.sel(n_events=n_events).dropna('event',how='all')
+    mags = n_event_model.magnitudes.dropna('event',how='all').data
+    pars = n_event_model.parameters.dropna('stage').data
+
+    #fit condition model
+    cond_model = hmp_model.fit_n(magnitudes=mags, parameters=pars, mags_map=mags_map, pars_map=pars_map, level_dict=conds, verbose=verbose)
+
+    return [backward_model, cond_model]
 
 def loocv_estimate_func(data, init, participant, func_estimate, func_args=None, cpus=None, verbose=False):
     '''
@@ -375,7 +413,7 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
 
     For example of func_estimate, see these function above:
     example_fit_n_func(..)
-    example_complex_single_func(..)
+    example_complex_fit_n_func(..)
 
     They can be called, for example, as
         loocv_func(hmp_model, hmp_data, example_fit_n_func, func_args=[1])
