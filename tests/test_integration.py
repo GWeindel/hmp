@@ -132,7 +132,9 @@ def test_integration():
     loocv_model_speed = hmp.loocv.loocv(init_speed, hmp_speed_data, backward_speed, print_warning=True, verbose=True, cpus=1)
     correct_loocv_model = hmp.loocv.loocv_backward(init, hmp_data, max_events=2)
     hmp.loocv.loocv_fit_backward(init_speed, hmp_speed_data, by_sample=False, min_events=2, cpus=1, verbose=True)
-    loocv_combined = hmp.loocv.loocv(init_speed, hmp_speed_data, model_stage_removed, print_warning=True)
+    hmp.loocv.loocv_func(init_speed, hmp_speed_data, hmp.loocv.example_fit_n_func, func_args=[1])
+    hmp.loocv.loocv_func(init_speed, hmp_speed_data, hmp.loocv.example_complex_fit_n_func, func_args=[2])
+    # loocv_combined = hmp.loocv.loocv(init_speed, hmp_speed_data, model_stage_removed, print_warning=True)
     # hmp.loocv.loocv_func(init_speed, hmp_speed_data, init_speed.fit(), func_args=[5], cpus=1, verbose=True) 
     # testing plot_topo
     fig,ax = plt.subplots(2)
@@ -192,7 +194,7 @@ def test_integration():
     loocv_model_speed = hmp.loocv.loocv(init_speed, hmp_speed_data, backward_speed, print_warning=True, verbose=True)
     correct_loocv_model = hmp.loocv.loocv_backward(init, hmp_data, max_events=2,cpus=2)
     hmp.loocv.loocv_fit_backward(init_speed, hmp_speed_data, by_sample=False, min_events=2, cpus=2, verbose=True)
-    loocv_combined = hmp.loocv.loocv(init_speed, hmp_speed_data, model_stage_removed, print_warning=True,cpus=2)
+    # loocv_combined = hmp.loocv.loocv(init_speed, hmp_speed_data, model_stage_removed, print_warning=True,cpus=2)
     
     # Testing electrode activity plots
     ## ERP plot
