@@ -38,7 +38,7 @@ class hmp:
         cpus: int
             How many cpus to use for the functions`using multiprocessing`
         event_width : float
-            width of events in milliselevels, by default 50 ms.
+            width of events in milliseconds, by default 50 ms.
         shape: float
             shape of the probability distributions of the by-trial stage onset (one shape for all stages)
         template: ndarray
