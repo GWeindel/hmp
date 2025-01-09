@@ -924,7 +924,7 @@ class hmp:
         Compute the maximum possible number of events given event width  minimum reaction time
         '''
         return int(np.rint(np.percentile(self.durations, 10)//(self.location)))
-
+      
     def gen_random_stages(self, n_events):
         '''
         Returns random stage duration between 0 and mean RT by iteratively drawind sample from a 
@@ -950,7 +950,6 @@ class hmp:
             rnd_durations = np.hstack((rnd_events, mean_d)) - np.hstack((0, rnd_events))  #associated durations
         random_stages = np.array([[self.shape, self.mean_to_scale(x, self.shape)] for x in rnd_durations])
         return random_stages    
-    
     
     def fit(self, step=None, verbose=True, end=None, tolerance=1e-3, diagnostic=False, return_estimates=False, by_sample=False, pval = None):
         """
@@ -1094,7 +1093,7 @@ class hmp:
         pars = pars[:n_events+1, :]
         if n_events > 0:
             fit = self.fit_n(n_events, parameters=np.array([pars]), magnitudes=np.array([mags]), verbose=verbose, cpus=1)
-
+            fit = fit.assign_attrs(step=step, by_sample=int(by_sample))
             fit = fit.assign_attrs(method='fit', step=step, by_sample=int(by_sample))
         else:
             warn('Failed to find more than two stages, returning None')

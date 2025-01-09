@@ -5,8 +5,10 @@ HMP
 ![](plots/general_illustration.png)
 
 > [!NOTE]
-> The paper on HMP was accepted at Imaging Neuroscience, see the latest version on BiorXiv: [Trial-by-trial detection of cognitive events in neural time-series](https://www.biorxiv.org/content/10.1101/2024.02.13.580102v3)
+> The paper on HMP was accepted at Imaging Neuroscience, see : [Trial-by-trial detection of cognitive events in neural time-series](https://direct.mit.edu/imag/article/doi/10.1162/imag_a_00400/125469)
 
+> [!WARNING]
+> We're moving to v1.0.0 by mid-January, there will be a lot of syntax change thus people going on board now might prefer to clone the repository under the [v1.0.0 branch](https://github.com/GWeindel/hmp/tree/from_conditions_to_levels) and install and follow tutorials from there
 
 HMP is an open-source Python package to analyze neural time-series (e.g. EEG) to estimate Hidden Multivariate Patterns (HMP).  HMP is described in Weindel, van Maanen & Borst (2024, [see the preprint on biorXiv](https://www.biorxiv.org/content/10.1101/2024.02.13.580102v1)) and is a generalized and simplified version of the HsMM-MVPA method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)).
 

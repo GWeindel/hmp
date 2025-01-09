@@ -61,7 +61,6 @@ def test_integration():
             events_provided=events, verbose=True, reference='average', high_pass=1, low_pass=45,
                 subj_idx=['a','b'],pick_channels='eeg', lower_limit_RT=0.01, upper_limit_RT=2 ) 
     epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
-    
     positions = simulations.simulation_positions()
     
     
@@ -74,14 +73,14 @@ def test_integration():
     hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', cov=False, apply_zscore='participant', mcca_reg=1, zscore_acrossPCs=True, centering=False)
     hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', cov=False, apply_zscore='participant', mcca_reg=1, zscore_acrossPCs=True, centering=False, averaged=True)
     hmp_data = hmp.utils.transform_data(epoch_data, n_comp=2,)
-    
+
     # Testing condition selection functions and methods      
     hmp.utils.condition_selection(epoch_data, 'a', variable='condition', method='equal')
     hmp.utils.condition_selection(epoch_data, 'a', variable='condition', method='contains')
     hmp.utils.condition_selection_epoch(epoch_data, 'a', variable='condition', method='equal')
     hmp.utils.condition_selection_epoch(epoch_data, 'a', variable='condition', method='contains')
     hmp_speed_data = hmp_data
-    
+
     # Comparing to simulated data, asserting that results are the one simulated
     events_a = np.load(event_a)
     data_a = hmp.utils.participant_selection(hmp_data, 'a')
@@ -171,7 +170,7 @@ def test_integration():
                         additional_points = (3.5, loocv_model_speed[0]), ax=ax)
     hmp.visu.plot_loocv(loocv_model_speed, pvals=False, test='sign', figsize=(1,1), indiv=True, mean=True, 
                         additional_points = (3.5, loocv_model_speed[0]), ax=ax)
-    
+
     # testing save functions
     hmp.utils.save(selected, 'selected.nc')
     hmp.utils.load('selected.nc')
@@ -205,13 +204,11 @@ def test_integration():
     times['event'] = [0,1]
     erp_data = hmp.visu.erp_data(epoch_data.stack(trial_x_participant=["participant","epochs"]), times, 'EEG 031')
     hmp.visu.plot_erp(times, erp_data, ax=ax, upsample=2, label='EEG 031', bootstrap=2,minmax_lines=[1,2])
-    
-    ## Centered
+
     data = epoch_data.stack({'trial_x_participant':['participant','epochs']}).data.dropna('trial_x_participant', how="all")
     times = hmp.utils.event_times(estimates, fill_value=0, add_rt=True)
     centered = hmp.utils.centered_activity(data, times, ['EEG 031'], event=1, baseline=1, n_samples=None, cut_before_event=1, cut_after_event=1)
     centered = hmp.utils.centered_activity(data, times, ['EEG 031'], event=0, baseline=1, center=False, cut_before_event=0, cut_after_event=0)
-    
     
     # Remove temporary files
     os.remove("dataset_a_raw_raw_generating_events.npy")
