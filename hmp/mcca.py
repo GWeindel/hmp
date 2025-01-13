@@ -1,4 +1,4 @@
-""" 
+"""
 Adapted from https://github.com/ANCPLabOldenburg/MCCA/blob/main/README.md
 Author/maintainer: Leo Michalke https://github.com/lmichalke
 
@@ -26,34 +26,35 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
-import numpy as np
-from sklearn.decomposition import PCA
-from sklearn.exceptions import NotFittedError
-from scipy.linalg import eigh, norm
 import warnings
 
+import numpy as np
+from scipy.linalg import eigh, norm
+from sklearn.decomposition import PCA
+from sklearn.exceptions import NotFittedError
 
 
 class MCCA:
-    """ Performs multiset canonical correlation analysis with an optional
+    """Performs multiset canonical correlation analysis with an optional
         regularization term based on spatial similarity of weight maps. The
         stronger the regularization, the more similar weight maps are forced to
         be across subjects. Note that the term 'weights' is used interchangeably
         with PCA / MCCA eigenvectors here.
 
-    Parameters:
+    Parameters
+    ----------
         n_components_pca (int): Number of PCA components to retain for each subject (default 50)
 
         n_components_mcca (int): Number of MCCA components to retain (default 10)
 
         cov (bool): If true (default), apply the PCA to the var-cov matrix
-        
+
         r (int or float): Regularization strength (default 0)
 
         pca_only (bool): If true, skip MCCA calculation (default False)
 
-    Attributes:
+    Attributes
+    ----------
         mu (ndarray): Mean subtracted before PCA (subjects, sensors)
 
         sigma (ndarray): PCA standard deviation (subjects, PCs)
@@ -68,8 +69,11 @@ class MCCA:
     def __init__(self, n_components_pca, n_components_mcca, r=0, pca_only=False):
         if n_components_mcca > n_components_pca:
             import warnings
-            warnings.warn(f"Warning........... number of MCCA components ({n_components_mcca}) cannot be greater than "
-                          f"number of PCA components ({n_components_pca}), setting them equal.")
+
+            warnings.warn(
+                f"Warning........... number of MCCA components ({n_components_mcca}) cannot be greater than "
+                f"number of PCA components ({n_components_pca}), setting them equal."
+            )
             n_components_mcca = n_components_pca
         self.n_pcs = n_components_pca
         self.n_ccs = n_components_mcca
@@ -78,12 +82,14 @@ class MCCA:
         self.mcca_weights, self.pca_weights, self.mu, self.sigma = None, None, None, None
 
     def obtain_mcca(self, X):
-        """ Apply individual-subject PCA and across-subjects MCCA.
+        """Apply individual-subject PCA and across-subjects MCCA.
 
-        Parameters:
+        Parameters
+        ----------
             X (ndarray): Input data in sensor space (subjects, samples, sensors)
 
-        Returns:
+        Returns
+        -------
             scores (ndarray): Returns scores in PCA space if self.pca_only is true and MCCA scores otherwise.
         """
         n_subjects, n_samples, n_sensors = X.shape
@@ -94,74 +100,80 @@ class MCCA:
         lim = 0
         # obtain subject-specific PCAs
         for i in range(n_subjects):
-            pca = PCA(n_components=self.n_pcs, svd_solver='full')
+            pca = PCA(n_components=self.n_pcs, svd_solver="full")
             x_i = np.squeeze(X[i]).copy()  # time x sensors
-            score = pca.fit_transform( x_i[~np.isnan(x_i[:,0]),:])
+            score = pca.fit_transform(x_i[~np.isnan(x_i[:, 0]), :])
             self.mu[i] = pca.mean_
             self.sigma[i] = np.sqrt(pca.explained_variance_)
             score /= self.sigma[i]
-            lim_i = len(x_i[~np.isnan(x_i[:,0])])
+            lim_i = len(x_i[~np.isnan(x_i[:, 0])])
             lim = int(np.max([lim, lim_i]))
             self.pca_weights[i] = pca.components_.T
-            X_pca[i,:lim_i,:] = score
-        warnings.warn(f'MCCA is done on {lim} samples per subject')
-        X_pca = X_pca[:, :lim,:]
-        
+            X_pca[i, :lim_i, :] = score
+        warnings.warn(f"MCCA is done on {lim} samples per subject")
+        X_pca = X_pca[:, :lim, :]
+
         if self.pca_only:
             return X_pca
         else:
             return self._mcca(X_pca)
 
     def obtain_mcca_cov(self, X):
-        """ Apply individual-subject PCA on the variance-covariance matrix and across-subjects MCCA
+        """Apply individual-subject PCA on the variance-covariance matrix and across-subjects MCCA
 
-        Parameters:
+        Parameters
+        ----------
             X (ndarray): Input data in sensor space for each trial (subjects, n_trials, samples, sensors)
 
-        Returns:
+        Returns
+        -------
             scores (ndarray): Returns scores in PCA space if self.pca_only is true and MCCA scores otherwise.
         """
         n_subjects, n_trials, n_samples, n_sensors = X.shape
-        X_pca = np.zeros((n_subjects, n_trials*n_samples, self.n_pcs))
+        X_pca = np.zeros((n_subjects, n_trials * n_samples, self.n_pcs))
         self.pca_weights = np.zeros((n_subjects, n_sensors, self.n_pcs))
         lim = 0
         self.mu = np.zeros((n_subjects, n_sensors))
         self.sigma = np.ones((n_subjects, self.n_pcs))
         # obtain subject-specific PCAs
         for i in range(n_subjects):
-            pca = PCA(n_components=self.n_pcs, svd_solver='full')
+            pca = PCA(n_components=self.n_pcs, svd_solver="full")
             x_i = np.squeeze(X[i]).copy()  # time x sensors
-            av_vcov = np.mean(\
-                [np.cov(
-                    x_i[trial,~np.isnan(x_i[trial,:,0]),:]
-                    .T)\
-                for trial in range(x_i.shape[0]) if ~np.isnan(x_i[trial,:,0]).all()],axis=0)
+            av_vcov = np.mean(
+                [
+                    np.cov(x_i[trial, ~np.isnan(x_i[trial, :, 0]), :].T)
+                    for trial in range(x_i.shape[0])
+                    if ~np.isnan(x_i[trial, :, 0]).all()
+                ],
+                axis=0,
+            )
             pca.fit(av_vcov)
-            x_i = x_i.reshape(n_trials*n_samples, n_sensors)
-            score =  x_i[~np.isnan(x_i[:,0]),:] @ pca.components_.T
-            lim_i = len(x_i[~np.isnan(x_i[:,0])])
+            x_i = x_i.reshape(n_trials * n_samples, n_sensors)
+            score = x_i[~np.isnan(x_i[:, 0]), :] @ pca.components_.T
+            lim_i = len(x_i[~np.isnan(x_i[:, 0])])
             lim = int(np.max([lim, lim_i]))
             self.pca_weights[i] = pca.components_.T
-            X_pca[i,:lim_i,:] = score
-        warnings.warn(f'MCCA is done on {lim} out of {n_trials*n_samples} samples per subject')
-        X_pca = X_pca[:, :lim,:]
-        
+            X_pca[i, :lim_i, :] = score
+        warnings.warn(f"MCCA is done on {lim} out of {n_trials * n_samples} samples per subject")
+        X_pca = X_pca[:, :lim, :]
+
         if self.pca_only:
             return X_pca
         else:
             return self._mcca(X_pca)
 
-    
     def _mcca(self, pca_scores):
-        """ Performs multiset canonical correlation analysis with an optional
+        """Performs multiset canonical correlation analysis with an optional
             regularization term based on spatial similarity of weight maps. The
             stronger the regularization, the more similar weight maps are forced to
             be across subjects.
 
-        Parameters:
+        Parameters
+        ----------
             pca_scores (ndarray): Input data in PCA space (subjects, samples, PCs)
 
-        Returns:
+        Returns
+        -------
             mcca_scores (ndarray): Input data in MCCA space (subjects, samples, CCs).
         """
         # R_kl is a block matrix containing all cross-covariances R_kl = X_k^T X_l between subjects k, l, k != l
@@ -194,20 +206,22 @@ class MCCA:
         return np.matmul(pca_scores, self.mcca_weights)
 
     def transform_trials(self, X, subject=0):
-        """ Use of MCCA weights (obtained from averaged data) to transform single
+        """Use of MCCA weights (obtained from averaged data) to transform single
             trial data from sensor space to MCCA space.
 
-        Parameters:
+        Parameters
+        ----------
             X (ndarray): Single trial data of one subject in sensor space
                          (trials, samples, sensors)
             subject (int): Index of the subject whose data is being transformed
 
-        Returns:
+        Returns
+        -------
             X_mcca (ndarray): Transformed single trial data in MCCA space
                             (trials, samples, CCs)
         """
         if self.mcca_weights is None:
-            raise NotFittedError('MCCA needs to be fitted before calling transform_trials')
+            raise NotFittedError("MCCA needs to be fitted before calling transform_trials")
         X -= self.mu[np.newaxis, np.newaxis, subject]  # centered
         X_pca = np.matmul(X, self.pca_weights[subject])
         X_pca /= self.sigma[np.newaxis, np.newaxis, subject]  # standardized
@@ -216,12 +230,14 @@ class MCCA:
 
 
 def _compute_cross_covariance(X):
-    """ Computes cross-covariance of PCA scores or components between subjects.
+    """Computes cross-covariance of PCA scores or components between subjects.
 
-    Parameters:
+    Parameters
+    ----------
         X (ndarray): PCA scores (subjects, samples, PCs) or weights (subjects, sensors, PCs)
 
-    Returns:
+    Returns
+    -------
         R_kl (ndarray): Block matrix containing all cross-covariances R_kl = X_k^T X_l between subjects k, l, k != l
                         with shape (subjects * PCs, subjects * PCs)
         R_kk (ndarray): Block diagonal matrix containing auto-correlations R_kk = X_k^T X_k in its diagonal blocks
