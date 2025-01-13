@@ -1,17 +1,18 @@
 """ """
 
-import os.path as op
 import os
-import numpy as np
-import mne
-from mne.datasets import sample
-from warnings import warn
+import os.path as op
 from copy import deepcopy
+from warnings import warn
+
+import mne
+import numpy as np
+from mne.datasets import sample
 
 
 def available_sources(subselection=True):
     """
-    list available sources for sample subject in MNE
+    List available sources for sample subject in MNE
     """
     data_path = sample.data_path()
     subjects_dir = op.join(data_path, "subjects")
@@ -125,6 +126,7 @@ def simulate(
         value in ms to add after a simulated event and before another one
     save_snr: bool
         Save the signal at peak value and electrode noise
+
     Returns
     -------
     generating_events: ndarray
@@ -218,7 +220,7 @@ def simulate(
             src, tstep=tstep, first_samp=0, duration=trial_time[-1] + 10
         )  # add 10sec to the end of the last trial
         if n_subj == 1:
-            subj_file = file + f"_raw.fif"
+            subj_file = file + "_raw.fif"
         else:
             subj_file = file + f"_{subj}_raw.fif"
         if subj_file in os.listdir(path) and not overwrite:
@@ -229,7 +231,7 @@ def simulate(
             if save_snr:
                 files_subj.append(subj_file.split(".fif")[0] + "_snr.npy")
             if save_noiseless:
-                files_subj.append(file + f"_noiseless_raw.fif")
+                files_subj.append(file + "_noiseless_raw.fif")
             files.append(files_subj)
         else:
             subj_file = op.join(path, subj_file)
@@ -316,7 +318,7 @@ def simulate(
 
             n_events = len(sources_subj) - 1
             if save_noiseless:
-                raw.save(file + f"_noiseless_raw.fif", overwrite=True)
+                raw.save(file + "_noiseless_raw.fif", overwrite=True)
             if data_type == "eeg":
                 raw = raw.pick_types(meg=False, eeg=True, stim=True)
             elif data_type == "meg":
@@ -352,7 +354,7 @@ def simulate(
                 files_subj.append(subj_file.split(".fif")[0] + "_snr.npy")
             files.append(files_subj)
             if save_noiseless:
-                files_subj.append(file + f"_noiseless_raw.fif")
+                files_subj.append(file + "_noiseless_raw.fif")
             print(f"{subj_file} simulated")
 
     if n_subj == 1:
@@ -363,7 +365,7 @@ def simulate(
 def demo(cpus, n_events, seed=123):
     ## Imports and code specific to the simulation (see tutorial 3 and 4 for real data)
     from scipy.stats import gamma
-    import matplotlib.pyplot as plt
+
     from hmp.utils import read_mne_data
 
     random_gen = np.random.default_rng(seed=seed)

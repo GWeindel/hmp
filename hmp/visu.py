@@ -1,14 +1,15 @@
 """ """
 
-import scipy.stats as stats
-import scipy.signal as ssignal
+from itertools import cycle
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-from hmp.utils import event_topo, event_times
+import scipy.signal as ssignal
 import xarray as xr
-from itertools import cycle
-import warnings
+from scipy import stats
+
+from hmp.utils import event_times, event_topo
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold"]
 
@@ -104,15 +105,14 @@ def plot_topo_timecourse(
     estimate_method : string
         'max' or 'mean', either take the max probability of each event on each trial, or the weighted
         average.
+
     Returns
     -------
     ax : matplotlib.pyplot.ax
         if ax was specified otherwise returns the plot
     """
-
-    from mne.viz import plot_brain_colorbar, plot_topomap
     from mne import Info
-    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    from mne.viz import plot_brain_colorbar, plot_topomap
 
     sfreq = estimates.sfreq
     level_plot = False
@@ -464,9 +464,8 @@ def save_model_topos(
         Whether a colorbar is saved in a separate file (fname_colorbar)
 
     """
-
-    from mne.viz import plot_brain_colorbar, plot_topomap
     from mne import Info
+    from mne.viz import plot_brain_colorbar, plot_topomap
 
     plot_type = "default"
     ydim = None
@@ -666,7 +665,6 @@ def plot_loocv(
     ax : matplotlib.pyplot.ax
         if ax was specified otherwise returns the plot
     """
-
     if pvals:
         if test == "sign":
             from statsmodels.stats.descriptivestats import sign_test
@@ -824,7 +822,6 @@ def plot_latencies(
     as_time : bool
         if true, plot time (ms) instead of samples.
     """
-
     if as_time and init is not None:
         time_step = 1000 / init.sfreq  # time_step still needed below
     else:
@@ -1049,7 +1046,6 @@ def plot_erp(
 ):
     """
     Plot the ERP based on the times extracted by HMP (or just stimulus and response and the data extracted from ```erp_data```.
-
 
     Parameters
     ----------

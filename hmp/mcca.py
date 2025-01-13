@@ -26,11 +26,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+import warnings
+
 import numpy as np
+from scipy.linalg import eigh, norm
 from sklearn.decomposition import PCA
 from sklearn.exceptions import NotFittedError
-from scipy.linalg import eigh, norm
-import warnings
 
 
 class MCCA:
@@ -40,7 +41,8 @@ class MCCA:
         be across subjects. Note that the term 'weights' is used interchangeably
         with PCA / MCCA eigenvectors here.
 
-    Parameters:
+    Parameters
+    ----------
         n_components_pca (int): Number of PCA components to retain for each subject (default 50)
 
         n_components_mcca (int): Number of MCCA components to retain (default 10)
@@ -51,7 +53,8 @@ class MCCA:
 
         pca_only (bool): If true, skip MCCA calculation (default False)
 
-    Attributes:
+    Attributes
+    ----------
         mu (ndarray): Mean subtracted before PCA (subjects, sensors)
 
         sigma (ndarray): PCA standard deviation (subjects, PCs)
@@ -81,10 +84,12 @@ class MCCA:
     def obtain_mcca(self, X):
         """Apply individual-subject PCA and across-subjects MCCA.
 
-        Parameters:
+        Parameters
+        ----------
             X (ndarray): Input data in sensor space (subjects, samples, sensors)
 
-        Returns:
+        Returns
+        -------
             scores (ndarray): Returns scores in PCA space if self.pca_only is true and MCCA scores otherwise.
         """
         n_subjects, n_samples, n_sensors = X.shape
@@ -116,10 +121,12 @@ class MCCA:
     def obtain_mcca_cov(self, X):
         """Apply individual-subject PCA on the variance-covariance matrix and across-subjects MCCA
 
-        Parameters:
+        Parameters
+        ----------
             X (ndarray): Input data in sensor space for each trial (subjects, n_trials, samples, sensors)
 
-        Returns:
+        Returns
+        -------
             scores (ndarray): Returns scores in PCA space if self.pca_only is true and MCCA scores otherwise.
         """
         n_subjects, n_trials, n_samples, n_sensors = X.shape
@@ -161,10 +168,12 @@ class MCCA:
             stronger the regularization, the more similar weight maps are forced to
             be across subjects.
 
-        Parameters:
+        Parameters
+        ----------
             pca_scores (ndarray): Input data in PCA space (subjects, samples, PCs)
 
-        Returns:
+        Returns
+        -------
             mcca_scores (ndarray): Input data in MCCA space (subjects, samples, CCs).
         """
         # R_kl is a block matrix containing all cross-covariances R_kl = X_k^T X_l between subjects k, l, k != l
@@ -200,12 +209,14 @@ class MCCA:
         """Use of MCCA weights (obtained from averaged data) to transform single
             trial data from sensor space to MCCA space.
 
-        Parameters:
+        Parameters
+        ----------
             X (ndarray): Single trial data of one subject in sensor space
                          (trials, samples, sensors)
             subject (int): Index of the subject whose data is being transformed
 
-        Returns:
+        Returns
+        -------
             X_mcca (ndarray): Transformed single trial data in MCCA space
                             (trials, samples, CCs)
         """
@@ -221,10 +232,12 @@ class MCCA:
 def _compute_cross_covariance(X):
     """Computes cross-covariance of PCA scores or components between subjects.
 
-    Parameters:
+    Parameters
+    ----------
         X (ndarray): PCA scores (subjects, samples, PCs) or weights (subjects, sensors, PCs)
 
-    Returns:
+    Returns
+    -------
         R_kl (ndarray): Block matrix containing all cross-covariances R_kl = X_k^T X_l between subjects k, l, k != l
                         with shape (subjects * PCs, subjects * PCs)
         R_kk (ndarray): Block diagonal matrix containing auto-correlations R_kk = X_k^T X_k in its diagonal blocks

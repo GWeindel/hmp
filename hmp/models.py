@@ -1,17 +1,17 @@
 """ """
 
+import gc
+import itertools
+import multiprocessing as mp
+from itertools import cycle, product
+from warnings import resetwarnings, warn
+
+import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
-import multiprocessing as mp
-import itertools
 from pandas import MultiIndex
-from warnings import warn, filterwarnings, resetwarnings
-import matplotlib.pyplot as plt
-from hmp import utils
 from scipy.signal import correlate
-from itertools import cycle, product
 from scipy.stats import norm as norm_pval
-import gc
 
 try:
     __IPYTHON__
@@ -37,7 +37,7 @@ class hmp:
         """
         This function intializes an HMP model by providing the data, the expected probability distribution for the by-trial variation in stage onset, and the expected duration of the transition event.
 
-        parameters
+        Parameters
         ----------
         data : xr.Dataset
             xr.Dataset obtained through the hmp.utils.transform_data() function
@@ -59,22 +59,26 @@ class hmp:
         match distribution:
             case "gamma":
                 from scipy.stats import gamma as sp_dist
-                from hmp.utils import gamma_scale_to_mean, gamma_mean_to_scale
+
+                from hmp.utils import gamma_mean_to_scale, gamma_scale_to_mean
 
                 self.scale_to_mean, self.mean_to_scale = gamma_scale_to_mean, gamma_mean_to_scale
             case "lognormal":
                 from scipy.stats import lognorm as sp_dist
-                from hmp.utils import logn_scale_to_mean, logn_mean_to_scale
+
+                from hmp.utils import logn_mean_to_scale, logn_scale_to_mean
 
                 self.scale_to_mean, self.mean_to_scale = logn_scale_to_mean, logn_mean_to_scale
             case "wald":
                 from scipy.stats import invgauss as sp_dist
-                from hmp.utils import wald_scale_to_mean, wald_mean_to_scale
+
+                from hmp.utils import wald_mean_to_scale, wald_scale_to_mean
 
                 self.scale_to_mean, self.mean_to_scale = wald_scale_to_mean, wald_mean_to_scale
             case "weibull":
                 from scipy.stats import weibull_min as sp_dist
-                from hmp.utils import weibull_scale_to_mean, weibull_mean_to_scale
+
+                from hmp.utils import weibull_mean_to_scale, weibull_scale_to_mean
 
                 self.scale_to_mean, self.mean_to_scale = (
                     weibull_scale_to_mean,
@@ -166,7 +170,7 @@ class hmp:
         This function puts on each sample the correlation of that sample and the next
         x samples (depends on sampling frequency and event size) with a half sine on time domain.
 
-        parameters
+        Parameters
         ----------
         data : ndarray
             2D ndarray with n_samples * components
@@ -210,7 +214,7 @@ class hmp:
         """
         Fit HMP for a single n_events model
 
-        parameters
+        Parameters
         ----------
         n_events : int
             how many events are estimated
@@ -578,18 +582,17 @@ class hmp:
                     "nr of events in magnitudes map and parameters map do not correspond on row "
                     + str(c)
                 )
-        else:  # if 0, copy n_levels as zero map
-            if n_levels_mags == 0:
-                assert not (pars_map < 0).any(), (
-                    "If negative parameters are provided, magnitude map is required."
-                )
-                mags_map = np.zeros((n_levels, pars_map.shape[1] - 1), dtype=int)
-            else:
-                pars_map = np.zeros((n_levels, mags_map.shape[1] + 1), dtype=int)
-                if (mags_map < 0).any():
-                    for c in range(n_levels):
-                        pars_map[c, np.where(mags_map[c, :] < 0)[0]] = -1
-                        pars_map[c, np.where(mags_map[c, :] < 0)[0] + 1] = 1
+        elif n_levels_mags == 0:
+            assert not (pars_map < 0).any(), (
+                "If negative parameters are provided, magnitude map is required."
+            )
+            mags_map = np.zeros((n_levels, pars_map.shape[1] - 1), dtype=int)
+        else:
+            pars_map = np.zeros((n_levels, mags_map.shape[1] + 1), dtype=int)
+            if (mags_map < 0).any():
+                for c in range(n_levels):
+                    pars_map[c, np.where(mags_map[c, :] < 0)[0]] = -1
+                    pars_map[c, np.where(mags_map[c, :] < 0)[0] + 1] = 1
 
         # print maps to check level/row mathcing
         if verbose:
@@ -651,7 +654,7 @@ class hmp:
         """
         Expectation maximization function underlying fit
 
-        parameters
+        Parameters
         ----------
         n_events : int
             how many events are estimated
@@ -691,7 +694,6 @@ class hmp:
         param_dev : ndarray
             paramters for each iteration of EM
         """
-
         assert mags_map.shape[0] == pars_map.shape[0], (
             "Both maps need to indicate the same number of levels."
         )
@@ -831,7 +833,7 @@ class hmp:
         by_trial_lkh=False,
     ):
         """
-        parameters
+        Parameters
         ----------
         magnitudes : ndarray
             2D ndarray n_events * components (or 3D iteration * n_events * n_components), initial conditions for events magnitudes. If magnitudes are estimated, the list provided is used as starting point,
@@ -978,7 +980,7 @@ class hmp:
         self, magnitudes, parameters, locations, mags_map, pars_map, levels, lkh_only=False, cpus=1
     ):
         """
-        parameters
+        Parameters
         ----------
         magnitudes : ndarray
             2D ndarray n_events * components (or 3D iteration * n_events * n_components), initial conditions for events magnitudes. If magnitudes are estimated, the list provided is used as starting point,
@@ -1002,7 +1004,6 @@ class hmp:
         eventprobs : ndarray
             Probabilities with shape max_samples*n_trials*n_events
         """
-
         n_levels = mags_map.shape[0]
         likes_events_level = []
         if cpus > 1:
@@ -1049,12 +1050,13 @@ class hmp:
         """
         Returns PMF for a provided scipy disttribution with shape and scale, on a range from 0 to max_length
 
-        parameters
+        Parameters
         ----------
         shape : float
             shape parameter
         scale : float
             scale parameter
+
         Returns
         -------
         p : ndarray
@@ -1071,7 +1073,7 @@ class hmp:
         the event is computed from eventprobs. The scale parameter are then taken as the average
         distance between the events
 
-        parameters
+        Parameters
         ----------
         eventprobs : ndarray
             [samples(max_d)*n_trials*n_events] = [max_d*trials*nTransition events]
@@ -1108,7 +1110,7 @@ class hmp:
         iteratively removing one of the event and pick the one with the highest
         loglikelihood
 
-        parameters
+        Parameters
         ----------
         max_events : int
             Maximum number of events to be estimated, by default the output of hmp.models.hmp.compute_max_events()
@@ -1237,7 +1239,7 @@ class hmp:
         Last stage is equal to 1-previous stage duration.
         The stages are then scaled to the mean RT
 
-        parameters
+        Parameters
         ----------
         n_events : int
             how many events
@@ -1278,7 +1280,7 @@ class hmp:
          Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point.
          As soon as a starting points reaches the convergence criterion, the function fits an n+1 event model and uses the next samples in the RT as starting point for the following event
 
-        parameters
+        Parameters
         ----------
                   step: float
                 The size of the step from 0 to the mean RT, defaults to the widths of the expected event.
@@ -1300,7 +1302,8 @@ class hmp:
              pval: float
                  p-value for the detection of the first event, test the first location for significance compared to a distribution of noise estimates
 
-         Returns:
+        Returns
+        -------
                   A the fitted HMP mo
         """
         if end is None:

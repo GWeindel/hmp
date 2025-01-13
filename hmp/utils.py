@@ -1,18 +1,16 @@
 """ """
 
-import numpy as np
-from scipy.special import gamma as gamma_func
-import xarray as xr
-import multiprocessing as mp
-import itertools
-import pandas as pd
-from pandas import MultiIndex
-from scipy.stats import sem
-import warnings
-from warnings import warn, filterwarnings
-from hmp import mcca
+from warnings import filterwarnings, warn
+
 import mne
-import os
+import numpy as np
+import pandas as pd
+import xarray as xr
+from pandas import MultiIndex
+from scipy.special import gamma as gamma_func
+from scipy.stats import sem
+
+from hmp import mcca
 
 filterwarnings(
     "ignore",
@@ -82,7 +80,8 @@ def read_mne_data(
     """
     Reads EEG/MEG data format (.fif or .bdf) using MNE's integrated function .
 
-    Notes:
+    Notes
+    -----
     - Only EEG or MEG data are selected (other channel types are discarded)
     - All times are expressed on the second scale.
     - If multiple files in pfiles the data of the group is read and seqentially processed.
@@ -148,6 +147,7 @@ def read_mne_data(
         What reference to use (see MNE documentation), if None, keep the existing one
     ignore_rt: bool
         Use RT to parse the epochs (False, Default) or ignore the RT and parse up to tmaxx in epochs (True)
+
     Returns
     -------
     epoch_data : xarray
@@ -155,8 +155,6 @@ def read_mne_data(
         All eventual participant/channels naming and epochs index are kept.
         The choosen sampling frequnecy is stored as attribute.
     """
-    import mne
-
     dict_datatype = {False: "continuous", True: "epoched"}
     epoch_data = []
     if isinstance(pfiles, str):  # only one participant
@@ -218,13 +216,12 @@ def read_mne_data(
                 events_stim = np.array(
                     [list(x) for x in events if x[2] in event_id.values()]
                 )  # only stim
-            else:
-                if len(events_provided[0]) == 3:
-                    events_provided = events_provided[np.newaxis]
-                    events = events_provided[y]
-                else:  # assumes stacked event files
-                    events = events_provided[ev_i]
-                    ev_i += 1
+            elif len(events_provided[0]) == 3:
+                events_provided = events_provided[np.newaxis]
+                events = events_provided[y]
+            else:  # assumes stacked event files
+                events = events_provided[ev_i]
+                ev_i += 1
             if reference is not None:
                 data = data.set_eeg_reference(reference)
             data = _pick_channels(pick_channels, data, stim=True)
@@ -334,7 +331,7 @@ def read_mne_data(
                     f"Expected column named {rt_col} in the provided metadata file, alternative names can be passed through the rt_col parameter"
                 )
         elif rts is None:
-            raise ValueError(f"Expected either a metadata Dataframe or an array of Reaction Times")
+            raise ValueError("Expected either a metadata Dataframe or an array of Reaction Times")
         rts_arr = np.array(rts)
         if verbose:
             print(
@@ -508,7 +505,7 @@ def _standardize(x):
 
 def _center(data):
     """
-    center the data
+    Center the data
     """
     mean_last_dim = np.nanmean(data.values, axis=-1)
     mean_last_dim_expanded = np.expand_dims(mean_last_dim, axis=-1)
@@ -520,7 +517,7 @@ def _center(data):
 
 def zscore_xarray(data):
     """
-    zscore of the data in an xarray, avoiding any nans
+    Zscore of the data in an xarray, avoiding any nans
     """
     if isinstance(data, xr.Dataset):  # if no PCA
         data = data.data
@@ -689,7 +686,7 @@ def transform_data(
         raise ValueError(
             "Expected a xarray Dataset with data and event as DataArrays, check the data format"
         )
-    if not apply_zscore in ["all", "participant", "trial"] and not isinstance(apply_zscore, bool):
+    if apply_zscore not in ["all", "participant", "trial"] and not isinstance(apply_zscore, bool):
         raise ValueError(
             "apply_zscore should be either a boolean or one of ['all', 'participant', 'trial']"
         )
@@ -739,17 +736,16 @@ def transform_data(
                         axis=0,
                     )
                 pca_ready_data = np.mean(np.array(indiv_data), axis=0)
-            else:  # assumes ERPs
-                if averaged:
-                    erps = []
-                    for part in data.participant:
-                        erps.append(data.sel(participant=part).groupby("samples").mean("epochs").T)
-                    pca_ready_data = np.nanmean(erps, axis=0)
-                else:
-                    pca_ready_data = data.stack(
-                        {"all": ["participant", "epochs", "samples"]}
-                    ).dropna("all")
-                    pca_ready_data = pca_ready_data.transpose("all", "channels")
+            elif averaged:
+                erps = []
+                for part in data.participant:
+                    erps.append(data.sel(participant=part).groupby("samples").mean("epochs").T)
+                pca_ready_data = np.nanmean(erps, axis=0)
+            else:
+                pca_ready_data = data.stack(
+                    {"all": ["participant", "epochs", "samples"]}
+                ).dropna("all")
+                pca_ready_data = pca_ready_data.transpose("all", "channels")
             # Performing spatial PCA on the average var-cov matrix
             pca_weights = _pca(pca_ready_data, n_comp, data.coords["channels"].values)
             data = data @ pca_weights
@@ -866,7 +862,7 @@ def event_times(
     """
     Compute the likeliest peak times for each event
 
-    parameters
+    Parameters
     ----------
     init :
         Initialized HMP object
@@ -903,7 +899,6 @@ def event_times(
         Transition event peak or stage duration with trial_x_participant*event dimensions or only event dimension if mean = True
         Contains nans for missing stages.
     """
-
     assert not (mean and errorbars is not None), "Only one of mean and errorbars can be set."
     sfreq = estimates.sfreq
     rts = estimates.rts
@@ -1008,13 +1003,12 @@ def event_times(
                 times = times.groupby("levels").mean("trial_x_participant")
             else:
                 print("center measure not recognized")
+        elif center_measure == "mean":
+            times = times.mean("trial_x_participant")
+        elif center_measure == "median":
+            times = times.median("trial_x_participant")
         else:
-            if center_measure == "mean":
-                times = times.mean("trial_x_participant")
-            elif center_measure == "median":
-                times = times.median("trial_x_participant")
-            else:
-                print("center measure not recognized")
+            print("center measure not recognized")
 
     elif errorbars:
         if extra_dim == "levels":
@@ -1051,19 +1045,18 @@ def event_times(
                     errorbars_model[c, :, :] = np.tile(se_errs[c, :], (2, 1))
             else:
                 raise ValueError("Unknown error bars, 'std' or 'se'")
-        else:
-            if errorbars == "std":
-                errorbars_model = np.tile(
-                    times.reduce(np.std, dim="trial_x_participant").values, (2, 1)
-                )
-            elif errorbars == "se":
-                errorbars_model = np.tile(
-                    times.groupby("participant")
-                    .mean("trial_x_participant")
-                    .reduce(sem, dim="participant")
-                    .values,
-                    (2, 1),
-                )
+        elif errorbars == "std":
+            errorbars_model = np.tile(
+                times.reduce(np.std, dim="trial_x_participant").values, (2, 1)
+            )
+        elif errorbars == "se":
+            errorbars_model = np.tile(
+                times.groupby("participant")
+                .mean("trial_x_participant")
+                .reduce(sem, dim="participant")
+                .values,
+                (2, 1),
+            )
         times = errorbars_model
     return times
 
@@ -1081,7 +1074,7 @@ def event_topo(
     """
     Compute topographies for each trial.
 
-    parameters
+    Parameters
     ----------
         epoch_data: xr.Dataset
             Epoched data
@@ -1101,13 +1094,12 @@ def event_topo(
         template: int
             Length of the pattern in samples (e.g. 5 for a pattern of 50 ms with a 100Hz sampling frequency)
 
-     Returns
-     -------
+    Returns
+    -------
         event_values: xr.DataArray
             array containing the values of each electrode at the most likely transition time
             contains nans for missing events
     """
-
     if estimate_method is None:
         estimate_method = "max"
     epoch_data = (

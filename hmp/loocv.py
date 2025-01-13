@@ -1,11 +1,12 @@
 """ """
 
-import numpy as np
-import hmp
-import xarray as xr
-import multiprocessing as mp
 import itertools
-from warnings import warn
+import multiprocessing as mp
+
+import numpy as np
+import xarray as xr
+
+import hmp
 
 
 def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
@@ -33,7 +34,6 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
     likelihood : float
         likelihood computed for the left-out participant
     """
-
     if verbose:
         print(f"\t\tCalculating fit for participant {participant}")
     if cpus is None:
@@ -179,7 +179,6 @@ def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
     -------
     list of likelihood objects for provided model estimates
     """
-
     if verbose:
         if print_warning:
             print()
@@ -221,7 +220,7 @@ def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
     likelihoods = []
     for model in models:
         # option 1 and 2: single model and single model with levels
-        if not "n_events" in model.dims:
+        if "n_events" not in model.dims:
             if verbose:
                 if "level" in model.dims:
                     print(
@@ -336,7 +335,6 @@ def example_complex_fit_n_func(
         conds = {'rep': np.arange(5)+1}
         loocv_func(hmp_model, hmp_data, example_complex_fit_n_func, func_args=[7, 5, None, pars_map,conds])
     """
-
     # fit backward model up to max_events
     backward_model = hmp_model.backward_estimation(max_events)
 
@@ -392,7 +390,6 @@ def loocv_estimate_func(
     hmp model
         estimated hmp_model with func_estimate on n-1 participants
     """
-
     if verbose:
         print(f"\tEstimating model for all participants except {participant}")
     if cpus is None:
@@ -452,7 +449,6 @@ def loocv_loglikelihood(data, init, participant, estimate, cpus=None, verbose=Fa
     likelihood : float
         likelihood computed for the left-out participant
     """
-
     if verbose:
         print(f"\tCalculating likelihood for participant {participant}")
     if cpus is None:
@@ -582,7 +578,6 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
     likelihood object containing likelihoods on left out participant
     estimates : list of all models without the left out participant
     """
-
     if cpus is None:
         cpus = init.cpus
 
@@ -633,7 +628,7 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
     all_likelihoods = []
     for estimates in all_estimates:
         # option 1 and 2: single model and single model with levels
-        if not "n_events" in estimates[0].dims:
+        if "n_events" not in estimates[0].dims:
             if verbose:
                 if "level" in estimates[0].dims:
                     print(
@@ -790,8 +785,8 @@ def loocv_backward(
 
      Hmp model settings are based on init.
 
-     Parameters
-     ----------
+    Parameters
+    ----------
      init : hmp model
          initialized hmp model
      data : xarray.Dataset
@@ -813,11 +808,10 @@ def loocv_backward(
          CPUs if you have *a lot* of memory available.
      verbose : bool
 
-     Returns
-     -------
+    Returns
+    -------
      likelihood object and fitten backward estimation models
     """
-
     return loocv_func(
         init,
         data,
@@ -876,7 +870,6 @@ def loocv_fit_backward(
     -------
     likelihood object and fitten backward estimation models
     """
-
     return loocv_func(
         init,
         data,
