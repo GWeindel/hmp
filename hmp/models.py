@@ -10,8 +10,8 @@ from pandas import MultiIndex
 from warnings import warn, filterwarnings, resetwarnings
 import matplotlib.pyplot as plt
 from hmp import utils
+from scipy.signal import correlate
 from itertools import cycle, product
-from scipy.stats import sem
 from scipy.stats import norm as norm_pval 
 import gc
 
@@ -25,7 +25,7 @@ default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen',
 
 class hmp:
     
-    def __init__(self, data, epoch_data=None, sfreq=None, cpus=1, event_width=50, shape=2, template=None, location=None, distribution='gamma'):
+    def __init__(self, data, sfreq=None, cpus=1, event_width=50, shape=2, template=None, location=None, distribution='gamma'):
         '''
         This function intializes an HMP model by providing the data, the expected probability distribution for the by-trial variation in stage onset, and the expected duration of the transition event.
 
@@ -33,8 +33,6 @@ class hmp:
         ----------
         data : xr.Dataset
             xr.Dataset obtained through the hmp.utils.transform_data() function
-        epoch_data: xr.Dataset
-            Xarray dataset with the EEG/MEG data
         sfreq : float
             (optional) Sampling frequency of the signal if not provided, inferred from the epoch_data
         cpus: int
@@ -46,7 +44,7 @@ class hmp:
         template: ndarray
             Expected shape for the transition event used in the cross-correlation, should be a vector of values capturing the expected shape over the sampling frequency of the data. If None, the template is created as a half-sine shape with a frequency derived from the event_width argument
         location : float
-            Minimum duration between events in samples. Default is half the event_width.
+            Minimum duration between events in samples. Default is the event_width.
         distribution : str
             Probability distribution for the by-trial onset of stages can be one of 'gamma','lognormal','wald', or 'weibull'
         '''
@@ -82,47 +80,45 @@ class hmp:
             self.location = int(self.event_width / self.steps)
         else:
             self.location = int(np.rint(location))
-            
+        if template is None:
+            self.template = self._event_shape()
+        else: 
+            self.template = template
+        # compute sequence durations based on number of samples
         durations = data.unstack().sel(component=0).rename({'epochs':'trials'})\
             .stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",\
             how="all").groupby('trial_x_participant').count(dim="samples").cumsum().squeeze()
+        
         if durations.trial_x_participant.count() > 1:
             dur_dropped_na = durations.dropna("trial_x_participant")
             starts = np.roll(dur_dropped_na.data, 1)
             starts[0] = 0
             ends = dur_dropped_na.data-1
+            self.named_durations =  durations.dropna("trial_x_participant") - durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
+            self.coords = durations.reset_index('trial_x_participant').coords
         else: 
             dur_dropped_na = durations
             starts = np.array([0])
             ends = np.array([dur_dropped_na.data-1])
+            self.named_durations = durations
+            self.coords = durations.coords
+            
         self.starts = starts
         self.ends = ends
         self.durations =  self.ends-self.starts+1
-        if durations.trial_x_participant.count() > 1:
-            self.named_durations =  durations.dropna("trial_x_participant") - durations.dropna("trial_x_participant").shift(trial_x_participant=1, fill_value=0)
-            self.coords = durations.reset_index('trial_x_participant').coords
-        else: 
-            self.named_durations = durations
-            self.coords = durations.coords
         self.mean_d = self.durations.mean()
         self.n_trials = durations.trial_x_participant.count().values
-            
         self.cpus = cpus
         self.n_samples, self.n_dims = np.shape(data.data.T)
-        if template is None:
-            self.template = self._event_shape()
-        else: self.template = template
-        self.events = self.cross_correlation(data.data.T)#adds event morphology
+        self.crosscorr = self.cross_correlation(data.data.T)# Equation 1 in 2024 paper
         self.max_d = self.durations.max()
-        
-        self.convolution = np.convolve
         self.trial_coords = data.unstack().sel(component=0,samples=0).rename({'epochs':'trials'}).\
             stack(trial_x_participant=['participant','trials']).dropna(dim="trial_x_participant",how="all").coords
-        
     
     def _event_shape(self):
         '''
         Computes the template of a half-sine (event) with given frequency f and sampling frequency
+        Equations in section 2.4 in the 2024 paper
         '''
         event_idx = np.arange(self.event_width_samples)*self.steps + self.steps / 2
         event_frequency = 1000/(self.event_width*2)#gives event frequency given that events are defined as half-sines
@@ -146,16 +142,16 @@ class hmp:
             a 2D ndarray with samples * PC components where cell values have
             been correlated with event morphology
         '''
-        from scipy.signal import correlate
         events = np.zeros(data.shape)
         for trial in range(self.n_trials):#avoids confusion of gains between trials
             for dim in np.arange(self.n_dims):
                 events[self.starts[trial]:self.ends[trial]+1,dim] = correlate(data[self.starts[trial]:self.ends[trial]+1, dim], self.template, mode='same', method='direct')
         return events
 
-    def fit_single(self, n_events=None, magnitudes=None, parameters=None, parameters_to_fix=None, 
-                   magnitudes_to_fix=None, tolerance=1e-4, max_iteration=1e3, maximization=True, min_iteration = 1,
-                   starting_points=1, method='random', return_max=True, verbose=True, cpus=None):
+    def fit_n(self, n_events=None, magnitudes=None, parameters=None, parameters_to_fix=None, 
+                   magnitudes_to_fix=None, tolerance=1e-4, max_iteration=1e3, maximization=True, min_iteration=1,
+                   starting_points=1, return_max=True, verbose=True, cpus=None,
+                   mags_map=None, pars_map=None, level_dict=None):
         '''
         Fit HMP for a single n_events model
         
@@ -185,23 +181,48 @@ class hmp:
             Minimum number of iteration for the expectation maximization in the EM() function
         starting_points: int
             How many starting points to use for the EM() function
-        method: str
-            What starting points generation method to use, 'random'or 'grid' (grid is not yet fully supported)
         return_max: bool
-            In the case of multiple starting points, dictates whether to only return the max likelihood model (True, default) or all of the models (False)
+            In the case of multiple starting points, dictates whether to only return the max loglikelihood model (True, default) or all of the models (False)
         verbose: bool
             True displays output useful for debugging, recommended for first use
         cpus: int
             number of cores to use in the multiprocessing functions
+        mags_map: 2D nd_array n_level * n_events indicating which magnitudes are shared between levels.
+        pars_map: 2D nd_array n_level * n_stages indicating which parameters are shared between levels.
+        levels: dict | list
+            if one level, use a dict with the name in the metadata and a list of the levels in the same
+            order as the rows of the map(s). E.g., {'cue': ['SP', 'AC']}
+            if multiple levels need to be crossed, use a list of dictionaries per level. E.g.,
+            [{'cue': ['SP', 'AC',]}, {'resp': ['left', 'right']}]. These are crossed by repeating
+            the first level as many times as there are levels in the selevel level. E.g., SP-left, 
+            SP-right, AC-left, AC-right.
         '''
+        # A dict containing all the info we want to keep, populated along the func
+        infos_to_store = {}
+        infos_to_store['sfreq'] = self.sfreq
+        infos_to_store['event_width_samples'] = self.event_width_samples
+        infos_to_store['tolerance'] = tolerance
+        infos_to_store['maximization'] = int(maximization)
+        
         if n_events is None:
             if parameters is not None:
                 n_events = len(parameters)-1   
             elif magnitudes is not None:
                 n_events = len(magnitudes)
             else:
-                raise ValueError('The fit_single() function needs to be provided with a number of expected transition events')
+                raise ValueError('The fit_n() function needs to be provided with a number of expected transition events')
         assert n_events <= self.compute_max_events(), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
+
+        if level_dict is None:
+            n_levels, levels, = 1, np.zeros(self.n_trials)
+            pars_map, mags_map = np.zeros((1,n_events+1)), np.zeros((1,n_events))
+        else:
+            n_levels, levels, clabels, pars_map, mags_map = \
+                self._level_constructor(magnitudes, parameters, mags_map, pars_map, level_dict, verbose)
+            infos_to_store['mags_map'] = mags_map
+            infos_to_store['pars_map'] = pars_map
+            infos_to_store['clabels'] = clabels
+            infos_to_store['level_dict'] = level_dict
         if verbose:
             if parameters is None:
                 print(f'Estimating {n_events} events model with {starting_points} starting point(s)')
@@ -209,6 +230,7 @@ class hmp:
                 print(f'Estimating {n_events} events model')
         if cpus is None:
             cpus = self.cpus      
+            
         #Formatting parameters
         if isinstance(parameters, (xr.DataArray,xr.Dataset)):
             parameters = parameters.dropna(dim='stage').values
@@ -217,51 +239,70 @@ class hmp:
         if isinstance(magnitudes, np.ndarray):
             magnitudes = magnitudes.copy()
         if isinstance(parameters, np.ndarray):
-            parameters = parameters.copy()          
-        if parameters_to_fix is None: parameters_to_fix=[]
-        if magnitudes_to_fix is None: magnitudes_to_fix=[]
-        
-        if parameters is not None:
-            if len(np.shape(parameters)) == 3:
-                starting_points = np.shape(parameters)[0]
-        if magnitudes is not None:
-            if len(np.shape(magnitudes)) == 3:
-                starting_points = np.shape(magnitudes)[0]
+            parameters = parameters.copy()       
+        if parameters_to_fix is None: 
+            parameters_to_fix=[]
+        else:
+            infos_to_store['parameters_to_fix'] = parameters_to_fix
+        if magnitudes_to_fix is None: 
+            magnitudes_to_fix=[]
+        else:
+            infos_to_store['magnitudes_to_fix'] = magnitudes_to_fix
         
         if parameters is None:
-            parameters = np.tile([self.shape, self.mean_to_scale(np.mean(self.durations)/(n_events+1),self.shape)], (n_events+1,1))
-        initial_p = parameters
-        
+            parameters = np.zeros((n_levels,n_events + 1, 2)) * np.nan #by default nan for missing stages
+            for c in range(n_levels):
+                pars_level = np.where(pars_map[c,:]>=0)[0]
+                n_stage_level = len(pars_level)
+                # by default starting point is to split the average duration in equal bins
+                parameters[c,pars_level,:] = np.tile([self.shape, self.mean_to_scale(np.mean(self.durations[levels==c])/(n_stage_level),self.shape)], (n_stage_level,1))
+        else:
+            infos_to_store['sp_parameters'] = parameters
+            if len(np.shape(parameters)) == 2: #broadcast provided parameters across levels
+                parameters = np.tile(parameters, (n_levels, 1, 1))
+            assert parameters.shape[1] == n_events + 1, f'Provided parameters ({ parameters.shape[1]} should match number of stages {n_events + 1}'
+
+            #set params missing stages to nan to make it obvious in the results
+            if (pars_map < 0).any():
+                for c in range(n_levels):
+                    parameters[c, np.where(pars_map[c,:]<0)[0],:] = np.nan
+            
         if magnitudes is None:
-            magnitudes = np.zeros((n_events,self.n_dims), dtype=np.float64)
+            # By defaults mags are initiated to 0
+            magnitudes = np.zeros((n_levels, n_events, self.n_dims), dtype=np.float64)
+            if (mags_map < 0).any(): #set missing mags to nan
+                for c in range(n_levels):
+                    magnitudes[c, np.where(mags_map[c,:]<0)[0],:] = np.nan
+        else:
+            infos_to_store['sp_magnitudes'] = magnitudes
+            if len(np.shape(magnitudes)) == 2: #broadcast provided magnitudes across levels
+                magnitudes = np.tile(magnitudes, (n_levels, 1, 1))
+            assert magnitudes.shape[1] == n_events, 'Provided magnitudes should match number of events in magnitudes map'
+            
+            #set mags missing events to nan to make it obvious in the results
+            if (mags_map < 0).any():
+                for c in range(n_levels):
+                    magnitudes[c, np.where(mags_map[c,:]<0)[0],:] = np.nan
+        initial_p = parameters
         initial_m = magnitudes
-        # if starting_points > 1:
-        filterwarnings('ignore', 'Convergence failed, estimation hitted the maximum ', )#will be the case but for a subset only hence ignore
-        if len(np.shape(initial_m)) == 2:
-            parameters = [initial_p]
-            magnitudes = np.zeros((starting_points, n_events, self.n_dims))
-            magnitudes[0] = initial_m
-            if method == 'random':
-                for _ in np.arange(starting_points - 1):
-                    proposal_p = self.gen_random_stages(n_events)
-                    proposal_p[parameters_to_fix] = initial_p[parameters_to_fix]
-                    parameters.append(proposal_p)
-                magnitudes[1:] = self.gen_mags(n_events, starting_points-1, method='random', verbose=False)
-                magnitudes[:,magnitudes_to_fix,:] = np.tile(initial_m[magnitudes_to_fix], (len(magnitudes), 1, 1))
-            elif method == 'grid':
-                parameters = self._grid_search(n_events+1, iter_limit=starting_points, method='grid')
-                magnitudes = np.zeros((len(parameters), n_events, self.n_dims), dtype=np.float64)#Grid search is not yet done for mags
-            else:
-                raise ValueError('Unknown starting point method requested, use "random" or "grid"')
-        elif len(np.shape(initial_m)) == 3:
-            magnitudes = initial_m
-            if len(np.shape(initial_p)) == 3:
-                parameters = initial_p
-            else:
-                parameters = np.tile(parameters, (len(magnitudes),1,1))
-        if cpus>1: 
+        parameters = [initial_p]
+        magnitudes = np.tile(initial_m, (starting_points+1, 1, 1, 1))
+        if starting_points > 1:
+            infos_to_store['starting_points'] = starting_points
+            for _ in np.arange(starting_points):
+                proposal_p = np.zeros((n_levels,n_events + 1, 2)) * np.nan #by default nan for missing stages
+                for c in range(n_levels):
+                    pars_level = np.where(pars_map[c,:]>=0)[0]
+                    n_stage_level = len(pars_level)
+                    proposal_p[c,pars_level,:] = self.gen_random_stages(n_stage_level-1)
+                    proposal_p[c,parameters_to_fix,:] = initial_p[0, parameters_to_fix]
+                parameters.append(proposal_p)
+            parameters = np.array(parameters)
+            
+        if cpus > 1: 
             inputs = zip(magnitudes, parameters, itertools.repeat(maximization),
-                    itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(min_iteration), itertools.repeat(None), itertools.repeat(None),itertools.repeat(None), itertools.repeat(1))
+                    itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(min_iteration),
+                    itertools.repeat(mags_map), itertools.repeat(pars_map), itertools.repeat(levels),itertools.repeat(1))
             with mp.Pool(processes=cpus) as pool:
                 if starting_points > 1:
                     estimates = list(tqdm(pool.imap(self._EM_star, inputs), total=len(magnitudes)))
@@ -272,197 +313,137 @@ class hmp:
             estimates = []
             for pars, mags in zip(parameters, magnitudes):
                 estimates.append(self.EM(mags, pars, maximization,\
-                magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration))
+                magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration,
+                 mags_map, pars_map, levels, 1))
             resetwarnings()
+        
         lkhs_sp = [x[0] for x in estimates]
         mags_sp = [x[1] for x in estimates]
         pars_sp = [x[2] for x in estimates]
         eventprobs_sp = [x[3] for x in estimates]
         traces_sp = [x[4] for x in estimates]
         param_dev_sp = [x[5] for x in estimates]
-
-        if return_max:
+        if starting_points > 1 and return_max:
             max_lkhs = np.argmax(lkhs_sp)
-            lkh = lkhs_sp[max_lkhs]
-            mags = mags_sp[max_lkhs]
-            pars = pars_sp[max_lkhs]
-            eventprobs = eventprobs_sp[max_lkhs]
-            traces = traces_sp[max_lkhs]
-            param_dev = param_dev_sp[max_lkhs]
-        else:
-            lkh = lkhs_sp
-            mags = mags_sp
-            pars = pars_sp
-            eventprobs = eventprobs_sp
-            traces = np.zeros((len(lkh),  max([len(x) for x in traces_sp])))*np.nan
-            for i, _i in enumerate(traces_sp):
-                traces[i, :len(_i)] = _i
-            param_dev = np.zeros((len(lkh),  max([len(x) for x in param_dev_sp]), n_events + 1, 2))*np.nan
-            for i, _i in enumerate(param_dev_sp):
-                param_dev[i, :len(_i),:,:] = _i
-            
+            lkhs_sp = [lkhs_sp[max_lkhs]]
+            mags_sp = [mags_sp[max_lkhs]]
+            pars_sp = [pars_sp[max_lkhs]]
+            eventprobs_sp = [eventprobs_sp[max_lkhs]]
+            traces_sp = [traces_sp[max_lkhs]]
+            param_dev_sp = [param_dev_sp[max_lkhs]]
+            starting_points = 1
 
-        if len(np.shape(eventprobs)) == 3:
-            n_event_xr = n_event_xreventprobs = len(mags)
-            n_stage = n_event_xr+1
-            xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
-            xrtraces = xr.DataArray(traces, dims=("em_iteration"), name="traces", coords={'em_iteration':range(len(traces))})
-            xrparam_dev = xr.DataArray(param_dev, dims=("em_iteration","stage",'parameter'), name="param_dev", coords=[range(len(param_dev)), range(n_stage), ['shape','scale']])
-            xrparams = xr.DataArray(pars, dims=("stage",'parameter'), name="parameters", 
-                            coords = [range(n_stage), ['shape','scale']])
-            xrmags = xr.DataArray(mags, dims=("event","component"), name="magnitudes",
-                        coords={'event':range(n_event_xr),
-                                "component":range(self.n_dims)})
+        #make output object
+        estimated = []
+        for sp in range(starting_points):
+            xrlikelihoods = xr.DataArray(lkhs_sp[sp] , name="loglikelihood")
+            xrtraces = xr.DataArray(traces_sp[sp], dims=("em_iteration"), name="traces",
+                                    coords={'em_iteration':range(len(traces_sp[sp]))})
+            xrparam_dev = xr.DataArray(param_dev_sp[sp], dims=("em_iteration","level","stage",'parameter'), 
+                                       name="param_dev", coords=[range(len(param_dev_sp[sp])), range(n_levels), 
+                                       range(n_events+1), ['shape','scale']])               
+            xrparams = xr.DataArray(pars_sp[sp], dims=("level","stage",'parameter'), name="parameters", 
+                                    coords ={'level':range(n_levels), 'stage':range(n_events+1), 'parameter':['shape','scale']})
+            xrmags = xr.DataArray(mags_sp[sp], dims=("level", "event", "component"), name="magnitudes",
+                         coords={'level':range(n_levels), 'event':range(n_events), "component":range(self.n_dims)})
             part, trial = self.coords['participant'].values, self.coords['trials'].values
             trial_x_part = xr.Coordinates.from_pandas_multiindex(MultiIndex.from_arrays([part,trial],
                                     names=('participant','trials')),'trial_x_participant')
-            xreventprobs = xr.Dataset({'eventprobs': (('event', 'trial_x_participant','samples'), 
-                                             eventprobs.T)},
-                             {'event':range(n_event_xreventprobs),
-                              'samples':range(np.shape(eventprobs)[0])})
-            xreventprobs = xreventprobs.assign_coords(trial_x_part)            
-            xreventprobs = xreventprobs.transpose('trial_x_participant','samples','event')
-        else: 
-            n_event_xr = len(mags[0])
-            if verbose and traces[0, -1] - traces[0, -2] < 0:
-                warn(f'Last iteration of the estimation procedure lead to a decrease in log-likelihood, convergence issue. The resulting fit likely contains a duplicated event', RuntimeWarning)
-            xrlikelihoods = xr.DataArray(lkh , dims=("iteration"), name="likelihoods", coords={'iteration':range(len(lkh))})
-            xrtraces = xr.DataArray(traces, dims=("iteration","em_iteration"), name="traces", coords={'iteration':range(len(lkh)), 'em_iteration':range(len(traces[0]))})  
-            xrparam_dev = xr.DataArray(param_dev, dims=("iteration","em_iteration","stage",'parameter'), name="param_dev", coords={'iteration':range(len(lkh)), 'em_iteration':range(len(param_dev[0])), 'stage':range(n_event_xr+1), 'parameter':['shape','scale']})
-            xrparams = xr.DataArray(pars, dims=("iteration","stage",'parameter'), name="parameters", 
-                            coords = {'iteration': range(len(lkh)), 'parameter':['shape','scale']})
-            xrmags = xr.DataArray(mags, dims=("iteration","event","component"), name="magnitudes",
-                        coords={'iteration':range(len(lkh)), 'event':range(n_event_xr),
-                                "component":range(self.n_dims)})
-            part, trial = self.coords['participant'].values, self.coords['trials'].values
-            trial_x_part = xr.Coordinates.from_pandas_multiindex(MultiIndex.from_arrays([part,trial],
-                                    names=('participant','trials')),'trial_x_participant')
-            xreventprobs = xr.Dataset({'eventprobs': (('iteration','event', \
-                                    'trial_x_participant','samples'), [x.T for x in eventprobs])},
-                             {'iteration':range(len(lkh)),
-                              'event':np.arange(n_event_xr),
-                              'samples':np.arange(np.shape(eventprobs)[1])})
+            xreventprobs = xr.Dataset({'eventprobs': (('event', 'trial_x_participant','samples'),
+                                             eventprobs_sp[sp].T)},
+                                {'event': ('event', range(n_events)),
+                                 'samples': ('samples', range(np.shape(eventprobs_sp[sp])[0]))})
             xreventprobs = xreventprobs.assign_coords(trial_x_part)
-            xreventprobs = xreventprobs.transpose('iteration','trial_x_participant','samples','event')
-        estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrtraces, xrparam_dev))
-        estimated = estimated.assign_attrs(sfreq=self.sfreq, event_width_samples=self.event_width_samples, location=self.location,  
-                                           shape=self.shape, distribution=self.distribution, tolerance=tolerance, maximization=int(maximization))
+            if n_levels > 1:
+                xreventprobs = xreventprobs.assign_coords(levels=("trial_x_participant", levels))
+            xreventprobs = xreventprobs.transpose('trial_x_participant','samples','event')
+    
+            estimated.append(xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrtraces, xrparam_dev)))
+
+        if starting_points > 1:
+            estimated = xr.concat(estimated, 'starting_points')
+            estimated = estimated.assign_coords(starting_points=("starting_points", np.arange(starting_points)))
+        else:
+            estimated = estimated[0]
+
+        # Adding infos
+        estimated = estimated.assign_coords(rts=("trial_x_participant", self.named_durations.data))
+
+        for x, y in infos_to_store.items():
+            estimated.attrs[x] = y
+
+        if n_levels == 1:
+            estimated = estimated.squeeze(dim='level')
+            # Drops empty coords incuced by squeeze
+            estimated = estimated.drop_vars(lambda x: [v for v, da in x.coords.items() if not da.dims])
+
         if verbose:
             print(f"parameters estimated for {n_events} events model")
         return estimated
     
-    def fit_single_conds(self, magnitudes=None, parameters=None, parameters_to_fix=None, 
-                   magnitudes_to_fix=None, tolerance=1e-4, max_iteration=1e3, maximization=True, min_iteration = 1,
-                   starting_points=1, method='random', return_max=True, verbose=True, cpus=None,
-                   mags_map=None, pars_map=None, conds=None):
+    def _level_constructor(self, magnitudes, parameters, mags_map, pars_map, level_dict, verbose):
         '''
-        Fit HMP for a single n_events model
-        
-        parameters
-        ----------
-        n_events : int
-            how many events are estimated
-        magnitudes : ndarray
-            2D or 3D ndarray n_events * components (3D: n_cond * n_events * n_components), initial conditions for events magnitudes. If magnitudes are estimated, the list provided is used as starting point, if magnitudes are fixed, magnitudes estimated will be the same as the one provided.
-        parameters : list
-            2D or 3D nd_array stage * parameters (3D: n_cond * stage * parameters) of initial conditions for Gamma distribution parameters parameter. If parameters are estimated, the list provided is used as starting point,
-            if parameters are fixed, parameters estimated will be the same as the one provided.
-        parameters_to_fix : bool
-            To fix (True) or to estimate (False, default) the parameters of the gammas
-        magnitudes_to_fix: bool
-            To fix (True) or to estimate (False, default) the magnitudes of the channel contribution to the events
-        tolerance: float
-            Tolerance applied to the expectation maximization in the EM() function
-        max_iteration: int
-            Maximum number of iteration for the expectation maximization in the EM() function
-        maximization: bool
-            If True (Default) perform the maximization phase in EM() otherwhise skip
-        min_iteration: int
-            Minimum number of iteration for the expectation maximization in the EM() function
-        starting_points: int
-            How many starting points to use for the EM() function
-        method: str
-            What starting points generation method to use, 'random'or 'grid' (grid is not yet fully supported)
-        return_max: bool
-            In the case of multiple starting points, dictates whether to only return the max likelihood model (True, default) or all of the models (False)
-        verbose: bool
-            True displays output useful for debugging, recommended for first use
-        cpus: int
-            number of cores to use in the multiprocessing functions
-        mags_map: 2D nd_array n_cond * n_events indicating which magnitudes are shared between conditions.
-        pars_map: 2D nd_array n_cond * n_stages indicating which parameters are shared between conditions.
-        conds: dict | list
-            if one condition, use a dict with the name in the metadata and a list of the levels in the same
-            order as the rows of the map(s). E.g., {'cue': ['SP', 'AC']}
-            if multiple conditions need to be crossed, use a list of dictionaries per condition. E.g.,
-            [{'cue': ['SP', 'AC',]}, {'resp': ['left', 'right']}]. These are crossed by repeating
-            the first condition as many times as there are levels in the second condition. E.g., SP-left, 
-            SP-right, AC-left, AC-right.
+        Adapt model to levels
         '''
-        #Conditions
-        assert mags_map is not None or pars_map is not None, 'fit_single_conds() requires a magnitude and/or parameter map'
-        assert conds is not None, 'fit_single_conds() requires conditions argument'
-        assert isinstance(conds, dict) or isinstance(conds[0], dict), 'conditions have to be specified as a dictionary, or list of dictionaries'
-        if isinstance(conds, dict): conds = [conds]
-        conds_dict = conds
+        ## levels
+        assert isinstance(level_dict, dict) , 'levels have to be specified as a dictionary'
 
-        #collect condition names, levels, and trial coding
-        cond_names = []
-        cond_levels = []
-        cond_trials = []
-        for cond in conds:
-            assert len(cond) == 1, 'Each condition dictionary can only contain one condition (e.g. {\'cue\': [\'SP\', \'AC\']})'
-            cond_names.append(list(cond.keys())[0])
-            cond_levels.append(cond[cond_names[-1]])
-            cond_trials.append(self.trial_coords[cond_names[-1]].data.copy())
+        #collect level names, levels, and trial coding
+        level_names = []
+        level_mods = []
+        level_trials = []
+        for level in level_dict.keys():
+            level_names.append(level)
+            level_mods.append(level_dict[level])
+            level_trials.append(self.trial_coords[level])
             if verbose:
-                print('Condition \"' + cond_names[-1] + '\" analyzed, with levels:', cond_levels[-1])
+                print('Level \"' + level_names[-1] + '\" analyzed, with levels:', level_mods[-1])
 
-        cond_levels = list(product(*cond_levels))
-        cond_levels = np.array(cond_levels, dtype=object)
-        n_conds = len(cond_levels)
+        level_mods = list(product(*level_mods))
+        level_mods = np.array(level_mods, dtype=object)
+        print(level_mods)
+        n_levels = len(level_mods)
 
-        #build condition array with digit indicating the combined levels
-        cond_trials = np.vstack(cond_trials).T
-        conds = np.zeros((cond_trials.shape[0])) * np.nan
+        #build level array with digit indicating the combined levels
+        level_trials = np.vstack(level_trials).T
+        levels = np.zeros((level_trials.shape[0])) * np.nan
         if verbose:
             print('\nCoded as follows: ')
-        for i, level in enumerate(cond_levels):
-            assert len(np.where((cond_trials == level).all(axis=1))[0]) > 0, f'condition level {level} does not occur in the data'
-            conds[np.where((cond_trials == level).all(axis=1))] = i
+        for i, mod in enumerate(level_mods):
+            assert len(np.where((level_trials == mod).all(axis=1))[0]) > 0, f'Modality {mod} of level does not occur in the data'
+            levels[np.where((level_trials == mod).all(axis=1))] = i
             if verbose:
                 print(str(i) + ': ' + str(level))
-        conds=np.int8(conds)
-
-        clabels = {'Condition ' + str(cond_names): cond_levels}
+        levels=np.int8(levels)
+        clabels = {'level ' + str(level_names): level_mods}
 
         #check maps
-        n_conds_mags = 0 if mags_map is None else mags_map.shape[0]
-        n_conds_pars = 0 if pars_map is None else pars_map.shape[0]
-        if n_conds_mags > 0 and n_conds_pars > 0: #either both maps should have the same number of conds, or 0
-            assert n_conds_mags == n_conds_pars, 'magnitude and parameters maps have to indicate the same number of conditions'
+        n_levels_mags = 0 if mags_map is None else mags_map.shape[0]
+        n_levels_pars = 0 if pars_map is None else pars_map.shape[0]
+        if n_levels_mags > 0 and n_levels_pars > 0: #either both maps should have the same number of levels, or 0
+            assert n_levels_mags == n_levels_pars, 'magnitude and parameters maps have to indicate the same number of levels'
             #make sure nr of events correspond per row
-            for c in range(n_conds):
+            for c in range(n_levels):
                 assert sum(mags_map[c,:] >= 0) + 1 == sum(pars_map[c,:] >= 0), 'nr of events in magnitudes map and parameters map do not correspond on row ' + str(c)
-        else: #if 0, copy n_conds as zero map
-            if n_conds_mags == 0:
+        else: #if 0, copy n_levels as zero map
+            if n_levels_mags == 0:
                 assert not (pars_map < 0).any(), 'If negative parameters are provided, magnitude map is required.'
-                mags_map = np.zeros((n_conds, pars_map.shape[1]-1), dtype=int)
+                mags_map = np.zeros((n_levels, pars_map.shape[1]-1), dtype=int)
             else:
-                pars_map = np.zeros((n_conds, mags_map.shape[1] + 1), dtype=int)
+                pars_map = np.zeros((n_levels, mags_map.shape[1] + 1), dtype=int)
                 if (mags_map < 0).any():
-                    for c in range(n_conds):
+                    for c in range(n_levels):
                         pars_map[c, np.where(mags_map[c,:] < 0)[0]] = -1
                         pars_map[c, np.where(mags_map[c,:] < 0)[0]+1] = 1
 
         #print maps to check level/row mathcing
         if verbose:
             print('\nMagnitudes map:')
-            for cnt in range(n_conds):
+            for cnt in range(n_levels):
                 print(str(cnt) + ': ', mags_map[cnt,:])
 
             print('\nParameters map:')
-            for cnt in range(n_conds):
+            for cnt in range(n_levels):
                 print(str(cnt) + ': ', pars_map[cnt,:])
 
             #give explanation if negative parameters:
@@ -473,203 +454,27 @@ class hmp:
                 print(np.array([[0, 0, 0, 0],
                                 [0, -1, 0, 0]]))
                 print('the parameters of stage 1 are shared, as well as the parameters of stage 3 of')
-                print('condition 1 with stage 2 (column 3) of condition 2 and the last stage of both')
-                print('conditions.')
-                print('Given that event 2 is probably missing in condition 2, it would typically')
-                print('make more sense to let both stages around event 2 in condition 1 vary as')
-                print('compared to condition 2:')
+                print('level 1 with stage 2 (column 3) of level 2 and the last stage of both')
+                print('levels.')
+                print('Given that event 2 is probably missing in level 2, it would typically')
+                print('make more sense to let both stages around event 2 in level 1 vary as')
+                print('compared to level 2:')
                 print(np.array([[0, 0, 0, 0],
                                 [0, -1, 1, 0]]))
                 print('-----')
 
                 
-        #at this point, all should indicate the same number of conditions
-        assert n_conds == mags_map.shape[0] == pars_map.shape[0], 'number of unique conditions should correspond to number of rows in map(s)'
+        #at this point, all should indicate the same number of levels
+        assert n_levels == mags_map.shape[0] == pars_map.shape[0], 'number of unique levels should correspond to number of rows in map(s)'
 
-        n_events = mags_map.shape[1]
-        assert self.location*(n_events) < min(self.durations), f'{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}'
-
-        assert conds.shape[0] == self.durations.shape[0], 'Conds parameter should contain the condition per epoch.'
-        if verbose:
-            if parameters is None:
-                print(f'\nEstimating {n_events} events model with {starting_points} starting point(s)')
-            else:
-                print(f'\nEstimating {n_events} events model')
-        if cpus is None:
-            cpus = self.cpus         
-        
-        #Formatting parameters
-        if isinstance(parameters, (xr.DataArray,xr.Dataset)):
-            parameters = parameters.dropna(dim='stage').values
-        if isinstance(magnitudes, (xr.DataArray,xr.Dataset)):
-            magnitudes = magnitudes.dropna(dim='event').values  
-        if isinstance(magnitudes, np.ndarray):
-            magnitudes = magnitudes.copy()
-        if isinstance(parameters, np.ndarray):
-            parameters = parameters.copy()          
-        if parameters_to_fix is None: parameters_to_fix=[]
-        if magnitudes_to_fix is None: magnitudes_to_fix=[]
-        
-        if parameters is not None:
-            if len(np.shape(parameters)) == 2: #broadcast parameters across conditions
-                parameters = np.tile(parameters, (n_conds, 1, 1))
-            assert parameters.shape[1] == n_events + 1, f'Provided parameters ({ parameters.shape[1]} should match number of stages {n_events + 1} in parameters map'
-
-            #set params missing stages to nan to make it obvious in the results
-            if (pars_map < 0).any():
-                for c in range(n_conds):
-                    parameters[c, np.where(pars_map[c,:]<0)[0],:] = np.nan
-            
-        if magnitudes is not None:
-            if len(np.shape(magnitudes)) == 2: #broadcast magnitudes across conditions
-                magnitudes = np.tile(magnitudes, (n_conds, 1, 1))
-            assert magnitudes.shape[1] == n_events, 'Provided magnitudes should match number of events in magnitudes map'
-            
-            #set mags missing events to nan to make it obvious in the results
-            if (mags_map < 0).any():
-                for c in range(n_conds):
-                    magnitudes[c, np.where(mags_map[c,:]<0)[0],:] = np.nan
-
-        if starting_points > 0:#Initialize with equally spaced option
-            if parameters is None:
-                parameters = np.zeros((n_conds,n_events + 1, 2)) * np.nan #by default nan for missing stages
-                for c in range(n_conds):
-                    pars_cond = np.where(pars_map[c,:]>=0)[0]
-                    n_stage_cond = len(pars_cond)
-                    parameters[c,pars_cond,:] = np.tile([self.shape, self.mean_to_scale(np.mean(self.durations[conds==c])/(n_stage_cond),self.shape)], (n_stage_cond,1))
-            initial_p = parameters
-            if magnitudes is None:
-                magnitudes = np.zeros((n_events,self.n_dims), dtype=np.float64)
-                magnitudes = np.tile(magnitudes, (n_conds, 1, 1)) #broadcast across conditions
-                if (mags_map < 0).any(): #set missing mags to nan
-                    for c in range(n_conds):
-                        magnitudes[c, np.where(mags_map[c,:]<0)[0],:] = np.nan
-            initial_m = magnitudes
-
-        if starting_points > 1: #use multiple starting points
-            filterwarnings('ignore', 'Convergence failed, estimation hitted the maximum ', )#will be the case but for a subset only hence ignore
-            parameters = [initial_p]
-            magnitudes = np.tile(initial_m, (starting_points+1, 1, 1, 1))
-            if method == 'random':
-                for _ in np.arange(starting_points):
-                    proposal_p = np.zeros((n_conds,n_events + 1, 2)) * np.nan #by default nan for missing stages
-                    for c in range(n_conds):
-                        pars_cond = np.where(pars_map[c,:]>=0)[0]
-                        n_stage_cond = len(pars_cond)
-                        proposal_p[c,pars_cond,:] = self.gen_random_stages(n_stage_cond-1)
-                        proposal_p[i][parameters_to_fix] = initial_p[0][parameters_to_fix]
-                    parameters.append(proposal_p)
-                
-                proposals_m = self.gen_mags(n_events, starting_points, method='random', verbose=False)
-                for i in range(starting_points):
-                    proposal_m = proposals_m[i]
-                    proposal_m = np.tile(proposal_m, (n_conds, 1,1))
-                    for j in range(n_conds):
-                        if (mags_map < 0).any(): #set missing mags to nan
-                            proposal_m[c, np.where(mags_map[c,:]<0)[0],:] = np.nan
-                        proposal_m[j][magnitudes_to_fix,:] = initial_m[0][magnitudes_to_fix,:]
-                    magnitudes[i+1,:,:,:] = proposal_m
-            else:
-                raise ValueError('Unknown starting point method requested, use "random" ')
-            
-            if cpus > 1: 
-                inputs = zip(magnitudes, parameters, itertools.repeat(maximization),
-                        itertools.repeat(magnitudes_to_fix),itertools.repeat(parameters_to_fix), itertools.repeat(max_iteration), itertools.repeat(tolerance), itertools.repeat(min_iteration),
-                        itertools.repeat(mags_map), itertools.repeat(pars_map), itertools.repeat(conds),itertools.repeat(1))
-                with mp.Pool(processes=cpus) as pool:
-                    if starting_points > 1:
-                        estimates = list(tqdm(pool.imap(self._EM_star, inputs), total=len(magnitudes)))
-                    else:
-                        estimates = pool.starmap(self.EM, inputs)
- 
-            else:#avoids problems if called in an already parallel function
-                estimates = []
-                for pars, mags in zip(parameters, magnitudes):
-                    estimates.append(self.EM(mags, maximization,\
-                    magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration,
-                     pars, mags_map, pars_map, conds, 1))
-                resetwarnings()
-            
-            lkhs_sp = [x[0] for x in estimates]
-            mags_sp = [x[1] for x in estimates]
-            pars_sp = [x[2] for x in estimates]
-            eventprobs_sp = [x[3] for x in estimates]
-            traces_sp = [x[4] for x in estimates]
-            param_dev_sp = [x[5] for x in estimates]
-            if return_max:
-                max_lkhs = np.argmax(lkhs_sp)
-                lkh = lkhs_sp[max_lkhs]
-                mags = mags_sp[max_lkhs]
-                pars = pars_sp[max_lkhs]
-                eventprobs = eventprobs_sp[max_lkhs]
-                traces = traces_sp[max_lkhs]
-                param_dev = param_dev_sp[max_lkhs]
-            else:
-                lkh = lkhs_sp
-                mags = mags_sp
-                pars = pars_sp
-                eventprobs = eventprobs_sp
-                traces = np.zeros((len(lkh),  max([len(x) for x in traces_sp])))*np.nan
-                for i, _i in enumerate(traces_sp):
-                    traces[i, :len(_i)] = _i
-                param_dev = np.zeros((len(lkh),  max([len(x) for x in param_dev_sp]), n_conds, n_events + 1, 2))*np.nan
-                for i, _i in enumerate(param_dev_sp):
-                    param_dev[i, :len(_i),:,:,:] = _i
-            
-        elif starting_points == 1:#informed starting point
-            lkh, mags, pars, eventprobs, traces, param_dev = self.EM(initial_m, initial_p, \
-                                         maximization, magnitudes_to_fix, parameters_to_fix, \
-                                         max_iteration, tolerance, min_iteration, 
-                                         mags_map, pars_map, conds, 1)
-
-        else:#uninitialized    
-            if np.any(parameters)== None:
-                parameters = np.tile([self.shape, self.mean_to_scale(np.mean(self.durations)/(n_events+1),self.shape)], (n_events+1,1))
-                parameters = np.tile(parameters, (n_conds, 1, 1))  #broadcast across conditions                             
-            
-            if np.any(magnitudes)== None:
-                magnitudes = np.zeros((n_events,self.n_dims), dtype=np.float64)
-                magnitudes = np.tile(magnitudes, (n_conds, 1, 1)) #broadcast across conditions
-
-            lkh, mags, pars, eventprobs, traces, param_dev = self.EM(magnitudes, parameters, maximization, magnitudes_to_fix, parameters_to_fix, max_iteration, tolerance, min_iteration, mags_map, pars_map, conds, 1)
-        
-        #make output object
-        xrlikelihoods = xr.DataArray(lkh , name="likelihoods")
-        xrtraces = xr.DataArray(traces, dims=("em_iteration"), name="traces", coords={'em_iteration':range(len(traces))})
-        xrparam_dev = xr.DataArray(param_dev, dims=("em_iteration","condition","stage",'parameter'), name="param_dev", coords=[range(len(param_dev)), range(n_conds), range(n_events+1), ['shape','scale']])               
-        xrparams = xr.DataArray(pars, dims=("condition","stage",'parameter'), name="parameters", 
-                                 coords ={'condition':range(n_conds), 'stage':range(n_events+1), 'parameter':['shape','scale']})
-        xrmags = xr.DataArray(mags, dims=("condition", "event", "component"), name="magnitudes",
-                     coords={'condition':range(n_conds), 'event':range(n_events), "component":range(self.n_dims)})
-        part, trial = self.coords['participant'].values, self.coords['trials'].values
-        trial_x_part = xr.Coordinates.from_pandas_multiindex(MultiIndex.from_arrays([part,trial],
-                                    names=('participant','trials')),'trial_x_participant')
-        
-        xreventprobs = xr.Dataset({'eventprobs': (('event', 'trial_x_participant','samples'),
-                                             eventprobs.T)},
-                                {'event': ('event', range(n_events)),
-                                 'samples': ('samples', range(np.shape(eventprobs)[0])),
-                                 'cond_x_participant': ('trial_x_participant', MultiIndex.from_arrays([part,conds],
-                                 names=('participant','cond'))),
-                                 'cond':('trial_x_participant',conds)})
-        xreventprobs = xreventprobs.assign_coords(trial_x_part)
-        xreventprobs = xreventprobs.transpose('trial_x_participant','samples','event')
-
-        estimated = xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrtraces, xrparam_dev))
-        estimated.attrs['mags_map'] = mags_map
-        estimated.attrs['pars_map'] = pars_map
-        estimated.attrs['clabels'] = clabels
-        estimated.attrs['conds_dict'] = conds_dict
-        
-        if verbose:
-            print(f"parameters estimated for {n_events} events model")
-        return estimated
+        assert levels.shape[0] == self.durations.shape[0], 'levels parameter should contain the level per epoch.'
+        return n_levels, levels, clabels, pars_map, mags_map
 
 
     def _EM_star(self, args): #for tqdm usage
         return self.EM(*args)
     
-    def EM(self, magnitudes, parameters, maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1, mags_map=None, pars_map=None,conds=None, cpus=1):  
+    def EM(self, magnitudes, parameters, maximization=True, magnitudes_to_fix=None, parameters_to_fix=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1, mags_map=None, pars_map=None,levels=None, cpus=1):  
         '''
         Expectation maximization function underlying fit
 
@@ -678,7 +483,7 @@ class hmp:
         n_events : int
             how many events are estimated
         magnitudes : ndarray
-            2D ndarray n_events * components (or 3D iteration * n_events * n_components), initial conditions for events magnitudes. If magnitudes are estimated, the list provided is used as starting point,
+            2D ndarray n_events * components (or 3D iteration * n_events * n_components), initial levelitions for events magnitudes. If magnitudes are estimated, the list provided is used as starting point,
             if magnitudes are fixed, magnitudes estimated will be the same as the one provided. When providing a list, magnitudes need to be in the same order
             _n_th magnitudes parameter is  used for the _n_th event
         parameters : list
@@ -714,37 +519,19 @@ class hmp:
             paramters for each iteration of EM
         ''' 
         
-        if mags_map is not None or pars_map is not None or conds is not None: #condition version
-            assert mags_map is not None and pars_map is not None and conds is not None, 'Both magnitude and parameter maps need to be provided when doing EM based on conditions, as well as conditions.'
-            assert mags_map.shape[0] == pars_map.shape[0], 'Both maps need to indicate the same number of conditions.'
-            n_cond = mags_map.shape[0]
-        else:
-            n_cond = None
+        assert mags_map.shape[0] == pars_map.shape[0], 'Both maps need to indicate the same number of levels.'
+        n_levels = mags_map.shape[0]
         
-        null_stages = np.where(parameters[...,-1].flatten()<0)[0]
-        wrong_shape = np.where(parameters[...,-2]!=self.shape)[0]
-        if n_cond is None and len(null_stages)>0:
-            raise ValueError(f'Wrong scale parameter input, provided scale parameter(s) {null_stages} should be positive but have value {parameters[...,-1].flatten()[null_stages]}')
-        if n_cond is None and len(wrong_shape)>0:
-            raise ValueError(f'Wrong shape parameter input, provided parameter(s) {wrong_shape} shape is {parameters[...,-2][wrong_shape]} but expected {self.shape}')
-
         n_events = magnitudes.shape[magnitudes.ndim-2]
-        if n_events == 0:
-            raise ValueError(f'At least one event has to be required')
-        initial_magnitudes = magnitudes.copy()
-        initial_parameters = parameters.copy()
-
         locations = np.zeros((n_events+1,),dtype=int) #location per stage
         locations[1:-1] = self.location
-        if n_cond is not None:
-            locations = np.tile(locations, (n_cond, 1))
-            lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, locations, mags_map, pars_map, conds, cpus=cpus)
-        else:
-            lkh, eventprobs = self.estim_probs(magnitudes, parameters, locations, n_events)
-
+        locations = np.tile(locations, (n_levels, 1))
+        lkh, eventprobs = self._estim_probs_levels(magnitudes, parameters, locations, mags_map, pars_map, levels, cpus=cpus)
+        initial_magnitudes = magnitudes.copy()
+        initial_parameters = parameters.copy()
+        
         traces = [lkh]
         param_dev = [parameters.copy()] #... and parameters
-
         i = 0
         if not maximization:
             lkh_prev = lkh
@@ -760,48 +547,34 @@ class hmp:
                 lkh_prev = lkh.copy()
                 parameters_prev = parameters.copy()
 
-                if n_cond is not None: #condition dependent
-                    for c in range(n_cond): #get params/mags
+                for c in range(n_levels): #get params/mags
 
-                        mags_map_cond = np.where(mags_map[c,:]>=0)[0]
-                        pars_map_cond = np.where(pars_map[c,:]>=0)[0]
-                        epochs_cond = np.where(conds == c)[0]
-                        
-                        #get mags/pars by condition
-                        magnitudes[c,mags_map_cond,:], parameters[c,pars_map_cond,:] = self.get_magnitudes_parameters_expectation(eventprobs[np.ix_(range(self.max_d),epochs_cond, mags_map_cond)], subset_epochs=epochs_cond)
-
-                        magnitudes[c,magnitudes_to_fix,:] = initial_magnitudes[c,magnitudes_to_fix,:].copy()
-                        parameters[c,parameters_to_fix,:] = initial_parameters[c,parameters_to_fix,:].copy()
+                    mags_map_level = np.where(mags_map[c,:]>=0)[0]
+                    pars_map_level = np.where(pars_map[c,:]>=0)[0]
+                    epochs_level = np.where(levels == c)[0]
                     
-                    #set mags to mean if requested in map
-                    for m in range(n_events):
-                        for m_set in np.unique(mags_map[:,m]):
-                            if m_set >= 0:
-                                magnitudes[mags_map[:,m] == m_set,m,:] = np.mean(magnitudes[mags_map[:,m] == m_set,m,:],axis=0)
+                    #get mags/pars by level
+                    magnitudes[c,mags_map_level,:], parameters[c,pars_map_level,:] = self.get_magnitudes_parameters_expectation(eventprobs[np.ix_(range(self.max_d),epochs_level, mags_map_level)], subset_epochs=epochs_level)
 
-                    #set params and locations to mean/max if requested in map
-                    for p in range(n_events+1):
-                        for p_set in np.unique(pars_map[:,p]):
-                            if p_set >= 0:
-                                parameters[pars_map[:,p] == p_set,p,:] = np.mean(parameters[pars_map[:,p] == p_set,p,:],axis=0)
-                else: #general
-                    magnitudes, parameters = self.get_magnitudes_parameters_expectation(eventprobs)
-                    magnitudes[magnitudes_to_fix,:] = initial_magnitudes[magnitudes_to_fix,:].copy()
-                    parameters[parameters_to_fix, :] = initial_parameters[parameters_to_fix,:].copy()
-                if n_cond is not None:
-                    lkh, eventprobs = self.estim_probs_conds(magnitudes, parameters, locations, mags_map, pars_map, conds, cpus=cpus)
-                else:
-                    lkh, eventprobs = self.estim_probs(magnitudes, parameters, locations, n_events)
+                    magnitudes[c,magnitudes_to_fix,:] = initial_magnitudes[c,magnitudes_to_fix,:].copy()
+                    parameters[c,parameters_to_fix,:] = initial_parameters[c,parameters_to_fix,:].copy()
                 
+                #set mags to mean if requested in map
+                for m in range(n_events):
+                    for m_set in np.unique(mags_map[:,m]):
+                        if m_set >= 0:
+                            magnitudes[mags_map[:,m] == m_set,m,:] = np.mean(magnitudes[mags_map[:,m] == m_set,m,:],axis=0)
+
+                #set param to mean if requested in map
+                for p in range(n_events+1):
+                    for p_set in np.unique(pars_map[:,p]):
+                        if p_set >= 0:
+                            parameters[pars_map[:,p] == p_set,p,:] = np.mean(parameters[pars_map[:,p] == p_set,p,:],axis=0)
+                lkh, eventprobs = self._estim_probs_levels(magnitudes, parameters, locations, mags_map, pars_map, levels, cpus=cpus)
                 traces.append(lkh)
                 param_dev.append(parameters.copy())
                 i += 1
-                
-        # Getting eventprobs without locations for last iteration
-        if n_cond is not None:
-            _, eventprobs = self.estim_probs_conds(magnitudes, parameters, np.zeros(locations.shape).astype(int), mags_map, pars_map, conds, cpus=cpus)
-        else:
-            _, eventprobs = self.estim_probs(magnitudes, parameters, np.zeros(locations.shape).astype(int), n_events)
+        _, eventprobs = self._estim_probs_levels(magnitudes, parameters, np.zeros(locations.shape).astype(int), mags_map, pars_map, levels, cpus=cpus)
         if i == max_iteration:
             warn(f'Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})', RuntimeWarning)
         return lkh, magnitudes, parameters, eventprobs, np.array(traces), np.array(param_dev)
@@ -815,21 +588,21 @@ class hmp:
 
         magnitudes = np.zeros((n_events, self.n_dims))
 
-        #Magnitudes from Expectation
+        #Magnitudes from Expectation, Eq 11 from 2024 paper
         for event in range(n_events):
             for comp in range(self.n_dims):
                 event_data = np.zeros((self.max_d, len(subset_epochs)))
                 for trial_idx, trial in enumerate(subset_epochs):
                     start, end = self.starts[trial], self.ends[trial]
                     duration = end - start + 1
-                    event_data[:duration, trial_idx] = self.events[start:end+1, comp]
+                    event_data[:duration, trial_idx] = self.crosscorr[start:end+1, comp]
                 magnitudes[event, comp] = np.mean(np.sum(eventprobs[:, :, event] * event_data, axis=0))
             # scale cross-correlation with likelihood of the transition
             # sum by-trial these scaled activation for each transition events
             # average across trials
         
-        #Gamma parameters from Expectation
-        #calc averagepos here as mean_d can be condition dependent, whereas scale_parameters() assumes it's general
+        #Gamma parameters from Expectation Eq 10 from 2024 paper
+        #calc averagepos here as mean_d can be level dependent, whereas scale_parameters() assumes it's general
         event_times_mean = np.concatenate([np.arange(self.max_d) @ eventprobs.mean(axis=1), [np.mean(self.durations[subset_epochs])-1]])
         parameters = self.scale_parameters(eventprobs=None, n_events=n_events, averagepos=event_times_mean)                            
 
@@ -854,13 +627,13 @@ class hmp:
         n_events : int
             how many events are estimated
         subset_epochs : list
-            boolean array indicating which epoch should be taken into account for condition-based calcs
+            boolean array indicating which epoch should be taken into account for level-based calcs
         lkh_only: bool
             Returning eventprobs (True) or not (False)
         
         Returns
         -------
-        likelihood : float
+        loglikelihood : float
             Summed log probabilities
         eventprobs : ndarray
             Probabilities with shape max_samples*n_trials*n_events
@@ -886,7 +659,7 @@ class hmp:
         for i in range(self.n_dims):
             # computes the gains, i.e. congruence between the pattern shape
             # and the data given the magnitudes of the sensors
-            gains = gains + self.events[:,i][np.newaxis].T * magnitudes[:,i]-magnitudes[:,i]**2/2
+            gains = gains + self.crosscorr[:,i][np.newaxis].T * magnitudes[:,i]-magnitudes[:,i]**2/2
         gains = np.exp(gains)
         probs = np.zeros([self.max_d, n_trials,n_events], dtype=np.float64) # prob per trial
         probs_b = np.zeros([self.max_d, n_trials,n_events], dtype=np.float64)# Sample and state reversed
@@ -918,9 +691,9 @@ class hmp:
             add_b = backward[:,:,event-1]*probs_b[:,:,event-1]#Next stage in back
             for trial in np.arange(n_trials):
                 # convolution between gamma * gains at previous event and event
-                forward[:,trial,event] = self.convolution(forward[:,trial,event-1], pmf[:,event])[:self.max_d]
+                forward[:,trial,event] = np.convolve(forward[:,trial,event-1], pmf[:,event])[:self.max_d]
                 # same but backwards
-                backward[:,trial,event] = self.convolution(add_b[:,trial], pmf_b[:, event])[:self.max_d]
+                backward[:,trial,event] = np.convolve(add_b[:,trial], pmf_b[:, event])[:self.max_d]
             forward[:,:,event] = forward[:,:,event]*probs[:,:,event]
         #re-arranging backward to the expected variable
         backward = backward[:,:,::-1]#undoes stage inversion
@@ -930,7 +703,6 @@ class hmp:
         
         eventprobs = forward * backward
         eventprobs = np.clip(eventprobs, 0, None) #floating point precision error
-        
         #eventprobs can be so low as to be 0, avoid dividing by 0
         #this only happens when magnitudes are 0 and gammas are randomly determined
         if (eventprobs.sum(axis=0) == 0).any() or (eventprobs[:,:,0].sum(axis=0) == 0).any(): 
@@ -954,7 +726,6 @@ class hmp:
 
             likelihood = np.sum(np.log(eventprobs[:,:,0].sum(axis=0)))#sum over max_samples to avoid 0s in log
             eventprobs = eventprobs / eventprobs.sum(axis=0)
-        #conversion to probabilities, divide each trial and state by the sum of the likelihood of the n points in a trial
 
         if lkh_only:
             return likelihood
@@ -963,7 +734,7 @@ class hmp:
         else:
             return [likelihood, eventprobs]
 
-    def estim_probs_conds(self, magnitudes, parameters, locations, mags_map, pars_map, conds, lkh_only=False, cpus=1):
+    def _estim_probs_levels(self, magnitudes, parameters, locations, mags_map, pars_map, levels, lkh_only=False, cpus=1):
         '''
         parameters
         ----------
@@ -976,7 +747,7 @@ class hmp:
             if parameters are fixed, parameters estimated will be the same as the one provided. When providing a list, stage need to be in the same order
             _n_th gamma parameter is  used for the _n_th stage
         locations : ndarray
-            2D n_cond * n_events array indication locations for all events
+            2D n_level * n_events array indication locations for all events
         n_events : int
             how many events are estimated
         lkh_only: bool
@@ -984,28 +755,28 @@ class hmp:
         
         Returns
         -------
-        likelihood : float
+        loglikelihood : float
             Summed log probabilities
         eventprobs : ndarray
             Probabilities with shape max_samples*n_trials*n_events
         '''
 
-        n_conds = mags_map.shape[0]
-        likes_events_cond = []
+        n_levels = mags_map.shape[0]
+        likes_events_level = []
         if cpus > 1:
             with mp.Pool(processes=cpus) as pool:
-                likes_events_cond = pool.starmap(self.estim_probs, 
-                    zip([magnitudes[c, mags_map[c,:]>=0, :] for c in range(n_conds)], [parameters[c, pars_map[c,:]>=0, :] for c in range(n_conds)], [locations[c, pars_map[c,:]>=0] for c in range(n_conds)],itertools.repeat(None), [conds == c for c in range(n_conds)], itertools.repeat(False)))
+                likes_events_level = pool.starmap(self.estim_probs, 
+                    zip([magnitudes[c, mags_map[c,:]>=0, :] for c in range(n_levels)], [parameters[c, pars_map[c,:]>=0, :] for c in range(n_levels)], [locations[c, pars_map[c,:]>=0] for c in range(n_levels)],itertools.repeat(None), [levels == c for c in range(n_levels)], itertools.repeat(False)))
         else:
-            for c in range(n_conds):
-                magnitudes_cond = magnitudes[c, mags_map[c,:]>=0, :] #select existing magnitudes
-                parameters_cond = parameters[c, pars_map[c,:]>=0, :] #select existing params
-                likes_events_cond.append(self.estim_probs(magnitudes_cond, parameters_cond, locations[c, pars_map[c,:]>=0], subset_epochs = (conds == c)))
+            for c in range(n_levels):
+                magnitudes_level = magnitudes[c, mags_map[c,:]>=0, :] #select existing magnitudes
+                parameters_level = parameters[c, pars_map[c,:]>=0, :] #select existing params
+                likes_events_level.append(self.estim_probs(magnitudes_level, parameters_level, locations[c, pars_map[c,:]>=0], subset_epochs = (levels == c)))
 
-        likelihood = np.sum([x[0] for x in likes_events_cond])
-        eventprobs = np.zeros((self.max_d, len(conds), mags_map.shape[1]))
-        for c in range(n_conds):
-            eventprobs[np.ix_(range(self.max_d), conds == c, mags_map[c,:]>=0)] = likes_events_cond[c][1]
+        likelihood = np.sum([x[0] for x in likes_events_level])
+        eventprobs = np.zeros((self.max_d, len(levels), mags_map.shape[1]))
+        for c in range(n_levels):
+            eventprobs[np.ix_(range(self.max_d), levels == c, mags_map[c,:]>=0)] = likes_events_level[c][1]
 
         if lkh_only:
             return likelihood
@@ -1027,13 +798,9 @@ class hmp:
         p : ndarray
             probabilty mass function for the distribution with given scale
         '''
-        if scale == 0:
-            warn('Convergence failed: one stage has been found to be null')
-            p = np.repeat(0,self.max_d)
-        else:
-            p = self.pdf(np.arange(self.max_d), shape, scale=scale)
-            p = p/np.sum(p)
-            p[np.isnan(p)] = 0 #remove potential nans
+        p = self.pdf(np.arange(self.max_d), shape, scale=scale)
+        p = p/np.sum(p)
+        p[np.isnan(p)] = 0 #remove potential nans
         return p
     
     def scale_parameters(self, eventprobs=None, n_events=None, averagepos=None):
@@ -1064,12 +831,11 @@ class hmp:
         params[:,1] = [self.mean_to_scale(x[1],x[0]) for x in params]
         return params
 
-
-    def backward_estimation(self,max_events=None, min_events=0, max_fit=None, max_starting_points=1, method="random", tolerance=1e-4, maximization=True, max_iteration=1e3):
+    def backward_estimation(self,max_events=None, min_events=0, max_fit=None, max_starting_points=1, tolerance=1e-4, maximization=True, max_iteration=1e3):
         '''
         First read or estimate max_event solution then estimate max_event - 1 solution by 
         iteratively removing one of the event and pick the one with the highest 
-        likelihood
+        loglikelihood
         
         parameters
         ----------
@@ -1082,8 +848,6 @@ class hmp:
             with this arguments, defaults to None
         max_starting_points: int
             how many random starting points iteration to try for the model estimating the maximal number of events
-        method: str
-            What starting points generation method to use, 'random'or 'grid' (grid is not yet fully supported)
         tolerance: float
             Tolerance applied to the expectation maximization in the EM() function
         maximization: bool
@@ -1095,8 +859,8 @@ class hmp:
             max_events = self.compute_max_events()
         if not max_fit:
             if max_starting_points > 0:
-                print(f'Estimating all solutions for maximal number of events ({max_events}) with 1 pre-defined starting point and {max_starting_points-1} {method} starting points')
-            event_loo_results = [self.fit_single(max_events, starting_points=max_starting_points, method=method, verbose=False)]
+                print(f'Estimating all solutions for maximal number of events ({max_events}) with 1 pre-defined starting point and {max_starting_points-1} starting points')
+            event_loo_results = [self.fit_n(max_events, starting_points=max_starting_points,  verbose=False)]
         else:
             event_loo_results = [max_fit]
         max_events = event_loo_results[0].event.max().values+1
@@ -1104,39 +868,38 @@ class hmp:
         for n_events in np.arange(max_events-1,min_events,-1):
 
             #only take previous model forward when it's actually fitting ok
-            if event_loo_results[-1].likelihoods.values != -np.inf:                
+            if event_loo_results[-1].loglikelihood.values != -np.inf:                
 
                 print(f'Estimating all solutions for {n_events} events')
                         
-                flats_prev = event_loo_results[-1].dropna('stage').parameters.values
+                pars_prev = event_loo_results[-1].dropna('stage').parameters.values
                 mags_prev = event_loo_results[-1].dropna('event').magnitudes.values
 
                 events_temp, pars_temp = [],[]
                 
                 for event in np.arange(n_events + 1):#creating all possible solutions
-
                     events_temp.append(mags_prev[np.arange(n_events+1) != event,])
                     
-                    temp_flat = np.copy(flats_prev)
-                    temp_flat[event,1] = temp_flat[event,1] + temp_flat[event+1,1] #combine two stages into one
-                    temp_flat = np.delete(temp_flat, event+1, axis=0)
-                    pars_temp.append(temp_flat)
+                    temp_pars = np.copy(pars_prev)
+                    temp_pars[event,1] = temp_pars[event,1] + temp_pars[event+1,1] #combine two stages into one
+                    temp_pars = np.delete(temp_pars, event+1, axis=0)
+                    pars_temp.append(temp_pars)
 
                 if self.cpus == 1:
                     event_loo_likelihood_temp = []
                     for i in range(len(events_temp)):
-                        event_loo_likelihood_temp.append(self.fit_single(n_events, events_temp[i],pars_temp[i],tolerance=tolerance,max_iteration=max_iteration,maximization=maximization,verbose=False))
+                        event_loo_likelihood_temp.append(self.fit_n(n_events, events_temp[i],pars_temp[i],tolerance=tolerance,max_iteration=max_iteration,maximization=maximization,verbose=False))
                 else:
                     inputs = zip(itertools.repeat(n_events), events_temp, pars_temp,\
                                 itertools.repeat([]), itertools.repeat([]),\
                                 itertools.repeat(tolerance), itertools.repeat(max_iteration), \
                                 itertools.repeat(maximization), itertools.repeat(1),\
-                                itertools.repeat(1),itertools.repeat('random'), itertools.repeat(True),\
+                                itertools.repeat(1),itertools.repeat(True),\
                                 itertools.repeat(False),itertools.repeat(1))
                     with mp.Pool(processes=self.cpus) as pool:
-                        event_loo_likelihood_temp = pool.starmap(self.fit_single, inputs)
+                        event_loo_likelihood_temp = pool.starmap(self.fit_n, inputs)
 
-                lkhs = [x.likelihoods.values for x in event_loo_likelihood_temp]
+                lkhs = [x.loglikelihood.values for x in event_loo_likelihood_temp]
                 event_loo_results.append(event_loo_likelihood_temp[np.nanargmax(lkhs)])
 
                 #remove event_loo_likelihood
@@ -1146,351 +909,22 @@ class hmp:
             
             else: 
                 print(f'Previous model did not fit well. Estimating a neutral {n_events} event model.')
-                event_loo_results.append(self.fit_single(n_events, tolerance=tolerance, max_iteration = max_iteration, maximization = maximization))
-
-        event_loo_results = xr.concat(event_loo_results, dim="n_events")
+                event_loo_results.append(self.fit_n(n_events, tolerance=tolerance, max_iteration = max_iteration, maximization = maximization))
+        event_loo_results = xr.concat(event_loo_results, dim="n_events", fill_value=np.nan)
         event_loo_results = event_loo_results.assign_coords({"n_events": np.arange(max_events,min_events,-1)})
+        event_loo_results = event_loo_results.assign_attrs(method='backward')
+        if 'sp_parameters' in event_loo_results.attrs:
+            del event_loo_results.attrs['sp_parameters']
+            del event_loo_results.attrs['sp_magnitudes']
+            del event_loo_results.attrs['maximization']
         return event_loo_results
 
     def compute_max_events(self):
         '''
         Compute the maximum possible number of events given event width  minimum reaction time
         '''
-        return int(np.rint(np.percentile(self.durations, 10)//(self.location)))+2
-        
-    @staticmethod        
-    def compute_times(init, estimates, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=False, extra_dim=None, as_time=False, errorbars=None, center_measure='mean',estimate_method='max', onset=False):
-        '''
-        Compute the likeliest onset times for each event
-
-        parameters
-        ----------
-        init : 
-            Initialized HMP object 
-        estimates : xr.Dataset
-            Estimated instance of an HMP model 
-        duration : bool
-            Whether to compute onset times (False) or stage duration (True)
-        fill_value : float | ndarray
-            What value to fill for the first onset/duration.
-        mean : bool 
-            Whether to compute the mean (True) or return the single trial estimates
-            Note that mean and errorbars cannot both be true.
-        mean_in_partipant : bool
-            Whether the mean is first computed within participant before calculating the overall mean.
-        cumulative : bool
-            Outputs stage duration (False) or time of onset of stages (True)
-        add_rt : bool
-            whether to append the last stage up to the RT
-        extra_dim : str
-            if string the times are averaged within that dimension
-        as_time : bool
-            if true, return time (ms) instead of samples
-        errorbars : str
-            calculate 95% confidence interval ('ci'), standard deviation ('std'),
-            standard error ('se') on the times or durations, or None.
-            Note that mean and errorbars cannot both be true.
-        center_measure : string
-            mean (default) or median, used to calculate the measure within participant if mean is True
-        estimate_method : string
-            'max' or 'mean', either take the max probability of each event on each trial, or the weighted 
-            average.
-        onset : bool
-            Whether to compute time at peak (False, Default) or onset of the Event (True)
-
-        Returns
-        -------
-        times : xr.DataArray
-            Transition event onset or stage duration with trial_x_participant*event dimensions or only event dimension if mean = True
-            Contains nans for missing stages.
-        '''
-
-        assert not(mean and errorbars is not None), 'Only one of mean and errorbars can be set.'
-
-        if estimate_method is None:
-            estimate_method = 'max'
-        event_shift = 0
-        if onset:
-            event_shift = init.event_width_samples//2
-        eventprobs = estimates.eventprobs.fillna(0).copy()
-        if estimate_method == "max":
-            times = eventprobs.argmax('samples') - event_shift #Most likely event location
-        else:
-            times = xr.dot(eventprobs, eventprobs.samples, dims='samples') - event_shift
-        times = times.astype('float32')#needed for eventual addition of NANs
-        #in case there is a single model, but there are empty stages at the end
-        #this happens with selected model from backward estimation
-        if 'n_events' in times.coords and len(times.shape) == 2:
-            tmp = times.mean('trial_x_participant').values
-            if tmp[-1] == -event_shift:
-                filled_stages = np.where(tmp != -event_shift)[0]
-                times = times[:, filled_stages]
-        #set to nan if stage missing
-        if extra_dim == 'condition':
-            times_cond = times.groupby('cond').mean('trial_x_participant').values #take average to make sure it's not just 0 on the trial-level
-            for c, e in np.argwhere(times_cond == -event_shift):
-                times[times['cond']==c, e] = np.nan
-        elif extra_dim == 'n_events':
-            times_n_events = times.mean('trial_x_participant').values
-            for x, e in np.argwhere(times_n_events == -event_shift):
-                times[x,:,e] = np.nan
-        if as_time:
-            times = times * 1000/init.sfreq
-        if duration:
-            fill_value=0
-        if fill_value != None:            
-            added = xr.DataArray(np.repeat(fill_value,len(times.trial_x_participant))[np.newaxis,:],
-                                 coords={'event':[0], 
-                                         'trial_x_participant':times.trial_x_participant})
-            times = times.assign_coords(event=times.event+1)
-            times = times.combine_first(added)
-        if add_rt:             
-            rts = init.named_durations
-            if as_time:
-                rts = rts * 1000/init.sfreq
-            rts = rts.assign_coords(event=int(times.event.max().values+1))
-            rts = rts.expand_dims(dim="event")
-            times = xr.concat([times, rts], dim='event')
-            if extra_dim == 'n_events': #move rts inside the nans of the missing stages
-                for e in times['n_events'].values:
-                    tmp = np.squeeze(times.isel(n_events = times['n_events'] == e).values) #seems overly complicated, but is necessary
-                    #identify first nan column
-                    first_nan = np.where(np.isnan(np.mean(tmp,axis=0)))[0]
-                    if len(first_nan) > 0:
-                        first_nan = first_nan[0]
-                        tmp[:,first_nan] = tmp[:,-1]
-                        tmp[:,-1] = np.nan
-                        times[times['n_events'] == e,:, :] = tmp
-        if duration: #taking into account missing events, hence the ugly code
-            times = times.rename({'event':'stage'})
-            if not cumulative:
-                if not extra_dim:
-                    times = times.diff(dim='stage')
-                elif extra_dim == 'condition': #by cond, ignore missing events
-                    for c in np.unique(times['cond'].values):
-                        tmp = times.isel(trial_x_participant = estimates['cond'] == c).values
-                        #identify nan columns == missing events
-                        missing_evts = np.where(np.isnan(np.mean(tmp,axis=0)))[0]
-                        tmp = np.diff(np.delete(tmp, missing_evts, axis=1)) #remove 0 columns, calc difference
-                        #insert nan columns (to maintain shape), 
-                        for missing in missing_evts:
-                            tmp = np.insert(tmp, missing-1, np.nan, axis=1)
-                        #add extra column to match shape
-                        tmp = np.hstack((tmp,np.tile(np.nan,(tmp.shape[0],1)))) 
-                        times[estimates['cond'] == c, :] = tmp
-                    times = times[:,:-1] #remove extra column
-                elif extra_dim == 'n_events':
-                    for e in times['n_events'].values:
-                        tmp = np.squeeze(times.isel(n_events = times['n_events'] == e).values) #seems overly complicated, but is necessary
-                        #identify nan columns == missing events
-                        missing_evts = np.where(np.isnan(np.mean(tmp,axis=0)))[0]
-                        tmp = np.diff(np.delete(tmp, missing_evts, axis=1)) #remove 0 columns, calc difference
-                        #insert nan columns (to maintain shape), in contrast to above,
-                        #here add columns at the end, as no actually 'missing' events
-                        tmp = np.hstack((tmp,np.tile(np.nan,(tmp.shape[0],len(missing_evts))))) 
-                        #add extra column to match shape
-                        tmp = np.hstack((tmp,np.tile(np.nan,(tmp.shape[0],1)))) 
-                        times[times['n_events'] == e,:, :] = tmp
-                    times = times[:,:,:-1] #remove extra column
-        
-        if mean:
-            if extra_dim == 'condition': #calculate mean only in trials of specific condition
-                if mean_in_participant:
-                    if center_measure == 'mean':
-                        times = times.groupby('cond_x_participant').mean('trial_x_participant')
-                    elif center_measure == 'median':
-                        times = times.groupby('cond_x_participant').median('trial_x_participant')
-                    else:
-                        print('center measure not recognized')
-                    times = times.groupby('cond').mean('cond_x_participant')       
-                else:
-                    if center_measure == 'mean':
-                        times = times.groupby('cond').mean('trial_x_participant')
-                    elif center_measure == 'median':
-                        times = times.groupby('cond').median('trial_x_participant')
-                    else:
-                        print('center measure not recognized')
-            else:
-                if mean_in_participant:
-                    if center_measure == 'mean':
-                        times = times.groupby('participant').mean('trial_x_participant').mean('participant')
-                    elif center_measure == 'median':
-                        times = times.groupby('participant').median('trial_x_participant').mean('participant')
-                    else:
-                        print('center measure not recognized')
-                else:
-                    if center_measure == 'mean':
-                        times = times.mean('trial_x_participant')
-                    elif center_measure == 'median':
-                        times = times.median('trial_x_participant')
-                    else:
-                        print('center measure not recognized')
-                    
-        elif errorbars:
-            if extra_dim == 'condition':
-                errorbars_model = np.zeros((len(np.unique(times['cond'])), 2,times.shape[1]))
-                if errorbars == 'std':
-                    std_errs = times.groupby('cond').reduce(np.std, dim='trial_x_participant').values
-                    for c in np.unique(times['cond']):
-                        errorbars_model[c,:,:] = np.tile(std_errs[c,:], (2,1))
-                elif errorbars == 'se':
-                    se_errs = times.groupby('cond_x_participant').mean('trial_x_participant').groupby('cond').reduce(sem, dim='cond_x_participant').values
-                    for c in np.unique(times['cond']):
-                        errorbars_model[c,:,:] = np.tile(se_errs[c,:], (2,1))
-            elif extra_dim == 'n_events':
-                errorbars_model = np.zeros((times.shape[0], 2, times.shape[2]))
-                if errorbars == 'std':
-                    std_errs = times.reduce(np.std, dim='trial_x_participant').values
-                    for e in np.unique(times['n_events']):
-                        errorbars_model[times['n_events']==e,:,:] = np.tile(std_errs[times['n_events']==e,:], (2,1))
-                elif errorbars == 'se':
-                    se_errs = times.groupby('participant').mean('trial_x_participant').groupby('n_events').reduce(sem, dim='participant', axis=0).values
-                    for c in np.unique(times['cond']):
-                        errorbars_model[c,:,:] = np.tile(se_errs[c,:], (2,1))
-            else:
-                if errorbars == 'std':
-                    errorbars_model = np.tile(times.reduce(np.std, dim='trial_x_participant').values, (2,1))
-                elif errorbars == 'se':
-                    errorbars_model = np.tile(times.groupby('participant').mean('trial_x_participant').reduce(sem, dim='participant').values, (2,1))
-            times = errorbars_model
-        return times
-   
-    @staticmethod
-    def compute_topographies(epoch_data, estimated, init, extra_dim=None, mean=True, mean_in_participant=True, peak=True, estimate_method='max'):
-        """
-        Compute topographies for each trial. 
-         
-        parameters
-        ----------
-         	epoch_data: xr.Dataset 
-                Epoched data
-         	estimated: xr.Dataset 
-                estimated model parameters and event probabilities
-         	init : 
-                Initialized HMP object 
-         	extra_dim: str 
-                if True the topography is computed in the extra dimension
-         	mean: bool 
-                if True mean will be computed instead of single-trial channel activities
-            mean_in_partipant : bool
-                Whether the mean is first computed within participant before calculating the overall mean.
-            peak : bool
-                if true, return topography at peak of the event. If false, return topographies weighted by a normalized template.
-            estimate_method : string
-                'max' or 'mean', either take the max probability of each event on each trial, or the weighted 
-                average.
-
-         Returns
-         -------
-         	event_values: xr.DataArray
-                array containing the values of each electrode at the most likely transition time
-                contains nans for missing events
-        """
-
-        if estimate_method is None:
-            estimate_method = 'max'
-
-        epoch_data = epoch_data.rename({'epochs':'trials'}).\
-                          stack(trial_x_participant=['participant','trials']).data.fillna(0).drop_duplicates('trial_x_participant')
-        estimated = estimated.eventprobs.fillna(0).copy()
-        n_events = estimated.event.count().values
-        n_trials = estimated.trial_x_participant.count().values
-        n_channels = epoch_data.channels.count().values
-
-        epoch_data = epoch_data.sel(trial_x_participant=estimated.trial_x_participant) #subset to estimated
-
-        if not peak:
-            normed_template = init.template/np.sum(init.template)
-
-        if not extra_dim or extra_dim == 'condition': #also in the condition case, only one fit per trial
-            if estimate_method == "max":
-                times = estimated.argmax('samples') #Most likely event location
-            else:
-                times = np.round(xr.dot(estimated, estimated.samples, dims='samples'))
-        
-            event_values = np.zeros((n_channels,n_trials,n_events))
-            for ev in range(n_events):
-                for tr in range(n_trials):
-                    samp = int(times.values[tr,ev])
-                    if peak:
-                        event_values[:,tr,ev] = epoch_data.values[:,samp,tr]
-                    else:
-                        vals = epoch_data.values[:,samp:samp+init.event_width_samples//2,tr]
-                        event_values[:,tr,ev] = np.dot(vals, normed_template[:vals.shape[1]])          
-                    
-            event_values = xr.DataArray(event_values, 
-                        dims = ["channels","trial_x_participant","event",],
-                        coords={"trial_x_participant":estimated.trial_x_participant,
-                                "event": estimated.event,
-                                "channels":epoch_data.channels
-                        })
-            event_values = event_values.transpose("trial_x_participant","event","channels") #to maintain previous behavior
-
-            if not extra_dim:
-                #set to nan if stage missing
-                times = times.mean('trial_x_participant').values
-                for e in np.argwhere(times == 0):
-                    event_values[:,e,:] = np.nan
-                        
-            if extra_dim == 'condition':
-                #add coords
-                event_values = event_values.assign_coords({'cond_x_participant': ('trial_x_participant', epoch_data['cond_x_participant'].values),
-                                            'cond': ('trial_x_participant', epoch_data['cond'].values)})
-
-                #set to nan if stage missing
-                times = times.groupby('cond').mean('trial_x_participant').values
-                for c, e in np.argwhere(times == 0):
-                    event_values[event_values['cond']==c,e,:] = np.nan
-
-        elif extra_dim == 'n_events': #here we need values per fit
-            n_dim = estimated[extra_dim].count().values
-            event_values = np.zeros((n_dim, n_channels, n_trials, n_events))*np.nan
-            for x in range(n_dim):
-                if estimate_method == "max":
-                    times = estimated[x].argmax('samples')
-                else:
-                    times = np.round(xr.dot(estimated[x], estimated.samples, dims='samples'))
-                for ev in range(n_events):
-                    for tr in range(n_trials):
-                        samp = int(times.values[tr,ev])
-                        if peak:
-                            event_values[x,:,tr,ev] = epoch_data.values[:,samp,tr]  
-                        else:
-                            vals = epoch_data.values[:,samp:samp+init.event_width_samples//2,tr]
-                            event_values[x,:,tr,ev] = np.dot(vals, normed_template[:vals.shape[1]]) 
-
-                #set to nan if missing
-                times = times.mean('trial_x_participant').values
-                for e in np.argwhere(times == 0):
-                    event_values[x,:,:,e] = np.nan
-                
-            event_values = xr.DataArray(event_values, 
-                    dims = [extra_dim, "channels", "trial_x_participant","event"],
-                    coords={extra_dim:estimated[extra_dim],
-                            "trial_x_participant":estimated.trial_x_participant,
-                            "event": estimated.event,
-                            "channels":epoch_data.channels
-                    })
-            event_values = event_values.transpose(extra_dim, "trial_x_participant","event","channels") #to maintain previous behavior
-        else:
-            print('Unknown extra dimension')
-
-        if mean:
-            if extra_dim == 'condition': #calculate mean within condition trials
-                if mean_in_participant:
-                    tmp = event_values.groupby('cond_x_participant').mean('trial_x_participant')
-                    tmp = tmp.assign_coords({'cond': ('cond_x_participant', [x[1] for x in tmp['cond_x_participant'].data])})
-                    return tmp.groupby('cond').mean('cond_x_participant')
-                else:
-                    return event_values.groupby('cond').mean('trial_x_participant')
-            else:
-                if mean_in_participant:
-                    return event_values.groupby('participant').mean('trial_x_participant').mean('participant')
-                else:
-                    return event_values.mean('trial_x_participant')
-        else:
-            return event_values
-
+        return int(np.rint(np.percentile(self.durations, 10)//(self.location)))
+      
     def gen_random_stages(self, n_events):
         '''
         Returns random stage duration between 0 and mean RT by iteratively drawind sample from a 
@@ -1515,148 +949,7 @@ class hmp:
             rnd_events = np.sort(rnd_events)
             rnd_durations = np.hstack((rnd_events, mean_d)) - np.hstack((0, rnd_events))  #associated durations
         random_stages = np.array([[self.shape, self.mean_to_scale(x, self.shape)] for x in rnd_durations])
-        return random_stages
-    
-    def gen_mags(self, n_events, n_samples=None, lower_bound=-1, upper_bound=1, method=None, size=3, decimate=False, verbose=True):
-        """
-        Generate magnitudes sampled on a grid with n_events combinations. 
-        This is a generator function that can be used to generate a set of magnitudes for testing different starting point to the EM algorithm
-         
-        parameters
-        ----------
-         	 n_events: int
-                Number of events in the HMP model
-         	 n_samples: int
-                Number of samples to generate ( default : len ( grid ))
-         	 lower_bound: float 
-                Lower bound of the grid ( default : - 1 )
-         	 upper_bound: float
-                Upper bound of the grid ( default : 1 )
-         	 method: str
-                Method for generating the magnitudes ( default : None )
-         	 size: int
-                Size of the grid ( default : 3 )
-         	 decimate: bool 
-                If True the number of samples will be decimated to the size of the grid ( default : False )
-         	 verbose: bool
-                If True the number of samples will be printed to standard output ( default : True )
-         
-         Returns
-         -------
-         	 List of n_samples magnitude ( s ) sampled on
-        """
-        '''
-        Return magnitudes sampled on a grid with n points between lower_bound and upper_bound for the n_events. All combinations are tested
-        '''
-        from itertools import product    
-        if n_samples == 1:
-            grid = np.zeros((n_events, 1, self.n_dims))
-        else: 
-            grid = np.array([x for x in product(np.linspace(lower_bound,upper_bound,size), repeat=self.n_dims)])
-
-        if verbose:
-            print(f'Number of potential magnitudes: {len(grid)}') 
-
-        if n_samples is None:
-            n_samples = len(grid)
-        if n_samples > len(grid):
-            method='random'
-        if decimate:
-            n_samples = int(np.rint(len(grid) / decimate))
-            
-        if method is None and len(grid) != n_samples:
-            sort_table = np.argsort(np.abs(np.sum(grid, axis=-1)), axis=0)[::-1]
-            grid = grid[sort_table[:n_samples]]
-            n_samples = len(grid)
-            if verbose:
-                print(f'Because of decimation {len(grid)} will be estimated.')
-        gen_mags = np.zeros((n_events, n_samples, self.n_dims))
-        for event in range(n_events):
-            if method is None:
-                gen_mags[event,:,:] = grid
-            elif method == "random":
-                gen_mags[event,:,:] = grid[np.random.choice(range(len(grid)), size=n_samples, replace=True)]
-        gen_mags = np.transpose(gen_mags, axes=(1,0,2))
-        return gen_mags
-    
-    def _grid_search(self, n_stages, n_points=None, verbose=True, start_time=0, end_time=None, iter_limit=np.inf, step=1, offset=None, method='slide'):
-        '''
-        This function decomposes the mean RT into a grid with points. Ideal case is to have a grid with one sample = one search point but the number
-        of possibilities badly scales with the length of the RT and the number of stages. Therefore the iter_limit is used to select an optimal number
-        of points in the grid with a given spacing. After having defined the grid, the function then generates all possible combination of 
-        event placements within this grid. It is faster than using random points (both should converge) but depending on the mean RT and the number 
-        of events to look for, the number of combination can be really large. 
-        
-        parameters
-        ----------
-        n_stages : int
-            how many event to look for +1
-        n_points: int 
-            how many points to look for ( default : None ). If None the number of points will be chosen from the length of the time
-        verbose: bool
-            Output useful print (True, default)
-        start_time: int
-            at what time to start the grid
-        end_time: int
-            at what time to stop the grid
-        iter_limit: int
-            How many iteration max, if grid is longer the grid will be decimated
-        step: 
-            How many step, i.e. samples, between two iterations
-        offset:
-        method:
-
-
-        Returns
-        -------
-        parameters : ndarray
-            3D array with numper of possibilities * n_stages * 2 (gamma parameters)
-        '''
-        from itertools import combinations_with_replacement, permutations  
-        from math import comb as binomcoeff
-        import more_itertools as mit
-        if offset is None:
-            offset = 1
-        start_time = int(start_time)
-        if end_time is None:
-            end_time = int(self.mean_d)
-        duration = end_time-start_time
-        if n_points is None:
-            n_points = duration//step
-            duration = step*n_points
-        check_n_posibilities = binomcoeff(n_points-1, n_stages-1)
-        if check_n_posibilities > iter_limit:
-            while binomcoeff(n_points-1, n_stages-1) > iter_limit:
-                n_points = n_points-1
-            step = duration//n_points#same if no points removed in the previous step
-            end_time = start_time+step*(n_points-1)#Rounding up to step size
-            duration = end_time-start_time
-        end_time = start_time+step*(n_points)#Rounding up to step size  
-        grid = np.array([x for x in np.linspace(start_time+step, end_time-step, (duration//step))-start_time])#all possible durations
-        grid = grid[grid < duration - ((n_stages-2)*step)]#In case of >2 stages avoid impossible durations, just to speed up
-        grid = grid[grid >= offset]
-        comb = np.array([x for x in combinations_with_replacement(grid, n_stages) if np.round(np.sum(x)) == np.round(duration)])#A bit bruteforce
-        if len(comb)>0:
-            new_comb = []
-            for c in comb:
-                new_comb.append(np.array(list(mit.distinct_permutations(c))))
-            comb = np.vstack(new_comb)
-            parameters = np.zeros((len(comb),n_stages,2), dtype=np.float64)
-            for idx, y in enumerate(comb):
-                parameters[idx, :, :] = [[self.shape, self.mean_to_scale(x,self.shape)] for x in y]
-            if verbose:
-                if check_n_posibilities > iter_limit:
-                    print(f'Initial number of possibilities is {check_n_posibilities}.') 
-                    print(f'Given the number of max iterations = {iter_limit}: fitting {len(comb)} models based on all \n possibilities from grid search with a spacing of {int(step)} samples and {n_points} points  \n and durations of {grid}.')
-                else:
-                    print(f'Fitting {len(comb)} models using grid search')
-            if method == 'grid':
-                return parameters
-            else:
-                return parameters[np.argsort(parameters[:,0,1]),:,:]
-        else:
-            raise ValueError(f'No combination found given length of the data {self.mean_d}, number of events {n_stages} and a max iteration of {iter_limit}')
-    
+        return random_stages    
     
     def fit(self, step=None, verbose=True, end=None, tolerance=1e-3, diagnostic=False, return_estimates=False, by_sample=False, pval = None):
         """
@@ -1711,13 +1004,14 @@ class hmp:
 
         # The first new detected event should be higher than the bias induced by splitting the RT in two random partition
         if pval is not None:
-            lkh = self.fit_single(1, maximization=False, starting_points=100, return_max=False, verbose=False)
-            lkh_prev = lkh.likelihoods.mean() + lkh.likelihoods.std()*norm_pval.ppf(1-pval)
+            lkh = self.fit_n(1, maximization=False, starting_points=100, return_max=False, verbose=False)
+            lkh_prev = lkh.loglikelihood.mean() + lkh.loglikelihood.std()*norm_pval.ppf(1-pval)
         else:
             lkh_prev = -np.inf
         if return_estimates:
             estimates = [] #store all n_event solutions
-        # Iterative fit, stop at half an event width as otherwise can get stuck for a while
+        
+        # Iterative fit
         while self.scale_to_mean(last_stage, self.shape) >= self.location and n_events <= max_event_n:
 
             prev_time = time
@@ -1725,18 +1019,21 @@ class hmp:
             #get new parameters
             mags_props, pars_prop = self.propose_fit_params(n_events, by_sample, step, j, mags, pars, end)
             last_stage = pars_prop[n_events,1]
+            pars_prop = np.array([pars_prop])
+
             #Estimate model based on these propositions
-            solutions = self.fit_single(n_events, mags_props, pars_prop, None, None,\
+            solutions = self.fit_n(n_events, mags_props, pars_prop, None, None,\
                             verbose=False, cpus=1, tolerance=tolerance)
-            sol_lkh = solutions.likelihoods.values
+            sol_lkh = solutions.loglikelihood.values
             sol_sample_new_event = int(np.round(self.scale_to_mean(np.sum(solutions.parameters.values[:n_events,1]), self.shape)))
+            
             #Diagnostic plot
             if diagnostic:
                 plt.plot(solutions.traces.T, alpha=.3, c='k')
                 print()
                 print('Event found at sample ' + str(sol_sample_new_event))
                 print(f'Events at {np.round(self.scale_to_mean(np.cumsum(solutions.parameters.values[:,1]), self.shape)).astype(int)}')
-                print('lkh change: ' + str(solutions.likelihoods.values - lkh_prev))
+                print('lkh change: ' + str(solutions.loglikelihood.values - lkh_prev))
             #check solution
             if sol_lkh - lkh_prev > 0:#accept solution if likelihood improved
             
@@ -1795,21 +1092,20 @@ class hmp:
         mags = mags[:n_events, :]
         pars = pars[:n_events+1, :]
         if n_events > 0:
-            fit = self.fit_single(n_events, parameters=pars, magnitudes=mags, verbose=verbose, cpus=1)
-
+            fit = self.fit_n(n_events, parameters=np.array([pars]), magnitudes=np.array([mags]), verbose=verbose, cpus=1)
             fit = fit.assign_attrs(step=step, by_sample=int(by_sample))
-
+            fit = fit.assign_attrs(method='fit', step=step, by_sample=int(by_sample))
         else:
             warn('Failed to find more than two stages, returning None')
             fit = None
-
+        del fit.attrs['sp_parameters']
+        del fit.attrs['sp_magnitudes']
+        del fit.attrs['maximization']
         pbar.update(int(np.rint(end)-int(np.rint(time))))
         if return_estimates:
             return fit, estimates
         else:
             return fit
-    
-
 
     def propose_fit_params(self, n_events, by_sample, step, j, mags, pars, end):
 

@@ -6,13 +6,14 @@ import scipy.signal as ssignal
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from hmp.utils import event_topo, event_times
 import xarray as xr
 from itertools import cycle
 import warnings
 default_colors =  ['cornflowerblue','indianred','orange','darkblue','darkgreen','gold']
 
 
-def plot_topo_timecourse(channels, estimated, channel_position, init,  ydim=None,
+def plot_topo_timecourse(epoch_data, estimates, channel_position, ydim=None,
                 figsize=None, dpi=100, magnify=1, times_to_display=None, cmap='Spectral_r',
                 ylabels=[], xlabel = None, max_time = None, vmin=None, vmax=None, title=False, ax=None, 
                 sensors=False, skip_channels_computation=False, contours=6, event_lines='tab:orange',
@@ -23,16 +24,13 @@ def plot_topo_timecourse(channels, estimated, channel_position, init,  ydim=None
     
     Parameters
     ----------
-    channels : ndarray | xr.Dataarray 
-        a 2D or 3D matrix of channel activity with channels and event as dimension (+ eventually a varying dimension) OR
-        the original EEG data in HMP format
-    estimated : ndarray | hmp object
-        a 1D or 2D matrix of times with event as dimension OR directly the results from a fitted hmp (either from fit_single or fit_single_conds)
+    epoch_data : xr.DataArray 
+        The original EEG data in HMP format
+    estimates : hmp object
+        the result from a fitted hmp
     channel_position : ndarray
         Either a 2D array with dimension channel and [x,y] storing channel location in meters or an info object from
         the mne package containning digit. points for channel location
-    init : float
-        initialized HMP object
     ydim: str
         name for the extra dimensions (e.g. iteration)
     figsize : list | tuple | ndarray
@@ -93,48 +91,48 @@ def plot_topo_timecourse(channels, estimated, channel_position, init,  ydim=None
     from mne.viz import plot_brain_colorbar, plot_topomap
     from mne import Info
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-    
-    cond_plot = False
-    estimated = estimated.copy()
-    channels = channels.copy()
+    sfreq = estimates.sfreq
+    level_plot = False
+    estimates = estimates.copy()
+    epoch_data = epoch_data.copy()
     # Stacking is necessary to retain the common indices, otherwise absent trials are just Nan'd out
-    if 'trial_x_participant' not in channels.dims:
-        channels = channels.rename({'epochs':'trials'}).\
+    if 'trial_x_participant' not in epoch_data.dims:
+        epoch_data = epoch_data.rename({'epochs':'trials'}).\
                           stack(trial_x_participant=['participant','trials'])
-    common_trials = np.intersect1d(estimated['trial_x_participant'].values, channels['trial_x_participant'].values)
-    estimated = estimated.sel(trial_x_participant=common_trials)
-    channels = channels.sel(trial_x_participant=common_trials).unstack().rename({'trials':'epochs'})
+    common_trials = np.intersect1d(estimates['trial_x_participant'].values, epoch_data['trial_x_participant'].values)
+    estimates = estimates.sel(trial_x_participant=common_trials)
+    epoch_data = epoch_data.sel(trial_x_participant=common_trials).unstack().rename({'trials':'epochs'})
     
-    #if condition estimates, prep conds
-    if isinstance(estimated, xr.Dataset) and 'condition' in estimated.dims:
-        cond_plot = True
-        conds = estimated['cond'].values
-        n_cond = estimated.parameters.shape[0]
+    #if multilevel estimates, prep levels
+    if isinstance(estimates, xr.Dataset) and 'levels' in estimates:
+        level_plot = True
+        levels = estimates['levels'].values
+        n_level = estimates.parameters.shape[0]
 
-        #make times_to_display in list with lines per condition
-        default = init.compute_times(init, estimated, mean=True, add_rt=True, extra_dim='condition', center_measure=center_measure,estimate_method=estimate_method).values[:,-1].tolist() #compute corresponding times
+        #make times_to_display in list with lines per level
+        default = event_times(estimates, mean=True, add_rt=True, extra_dim='levels', center_measure=center_measure,estimate_method=estimate_method).values[:,-1].tolist() #compute corresponding times
         default.reverse()
         if times_to_display is None:
             times_to_display = default
         elif isinstance(times_to_display, list):
             if not isinstance(times_to_display[0], list): #assume it's a list that needs to be copied
-                times_to_display = times_to_display * n_cond
-            elif len(times_to_display) != n_cond:
-                print('times_to_display should either be a list of length n_cond or an ndarray which will be repeated across conditions')
+                times_to_display = times_to_display * n_level
+            elif len(times_to_display) != n_level:
+                print('times_to_display should either be a list of length n_level or an ndarray which will be repeated across levels')
                 times_to_display = default
         elif isinstance(times_to_display, np.ndarray): #only one set of times
             if len(times_to_display.shape) == 1:
-                times_to_display = [times_to_display] * n_cond
+                times_to_display = [times_to_display] * n_level
 
-        #set ylabels to conditions
+        #set ylabels to level
         if ylabels == []:
-            ylabels = estimated.clabels
+            ylabels = estimates.clabels
 
     return_ax = True
 
     #if not times specified, plot average RT
     if times_to_display is None:
-        times_to_display = init.mean_d
+        times_to_display = np.mean(estimates.rts)
 
     if xlabel is None:
         if as_time:
@@ -148,36 +146,36 @@ def plot_topo_timecourse(channels, estimated, channel_position, init,  ydim=None
     else:
         event_color=event_lines
 
-    #if estimated is an fitted HMP instance, calculate topos and times 
-    assert 'event' in estimated
+    #if estimates is an fitted HMP instance, calculate topos and times 
+    assert 'event' in estimates
     if ydim is None:
-        if 'n_events' in estimated.dims and estimated.n_events.count() > 1: #and there are multiple different fits (eg backward estimation)
+        if 'n_events' in estimates.dims and estimates.n_events.count() > 1: #and there are multiple different fits (eg backward estimation)
             ydim = 'n_events' #set ydim to 'n_events'
-        elif 'condition' in estimated.dims:
-            ydim = 'condition'
+        elif 'levels' in estimates:
+            ydim = 'levels'
     if not skip_channels_computation:
-        channels = init.compute_topographies(channels, estimated, init, ydim, estimate_method=estimate_method).data #compute topographies
-    times = init.compute_times(init, estimated, mean=True, extra_dim=ydim, as_time=as_time, center_measure=center_measure,estimate_method=estimate_method).data #compute corresponding times
+        epoch_data = event_topo(epoch_data, estimates, ydim, estimate_method=estimate_method).data #compute topographies
+    times = event_times(estimates, mean=True, extra_dim=ydim, as_time=as_time, center_measure=center_measure,estimate_method=estimate_method).data #compute corresponding times
 
     times = times
-    if len(np.shape(channels)) == 2:
-        channels = channels[np.newaxis]
+    if len(np.shape(epoch_data)) == 2:
+        epoch_data = epoch_data[np.newaxis]
     
-    if cond_plot: #reverse order, to make correspond to condition maps
-        channels = np.flipud(channels)
+    if level_plot: #reverse order, to make correspond to level maps
+        epoch_data = np.flipud(epoch_data)
         times = np.flipud(times)
 
-    n_iter = np.shape(channels)[0]
+    n_iter = np.shape(epoch_data)[0]
 
     if n_iter == 1:
         times = [times]
     times = np.array(times)
 
     if as_time:
-        time_step = 1000/init.sfreq #time_step still needed below
+        time_step = 1000/sfreq #time_step still needed below
     else:
         time_step = 1
-    event_size = init.event_width_samples * time_step
+    event_size = estimates.event_width_samples * time_step
     
     #based the size of the topographies on event_size and magnify or only on magnify
     if topo_size_scaling: #does topo width scale with time interval of plot?
@@ -188,9 +186,9 @@ def plot_topo_timecourse(channels, estimated, channel_position, init,  ydim=None
 
     #fix vmin/vmax across topos, while keeping symmetric
     if vmax == None: #vmax = absolute max, unless no positive values
-        vmax = np.nanmax(np.abs(channels[:])) 
-        vmin = -vmax if np.nanmin(channels[:]) < 0 else 0
-        if np.nanmax(channels[:]) < 0: vmax = 0
+        vmax = np.nanmax(np.abs(epoch_data[:])) 
+        vmin = -vmax if np.nanmin(epoch_data[:]) < 0 else 0
+        if np.nanmax(epoch_data[:]) < 0: vmax = 0
 
     #make axis
     if ax is None:
@@ -211,8 +209,8 @@ def plot_topo_timecourse(channels, estimated, channel_position, init,  ydim=None
         times_iteration = times[iteration]
         missing_evts = np.where(np.isnan(times_iteration))[0]
         times_iteration = np.delete(times_iteration,missing_evts)
-        channels_ = channels[iteration,:,:]
-        channels_ = np.delete(channels_, missing_evts, axis=0)
+        epoch_data_ = epoch_data[iteration,:,:]
+        epoch_data_ = np.delete(epoch_data_, missing_evts, axis=0)
         n_event = len(times_iteration)
         ylow = iteration * rowheight
 
@@ -222,7 +220,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init,  ydim=None
             #topography
             axes.append(ax.inset_axes([times_iteration[event]-topo_size/2, ylow+.1*rowheight,
                                 topo_size, rowheight*.8], transform=ax.get_xaxis_transform())) 
-            plot_topomap(channels_[event,:], channel_position, axes=axes[-1], show=False,
+            plot_topomap(epoch_data_[event,:], channel_position, axes=axes[-1], show=False,
                          cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours)
 
             #lines/fill of detected event
@@ -236,8 +234,8 @@ def plot_topo_timecourse(channels, estimated, channel_position, init,  ydim=None
                 ax.vlines(times_iteration[event]+event_size/2,ylow2, yhigh, linestyles='dotted',color=event_color,alpha=.5, transform=ax.get_xaxis_transform())
                 ax.fill_between(np.array([times_iteration[event]-event_size/2,times_iteration[event]+event_size/2]), ylow2, yhigh, alpha=0.15,color=event_color, transform=ax.get_xaxis_transform(),edgecolor=None)
 
-        #add lines per condition
-        if cond_plot and times_to_display is not None:
+        #add lines per level
+        if level_plot and times_to_display is not None:
             #bottom of row + 5% if n_iter > 1
             ylow = iteration * rowheight if n_iter == 1 else iteration * rowheight + .05 * rowheight
             #top of row - 5% if n_iter > 1
@@ -258,7 +256,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init,  ydim=None
     #plot ylabels
     if isinstance(ylabels, dict):
         tick_labels = [str(x) for x in list(ylabels.values())[0]]
-        if cond_plot: tick_labels.reverse() 
+        if level_plot: tick_labels.reverse() 
         ax.set_yticks(np.arange(len(list(ylabels.values())[0]))+.5,
                       tick_labels)
         ax.set_ylabel(str(list(ylabels.keys())[0]))
@@ -267,7 +265,7 @@ def plot_topo_timecourse(channels, estimated, channel_position, init,  ydim=None
         ax.spines['left'].set_visible(False)
    
     #add vlines across all rows
-    if not cond_plot:
+    if not level_plot:
         __display_times(ax, times_to_display, 0, time_step, max_time, times, linecolors, n_iter)
     else:
         ax.set_xlim(-1*time_step, np.max(times_to_display)*time_step * 1.05)
@@ -284,22 +282,20 @@ def plot_topo_timecourse(channels, estimated, channel_position, init,  ydim=None
         ax.set_ylim(0, n_iter) #-1
         return ax
         
-def save_model_topos(channels, estimated, channel_position, init, fname='topo', figsize=None, dpi=300, cmap='Spectral_r',
+def save_model_topos(epoch_data, estimates, channel_position, fname='topo', figsize=None, dpi=300, cmap='Spectral_r',
                 vmin=None, vmax=None, sensors=False, contours=6, colorbar=True):
     '''
     Saving the event topographies to files, one per topography. Typically used for saving high quality topos.
     
     Parameters
     ----------
-    channels : xr.Dataarray 
+    epoch_data : xr.Dataarray 
        the original EEG data in HMP format
-    estimated : hmp object
-        a fitted hmp (either from fit_single, fit_single_conds, or backward_estimation)
+    estimates : hmp object
+        a fitted hmp (either from fit_n, or backward_estimation)
     channel_position : ndarray
         Either a 2D array with dimension channel and [x,y] storing channel location in meters or an info object from
         the mne package containning digit. points for channel location
-    init : float
-        initialized HMP object
     fname : str
         file name, other model specifications will be appended. Should not include extension.
     figsize : list | tuple | ndarray
@@ -329,25 +325,25 @@ def save_model_topos(channels, estimated, channel_position, init, fname='topo', 
     plot_type = 'default'
     ydim = None
 
-    #if condition estimates, prep conds
-    if isinstance(estimated, xr.Dataset) and 'condition' in estimated.dims:
-        plot_type = 'cond'
-        conds = estimated['cond'].values
-        n_cond = estimated.parameters.shape[0]
-        cond_names = estimated.clabels
-        ydim = 'condition'
-    elif 'n_events' in estimated.dims and estimated.n_events.count() > 1:
+    #if multilevel estimates, prep levels
+    if isinstance(estimates, xr.Dataset) and 'levels' in estimates:
+        plot_type = 'levels'
+        levels = estimates['levels'].values
+        n_level = estimates.parameters.shape[0]
+        level_names = estimates.clabels
+        ydim = 'levels'
+    elif 'n_events' in estimates.dims and estimates.n_events.count() > 1:
         plot_type = 'backward'
         ydim = 'n_events'
 
     #calculate topos
-    channels = init.compute_topographies(channels, estimated, init, ydim).data #compute topographies
+    epoch_data = event_topo(epoch_data, estimates, ydim).data #compute topographies
     
     #fix vmin/vmax across topos, while keeping symmetric
     if vmax == None: #vmax = absolute max, unless no positive values
-        vmax = np.nanmax(np.abs(channels[:])) 
-        vmin = -vmax if np.nanmin(channels[:]) < 0 else 0
-        if np.nanmax(channels[:]) < 0: vmax = 0
+        vmax = np.nanmax(np.abs(epoch_data[:])) 
+        vmin = -vmax if np.nanmin(epoch_data[:]) < 0 else 0
+        if np.nanmax(epoch_data[:]) < 0: vmax = 0
 
     #make axis
     if figsize == None:
@@ -362,51 +358,51 @@ def save_model_topos(channels, estimated, channel_position, init, fname='topo', 
     if plot_type == 'default':
 
         #remove potential nans
-        nans = np.where(np.isnan(np.mean(channels,axis=1)))[0]
-        channels = np.delete(channels, nans, axis=0)
-        n_event = channels.shape[0]
+        nans = np.where(np.isnan(np.mean(epoch_data,axis=1)))[0]
+        epoch_data = np.delete(epoch_data, nans, axis=0)
+        n_event = epoch_data.shape[0]
 
         for event in range(n_event):
             plot_name = fname + '_ev' + str(event+1) + '.png'
             fig, ax = plt.subplots(figsize=figsize)
-            plot_topomap(channels[event,:], channel_position, show=False, cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours, axes=ax)
+            plot_topomap(epoch_data[event,:], channel_position, show=False, cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours, axes=ax)
             fig.savefig(plot_name,dpi=dpi,transparent=True)    
 
-    elif plot_type == 'cond': #reverse order, to make correspond to condition maps
-        channels = np.flipud(channels)
-        cond_labels = [str(x[0]) for x in list(cond_names.values())[0]]
+    elif plot_type == 'levels': #reverse order, to make correspond to level maps
+        epoch_data = np.flipud(epoch_data)
+        level_labels = [str(x[0]) for x in list(level_names.values())[0]]
         
-        #plot by condition
-        for cond in range(n_cond):
-            cond_name = cond_labels[cond]
-            cond_channels = channels[cond]
+        #plot by level
+        for level in range(n_level):
+            level_name = level_labels[level]
+            level_epoch_data = epoch_data[level]
 
             #remove potential nans
-            nans = np.where(np.isnan(np.mean(cond_channels,axis=1)))[0]
-            cond_channels = np.delete(cond_channels, nans, axis=0)
-            n_event = cond_channels.shape[0]
+            nans = np.where(np.isnan(np.mean(level_epoch_data,axis=1)))[0]
+            level_epoch_data = np.delete(level_epoch_data, nans, axis=0)
+            n_event = level_epoch_data.shape[0]
 
             for event in range(n_event):
-                plot_name = fname + '_cond' + cond_name + '_ev' + str(event+1) + '.png'
+                plot_name = fname + '_level' + level_name + '_ev' + str(event+1) + '.png'
                 fig, ax = plt.subplots(figsize=figsize)
-                plot_topomap(cond_channels[event,:], channel_position, show=False, cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours, axes=ax)
+                plot_topomap(level_epoch_data[event,:], channel_position, show=False, cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours, axes=ax)
                 fig.savefig(plot_name,dpi=dpi,transparent=True)    
     
     elif plot_type == 'backward':
 
         # plot by number of events
-        for n_eve in range(channels.shape[0]):
-            back_channels = channels[n_eve]
+        for n_eve in range(epoch_data.shape[0]):
+            back_epoch_data = epoch_data[n_eve]
 
             #remove potential nans
-            nans = np.where(np.isnan(np.mean(back_channels,axis=1)))[0]
-            back_channels = np.delete(back_channels, nans, axis=0)
-            n_event = back_channels.shape[0]
+            nans = np.where(np.isnan(np.mean(back_epoch_data,axis=1)))[0]
+            back_epoch_data = np.delete(back_epoch_data, nans, axis=0)
+            n_event = back_epoch_data.shape[0]
 
             for event in range(n_event):
                 plot_name = fname + '_backward' + str(n_event) + '_ev' + str(event+1) + '.png'
                 fig, ax = plt.subplots(figsize=figsize)
-                plot_topomap(back_channels[event,:], channel_position, show=False, cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours, axes=ax)
+                plot_topomap(back_epoch_data[event,:], channel_position, show=False, cmap=cmap, vlim=(vmin, vmax), sensors=sensors, contours=contours, axes=ax)
                 fig.savefig(plot_name,dpi=dpi,transparent=True)    
 
     #legend
@@ -558,42 +554,6 @@ def plot_loocv(loocv_estimates, pvals=True, test='t-test', figsize=(16,5), indiv
         plt.tight_layout()
         if pvals:
             return pvalues
-    
-
-def plot_distribution(times, colors=default_colors, xlims=False, figsize=(8, 3), survival=False):
-    '''
-    Plots the distribution of each stage latencies
-
-    Parameters
-    ----------
-    times : ndarray
-        2D or 3D numpy array, Either trials * events or conditions * trials * events
-    colors : ndarray
-        array of colors for the different stages
-    xlims : tuple | list
-        lower and upper limit of the x (time) axis
-    figsize : list | tuple | ndarray
-        Length and heigth of the matplotlib plot
-    survival : bool
-        Whether to draw density plots or survival density plots
-
-    '''
-    f, axs = plt.subplots(1,1, figsize=figsize, dpi=100)
-
-    if len(np.shape(times)) == 2:
-        times = np.asarray([times],dtype = 'object')
-    cycol = cycle(colors)
-    for iteration in times:
-        for stage in iteration.T:
-            if survival:
-                axs.plot(1-stage.cumsum(axis=0), color=next(cycol) )
-            else: 
-                axs.plot(stage,color=next(cycol) )
-    axs.set_ylabel('p(event)')
-    axs.set_xlabel('Time (in samples)')
-    if xlims:
-        axs.set_xlim(xlims[0], xlims[1])
-    return axs
 
 def __display_times(ax, times_to_display, yoffset, time_step, max_time, times, linecolors, ymax=1):
     n_iter = len(times)
@@ -605,18 +565,15 @@ def __display_times(ax, times_to_display, yoffset, time_step, max_time, times, l
         ax.set_xlim(-1*time_step, max_time)
     return ax
 
-def plot_latencies(times, init=None, labels=[], colors=default_colors,
-    figsize=False, errs=None, kind='bar', legend=False, max_time=None, as_time=True):
+def plot_latencies(estimates, init=None, labels=[], colors=default_colors,
+    figsize=False, errs=None, kind='bar', legend=False, max_time=None, as_time=False):
     '''
     Plots the average of stage latencies with choosen errors bars
 
     Parameters
     ----------
-    times : ndarray | hmp results object
-        2D or 3D numpy array, either trials * events or conditions * trials * events
-        hmp results object either of fit_single or fit_single_conds
-    init : hmp object
-        Initialized hmp object, required if times is an hmp results object
+    estimates : hmp results object
+        hmp results object
     event_width : float
         Display size of the event in time unit given sampling frequency, if drawing a fitted object using hmp you 
         can provide the event_width_sample of fitted hmp (e.g. init.event_width_sample)
@@ -636,7 +593,7 @@ def plot_latencies(times, init=None, labels=[], colors=default_colors,
     kind : str
         bar or point
     as_time : bool
-        if true, plot time (ms) instead of samples (time_step takes precedence). Ignored if times are provided as array.
+        if true, plot time (ms) instead of samples.
     '''
        
     if as_time and init is not None:
@@ -645,51 +602,40 @@ def plot_latencies(times, init=None, labels=[], colors=default_colors,
         time_step = 1
 
     #if hmp estimates are provided, calculate time
-    hmp_obj = False
-    if isinstance(times, (xr.DataArray, xr.Dataset)):
+    if isinstance(estimates, (xr.DataArray, xr.Dataset)):
         assert init is not None, 'If hmp results object provided, init is a required parameter.'
-        hmp_obj = True
         ydim = None
-        if 'n_events' in times.dims and times.n_events.count() > 1: #and there are multiple different fits (eg backward estimation)
+        if 'n_events' in estimates.dims and estimates.n_events.count() > 1: #and there are multiple different fits (eg backward estimation)
             ydim = 'n_events' 
-        elif 'condition' in times.dims:
-            ydim = 'condition'
-        avg_durations = init.compute_times(init, times, mean=True, duration=True,add_rt=True, extra_dim=ydim, as_time=as_time).data 
-        avg_times = init.compute_times(init, times, mean=True, duration=False,add_rt=True, extra_dim=ydim, as_time=as_time).data 
+        elif 'levels' in estimates:
+            ydim = 'levels'
+        avg_durations = event_times(estimates, mean=True, duration=True, add_rt=True, extra_dim=ydim, as_time=as_time).data 
+        avg_times = event_times(estimates, mean=True, duration=False, add_rt=True, extra_dim=ydim, as_time=as_time).data 
         if errs is not None:
-            errorbars = init.compute_times(init, times, duration=True,add_rt=True, extra_dim=ydim, as_time=as_time, errorbars=errs)
+            errorbars = event_times(estimates, duration=True,add_rt=True, extra_dim=ydim, as_time=as_time, errorbars=errs)
         if len(avg_times.shape) == 1:
             avg_durations = np.expand_dims(avg_durations, axis=0)
             avg_times = np.expand_dims(avg_times, axis=0)
             if errs is not None:
                 errorbars = np.expand_dims(errorbars, axis=0)
-
         avg_durations = avg_durations * time_step
         avg_times = avg_times * time_step
         if errs is not None:
             errorbars = errorbars * time_step
 
-        if ydim == 'condition': #reverse order, to make correspond to condition maps
+        if ydim == 'levels': #reverse order, to make correspond to level maps
             avg_durations = np.flipud(avg_durations)
             avg_times = np.flipud(avg_times)
             if errs is not None:
                 errorbars = np.flipud(errorbars)
 
         n_model = avg_times.shape[0]
-    else: #no hmp object
-        if len(np.shape(times)) == 2:
-            times = [times]
-        times = [time * time_step for time in times]
-        if isinstance(times[0], xr.DataArray):
-            times = [time.values for time in times]
-        n_model = len(times)
-        avg_times=[]
-        avg_durations=[]
-        errorbars =[]
-        
+    else:
+        raise ValueError('Expected an hmp fitted object')
+
     if labels == []:
-        if hmp_obj and ydim == 'condition':
-            labels = [str(x) for x in reversed(list(times.clabels.values())[0])] 
+        if ydim == 'levels':
+            labels = [str(x) for x in reversed(list(estimates.clabels.values())[0])] 
         else:
             labels = np.arange(n_model)
 
@@ -698,28 +644,13 @@ def plot_latencies(times, init=None, labels=[], colors=default_colors,
     f, axs = plt.subplots(1,1, figsize=figsize, dpi=100)
 
     cycol = cycle(colors)
-    cur_colors = [next(cycol) for x in np.arange(n_model)] #color per condition/model (line plot)
+    cur_colors = [next(cycol) for x in np.arange(n_model)] #color per level/model (line plot)
     
-    for j in range(n_model): #per condition/model
-        if hmp_obj: #all calcs have been done
-            avg_times_model = np.hstack((0,avg_times[j,:]))
-            avg_durations_model = avg_durations[j,:]
-            n_stages = len(avg_durations_model)
-            errorbars_model = errorbars[j,:,:] if errs is not None else None
-        else: #call error bars etc
-            time = times[j]
-            duration = np.diff(time, axis=1, prepend=0) #time per trial, duration per trial
-            avg_times_model = np.hstack((0, np.mean(time, axis=0)))
-            avg_durations_model = np.mean(duration, axis=0)
-            n_stages = len(avg_durations_model)
-            errorbars_model = None if errs is None else np.zeros((2,n_stages))
-            if errs == 'std':
-                errorbars_model = np.tile(np.std(duration, axis=0), (2,1))
-            elif errs == 'se':
-                print('Cannot calculate SE for non-hmp object')
-            avg_durations.append(np.nanmax(avg_durations_model)) #for determining axes
-            errorbars.append(np.nanmax(errorbars_model))
-            avg_times.append(np.nanmax(avg_times_model))
+    for j in range(n_model): #per level/model
+        avg_times_model = np.hstack((0,avg_times[j,:]))
+        avg_durations_model = avg_durations[j,:]
+        n_stages = len(avg_durations_model)
+        errorbars_model = errorbars[j,:,:] if errs is not None else None
             
         if kind == 'bar':
             cycol = cycle(colors) #get a color per stage
@@ -764,7 +695,7 @@ def plot_latencies(times, init=None, labels=[], colors=default_colors,
         max_y = (np.nanmax(avg_durations) + np.nanmax(errorbars) if errs else np.nanmax(avg_durations)) * 1.05
         axs.set_ylim(0, max_y)
 
-        if  as_time:
+        if as_time:
             plt.ylabel('Stage durations (ms)')
         else:
             plt.ylabel('Stage durations (samples)')

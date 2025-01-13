@@ -54,25 +54,26 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
 
     #fit the HMP using previously estimated parameters as initial parameters, and estimate likelihood
     dur_ratio = model_pp.mean_d / model_without_pp.mean_d
-    if 'condition' in initial_fit.dims:
+    if 'level' in initial_fit.dims:
+        n_eve = initial_fit.pars_map.shape[1]-1
         locations = np.zeros(initial_fit.pars_map.shape, dtype=int)
         for c in range(len(initial_fit.pars_map)):
             indexes = np.arange(len(initial_fit.pars_map[c]))[initial_fit.pars_map[c,:]>=0] #Actual estimated event
             if len(indexes[1:-1]) > 0:
                 locations[c,indexes[1:-1]] = init.location#add location at every non first or last estimated event
-        fit_without_pp = model_without_pp.fit_single_conds(initial_fit.magnitudes.values, initial_fit.parameters.values, mags_map=initial_fit.mags_map, pars_map=initial_fit.pars_map, conds=initial_fit.conds_dict, verbose=False)
+        fit_without_pp = model_without_pp.fit_n(n_eve, magnitudes=initial_fit.magnitudes.values, parameters=initial_fit.parameters.values, mags_map=initial_fit.mags_map, pars_map=initial_fit.pars_map, level_dict=initial_fit.level_dict, verbose=False)
         #calc lkh
         #adjust params to fit average duration of subject
         params = fit_without_pp.parameters.values
         params[:,:,1] = params[:,:,1] * dur_ratio
-        conds_pp = initial_fit.sel(participant=participant)['cond'].values
-        likelihood = model_pp.estim_probs_conds(fit_without_pp.magnitudes.values, params, locations, initial_fit.mags_map, initial_fit.pars_map, conds_pp, lkh_only=True)
+        levels_pp = initial_fit.sel(participant=participant)['levels'].values
+        likelihood = model_pp._estim_probs_levels(fit_without_pp.magnitudes.values, params, locations, initial_fit.mags_map, initial_fit.pars_map, levels_pp, lkh_only=True)
     else:
         n_eve = np.max(initial_fit.event.values)+1
         locations = np.zeros(n_eve+1, dtype=int)
         locations[1:-1] = init.location
         #fit model
-        fit_without_pp = model_without_pp.fit_single(n_eve, initial_fit.magnitudes.dropna('event',how='all').values, initial_fit.parameters.dropna('stage').values, verbose=False)
+        fit_without_pp = model_without_pp.fit_n(n_eve, initial_fit.magnitudes.dropna('event',how='all').values, initial_fit.parameters.dropna('stage').values, verbose=False)
         #calc lkh
         #adjust params to fit average duration of subject
         params = fit_without_pp.parameters.dropna('stage').values
@@ -91,9 +92,9 @@ def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
     Initial parameters for the models are based on estimate(s), hmp model settings on init.
 
     Estimate(s) can be provides as:
-    - a single model estimate (from fit_single(..))
+    - a single model estimate (from fit_n(..))
     - a set of fits from backward estimation (from backward_estimation(..))
-    - a model fit with different conditions (from fit_single_conds(...))
+    - a model fit with different levels
     - a list of one or more of the above
     Note that all need to share the same data and participants.
     
@@ -160,19 +161,18 @@ def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
     n_models = len(models)
     if verbose:
         print(f'LOOCV started for {n_models} model(s)')
-
     #no mp here, but at participant level
     likelihoods = []
     for model in models:
 
-        #option 1 and 2: single model and single model with conditions
+        #option 1 and 2: single model and single model with levels
         if not 'n_events' in model.dims:
             if verbose:
-                if 'condition' in model.dims:
-                    print(f'\tLOOCV for condition-based model with {np.max(model.event).values+1} event(s)')
+                if 'level' in model.dims:
+                    print(f'\tLOOCV for multilevel model with {np.max(model.event).values+1} event(s)')
                 else:
                     print(f'\tLOOCV for single model with {np.max(model.event).values+1} event(s)')
-
+            
             loocv = []
             if cpus == 1: #not mp            
                 for participant in participants_idx:
@@ -185,7 +185,7 @@ def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
             
             likelihoods.append(xr.DataArray(np.array(loocv).astype(np.float64), dims='participant',
                     coords = {"participant": participants_idx}, 
-                    name = "loo_likelihood"))
+                    name = "loo_loglikelihood"))
            
         #option 3: backward
         if 'n_events' in model.dims:
@@ -197,20 +197,21 @@ def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
                 if verbose:
                     print(f'\t  Estimating backward estimation model with {n_eve} event(s)')
                 loocv = []
+                model_neve = model.sel(n_events=n_eve).dropna('event',how='all')
                 if cpus == 1: #not mp            
                     for participant in participants_idx:
-                        loocv.append(loocv_calcs(data, init, participant, model.sel(n_events=n_eve).dropna('event',how='all'), verbose=verbose))
+                        loocv.append(loocv_calcs(data, init, participant, model_neve, verbose=verbose))
                 else: #mp
                     with mp.Pool(processes=cpus) as pool:
                         loocv = pool.starmap(loocv_calcs,
                                             zip(itertools.repeat(data), itertools.repeat(init),participants_idx,
-                                                itertools.repeat(model.sel(n_events=n_eve).dropna('event',how='all')),itertools.repeat(1),itertools.repeat(verbose)))
+                                                itertools.repeat(model_neve),itertools.repeat(1),itertools.repeat(verbose)))
 
                 loocv_back.append(xr.DataArray(np.expand_dims(np.array(loocv).astype(np.float64),axis=0), 
                                         dims=('n_event', 'participant'),
                                         coords = {"n_event": np.array([n_eve]),
                                                    "participant": participants_idx}, 
-                                        name = "loo_likelihood"))
+                                        name = "loo_loglikelihood"))
                 
             likelihoods.append(xr.concat(loocv_back, dim = 'n_event'))
             
@@ -219,13 +220,51 @@ def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
 
     return likelihoods
 
+def example_fit_n_func(hmp_model, n_events, magnitudes=None, parameters=None, verbose=False):
+    '''
+    Example of simple function that can be used with loocv_func.
+    This fits a model with n_events and potentially provided mags and params.
+    Can be called, for example, as :
+        loocv_func(hmp_model, hmp_data, example_fit_single_func, func_args=[2])
+    '''
+    return hmp_model.fit_n(n_events, magnitudes=magnitudes, parameters=parameters, verbose=verbose) 
+
+def example_complex_fit_n_func(hmp_model, max_events=None, n_events=1, mags_map=None, pars_map=None, conds=None, verbose=False):
+    '''
+    Example of a complex function that can be used with loocv_func.
+    This function first performs backwards estimation up to max_events,
+    and follows this with a condition-based model of n_events, informed
+    by the selected backward model and the provided maps. It returns
+    both models, so for both the likelihood will be estimated.
+    Can be called, for example, as :
+        pars_map = np.array([[0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 1, 0],
+                     [0, 0, 0, 0, 2, 0],
+                     [0, 0, 0, 0, 3, 0],
+                     [0, 0, 0, 0, 4, 0]])
+        conds = {'rep': np.arange(5)+1}
+        loocv_func(hmp_model, hmp_data, example_complex_fit_n_func, func_args=[7, 5, None, pars_map,conds])
+    '''
+
+    #fit backward model up to max_events
+    backward_model = hmp_model.backward_estimation(max_events)
+
+    #select n_events model
+    n_event_model = backward_model.sel(n_events=n_events).dropna('event',how='all')
+    mags = n_event_model.magnitudes.dropna('event',how='all').data
+    pars = n_event_model.parameters.dropna('stage').data
+
+    #fit condition model
+    cond_model = hmp_model.fit_n(magnitudes=mags, parameters=pars, mags_map=mags_map, pars_map=pars_map, level_dict=conds, verbose=verbose)
+
+    return [backward_model, cond_model]
 
 def loocv_estimate_func(data, init, participant, func_estimate, func_args=None, cpus=None, verbose=False):
     '''
     Applies func_estimate with func_args to data of n - 1 (participant) participants.
     func_estimate should return an estimated hmp model; either a single model, 
-    a condition model, or a backward estimation model. This model is then used 
-    to calculate the fit on the left out participant with loocv_likelihood.
+    a level model, or a backward estimation model. This model is then used 
+    to calculate the fit on the left out participant with loocv_loglikelihood.
 
     Parameters
     ----------
@@ -277,10 +316,10 @@ def loocv_estimate_func(data, init, participant, func_estimate, func_args=None, 
     return estimates
 
 
-def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False):
+def loocv_loglikelihood(data, init, participant, estimate, cpus=None, verbose=False):
     '''
-    Calculate likelihood of fit on participant participant using parameters from estimate,
-    either using single model or condition based model.
+    Calculate loglikelihood of fit on participant participant using parameters from estimate,
+    either using single model or level based model.
         
     Parameters
     ----------
@@ -319,39 +358,39 @@ def loocv_likelihood(data, init, participant, estimate, cpus=None, verbose=False
     dur_ratio = model_pp.mean_d / mean_d_without_subj
     locations = np.zeros(estimate.parameters.dropna('stage').values.shape[-2],dtype=int)
     locations[1:-1] = init.location
-    if 'condition' in estimate.dims:
+    if 'level' in estimate.dims:
         locations = np.tile(locations, (initial_fit.parameters.shape[0], 1))
         from itertools import product    
 
-        #create conds for this participant based on estimate.conds_dict and model_pp 
-        #description of condition for this participant, which is not available
-        conds = estimate.conds_dict
-        cond_names = []
-        cond_levels = []
-        cond_trials = []
-        for cond in conds:
-            cond_names.append(list(cond.keys())[0])
-            cond_levels.append(cond[cond_names[-1]])
-            cond_trials.append(model_pp.trial_coords[cond_names[-1]].data.copy())
+        #create levels for this participant based on estimate.levels_dict and model_pp 
+        #description of level for this participant, which is not available
+        levels = estimate.levels_dict
+        level_names = []
+        level_levels = []
+        level_trials = []
+        for level in levels:
+            level_names.append(list(level.keys())[0])
+            level_levels.append(level[level_names[-1]])
+            level_trials.append(model_pp.trial_coords[level_names[-1]].data.copy())
 
-        cond_levels = list(product(*cond_levels))
-        cond_levels = np.array(cond_levels, dtype=object) #otherwise comparison below can fail
+        level_levels = list(product(*level_levels))
+        level_levels = np.array(level_levels, dtype=object) #otherwise comparison below can fail
 
-        #build condition array with digit indicating the combined levels
-        cond_trials = np.vstack(cond_trials).T
-        conds = np.zeros((cond_trials.shape[0])) * np.nan
-        for i, level in enumerate(cond_levels):
-            conds[np.where((cond_trials == level).all(axis=1))] = i
-        conds=np.int8(conds)
+        #build level array with digit indicating the combined levels
+        level_trials = np.vstack(level_trials).T
+        levels = np.zeros((level_trials.shape[0])) * np.nan
+        for i, level in enumerate(level_levels):
+            levels[np.where((level_trials == level).all(axis=1))] = i
+        levels=np.int8(levels)
 
         #adjust parameters based on average RT
         parameters = estimate.parameters.values
         parameters[:,:,1] = parameters[:,:,1] * dur_ratio
 
-        likelihood = model_pp.estim_probs_conds(estimate.magnitudes.values, parameters, locations, estimate.mags_map, estimate.pars_map, conds, lkh_only=True)
+        likelihood = model_pp.estim_probs_levels(estimate.magnitudes.values, parameters, locations, estimate.mags_map, estimate.pars_map, levels, lkh_only=True)
     else:
-        n_eve = np.max(estimate.event.dropna('event', how='all').values)+1
-
+        n_eve = np.max(estimate.event.dropna('event').values)+1
+        print(n_eve)
         #adjust parameters based on average RT
         parameters = estimate.parameters.dropna('stage').values
         parameters[:,1] = parameters[:,1] * dur_ratio
@@ -373,11 +412,11 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
     the likelihood of the left out participant will be calculated.
 
     For example of func_estimate, see these function above:
-    example_fit_single_func(..)
-    example_complex_single_func(..)
+    example_fit_n_func(..)
+    example_complex_fit_n_func(..)
 
     They can be called, for example, as
-        loocv_func(hmp_model, hmp_data, example_fit_single_func, func_args=[1])
+        loocv_func(hmp_model, hmp_data, example_fit_n_func, func_args=[1])
     
     Note that func_args is not named, so all arguments up to the one you want to use
     of func_estimate need to be provided.
@@ -390,7 +429,7 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
         xarray data from transform_data() 
     func_estimate : function that returns an hmp model estimate or a list
         of hmp model estimates. These can be the results of backward_estimation,
-        fit_single, fit_single_conds, or your own function.
+        fit_n, or your own function.
         It should take an initialized hmp model as its first argument,
         other arguments are passed on from func_args.
     func_args : list
@@ -446,21 +485,21 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
     all_likelihoods = []
     for estimates in all_estimates: 
 
-        #option 1 and 2: single model and single model with conditions
+        #option 1 and 2: single model and single model with levels
         if not 'n_events' in estimates[0].dims:
             if verbose:
-                if 'condition' in estimates[0].dims:
-                    print(f'Calculating likelihood for condition-based model with {np.max(estimates[0].event).values+1} event(s)')
+                if 'level' in estimates[0].dims:
+                    print(f'Calculating likelihood for multilevel model with {np.max(estimates[0].event).values+1} event(s)')
                 else:
                     print(f'Calculating likelihood for single model with {np.max(estimates[0].event).values+1} event(s)')
 
             loocv = []
             if cpus == 1: #not mp            
                 for pidx, participant in enumerate(participants_idx):
-                    loocv.append(loocv_likelihood(data, init, participant, estimates[pidx], verbose=verbose))
+                    loocv.append(loocv_loglikelihood(data, init, participant, estimates[pidx], verbose=verbose))
             else: #mp
                 with mp.Pool(processes=cpus) as pool:
-                    loocv = pool.starmap(loocv_likelihood,
+                    loocv = pool.starmap(loocv_loglikelihood,
                                         zip(itertools.repeat(data), itertools.repeat(init),participants_idx,
                                             estimates, itertools.repeat(1),itertools.repeat(verbose)))
             
@@ -486,10 +525,10 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
                 loocv = []
                 if cpus == 1: #not mp            
                     for pidx, participant in enumerate(participants_idx):
-                        loocv.append(loocv_likelihood(data, init, participant, estimates[pidx].sel(n_events=n_eve).dropna('event',how='all'), verbose=verbose))
+                        loocv.append(loocv_loglikelihood(data, init, participant, estimates[pidx].sel(n_events=n_eve).dropna('event',how='all'), verbose=verbose))
                 else: #mp
                     with mp.Pool(processes=cpus) as pool:
-                        loocv = pool.starmap(loocv_likelihood,
+                        loocv = pool.starmap(loocv_loglikelihood,
                                             zip(itertools.repeat(data), itertools.repeat(init),participants_idx,
                                                 [estimates[x].sel(n_events=n_eve).dropna('event',how='all') for x in range(len(participants_idx))],itertools.repeat(1),itertools.repeat(verbose)))
 
@@ -510,11 +549,11 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
     return all_likelihoods, all_estimates
 
 
-def backward_func(hmp_model, max_events=None, min_events=0, max_starting_points=1, method="random", tolerance=1e-4, max_iteration=1e3):
+def backward_func(hmp_model, max_events=None, min_events=0, max_starting_points=1, tolerance=1e-4, max_iteration=1e3):
     '''
     Helper function for loocv_backward. Calls backward_estimation on hmp_model with provided args.
     '''    
-    return hmp_model.backward_estimation(max_events, min_events, None, max_starting_points, method, tolerance, True, max_iteration)
+    return hmp_model.backward_estimation(max_events, min_events, None, max_starting_points, tolerance, True, max_iteration)
 
 
 def fit_backward_func(hmp_model, by_sample=False, min_events=0, tolerance=1e-4, max_iteration=1e3):
@@ -530,7 +569,7 @@ def fit_backward_func(hmp_model, by_sample=False, min_events=0, tolerance=1e-4, 
     return backward_model
 
 
-def loocv_backward(init, data, max_events=None, min_events=0, max_starting_points=1, method="random", tolerance=1e-4, max_iteration=1e3, cpus=1, verbose=True):
+def loocv_backward(init, data, max_events=None, min_events=0, max_starting_points=1, tolerance=1e-4, max_iteration=1e3, cpus=1, verbose=True):
     '''
     Performs leave-one-out cross validation using backward_estimation to calculate the initial fit.
     It will perform loocv by leaving out one participant, applying 'backward_estimation' to the 
@@ -551,9 +590,7 @@ def loocv_backward(init, data, max_events=None, min_events=0, max_starting_point
         The minimum number of events to be estimated
     max_starting_points: int
         how many random starting points iteration to try for the model estimating the maximal number of events
-    method: str
-        What starting points generation method to use, 'random'or 'grid' (grid is not yet fully supported)
-    tolerance: float
+   tolerance: float
         Tolerance applied to the expectation maximization in the EM() function
     max_iteration: int
         Maximum number of iteration for the expectation maximization in the EM() function
@@ -569,7 +606,7 @@ def loocv_backward(init, data, max_events=None, min_events=0, max_starting_point
     likelihood object and fitten backward estimation models
     '''
 
-    return loocv_func(init, data, backward_func, func_args=[max_events, min_events, max_starting_points, method, tolerance, max_iteration], cpus=cpus, verbose=verbose)
+    return loocv_func(init, data, backward_func, func_args=[max_events, min_events, max_starting_points, tolerance, max_iteration], cpus=cpus, verbose=verbose)
 
 
 def loocv_fit_backward(init, data, by_sample=False, min_events=0, tolerance=1e-4, max_iteration=1e3, cpus=1, verbose=True):

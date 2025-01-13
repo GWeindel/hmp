@@ -1,4 +1,3 @@
-  
 ## Importing these packages is specific for this simulation case
 import os
 
@@ -41,7 +40,7 @@ def test_integration():
         sources.append([cur_name, 10., 1, gamma(2, scale=cur_mean)])
     raw_b, event_b = simulations.simulate(sources, n_trials, cpus, 'dataset_b_raw', seed=1, overwrite=True, 
         sfreq=sfreq, verbose=True, proportions=[.99,1,1,1], noise=False)
-
+    
     events = []
     raws = []
     event_id = {'stimulus':1}#trigger 1 = stimulus
@@ -52,7 +51,7 @@ def test_integration():
         events.append(np.load(event_file))
         raws.append(raw_file)
     sfreq = 100
-
+    
     # Data reading
     df_real_metadata = pd.read_csv(real_metadata) 
     epoch_data = hmp.utils.read_mne_data(real_data,  epoched=True, sfreq=10, verbose=True, high_pass=1, low_pass=45,
@@ -60,9 +59,8 @@ def test_integration():
                                          metadata=df_real_metadata, pick_channels=['Cz'])
     epoch_data = hmp.utils.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq,
             events_provided=events, verbose=True, reference='average', high_pass=1, low_pass=45,
-                subj_idx=['a','b'],pick_channels='eeg', lower_limit_RT=0.01, upper_limit_RT=2 )
+                subj_idx=['a','b'],pick_channels='eeg', lower_limit_RT=0.01, upper_limit_RT=2 ) 
     epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
-
     positions = simulations.simulation_positions()
     
     
@@ -88,38 +86,35 @@ def test_integration():
     data_a = hmp.utils.participant_selection(hmp_data, 'a')
     init_sim = hmp.models.hmp(data=data_a)
     sim_source_times, true_pars, true_magnitudes, _ = simulations.simulated_times_and_parameters(events_a, init_sim)
-    true_estimates = init_sim.fit_single(n_events, parameters = true_pars, magnitudes=true_magnitudes, maximization=False, verbose=True)
-    true_topos = init_sim.compute_topographies(epoch_data, true_estimates, init_sim, mean=True)
-    estimates = init_sim.fit_single(n_events, verbose=True)
-    test_topos = init_sim.compute_topographies(epoch_data, estimates, init_sim, mean=True)
+    true_estimates = init_sim.fit_n(n_events, parameters = np.array([true_pars]), magnitudes=np.array([true_magnitudes]), maximization=False, verbose=True)
+    true_topos = hmp.utils.event_topo(epoch_data, true_estimates, mean=True)
+    estimates = init_sim.fit_n(n_events, verbose=True)
+    test_topos = hmp.utils.event_topo(epoch_data, estimates, mean=True)
     assert (np.array(simulations.classification_true(true_topos,test_topos)) == np.array(([0,1,2],[0,1,2]))).all()
     assert np.sum(np.abs(true_topos.data - test_topos.data)) < 2.65e-05
-    assert np.round(estimates.likelihoods.values,4) > np.array(-1)
+    assert np.round(estimates.loglikelihood.values,4) > np.array(-1)
     
     
     # Initializing models
     ## Testing different distribution implementation
     for distribution in  ['lognormal','wald','weibull','gamma']:
-        init_sim = hmp.models.hmp(data=hmp_data_sim, epoch_data=epoch_data, 
+        init_sim = hmp.models.hmp(data=hmp_data_sim,  
                             event_width=50, distribution=distribution, shape=2)
-        estimates = init_sim.fit_single(n_events, verbose=True)
-
+        estimates = init_sim.fit_n(n_events, verbose=True)
+    
     ## different init parameters
-    init = hmp.models.hmp(hmp_data, epoch_data, sfreq=epoch_data.sfreq)
-    init_speed = hmp.models.hmp(hmp_speed_data, epoch_data, sfreq=epoch_data.sfreq)
+    init = hmp.models.hmp(hmp_data, sfreq=epoch_data.sfreq)
+    init_speed = hmp.models.hmp(hmp_speed_data, sfreq=epoch_data.sfreq)
     
     # Testing fit 
-    ## fit_single tests
-    selected = init_sim.fit_single(n_events, method='random', starting_points=2,
+    ## fit_n tests
+    selected = init_sim.fit_n(n_events, starting_points=2,
                             return_max=False,verbose=True)#funct
-    elected = init_sim.fit_single(parameters=estimates.parameters, magnitudes=estimates.magnitudes)#funct
-    selected = init_sim.fit_single(parameters=np.array([estimates.parameters]), magnitudes=np.array([estimates.magnitudes]), cpus=2)#funct
-    selected = init_sim.fit_single(1, method='grid', starting_points=2,
-                            return_max=True,verbose=True)#funct
-    selected = init_sim.fit_single(1, method='grid', starting_points=2,
-                            return_max=False,verbose=True, cpus=2)#funct
-    ## Fit function
+    elected = init_sim.fit_n(3, parameters=estimates.parameters, magnitudes=estimates.magnitudes)#funct
+    selected = init_sim.fit_n(3, parameters=estimates.parameters, magnitudes=estimates.magnitudes, cpus=2)#funct
+    # ## Fit function
     estimates_speed, _ = init_speed.fit(tolerance=1e-1, step=10, diagnostic=True, by_sample=True, pval=1, return_estimates=True)
+    estimates_speed, _ = init_speed.fit(tolerance=1e-1, step=10, diagnostic=True, by_sample=True,return_estimates=True)
     ## Backward function 
     backward_speed = init_speed.backward_estimation(max_fit=estimates_speed, tolerance=1e-1, max_events=2)
     ## Condition fit
@@ -130,44 +125,38 @@ def test_integration():
     conds = {'condition': ['a', 'b']} #dictionary with conditions to analyze as well as the levels.
     mags4 = backward_speed.sel(n_events=2).magnitudes.dropna('event').data
     pars4 = backward_speed.sel(n_events=2).parameters.dropna('stage').data
-    model_stage_removed = init.fit_single_conds(magnitudes=mags4, parameters=pars4, pars_map=pars_map, mags_map=mags_map, conds=conds,  cpus=1, tolerance=1e-1, verbose=True)
-
+    model_stage_removed = init.fit_n(magnitudes=mags4, parameters=pars4, pars_map=pars_map, mags_map=mags_map, level_dict=conds,  cpus=1, tolerance=1e-1, verbose=True)
+    
     # LOOCV
-    loocv_model_speed = hmp.loocv.loocv(init_speed, hmp_speed_data, backward_speed, print_warning=True, verbose=True, cpus=2)
+    loocv_model_speed = hmp.loocv.loocv(init_speed, hmp_speed_data, backward_speed, print_warning=True, verbose=True, cpus=1)
     correct_loocv_model = hmp.loocv.loocv_backward(init, hmp_data, max_events=2)
     hmp.loocv.loocv_fit_backward(init_speed, hmp_speed_data, by_sample=False, min_events=2, cpus=1, verbose=True)
-
-    
+    hmp.loocv.loocv_func(init_speed, hmp_speed_data, hmp.loocv.example_fit_n_func, func_args=[1])
+    hmp.loocv.loocv_func(init_speed, hmp_speed_data, hmp.loocv.example_complex_fit_n_func, func_args=[2])
+    # loocv_combined = hmp.loocv.loocv(init_speed, hmp_speed_data, model_stage_removed, print_warning=True)
+    # hmp.loocv.loocv_func(init_speed, hmp_speed_data, init_speed.fit(), func_args=[5], cpus=1, verbose=True) 
     # testing plot_topo
     fig,ax = plt.subplots(2)
-    hmp.visu.plot_topo_timecourse(epoch_data, estimates, positions, init, 
+    hmp.visu.plot_topo_timecourse(epoch_data, estimates, positions, 
                                   sensors=True, times_to_display = np.array([1,2]), ax=ax[0], topo_size_scaling=True, max_time=2)
-    hmp.visu.plot_topo_timecourse(epoch_data, estimates, positions, init, sensors=False, 
+    hmp.visu.plot_topo_timecourse(epoch_data, estimates, positions, sensors=False, 
                                   times_to_display = None, title='a', max_time=None)
-    hmp.visu.plot_topo_timecourse(epoch_data, estimates_speed, info, init_speed, 
+    hmp.visu.plot_topo_timecourse(epoch_data, estimates_speed, info, 
                                   as_time=True, contours=False, event_lines=None, colorbar=False, ax=ax[0])
-    hmp.visu.plot_topo_timecourse(epoch_data, backward_speed, info, init_speed, ax=ax[0])
+    hmp.visu.plot_topo_timecourse(epoch_data, backward_speed, info, ax=ax[0])
     
-    hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, init, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0],) 
-    hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, init, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0], times_to_display=[1,2]) 
-    hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, init, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0], times_to_display=[[1,2]]) 
-    hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, init, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0], times_to_display=np.array([1,2]))
-
+    hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0],) 
+    hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0], times_to_display=[1,2]) 
+    hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0], times_to_display=[[1,2]]) 
+    hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0], times_to_display=np.array([1,2]))
+    
     # Testing comoput_times
-    init_speed.compute_times(init_speed, backward_speed.sel(n_events=1), duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=True, as_time=False, errorbars='se', center_measure='mean',estimate_method='max', onset=True)
-    init_speed.compute_times(init_speed, backward_speed, duration=False, fill_value=None, mean=False, mean_in_participant=True, cumulative=False, add_rt=True, as_time=False, errorbars='se', center_measure='mean', onset=True)
-    init_speed.compute_times(init_speed, model_stage_removed, duration=True, fill_value=None, mean=False, mean_in_participant=True, cumulative=True, add_rt=True, as_time=True, errorbars='std', center_measure='median',estimate_method='mean', onset=False)
-
+    hmp.utils.event_times(backward_speed.sel(n_events=1), duration=False, fill_value=None, mean=False, mean_in_participant=True, add_rt=False, as_time=False, errorbars='se', center_measure='mean',estimate_method='max')
+    hmp.utils.event_times(backward_speed, duration=False, fill_value=None, mean=False, mean_in_participant=True, add_rt=True, as_time=False, errorbars='se', center_measure='mean')
+    hmp.utils.event_times(model_stage_removed, duration=True, fill_value=None, mean=False, mean_in_participant=True, add_rt=True, as_time=True, errorbars='std', center_measure='median',estimate_method='mean')
+    
     
     # Testing diverse plotting functions
-    times = init.compute_times(init_speed, estimates_speed).values
-    hmp.visu.plot_components_sensor(hmp_data, info)
-    hmp.visu.plot_distribution(times, xlims=False, figsize=(1, 1), survival=False)
-    hmp.visu.plot_distribution(times, xlims=[0,1], figsize=(1, 1), survival=True)
-    hmp.visu.plot_latencies(times, init=init, labels=[], 
-        figsize=False, errs=None, kind='point', legend=True, max_time=None, as_time=True)
-    hmp.visu.plot_latencies(times, init=init, labels=[], 
-        figsize=False, errs=None, kind='point', legend=True, max_time=None, as_time=True)
     hmp.visu.plot_latencies(estimates_speed, init=init_speed, labels=[], 
         figsize=False, errs='std', kind='bar', legend=False, max_time=None, as_time=False)
     hmp.visu.plot_latencies(estimates_speed, init=init_speed, labels=[], 
@@ -187,38 +176,40 @@ def test_integration():
     hmp.utils.load('selected.nc')
     hmp.utils.save(estimates_speed, 'estimates_speed.nc')
     hmp.utils.load('estimates_speed.nc')
-    hmp.visu.save_model_topos(epoch_data, estimates, positions, init, 
+    hmp.visu.save_model_topos(epoch_data, estimates, positions, 
                               fname='topo', figsize=None, dpi=300, cmap='Spectral_r', 
                 vmin=None, vmax=None, sensors=False, contours=6, colorbar=True)
-    hmp.visu.save_model_topos(epoch_data, backward_speed, info, init_speed, fname='topo', figsize=None, dpi=300, cmap='Spectral_r', 
+    hmp.visu.save_model_topos(epoch_data, backward_speed, info, fname='topo', figsize=None, dpi=300, cmap='Spectral_r', 
                 vmin=None, vmax=None, sensors=False, contours=6, colorbar=True)
-    hmp.visu.save_model_topos(epoch_data, model_stage_removed, info, init_speed, fname='topo', figsize=None, dpi=300, cmap='Spectral_r', 
+    hmp.visu.save_model_topos(epoch_data, model_stage_removed, info, fname='topo', figsize=None, dpi=300, cmap='Spectral_r', 
                 vmin=None, vmax=None, sensors=False, contours=6, colorbar=True)
     hmp.utils.save_eventprobs(selected.eventprobs, 'selected_eventprobs.csv')
-
+    
     # Testing parallelized func 
-    init_speed = hmp.models.hmp(hmp_speed_data, epoch_data, sfreq=epoch_data.sfreq, cpus=2)
+    init_speed = hmp.models.hmp(hmp_speed_data, sfreq=epoch_data.sfreq, cpus=2)
     backward_speed = init_speed.backward_estimation(max_fit=estimates_speed, tolerance=1e-1, max_events=2)
     
-
-
+    # LOOCV
+    loocv_model_speed = hmp.loocv.loocv(init_speed, hmp_speed_data, backward_speed, print_warning=True, verbose=True)
+    correct_loocv_model = hmp.loocv.loocv_backward(init, hmp_data, max_events=2,cpus=2)
+    hmp.loocv.loocv_fit_backward(init_speed, hmp_speed_data, by_sample=False, min_events=2, cpus=2, verbose=True)
+    # loocv_combined = hmp.loocv.loocv(init_speed, hmp_speed_data, model_stage_removed, print_warning=True,cpus=2)
+    
     # Testing electrode activity plots
     ## ERP plot
     fig, ax = plt.subplots(1,1, figsize=(1,1), sharey=True, sharex=True)
-    fakefit = init_sim.fit_single(2, maximization=False, verbose=True)#Just to get the stim ERP in the same format
-    BRP_times = init_sim.compute_times(init, fakefit, fill_value=0, add_rt=True)
+    fakefit = init_sim.fit_n(2, maximization=False, verbose=True)#Just to get the stim ERP in the same format
+    BRP_times = hmp.utils.event_times(fakefit, fill_value=0, add_rt=True)
     times = BRP_times.sel(event=[0,1])#Stim and response only
     times['event'] = [0,1]
     erp_data = hmp.visu.erp_data(epoch_data.stack(trial_x_participant=["participant","epochs"]), times, 'EEG 031')
     hmp.visu.plot_erp(times, erp_data, ax=ax, upsample=2, label='EEG 031', bootstrap=2,minmax_lines=[1,2])
 
-    ## Centered
     data = epoch_data.stack({'trial_x_participant':['participant','epochs']}).data.dropna('trial_x_participant', how="all")
-    times = init_sim.compute_times(init, estimates, fill_value=0, add_rt=True)
+    times = hmp.utils.event_times(estimates, fill_value=0, add_rt=True)
     centered = hmp.utils.centered_activity(data, times, ['EEG 031'], event=1, baseline=1, n_samples=None, cut_before_event=1, cut_after_event=1)
     centered = hmp.utils.centered_activity(data, times, ['EEG 031'], event=0, baseline=1, center=False, cut_before_event=0, cut_after_event=0)
-
-
+    
     # Remove temporary files
     os.remove("dataset_a_raw_raw_generating_events.npy")
     os.remove("dataset_a_raw_raw.fif")
@@ -230,7 +221,7 @@ def test_integration():
     for filename in os.listdir():
         if filename.endswith('.png'):
             os.remove(filename)
-
+    
     #close all plots
     plt.cla()
     plt.close()
