@@ -1,4 +1,4 @@
-""" """
+"""Generating synthetic data to test HMP."""
 
 import os
 import os.path as op
@@ -10,10 +10,8 @@ import numpy as np
 from mne.datasets import sample
 
 
-def available_sources(subselection=True):
-    """
-    List available sources for sample subject in MNE
-    """
+def available_sources():
+    """List available sources for sample subject in MNE."""
     data_path = sample.data_path()
     subjects_dir = op.join(data_path, "subjects")
     labels = mne.read_labels_from_annot("sample", subjects_dir=subjects_dir, verbose=False)
@@ -25,19 +23,13 @@ def available_sources(subselection=True):
 
 
 def simulation_sfreq():
-    data_path = sample.data_path()
-    subjects_dir = op.join(data_path, "subjects")
-    evoked_fname = op.join(data_path, "MEG", "sample", "sample_audvis-ave.fif")
-    info = mne.io.read_info(evoked_fname, verbose=False)
-    return info["sfreq"]
+    """Recovering sampling frequency of the sample data."""
+    return simulation_info()["sfreq"]
 
 
 def simulation_positions():
-    data_path = sample.data_path()
-    subjects_dir = op.join(data_path, "subjects")
-    subject = "sample"
-    evoked_fname = op.join(data_path, "MEG", subject, "sample_audvis-ave.fif")
-    info = mne.io.read_info(evoked_fname, verbose=False)
+    """Recovering position of the simulated electrodes."""
+    info = simulation_info()
     positions = np.delete(
         mne.channels.layout._find_topomap_coords(info, "eeg"), 52, axis=0
     )  # inferring channel location using MNE
@@ -45,19 +37,16 @@ def simulation_positions():
 
 
 def simulation_info():
+    """Recovering MNE's info file for simulated data."""
     data_path = sample.data_path()
-    subjects_dir = op.join(data_path, "subjects")
     subject = "sample"
     evoked_fname = op.join(data_path, "MEG", subject, "sample_audvis-ave.fif")
     info = mne.io.read_info(evoked_fname, verbose=False)
-
     return info
 
 
 def event_shape(event_width, event_width_samples, steps):
-    """
-    Computes the template of a half-sine (event) with given frequency f and sampling frequency
-    """
+    """Compute the template of a half-sine with given frequency f and sampling frequency."""
     event_idx = np.arange(event_width_samples) * steps + steps / 2
     event_frequency = 1000 / (
         event_width * 2
@@ -88,8 +77,7 @@ def simulate(
     event_length_samples=None,
     proportions=None,
 ):
-    """
-    Simulates n_trials of EEG and/or MEG using MNE's tools based on the specified sources
+    """Simulate n_trials of EEG and/or MEG using MNE's tools based on the specified sources.
 
     Parameters
     ----------
@@ -99,7 +87,8 @@ def simulate(
         - the name of the source (see the output of available_source())
         - the duration of the event (in frequency, usually 10Hz)
         - the amplitude or strength of the signal from the source, expressed in volt (e.g. 1e-8 V)
-        - the duration of the preceding stage as a scipy.stats distribution (e.g. scipy.stats.gamma(a, scale))
+        - the duration of the preceding stage as a scipy.stats
+            distribution (e.g. scipy.stats.gamma(a, scale))
     n_trials: int
         Number of trials
     n_jobs: int
@@ -107,7 +96,8 @@ def simulate(
     file: str
         Name of the file to be saved (number of the subject will be added)
     relations: list
-        list of int describing to which previous event is each event connected, 1 means stimulus, 2 means one event after stimulus, ... One event cannot be connected to an upcoming one
+        list of int describing to which previous event is each event connected, 1 means stimulus,
+        2 means one event after stimulus, ... One event cannot be connected to an upcoming one
     data_type: str
         Whether to simulate "eeg" or "meg"
     n_subj: int
@@ -283,7 +273,8 @@ def simulate(
                     event_shape(((1000 / source[1]) / 2), event_duration, 1000 / info["sfreq"])
                     * source[2]
                 )
-                # adding source event, take as previous time the event defined by relation (default is previous event)
+                # adding source event, take as previous time the event defined by relation (default
+                # is previous event)
                 events = generating_events[generating_events[:, -1] == relations[s]].copy()
                 random_indices = random_indices_list[s]
                 if times is None:
@@ -294,7 +285,8 @@ def simulate(
                     rand_i = times[:, s] / (tstep * 1000)
                 if len(rand_i[rand_i < 0]) > 0:
                     warn(
-                        f"Negative stage duration were found, 1 is imputed for the {len(rand_i[rand_i < 0])} trial(s)",
+                        f"Negative stage duration were found, 1 is imputed for the"
+                        f"{len(rand_i[rand_i < 0])} trial(s)",
                         UserWarning,
                     )
                     rand_i[rand_i < 0] = 1
@@ -363,6 +355,7 @@ def simulate(
 
 
 def demo(cpus, n_events, seed=123):
+    """Create example data for the tutorials."""
     ## Imports and code specific to the simulation (see tutorial 3 and 4 for real data)
     from scipy.stats import gamma
 
@@ -397,7 +390,7 @@ def demo(cpus, n_events, seed=123):
 
     file = "dataset_tutorial2"  # Name of the file to save
 
-    # Simulating and recover information on electrode location and true time onset of the simulated events
+    # Simulating and recover information on electrode location and true time of the simulated events
     files = simulate(
         sources, n_trials, cpus, file, overwrite=False, seed=seed, noise=True, sfreq=sfreq
     )
@@ -431,15 +424,16 @@ def demo(cpus, n_events, seed=123):
 
 
 def classification_true(true_topologies, test_topologies):
-    """
-    Classifies event as belonging to one of the true events
+    """Classifies event as belonging to one of the true events.
 
     Parameters,
     ----------
     true_topologies : xarray.DataArray
-        topologies for the true events simulated obtained from `init.compute_topologies(epoch_data, test_estimates, test_init, mean=True)`
+        topologies for the true events simulated obtained from
+        `init.compute_topologies(epoch_data, test_estimates, test_init, mean=True)`
     test_tolopogies : xarray.DataArray
-        topologies for the events found in the estimation procedure obtained from `init.compute_topologies(epoch_data, true_estimates, true_init, mean=True)`
+        topologies for the events found in the estimation procedure obtained from
+        `init.compute_topologies(epoch_data, true_estimates, true_init, mean=True)`
 
 
     Returns
@@ -484,6 +478,32 @@ def classification_true(true_topologies, test_topologies):
 
 
 def simulated_times_and_parameters(generating_events, init, resampling_freq=None, data=None):
+    """Recover the generating HMP parameters from the simulated EEG data.
+
+    Parameters,
+    ----------
+    generating_events: ndarray
+        Times of the simulated events created by the function simulate()
+    init: hmp class
+        Initialized HMP object
+    resampling_freq: float
+        Value of the new sampling frequency if there is a difference between the initialised HMP
+        object and the generating_events
+    data : ndarray
+        Use alternative data instead of crosscorrelation contained in init.crosscorr
+
+
+    Returns
+    -------
+    random_source_times: np.array
+        index of the true events found in the test estimation
+    true_parameters : list
+        list of true distribution parameters (2D stage * parameter).
+    true_magnitudes: ndarray
+        2D ndarray n_events * components, true electrode contribution to event
+    true_activities: ndarray
+        Actual values at simulated event times
+    """
     sfreq = init.sfreq
     n_stages = len(np.unique(generating_events[:, 2])[1:])  # one trigger = one source
     n_events = n_stages - 1
