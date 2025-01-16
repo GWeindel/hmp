@@ -1,5 +1,5 @@
-"""
-Adapted from https://github.com/ANCPLabOldenburg/MCCA/blob/main/README.md
+"""Adapted from https://github.com/ANCPLabOldenburg/MCCA/blob/main/README.md.
+
 Author/maintainer: Leo Michalke https://github.com/lmichalke
 
 
@@ -35,11 +35,12 @@ from sklearn.exceptions import NotFittedError
 
 
 class MCCA:
-    """Performs multiset canonical correlation analysis with an optional
-        regularization term based on spatial similarity of weight maps. The
-        stronger the regularization, the more similar weight maps are forced to
-        be across subjects. Note that the term 'weights' is used interchangeably
-        with PCA / MCCA eigenvectors here.
+    """Performs multiset canonical correlation analysis.
+
+    with an optional regularization term based on spatial similarity of weight maps. The
+    stronger the regularization, the more similar weight maps are forced to
+    be across subjects. Note that the term 'weights' is used interchangeably
+    with PCA / MCCA eigenvectors here.
 
     Parameters
     ----------
@@ -71,7 +72,8 @@ class MCCA:
             import warnings
 
             warnings.warn(
-                f"Warning........... number of MCCA components ({n_components_mcca}) cannot be greater than "
+                f"Warning........... number of MCCA components ({n_components_mcca}) cannot be "
+                "greater than "
                 f"number of PCA components ({n_components_pca}), setting them equal."
             )
             n_components_mcca = n_components_pca
@@ -90,7 +92,8 @@ class MCCA:
 
         Returns
         -------
-            scores (ndarray): Returns scores in PCA space if self.pca_only is true and MCCA scores otherwise.
+            scores (ndarray): Returns scores in PCA space if self.pca_only is true
+            and MCCA scores otherwise.
         """
         n_subjects, n_samples, n_sensors = X.shape
         X_pca = np.zeros((n_subjects, n_samples, self.n_pcs))
@@ -119,15 +122,17 @@ class MCCA:
             return self._mcca(X_pca)
 
     def obtain_mcca_cov(self, X):
-        """Apply individual-subject PCA on the variance-covariance matrix and across-subjects MCCA
+        """Apply individual-subject PCA on the variance-covariance matrix and across-subjects MCCA.
 
         Parameters
         ----------
-            X (ndarray): Input data in sensor space for each trial (subjects, n_trials, samples, sensors)
+        X (ndarray):
+            Input data in sensor space for each trial (subjects, n_trials, samples, sensors)
 
         Returns
         -------
-            scores (ndarray): Returns scores in PCA space if self.pca_only is true and MCCA scores otherwise.
+        scores (ndarray):
+            Returns scores in PCA space if self.pca_only is true and MCCA scores otherwise.
         """
         n_subjects, n_trials, n_samples, n_sensors = X.shape
         X_pca = np.zeros((n_subjects, n_trials * n_samples, self.n_pcs))
@@ -163,10 +168,11 @@ class MCCA:
             return self._mcca(X_pca)
 
     def _mcca(self, pca_scores):
-        """Performs multiset canonical correlation analysis with an optional
-            regularization term based on spatial similarity of weight maps. The
-            stronger the regularization, the more similar weight maps are forced to
-            be across subjects.
+        """Perform multiset canonical correlation analysis with an optional.
+
+        regularization term based on spatial similarity of weight maps. The
+        stronger the regularization, the more similar weight maps are forced to
+        be across subjects.
 
         Parameters
         ----------
@@ -176,13 +182,16 @@ class MCCA:
         -------
             mcca_scores (ndarray): Input data in MCCA space (subjects, samples, CCs).
         """
-        # R_kl is a block matrix containing all cross-covariances R_kl = X_k^T X_l between subjects k, l, k != l
+        # R_kl is a block matrix containing all cross-covariances R_kl = X_k^T X_l between
+        # subjects k, l, k != l
         # where X is the data in the subject-specific PCA space (PCA scores)
-        # R_kk is a block diagonal matrix containing auto-correlations R_kk = X_k^T X_k in its diagonal blocks
+        # R_kk is a block diagonal matrix containing auto-correlations R_kk = X_k^T X_k in its
+        # diagonal blocks
         R_kl, R_kk = _compute_cross_covariance(pca_scores)
         # Regularization
         if self.r != 0:
-            # The regularization terms W_kl and W_kk are calculated the same way as R_kl and R_kk above, but using
+            # The regularization terms W_kl and W_kk are calculated the same way as
+            # R_kl and R_kk above, but using
             # cross-covariance of PCA weights instead of PCA scores
             W_kl, W_kk = _compute_cross_covariance(self.pca_weights)
             # Add regularization term to R_kl and R_kk
@@ -192,10 +201,12 @@ class MCCA:
         #                   R_kl h = p R_kk h
         # where h are the concatenated eigenvectors of all subjects and
         # p are the generalized eigenvalues (canonical correlations).
-        # If PCA scores are whitened and no regularisation is used, R_kk is an identity matrix and the generalized
+        # If PCA scores are whitened and no regularisation is used, R_kk is an identity matrix and
+        # the generalized
         # eigenvalue problem is reduced to a regular eigenvalue problem
         p, h = eigh(R_kl, R_kk, subset_by_index=(R_kl.shape[0] - self.n_ccs, R_kl.shape[0] - 1))
-        # eigh returns eigenvalues in ascending order. To pick the k largest from a total of n eigenvalues,
+        # eigh returns eigenvalues in ascending order. To pick the k largest from a
+        # total of n eigenvalues,
         # we use subset_by_index=(n - k, n - 1).
         # Flip eigenvectors so that they are in descending order
         h = np.flip(h, axis=1)
@@ -206,8 +217,10 @@ class MCCA:
         return np.matmul(pca_scores, self.mcca_weights)
 
     def transform_trials(self, X, subject=0):
-        """Use of MCCA weights (obtained from averaged data) to transform single
-            trial data from sensor space to MCCA space.
+        """Transform single trial data to MCCA space.
+
+        Use of MCCA weights (obtained from averaged data) to transform single
+        trial data from sensor space to MCCA space.
 
         Parameters
         ----------
@@ -230,7 +243,7 @@ class MCCA:
 
 
 def _compute_cross_covariance(X):
-    """Computes cross-covariance of PCA scores or components between subjects.
+    """Compute cross-covariance of PCA scores or components between subjects.
 
     Parameters
     ----------
@@ -238,10 +251,14 @@ def _compute_cross_covariance(X):
 
     Returns
     -------
-        R_kl (ndarray): Block matrix containing all cross-covariances R_kl = X_k^T X_l between subjects k, l, k != l
-                        with shape (subjects * PCs, subjects * PCs)
-        R_kk (ndarray): Block diagonal matrix containing auto-correlations R_kk = X_k^T X_k in its diagonal blocks
-                        with shape (subjects * PCs, subjects * PCs)
+    R_kl (ndarray):
+        Block matrix containing all cross-covariances R_kl = X_k^T X_l between
+        subjects k, l, k != l
+        with shape (subjects * PCs, subjects * PCs)
+    R_kk (ndarray):
+        Block diagonal matrix containing auto-correlations R_kk = X_k^T X_k in its
+        diagonal blocks
+        with shape (subjects * PCs, subjects * PCs)
     """
     n_subjects, n_samples, n_pcs = X.shape
     R = np.cov(X.swapaxes(1, 2).reshape(n_subjects * n_pcs, n_samples))

@@ -1,4 +1,4 @@
-""" """
+"""Module for leave-one-out crossvalidation evaluation."""
 
 import itertools
 import multiprocessing as mp
@@ -10,7 +10,8 @@ import hmp
 
 
 def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
-    """
+    """Fit the model and compute likelihood of left out data.
+
     Fits model based on init settings and initial_fit parameters to data of
     n - 1 (participant) participants, and calculates likelihood on the left-out
     participant.
@@ -48,7 +49,7 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
     data_pp = hmp.utils.stack_data(data.sel(participant=participant, drop=False))
 
     # Building models
-    model_without_pp = hmp.models.hmp(
+    model_without_pp = hmp.models.HMP(
         data_without_pp,
         sfreq=init.sfreq,
         event_width=init.event_width,
@@ -59,7 +60,7 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
         distribution=init.distribution,
     )
 
-    model_pp = hmp.models.hmp(
+    model_pp = hmp.models.HMP(
         data_pp,
         sfreq=init.sfreq,
         event_width=init.event_width,
@@ -70,7 +71,8 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
         distribution=init.distribution,
     )
 
-    # fit the HMP using previously estimated parameters as initial parameters, and estimate likelihood
+    # fit the HMP using previously estimated parameters as initial parameters,
+    # and estimate likelihood
     dur_ratio = model_pp.mean_d / model_without_pp.mean_d
     if "level" in initial_fit.dims:
         n_eve = initial_fit.pars_map.shape[1] - 1
@@ -134,7 +136,8 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
 
 
 def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
-    """
+    """Perform leave-one-out cross validation.
+
     Performs leave-one-out cross validation. For provided estimate(s), it will perform loocv by
     leaving out one participant, estimating a fit, and computing the likelihood of the data from
     the left out participant with the estimated parameters. This is repeated for all participants.
@@ -183,10 +186,12 @@ def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
         if print_warning:
             print()
             print(
-                "IMPORTANT:  This loocv procedure is incorrect in the sense that an initial estimate"
+                "IMPORTANT:  This loocv procedure is incorrect in the sense that an "
+                "initial estimate"
             )
             print(
-                "is used to inform both the fit of the left-out participant and the other participants."
+                "is used to inform both the fit of the left-out participant and the other "
+                "participants."
             )
             print("This means that they are not fully independent, unless the initial estimate is")
             print(
@@ -224,7 +229,8 @@ def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
             if verbose:
                 if "level" in model.dims:
                     print(
-                        f"\tLOOCV for multilevel model with {np.max(model.event).values + 1} event(s)"
+                        f"\tLOOCV for multilevel model with "
+                        f"{np.max(model.event).values + 1} event(s)"
                     )
                 else:
                     print(
@@ -308,7 +314,8 @@ def loocv(init, data, estimate, cpus=1, verbose=True, print_warning=True):
 
 
 def example_fit_n_func(hmp_model, n_events, magnitudes=None, parameters=None, verbose=False):
-    """
+    """Fit function example.
+
     Example of simple function that can be used with loocv_func.
     This fits a model with n_events and potentially provided mags and params.
     Can be called, for example, as :
@@ -320,7 +327,8 @@ def example_fit_n_func(hmp_model, n_events, magnitudes=None, parameters=None, ve
 def example_complex_fit_n_func(
     hmp_model, max_events=None, n_events=1, mags_map=None, pars_map=None, conds=None, verbose=False
 ):
-    """
+    """Fit function, complex example.
+
     Example of a complex function that can be used with loocv_func.
     This function first performs backwards estimation up to max_events,
     and follows this with a condition-based model of n_events, informed
@@ -333,7 +341,8 @@ def example_complex_fit_n_func(
                      [0, 0, 0, 0, 3, 0],
                      [0, 0, 0, 0, 4, 0]])
         conds = {'rep': np.arange(5)+1}
-        loocv_func(hmp_model, hmp_data, example_complex_fit_n_func, func_args=[7, 5, None, pars_map,conds])
+        loocv_func(hmp_model, hmp_data, example_complex_fit_n_func,
+                   func_args=[7, 5, None, pars_map,conds])
     """
     # fit backward model up to max_events
     backward_model = hmp_model.backward_estimation(max_events)
@@ -359,7 +368,8 @@ def example_complex_fit_n_func(
 def loocv_estimate_func(
     data, init, participant, func_estimate, func_args=None, cpus=None, verbose=False
 ):
-    """
+    """Apply function estimation.
+
     Applies func_estimate with func_args to data of n - 1 (participant) participants.
     func_estimate should return an estimated hmp model; either a single model,
     a level model, or a backward estimation model. This model is then used
@@ -403,7 +413,7 @@ def loocv_estimate_func(
     )
 
     # Building model
-    model_without_pp = hmp.models.hmp(
+    model_without_pp = hmp.models.HMP(
         data_without_pp,
         sfreq=init.sfreq,
         event_width=init.event_width,
@@ -426,7 +436,8 @@ def loocv_estimate_func(
 
 
 def loocv_loglikelihood(data, init, participant, estimate, cpus=None, verbose=False):
-    """
+    """Compute the log-likelihood of the fit.
+
     Calculate loglikelihood of fit on participant participant using parameters from estimate,
     either using single model or level based model.
 
@@ -458,7 +469,7 @@ def loocv_loglikelihood(data, init, participant, estimate, cpus=None, verbose=Fa
     data_pp = hmp.utils.stack_data(data.sel(participant=participant, drop=False))
 
     # Building model
-    model_pp = hmp.models.hmp(
+    model_pp = hmp.models.HMP(
         data_pp,
         sfreq=init.sfreq,
         event_width=init.event_width,
@@ -476,7 +487,7 @@ def loocv_loglikelihood(data, init, participant, estimate, cpus=None, verbose=Fa
     locations = np.zeros(estimate.parameters.dropna("stage").values.shape[-2], dtype=int)
     locations[1:-1] = init.location
     if "level" in estimate.dims:
-        locations = np.tile(locations, (initial_fit.parameters.shape[0], 1))
+        locations = np.tile(locations, (initial_fit.parameters.shape[0], 1))  # Fix this
         from itertools import product
 
         # create levels for this participant based on estimate.levels_dict and model_pp
@@ -533,7 +544,8 @@ def loocv_loglikelihood(data, init, participant, estimate, cpus=None, verbose=Fa
 
 
 def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
-    """
+    """Perform leave one-out cross validation.
+
     Performs leave-one-out cross validation using func_estimate to calculate the initial fit.
     It will perform loocv by leaving out one participant, applying 'func_estimate' to the
     data to estimate a fit, and computing the likelihood of the data from the left out
@@ -632,11 +644,13 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
             if verbose:
                 if "level" in estimates[0].dims:
                     print(
-                        f"Calculating likelihood for multilevel model with {np.max(estimates[0].event).values + 1} event(s)"
+                        f"Calculating likelihood for multilevel model with "
+                        f"{np.max(estimates[0].event).values + 1} event(s)"
                     )
                 else:
                     print(
-                        f"Calculating likelihood for single model with {np.max(estimates[0].event).values + 1} event(s)"
+                        f"Calculating likelihood for single model with "
+                        f"{np.max(estimates[0].event).values + 1} event(s)"
                     )
 
             loocv = []
@@ -677,14 +691,16 @@ def loocv_func(init, data, func_estimate, func_args=None, cpus=1, verbose=True):
 
             if verbose:
                 print(
-                    f"Calculating likelihood for backward estimation models with {max_n_events_over_subjects} to {min_n_events} event(s)"
+                    f"Calculating likelihood for backward estimation models with "
+                    f"{max_n_events_over_subjects} to {min_n_events} event(s)"
                 )
 
             loocv_back = []
             for n_eve in np.arange(max_n_events_over_subjects, min_n_events - 1, -1):
                 if verbose:
                     print(
-                        f"  Calculating likelihood for backward estimation model with {n_eve} event(s)"
+                        f"  Calculating likelihood for backward estimation model with {n_eve} "
+                        "event(s)"
                     )
                 loocv = []
                 if cpus == 1:  # not mp
@@ -743,7 +759,8 @@ def backward_func(
     tolerance=1e-4,
     max_iteration=1e3,
 ):
-    """
+    """Wrap backward estimation helper.
+
     Helper function for loocv_backward. Calls backward_estimation on hmp_model with provided args.
     """
     return hmp_model.backward_estimation(
@@ -752,8 +769,10 @@ def backward_func(
 
 
 def fit_backward_func(hmp_model, by_sample=False, min_events=0, tolerance=1e-4, max_iteration=1e3):
-    """
-    Helper function for fit_loocv_backward. Calls fit function followed by backward_estimation on hmp_model with provided args.
+    """Wrap fit backward function.
+
+    Helper function for fit_loocv_backward. Calls fit function followed by backward_estimation on
+    hmp_model with provided args.
     """
     # fit model
     fit_model = hmp_model.fit(by_sample=by_sample, tolerance=tolerance)
@@ -777,40 +796,43 @@ def loocv_backward(
     cpus=1,
     verbose=True,
 ):
-    """
-     Performs leave-one-out cross validation using backward_estimation to calculate the initial fit.
-     It will perform loocv by leaving out one participant, applying 'backward_estimation' to the
-     data to estimate a fit, and computing the likelihood of the data from the left out
-     participant with the estimated parameters. This is repeated for all participants.
+    """Perform leave-one-out cross validation with backward estimation.
 
-     Hmp model settings are based on init.
+    Performs leave-one-out cross validation using backward_estimation to calculate the initial fit.
+    It will perform loocv by leaving out one participant, applying 'backward_estimation' to the
+    data to estimate a fit, and computing the likelihood of the data from the left out
+    participant with the estimated parameters. This is repeated for all participants.
+
+    Hmp model settings are based on init.
 
     Parameters
     ----------
-     init : hmp model
-         initialized hmp model
-     data : xarray.Dataset
-         xarray data from transform_data()
-     max_events : int
-         Maximum number of events to be estimated, by default the output of hmp.models.hmp.compute_max_events()
-     min_events : int
-         The minimum number of events to be estimated
-     max_starting_points: int
-         how many random starting points iteration to try for the model estimating the maximal number of events
+    init : hmp model
+        initialized hmp model
+    data : xarray.Dataset
+        xarray data from transform_data()
+    max_events : int
+        Maximum number of events to be estimated, by default the output of
+        hmp.models.HMP.compute_max_events()
+    min_events : int
+        The minimum number of events to be estimated
+    max_starting_points: int
+        how many random starting points iteration to try for the model estimating the maximal number
+        of events.
     tolerance: float
-         Tolerance applied to the expectation maximization in the EM() function
-     max_iteration: int
-         Maximum number of iteration for the expectation maximization in the EM() function
-     cpus : int
-         Nr of cpus to use. If 1, LOOCV is performed on a single CPU. Otherwise
-         on the provided int or setting in init.
-         We recommend using 1 CPU at this level on a laptop or normal PC. Only use multiple
-         CPUs if you have *a lot* of memory available.
-     verbose : bool
+        Tolerance applied to the expectation maximization in the EM() function
+    max_iteration: int
+        Maximum number of iteration for the expectation maximization in the EM() function
+    cpus : int
+        Nr of cpus to use. If 1, LOOCV is performed on a single CPU. Otherwise
+        on the provided int or setting in init.
+        We recommend using 1 CPU at this level on a laptop or normal PC. Only use multiple
+        CPUs if you have *a lot* of memory available.
+    verbose : bool
 
     Returns
     -------
-     likelihood object and fitten backward estimation models
+        likelihood object and fitten backward estimation models
     """
     return loocv_func(
         init,
@@ -832,11 +854,12 @@ def loocv_fit_backward(
     cpus=1,
     verbose=True,
 ):
-    """
+    """Perform leave-one-out cross validation with fit function and backward estimation.
+
     Performs leave-one-out cross validation using the fit function followed by backward_estimation
     using the fit-ted model as the maximal model to calculate the initial fit.
-    It will perform loocv by leaving out one participant, applying 'fit + backward_estimation' to the
-    data to estimate a fit, and computing the likelihood of the data from the left out
+    It will perform loocv by leaving out one participant, applying 'fit + backward_estimation'
+    to the data to estimate a fit, and computing the likelihood of the data from the left out
     participant with the estimated parameters. This is repeated for all participants. Because the
     fit function might return models with different numbers of events, loglikelihood are calculated
     for models that exist for all folds.
@@ -856,7 +879,8 @@ def loocv_fit_backward(
     min_events : int
         The minimum number of events to be estimated in backward_estimation
     tolerance: float
-        Tolerance applied to the expectation maximization in both the fit function and the EM() function
+        Tolerance applied to the expectation maximization in both the fit function and
+        the EM() function
     max_iteration: int
         Maximum number of iteration for the expectation maximization in the EM() function
     cpus : int

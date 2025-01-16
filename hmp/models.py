@@ -1,4 +1,4 @@
-""" """
+"""Models to compute analysis."""
 
 import gc
 import itertools
@@ -22,7 +22,34 @@ except NameError:
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
 
-class hmp:
+class HMP:
+    """The model to analyze the raw data.
+
+    Parameters
+    ----------
+    data : xr.Dataset
+        xr.Dataset obtained through the hmp.utils.transform_data() function
+    sfreq : float
+        (optional) Sampling frequency of the signal if not provided, inferred from the epoch_data
+    cpus: int
+        How many cpus to use for the functions`using multiprocessing`
+    event_width : float
+        width of events in milliseconds, by default 50 ms.
+    shape: float
+        shape of the probability distributions of the by-trial stage onset
+        (one shape for all stages)
+    template: ndarray
+        Expected shape for the transition event used in the cross-correlation,
+        should be a vector of values capturing the expected shape over the sampling frequency
+        of the data. If None, the template is created as a half-sine shape with a frequency
+        derived from the event_width argument
+    location : float
+        Minimum duration between events in samples. Default is the event_width.
+    distribution : str
+        Probability distribution for the by-trial onset of stages can be
+        one of 'gamma','lognormal','wald', or 'weibull'
+    """
+
     def __init__(
         self,
         data,
@@ -34,28 +61,7 @@ class hmp:
         location=None,
         distribution="gamma",
     ):
-        """
-        This function intializes an HMP model by providing the data, the expected probability distribution for the by-trial variation in stage onset, and the expected duration of the transition event.
 
-        Parameters
-        ----------
-        data : xr.Dataset
-            xr.Dataset obtained through the hmp.utils.transform_data() function
-        sfreq : float
-            (optional) Sampling frequency of the signal if not provided, inferred from the epoch_data
-        cpus: int
-            How many cpus to use for the functions`using multiprocessing`
-        event_width : float
-            width of events in milliseconds, by default 50 ms.
-        shape: float
-            shape of the probability distributions of the by-trial stage onset (one shape for all stages)
-        template: ndarray
-            Expected shape for the transition event used in the cross-correlation, should be a vector of values capturing the expected shape over the sampling frequency of the data. If None, the template is created as a half-sine shape with a frequency derived from the event_width argument
-        location : float
-            Minimum duration between events in samples. Default is the event_width.
-        distribution : str
-            Probability distribution for the by-trial onset of stages can be one of 'gamma','lognormal','wald', or 'weibull'
-        """
         match distribution:
             case "gamma":
                 from scipy.stats import gamma as sp_dist
@@ -151,8 +157,10 @@ class hmp:
         )
 
     def _event_shape(self):
-        """
-        Computes the template of a half-sine (event) with given frequency f and sampling frequency
+        """Compute the event shape.
+
+        Computes the template of a half-sine (event) with given frequency f and sampling frequency.
+
         Equations in section 2.4 in the 2024 paper
         """
         event_idx = np.arange(self.event_width_samples) * self.steps + self.steps / 2
@@ -166,7 +174,8 @@ class hmp:
         return template
 
     def cross_correlation(self, data):
-        """
+        """Set the correlation between the samples and the pattern.
+
         This function puts on each sample the correlation of that sample and the next
         x samples (depends on sampling frequency and event size) with a half sine on time domain.
 
@@ -211,25 +220,31 @@ class hmp:
         pars_map=None,
         level_dict=None,
     ):
-        """
-        Fit HMP for a single n_events model
+        """Fit HMP for a single n_events model.
 
         Parameters
         ----------
         n_events : int
             how many events are estimated
         magnitudes : ndarray
-            2D ndarray n_events * components (or 3D iteration * n_events * n_components), initial conditions for events magnitudes. If magnitudes are estimated, the list provided is used as starting point,
-            if magnitudes are fixed, magnitudes estimated will be the same as the one provided. When providing a list, magnitudes need to be in the same order
+            2D ndarray n_events * components (or 3D iteration * n_events * n_components),
+            initial conditions for events magnitudes. If magnitudes are estimated, the list provided
+            is used as starting point,
+            if magnitudes are fixed, magnitudes estimated will be the same as the one provided.
+            When providing a list, magnitudes need to be in the same order
             _n_th magnitudes parameter is  used for the _n_th event
         parameters : list
-            list of initial conditions for Gamma distribution parameters parameter (2D stage * parameter or 3D iteration * n_events * n_components). If parameters are estimated, the list provided is used as starting point,
-            if parameters are fixed, parameters estimated will be the same as the one provided. When providing a list, stage need to be in the same order
+            list of initial conditions for Gamma distribution parameters parameter
+            (2D stage * parameter or 3D iteration * n_events * n_components).
+            If parameters are estimated, the list provided is used as starting point,
+            if parameters are fixed, parameters estimated will be the same as the one provided.
+            When providing a list, stage need to be in the same order
             _n_th gamma parameter is  used for the _n_th stage
         parameters_to_fix : bool
             To fix (True) or to estimate (False, default) the parameters of the gammas
         magnitudes_to_fix: bool
-            To fix (True) or to estimate (False, default) the magnitudes of the channel contribution to the events
+            To fix (True) or to estimate (False, default) the magnitudes of the channel contribution
+            to the events
         tolerance: float
             Tolerance applied to the expectation maximization in the EM() function
         max_iteration: int
@@ -241,16 +256,19 @@ class hmp:
         starting_points: int
             How many starting points to use for the EM() function
         return_max: bool
-            In the case of multiple starting points, dictates whether to only return the max loglikelihood model (True, default) or all of the models (False)
+            In the case of multiple starting points, dictates whether to only return
+            the max loglikelihood model (True, default) or all of the models (False)
         verbose: bool
             True displays output useful for debugging, recommended for first use
         cpus: int
             number of cores to use in the multiprocessing functions
-        mags_map: 2D nd_array n_level * n_events indicating which magnitudes are shared between levels.
-        pars_map: 2D nd_array n_level * n_stages indicating which parameters are shared between levels.
+        mags_map: 2D nd_array n_level * n_events indicating which magnitudes are shared
+        between levels.
+        pars_map: 2D nd_array n_level * n_stages indicating which parameters are shared
+        between levels.
         levels: dict | list
-            if one level, use a dict with the name in the metadata and a list of the levels in the same
-            order as the rows of the map(s). E.g., {'cue': ['SP', 'AC']}
+            if one level, use a dict with the name in the metadata and a list of the levels
+            in the same order as the rows of the map(s). E.g., {'cue': ['SP', 'AC']}
             if multiple levels need to be crossed, use a list of dictionaries per level. E.g.,
             [{'cue': ['SP', 'AC',]}, {'resp': ['left', 'right']}]. These are crossed by repeating
             the first level as many times as there are levels in the selevel level. E.g., SP-left,
@@ -270,10 +288,12 @@ class hmp:
                 n_events = len(magnitudes)
             else:
                 raise ValueError(
-                    "The fit_n() function needs to be provided with a number of expected transition events"
+                    "The fit_n() function needs to be provided with a number of expected transition"
+                    " events"
                 )
         assert n_events <= self.compute_max_events(), (
-            f"{n_events} events do not fit given the minimum duration of {min(self.durations)} and a location of {self.location}"
+            f"{n_events} events do not fit given the minimum duration of {min(self.durations)}"
+            " and a location of {self.location}"
         )
 
         if level_dict is None:
@@ -340,7 +360,8 @@ class hmp:
             if len(np.shape(parameters)) == 2:  # broadcast provided parameters across levels
                 parameters = np.tile(parameters, (n_levels, 1, 1))
             assert parameters.shape[1] == n_events + 1, (
-                f"Provided parameters ({parameters.shape[1]} should match number of stages {n_events + 1}"
+                f"Provided parameters ({parameters.shape[1]} should match number of "
+                f"stages {n_events + 1}"
             )
 
             # set params missing stages to nan to make it obvious in the results
@@ -530,9 +551,7 @@ class hmp:
         return estimated
 
     def _level_constructor(self, magnitudes, parameters, mags_map, pars_map, level_dict, verbose):
-        """
-        Adapt model to levels
-        """
+        """Adapt model to levels."""
         ## levels
         assert isinstance(level_dict, dict), "levels have to be specified as a dictionary"
 
@@ -609,7 +628,8 @@ class hmp:
                 print("\n-----")
                 print("Negative parameters. Note that this stage is left out, while the parameters")
                 print(
-                    "of the other stages are compared column by column. In this parameter map example:"
+                    "of the other stages are compared column by column. "
+                    "In this parameter map example:"
                 )
                 print(np.array([[0, 0, 0, 0], [0, -1, 0, 0]]))
                 print(
@@ -633,10 +653,10 @@ class hmp:
         )
         return n_levels, levels, clabels, pars_map, mags_map
 
-    def _EM_star(self, args):  # for tqdm usage
+    def _EM_star(self, args):  # for tqdm usage  #noqa
         return self.EM(*args)
 
-    def EM(
+    def EM(  #noqa
         self,
         magnitudes,
         parameters,
@@ -651,25 +671,31 @@ class hmp:
         levels=None,
         cpus=1,
     ):
-        """
-        Expectation maximization function underlying fit
+        """Fit using expectation maximization.
 
         Parameters
         ----------
         n_events : int
             how many events are estimated
         magnitudes : ndarray
-            2D ndarray n_events * components (or 3D iteration * n_events * n_components), initial levelitions for events magnitudes. If magnitudes are estimated, the list provided is used as starting point,
-            if magnitudes are fixed, magnitudes estimated will be the same as the one provided. When providing a list, magnitudes need to be in the same order
+            2D ndarray n_events * components (or 3D iteration * n_events * n_components),
+            initial levelitions for events magnitudes. If magnitudes are estimated,
+            the list provided is used as starting point,
+            if magnitudes are fixed, magnitudes estimated will be the same as the one provided.
+            When providing a list, magnitudes need to be in the same order
             _n_th magnitudes parameter is  used for the _n_th event
         parameters : list
-            list of initial conditions for Gamma distribution parameters parameter (2D stage * parameter or 3D iteration * n_events * n_components). If parameters are estimated, the list provided is used as starting point,
-            if parameters are fixed, parameters estimated will be the same as the one provided. When providing a list, stage need to be in the same order
+            list of initial conditions for Gamma distribution parameters parameter
+            (2D stage * parameter or 3D iteration * n_events * n_components).
+            If parameters are estimated, the list provided is used as starting point,
+            if parameters are fixed, parameters estimated will be the same as the one provided.
+            When providing a list, stage need to be in the same order
             _n_th gamma parameter is  used for the _n_th stage
         maximization: bool
             If True (Default) perform the maximization phase in EM() otherwhise skip
         magnitudes_to_fix: bool
-            To fix (True) or to estimate (False, default) the magnitudes of the channel contribution to the events
+            To fix (True) or to estimate (False, default) the magnitudes of the channel contribution
+            to the events
         parameters_to_fix : bool
             To fix (True) or to estimate (False, default) the parameters of the gammas
         max_iteration: int
@@ -780,7 +806,8 @@ class hmp:
         )
         if i == max_iteration:
             warn(
-                f"Convergence failed, estimation hitted the maximum number of iteration ({int(max_iteration)})",
+                f"Convergence failed, estimation hitted the maximum number of iteration "
+                f"({int(max_iteration)})",
                 RuntimeWarning,
             )
         return lkh, magnitudes, parameters, eventprobs, np.array(traces), np.array(param_dev)
@@ -809,7 +836,8 @@ class hmp:
             # average across trials
 
         # Gamma parameters from Expectation Eq 10 from 2024 paper
-        # calc averagepos here as mean_d can be level dependent, whereas scale_parameters() assumes it's general
+        # calc averagepos here as mean_d can be level dependent, whereas scale_parameters() assumes
+        # it's general
         event_times_mean = np.concatenate(
             [
                 np.arange(self.max_d) @ eventprobs.mean(axis=1),
@@ -832,16 +860,23 @@ class hmp:
         lkh_only=False,
         by_trial_lkh=False,
     ):
-        """
+        """Estimate probabilities.
+
         Parameters
         ----------
         magnitudes : ndarray
-            2D ndarray n_events * components (or 3D iteration * n_events * n_components), initial conditions for events magnitudes. If magnitudes are estimated, the list provided is used as starting point,
-            if magnitudes are fixed, magnitudes estimated will be the same as the one provided. When providing a list, magnitudes need to be in the same order
+            2D ndarray n_events * components (or 3D iteration * n_events * n_components),
+            initial conditions for events magnitudes. If magnitudes are estimated,
+            the list provided is used as starting point,
+            if magnitudes are fixed, magnitudes estimated will be the same as the one provided.
+            When providing a list, magnitudes need to be in the same order
             _n_th magnitudes parameter is  used for the _n_th event
         parameters : list
-            list of initial conditions for Gamma distribution parameters parameter (2D stage * parameter or 3D iteration * n_events * n_components). If parameters are estimated, the list provided is used as starting point,
-            if parameters are fixed, parameters estimated will be the same as the one provided. When providing a list, stage need to be in the same order
+            list of initial conditions for Gamma distribution parameters parameter
+            (2D stage * parameter or 3D iteration * n_events * n_components).
+            If parameters are estimated, the list provided is used as starting point,
+            if parameters are fixed, parameters estimated will be the same as the one provided.
+            When providing a list, stage need to be in the same order
             _n_th gamma parameter is  used for the _n_th stage
         locations : ndarray
             1D ndarray of int with size n_events+1, locations for events
@@ -979,16 +1014,23 @@ class hmp:
     def _estim_probs_levels(
         self, magnitudes, parameters, locations, mags_map, pars_map, levels, lkh_only=False, cpus=1
     ):
-        """
+        """Estimate probability levels.
+
         Parameters
         ----------
         magnitudes : ndarray
-            2D ndarray n_events * components (or 3D iteration * n_events * n_components), initial conditions for events magnitudes. If magnitudes are estimated, the list provided is used as starting point,
-            if magnitudes are fixed, magnitudes estimated will be the same as the one provided. When providing a list, magnitudes need to be in the same order
+            2D ndarray n_events * components (or 3D iteration * n_events * n_components),
+            initial conditions for events magnitudes. If magnitudes are estimated,
+            the list provided is used as starting point,
+            if magnitudes are fixed, magnitudes estimated will be the same as the one provided.
+            When providing a list, magnitudes need to be in the same order
             _n_th magnitudes parameter is  used for the _n_th event
         parameters : list
-            list of initial conditions for Gamma distribution parameters parameter (2D stage * parameter or 3D iteration * n_events * n_components). If parameters are estimated, the list provided is used as starting point,
-            if parameters are fixed, parameters estimated will be the same as the one provided. When providing a list, stage need to be in the same order
+            list of initial conditions for Gamma distribution parameters parameter
+            (2D stage * parameter or 3D iteration * n_events * n_components).
+            If parameters are estimated, the list provided is used as starting point,
+            if parameters are fixed, parameters estimated will be the same as the one provided.
+            When providing a list, stage need to be in the same order
             _n_th gamma parameter is  used for the _n_th stage
         locations : ndarray
             2D n_level * n_events array indication locations for all events
@@ -1047,8 +1089,9 @@ class hmp:
             return [likelihood, eventprobs]
 
     def distribution_pmf(self, shape, scale):
-        """
-        Returns PMF for a provided scipy disttribution with shape and scale, on a range from 0 to max_length
+        """Return PMF for a provided scipy disttribution.
+
+        Uses the shape and scale, on a range from 0 to max_length.
 
         Parameters
         ----------
@@ -1068,7 +1111,8 @@ class hmp:
         return p
 
     def scale_parameters(self, eventprobs=None, n_events=None, averagepos=None):
-        """
+        """Scale the parameters for the distribution.
+
         Used for the re-estimation in the EM procdure. The likeliest location of
         the event is computed from eventprobs. The scale parameter are then taken as the average
         distance between the events
@@ -1105,7 +1149,8 @@ class hmp:
         maximization=True,
         max_iteration=1e3,
     ):
-        """
+        """Perform the backward estimation.
+
         First read or estimate max_event solution then estimate max_event - 1 solution by
         iteratively removing one of the event and pick the one with the highest
         loglikelihood
@@ -1113,14 +1158,16 @@ class hmp:
         Parameters
         ----------
         max_events : int
-            Maximum number of events to be estimated, by default the output of hmp.models.hmp.compute_max_events()
+            Maximum number of events to be estimated, by default the output of
+            hmp.models.hmp.compute_max_events()
         min_events : int
             The minimum number of events to be estimated
         max_fit : xarray
             To avoid re-estimating the model with maximum number of events it can be provided
             with this arguments, defaults to None
         max_starting_points: int
-            how many random starting points iteration to try for the model estimating the maximal number of events
+            how many random starting points iteration to try for the model estimating the maximal
+            number of events
         tolerance: float
             Tolerance applied to the expectation maximization in the EM() function
         maximization: bool
@@ -1133,7 +1180,8 @@ class hmp:
         if not max_fit:
             if max_starting_points > 0:
                 print(
-                    f"Estimating all solutions for maximal number of events ({max_events}) with 1 pre-defined starting point and {max_starting_points - 1} starting points"
+                    f"Estimating all solutions for maximal number of events ({max_events}) with 1 "
+                    "pre-defined starting point and {max_starting_points - 1} starting points"
                 )
             event_loo_results = [
                 self.fit_n(max_events, starting_points=max_starting_points, verbose=False)
@@ -1227,13 +1275,12 @@ class hmp:
         return event_loo_results
 
     def compute_max_events(self):
-        """
-        Compute the maximum possible number of events given event width  minimum reaction time
-        """
+        """Compute the maximum possible number of events given event width minimum reaction time."""
         return int(np.rint(np.percentile(self.durations, 10) // (self.location)))
 
     def gen_random_stages(self, n_events):
-        """
+        """Compute random stage duration.
+
         Returns random stage duration between 0 and mean RT by iteratively drawind sample from a
         uniform distribution between the last stage duration (equal to 0 for first iteration) and 1.
         Last stage is equal to 1-previous stage duration.
@@ -1275,32 +1322,40 @@ class hmp:
         by_sample=False,
         pval=None,
     ):
-        """
-         Instead of fitting an n event model this method starts by fitting a 1 event model (two stages) using each sample from the time 0 (stimulus onset) to the mean RT.
-         Therefore it tests for the landing point of the expectation maximization algorithm given each sample as starting point and the likelihood associated with this landing point.
-         As soon as a starting points reaches the convergence criterion, the function fits an n+1 event model and uses the next samples in the RT as starting point for the following event
+        """Fit the model starting with 1 event model.
+
+        Instead of fitting an n event model this method starts by fitting a 1 event model
+        (two stages) using each sample from the time 0 (stimulus onset) to the mean RT.
+        Therefore it tests for the landing point of the expectation maximization algorithm given
+        each sample as starting point and the likelihood associated with this landing point.
+        As soon as a starting points reaches the convergence criterion, the function fits an n+1
+        event model and uses the next samples in the RT as starting point for the following event
 
         Parameters
         ----------
-                  step: float
-                The size of the step from 0 to the mean RT, defaults to the widths of the expected event.
-                  verbose: bool
-                If True print information about the fit
-                  end: int
-                The maximum number of samples to explore within each trial
-                  trace: bool
-                If True keep the scale and magnitudes parameters for each iteration
-                  tolerance: float
-                The tolerance used for the convergence in the EM() function
-                  diagnostic: bool
-                If True print a diagnostic plot of the EM traces for each iteration and several statistics at each iteration
-             return_estimates : bool
-                return all intermediate models
-             by_sample : bool
-                try every sample as the starting point, even if a later event has already
-                been identified. This in case the method jumped over a local maximum in an earlier estimation.
-             pval: float
-                 p-value for the detection of the first event, test the first location for significance compared to a distribution of noise estimates
+        step: float
+            The size of the step from 0 to the mean RT, defaults to the widths of
+            the expected event.
+        verbose: bool
+            If True print information about the fit
+        end: int
+            The maximum number of samples to explore within each trial
+        trace: bool
+            If True keep the scale and magnitudes parameters for each iteration
+        tolerance: float
+            The tolerance used for the convergence in the EM() function
+        diagnostic: bool
+            If True print a diagnostic plot of the EM traces for each iteration and several
+            statistics at each iteration
+        return_estimates : bool
+            return all intermediate models
+        by_sample : bool
+            try every sample as the starting point, even if a later event has already
+            been identified. This in case the method jumped over a local maximum in an earlier
+            estimation.
+        pval: float
+            p-value for the detection of the first event, test the first location for significance
+            compared to a distribution of noise estimates
 
         Returns
         -------
@@ -1328,7 +1383,8 @@ class hmp:
         # Init mags
         mags = np.zeros((max_event_n, self.n_dims))  # final mags during estimation
 
-        # The first new detected event should be higher than the bias induced by splitting the RT in two random partition
+        # The first new detected event should be higher than the bias induced by splitting the RT
+        # in two random partition
         if pval is not None:
             lkh = self.fit_n(
                 1, maximization=False, starting_points=100, return_max=False, verbose=False
@@ -1377,8 +1433,11 @@ class hmp:
                 plt.plot(solutions.traces.T, alpha=0.3, c="k")
                 print()
                 print("Event found at sample " + str(sol_sample_new_event))
+                events_at = np.round(self.scale_to_mean(
+                                  np.cumsum(solutions.parameters.values[:, 1]),
+                                  self.shape)).astype(int)
                 print(
-                    f"Events at {np.round(self.scale_to_mean(np.cumsum(solutions.parameters.values[:, 1]), self.shape)).astype(int)}"
+                    f"Events at {events_at}"
                 )
                 print("lkh change: " + str(solutions.loglikelihood.values - lkh_prev))
             # check solution
@@ -1409,14 +1468,17 @@ class hmp:
                     plt.plot(solutions.traces.T, c=color, label=f"n-events {n_events - 1}")
                 if verbose:
                     print(
-                        f"Transition event {n_events - 1} found around sample {sol_sample_new_event}"
+                        f"Transition event {n_events - 1} found around sample "
+                        f"{sol_sample_new_event}"
                     )
 
             else:  # reject solution, search on
                 prev_sample = int(
                     np.round(self.scale_to_mean(np.sum(pars[: n_events - 1, 1]), self.shape))
                 )
-                if not by_sample:  # find furthest explored param. Note: this also work by_sample, just a tiny bit faster this way
+                # find furthest explored param. Note: this also work by_sample
+                # just a tiny bit faster this way
+                if not by_sample:
                     max_scale = np.max(
                         [np.sum(x[:n_events, 1]) for x in solutions.param_dev.values]
                     )
