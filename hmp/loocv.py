@@ -1,4 +1,4 @@
-"""Module for likelihood computations."""
+"""Module for leave-one-out crossvalidation evaluation."""
 
 import itertools
 import multiprocessing as mp
@@ -10,7 +10,7 @@ import hmp
 
 
 def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
-    """Fit the model and compute likelihood.
+    """Fit the model and compute likelihood of left out data.
 
     Fits model based on init settings and initial_fit parameters to data of
     n - 1 (participant) participants, and calculates likelihood on the left-out

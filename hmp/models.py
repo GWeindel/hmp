@@ -174,7 +174,7 @@ class HMP:
         return template
 
     def cross_correlation(self, data):
-        """Set the correlation for each sample and next samples.
+        """Set the correlation between the samples and the pattern.
 
         This function puts on each sample the correlation of that sample and the next
         x samples (depends on sampling frequency and event size) with a half sine on time domain.
