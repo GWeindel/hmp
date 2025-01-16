@@ -1433,10 +1433,11 @@ class HMP:
                 plt.plot(solutions.traces.T, alpha=0.3, c="k")
                 print()
                 print("Event found at sample " + str(sol_sample_new_event))
+                events_at = np.round(self.scale_to_mean(
+                                  np.cumsum(solutions.parameters.values[:, 1]),
+                                  self.shape)).astype(int)
                 print(
-                    f"Events at {np.round(self.scale_to_mean(
-                        np.cumsum(solutions.parameters.values[:, 1]),
-                        self.shape)).astype(int)}"
+                    f"Events at {events_at}"
                 )
                 print("lkh change: " + str(solutions.loglikelihood.values - lkh_prev))
             # check solution

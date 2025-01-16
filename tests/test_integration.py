@@ -84,7 +84,7 @@ def test_integration():
     # Comparing to simulated data, asserting that results are the one simulated
     events_a = np.load(event_a)
     data_a = hmp.utils.participant_selection(hmp_data, 'a')
-    init_sim = hmp.models.hmp(data=data_a)
+    init_sim = hmp.models.HMP(data=data_a)
     sim_source_times, true_pars, true_magnitudes, _ = simulations.simulated_times_and_parameters(events_a, init_sim)
     true_estimates = init_sim.fit_n(n_events, parameters = np.array([true_pars]), magnitudes=np.array([true_magnitudes]), maximization=False, verbose=True)
     true_topos = hmp.utils.event_topo(epoch_data, true_estimates, mean=True)
@@ -98,13 +98,13 @@ def test_integration():
     # Initializing models
     ## Testing different distribution implementation
     for distribution in  ['lognormal','wald','weibull','gamma']:
-        init_sim = hmp.models.hmp(data=hmp_data_sim,  
+        init_sim = hmp.models.HMP(data=hmp_data_sim,  
                             event_width=50, distribution=distribution, shape=2)
         estimates = init_sim.fit_n(n_events, verbose=True)
     
     ## different init parameters
-    init = hmp.models.hmp(hmp_data, sfreq=epoch_data.sfreq)
-    init_speed = hmp.models.hmp(hmp_speed_data, sfreq=epoch_data.sfreq)
+    init = hmp.models.HMP(hmp_data, sfreq=epoch_data.sfreq)
+    init_speed = hmp.models.HMP(hmp_speed_data, sfreq=epoch_data.sfreq)
     
     # Testing fit 
     ## fit_n tests
@@ -186,7 +186,7 @@ def test_integration():
     hmp.utils.save_eventprobs(selected.eventprobs, 'selected_eventprobs.csv')
     
     # Testing parallelized func 
-    init_speed = hmp.models.hmp(hmp_speed_data, sfreq=epoch_data.sfreq, cpus=2)
+    init_speed = hmp.models.HMP(hmp_speed_data, sfreq=epoch_data.sfreq, cpus=2)
     backward_speed = init_speed.backward_estimation(max_fit=estimates_speed, tolerance=1e-1, max_events=2)
     
     # LOOCV

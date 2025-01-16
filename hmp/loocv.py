@@ -49,7 +49,7 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
     data_pp = hmp.utils.stack_data(data.sel(participant=participant, drop=False))
 
     # Building models
-    model_without_pp = hmp.models.hmp(
+    model_without_pp = hmp.models.HMP(
         data_without_pp,
         sfreq=init.sfreq,
         event_width=init.event_width,
@@ -60,7 +60,7 @@ def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
         distribution=init.distribution,
     )
 
-    model_pp = hmp.models.hmp(
+    model_pp = hmp.models.HMP(
         data_pp,
         sfreq=init.sfreq,
         event_width=init.event_width,
@@ -413,7 +413,7 @@ def loocv_estimate_func(
     )
 
     # Building model
-    model_without_pp = hmp.models.hmp(
+    model_without_pp = hmp.models.HMP(
         data_without_pp,
         sfreq=init.sfreq,
         event_width=init.event_width,
@@ -469,7 +469,7 @@ def loocv_loglikelihood(data, init, participant, estimate, cpus=None, verbose=Fa
     data_pp = hmp.utils.stack_data(data.sel(participant=participant, drop=False))
 
     # Building model
-    model_pp = hmp.models.hmp(
+    model_pp = hmp.models.HMP(
         data_pp,
         sfreq=init.sfreq,
         event_width=init.event_width,
@@ -813,7 +813,7 @@ def loocv_backward(
         xarray data from transform_data()
     max_events : int
         Maximum number of events to be estimated, by default the output of
-        hmp.models.hmp.compute_max_events()
+        hmp.models.HMP.compute_max_events()
     min_events : int
         The minimum number of events to be estimated
     max_starting_points: int
