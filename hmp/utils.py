@@ -1,4 +1,4 @@
-""" """
+"""Functions to transform the input data and the estimates."""
 
 from warnings import filterwarnings, warn
 
@@ -19,35 +19,35 @@ filterwarnings(
 filterwarnings("ignore", "Mean of empty slice")  # When trying to center all-nans trials
 
 
-def gamma_scale_to_mean(scale, shape):
+def _gamma_scale_to_mean(scale, shape):
     return scale * shape
 
 
-def gamma_mean_to_scale(mean, shape):
+def _gamma_mean_to_scale(mean, shape):
     return mean / shape
 
 
-def logn_scale_to_mean(scale, shape):
+def _logn_scale_to_mean(scale, shape):
     return np.exp(scale + shape**2 / 2)
 
 
-def logn_mean_to_scale(mean, shape):
+def _logn_mean_to_scale(mean, shape):
     return np.exp(np.log(mean) - (shape**2 / 2))
 
 
-def wald_scale_to_mean(scale, shape):
+def _wald_scale_to_mean(scale, shape):
     return scale * shape
 
 
-def wald_mean_to_scale(mean, shape):
+def _wald_mean_to_scale(mean, shape):
     return mean / shape
 
 
-def weibull_scale_to_mean(scale, shape):
+def _weibull_scale_to_mean(scale, shape):
     return scale * gamma_func(1 + 1 / shape)
 
 
-def weibull_mean_to_scale(mean, shape):
+def _weibull_mean_to_scale(mean, shape):
     return mean / gamma_func(1 + 1 / shape)
 
 
@@ -70,36 +70,40 @@ def read_mne_data(
     low_pass=None,
     pick_channels="eeg",
     baseline=(None, 0),
-    upper_limit_RT=np.inf,
-    lower_limit_RT=0,
+    upper_limit_rt=np.inf,
+    lower_limit_rt=0,
     reject_threshold=None,
     scale=1,
     reference=None,
     ignore_rt=False,
 ):
-    """
-    Reads EEG/MEG data format (.fif or .bdf) using MNE's integrated function .
+    """Read EEG/MEG data format (.fif or .bdf) using MNE's integrated function.
 
     Notes
     -----
     - Only EEG or MEG data are selected (other channel types are discarded)
     - All times are expressed on the second scale.
     - If multiple files in pfiles the data of the group is read and seqentially processed.
-    - For non epoched data: Reaction Times are only computed if response trigger is in the epoch window (determined by tmin and tmax)
+    - For non epoched data: Reaction Times are only computed if response trigger is in the epoch
+    window (determined by tmin and tmax)
 
     Procedure:
     if data not already epoched:
-        0.1) the data is filtered with filters specified in low_pass and high_pass. Parameters of the filter are
-        determined by MNE's filter function.
-        0.2) if no events is provided, detect events in stimulus channel and keep events with id in event_id and resp_id.
-        0.3) eventual downsampling is performed if sfreq is lower than the data's sampling frequency. The event structure is
-        passed at the resample() function of MNE to ensure that events are approriately timed after downsampling.
-        0.4) epochs are created based on stimulus onsets (event_id) and tmin and tmax. Epoching removes any epoch where a
-        'BAD' annotiation is present and all epochs where an channel exceeds reject_threshold. Epochs are baseline
-        corrected from tmin to stimulus onset (time 0).)
-    1) Reaction times (RT) are computed based on the sample difference between onset of stimulus and response triggers.
-        If no response event happens after a stimulus or if RT > upper_limit_RT & < upper_limit_RT, RT is 0.
-    2) all the non-rejected epochs with positive RTs are cropped to stimulus onset to stimulus_onset + RT.
+        0.1) the data is filtered with filters specified in low_pass and high_pass.
+        Parameters of the filter are determined by MNE's filter function.
+        0.2) if no events is provided, detect events in stimulus channel and keep events with id in
+        event_id and resp_id.
+        0.3) eventual downsampling is performed if sfreq is lower than the data's sampling
+        frequency. The event structure is passed at the resample() function of MNE to ensure that
+        events are approriately timed after downsampling.
+        0.4) epochs are created based on stimulus onsets (event_id) and tmin and tmax. Epoching
+        removes any epoch where a 'BAD' annotiation is present and all epochs where an channel
+        exceeds reject_threshold. Epochs are baseline corrected from tmin to stim. onset (time 0).
+    1) Reaction times (RT) are computed based on the sample difference between onset of stimulus and
+    response triggers. If no response event happens after a stimulus or if RT > upper_limit_rt
+    & < upper_limit_rt, RT is 0.
+    2) all the non-rejected epochs with positive RTs are cropped to stimulus onset to
+    stimulus_onset + RT.
 
     Parameters
     ----------
@@ -112,13 +116,13 @@ def read_mne_data(
     sfreq : float
         Desired sampling frequency
     to_merge_id: dict
-        Dictionary containing the correspondance of named condition [keys] and event code [values] that needs to be
-        merged with the stimuli event in event_id
+        Dictionary containing the correspondance of named condition [keys] and event code [values]
+        that needs to be merged with the stimuli event in event_id
     subj_idx : list
         List of subject names
     events_provided : float
-        np.array with 3 columns -> [samples of the event, initial value of the channel, event code]. To use if the
-        automated event detection method of MNE is not appropriate
+        np.array with 3 columns -> [samples of the event, initial value of the channel, event code].
+        To use if the automated event detection method of MNE is not appropriate
     verbose : bool
         Whether to display MNE's message
     tmin : float
@@ -134,19 +138,21 @@ def read_mne_data(
     pick_channels: list
         'eeg' (default) to keep only EEG channels or  list of channel names to keep
     baseline : tuple
-        Time values to compute the baseline and substract to epoch data (usually some time before stimulus onset)
-    upper_limit_RT : float
+        Time values to compute the baseline and substract to epoch data (usually some time before
+        stimulus onset)
+    upper_limit_rt : float
         Upper limit for RTs. Longer RTs are discarded
-    lower_limit_RT : float
+    lower_limit_rt : float
         Lower limit for RTs. Shorter RTs are discarded
     reject_threshold : float
-        Rejection threshold to apply after cropping the epoch to the end of the sequence (e.g. RT), expressed in the unit of the data
+        Rejection threshold to apply after cropping the epoch to the end of the sequence (e.g. RT),
+        expressed in the unit of the data
     scale: float
         Scale to apply to the RT data (e.g. 1000 if ms)
     reference:
         What reference to use (see MNE documentation), if None, keep the existing one
     ignore_rt: bool
-        Use RT to parse the epochs (False, Default) or ignore the RT and parse up to tmaxx in epochs (True)
+        Use RT to parse the epochs (False, Default) or ignore RT and parse up to epoch tmax (True)
 
     Returns
     -------
@@ -163,13 +169,14 @@ def read_mne_data(
         subj_idx = ["S" + str(x) for x in np.arange(len(pfiles))]
     if isinstance(subj_idx, str):
         subj_idx = [subj_idx]
-    if upper_limit_RT < 0 or lower_limit_RT < 0:
+    if upper_limit_rt < 0 or lower_limit_rt < 0:
         raise ValueError("Limit to RTs cannot be negative")
     y = 0
     if metadata is not None:
         if len(pfiles) > 1 and len(metadata) != len(pfiles):
             raise ValueError(
-                f"Incompatible dimension between the provided metadata {len(metadata)} and the number of eeg files provided {len(pfiles)}"
+                f"Incompatible dimension between the provided metadata {len(metadata)} and the "
+                f"number of eeg files provided {len(pfiles)}"
             )
     else:
         metadata_i = None
@@ -178,7 +185,7 @@ def read_mne_data(
         print(f"Processing participant {participant}'s {dict_datatype[epoched]} {pick_channels}")
 
         # loading data
-        if epoched == False:  # performs epoching on raw data
+        if not epoched:  # performs epoching on raw data
             if ".fif" in participant:
                 data = mne.io.read_raw_fif(participant, preload=True, verbose=verbose)
             elif ".bdf" in participant:
@@ -199,9 +206,10 @@ def read_mne_data(
                     events = mne.events_from_annotations(data, verbose=verbose)[0]
                 if (
                     events[0, 1] > 0
-                ):  # bug from some stim channel, should be 0 otherwise indicates offset in the trggers
+                ):  # bug from some stim channel, should be 0 otherwise indicates offset in trggers
                     print(
-                        f"Correcting event values as trigger channel has offset {np.unique(events[:, 1])}"
+                        f"Correcting event values as trigger channel has offset "
+                        f"{np.unique(events[:, 1])}"
                     )
                     events[:, 2] = events[:, 2] - events[:, 1]  # correction on event value
                 events_values = np.concatenate(
@@ -213,9 +221,6 @@ def read_mne_data(
                 events = np.array(
                     [list(x) for x in events if x[2] in events_values]
                 )  # only keeps events with stim or response
-                events_stim = np.array(
-                    [list(x) for x in events if x[2] in event_id.values()]
-                )  # only stim
             elif len(events_provided[0]) == 3:
                 events_provided = events_provided[np.newaxis]
                 events = events_provided[y]
@@ -236,7 +241,8 @@ def read_mne_data(
                 decim = 1
                 if sfreq > data.info["sfreq"] + 1:
                     warn(
-                        f"Requested higher frequency {sfreq} than found in the EEG data, no resampling is performed"
+                        f"Requested higher frequency {sfreq} than found in the EEG data, no "
+                        f"resampling is performed"
                     )
             if high_pass is not None or low_pass is not None:
                 data.filter(high_pass, low_pass, fir_design="firwin", verbose=verbose)
@@ -310,10 +316,11 @@ def read_mne_data(
                     metadata_i = metadata.copy()
             else:
                 raise ValueError(
-                    "Metadata should be a pandas data-frame as generated by mne or be contained in the passed epoch data"
+                    "Metadata should be a pandas data-frame as generated by mne or be contained "
+                    "in the passed epoch data"
                 )
-        if upper_limit_RT == np.inf:
-            upper_limit_RT = epochs.tmax - offset_after_resp + 1 * (1 / sfreq)
+        if upper_limit_rt == np.inf:
+            upper_limit_rt = epochs.tmax - offset_after_resp + 1 * (1 / sfreq)
         if ignore_rt:
             metadata_i[rt_col] = epochs.tmax
         offset_after_resp_samples = np.rint(offset_after_resp * sfreq).astype(int)
@@ -328,17 +335,19 @@ def read_mne_data(
                 rts = rts / scale
             except:
                 raise ValueError(
-                    f"Expected column named {rt_col} in the provided metadata file, alternative names can be passed through the rt_col parameter"
+                    f"Expected column named {rt_col} in the provided metadata file, alternative "
+                    f"names can be passed through the rt_col parameter"
                 )
         elif rts is None:
             raise ValueError("Expected either a metadata Dataframe or an array of Reaction Times")
         rts_arr = np.array(rts)
         if verbose:
             print(
-                f"Applying reaction time trim to keep RTs between {lower_limit_RT} and {upper_limit_RT} seconds"
+                f"Applying reaction time trim to keep RTs between {lower_limit_rt} and "
+                f"{upper_limit_rt} seconds"
             )
-        rts_arr[rts_arr > upper_limit_RT] = 0  # removes RT above x sec
-        rts_arr[rts_arr < lower_limit_RT] = (
+        rts_arr[rts_arr > upper_limit_rt] = 0  # removes RT above x sec
+        rts_arr[rts_arr < lower_limit_rt] = (
             0  # removes RT below x sec, important as determines max events
         )
         rts_arr[np.isnan(rts_arr)] = 0  # too long trial
@@ -409,15 +418,15 @@ def read_mne_data(
     epoch_data = epoch_data.assign_attrs(
         lowpass=epochs.info["lowpass"],
         highpass=epochs.info["highpass"],
-        lower_limit_RT=lower_limit_RT,
-        upper_limit_RT=upper_limit_RT,
+        lower_limit_rt=lower_limit_rt,
+        upper_limit_rt=upper_limit_rt,
         reject_threshold=reject_threshold,
         n_trials=n_trials,
     )
     return epoch_data
 
 
-def _pick_channels(pick_channels, data, stim=True):
+def _pick_channels(pick_channels, data):
     try:
         data = data.pick(pick_channels)
     except:
@@ -428,16 +437,17 @@ def _pick_channels(pick_channels, data, stim=True):
 def hmp_data_format(
     data, sfreq, events=None, offset=0, participants=[], epochs=None, channels=None, metadata=None
 ):
-    """
-    Converting 3D matrix with dimensions (participant) * trials * channels * sample into xarray Dataset
+    """Convert to expected shape.
+
+    From 3D matrix with dimensions (participant) * trials * channels * sample into xarray Dataset
 
     Parameters
     ----------
     data : ndarray
         4/3D matrix with dimensions (participant) * trials * channels * sample
     events : ndarray
-        np.array with 3 columns -> [samples of the event, initial value of the channel, event code]. To use if the
-        automated event detection method of MNE is not appropriate
+        np.array with 3 columns -> [samples of the event, initial value of the channel, event code].
+        To use if the automated event detection method of MNE is not appropriate.
     sfreq : float
         Sampling frequency of the data
     participants : list
@@ -497,16 +507,12 @@ def hmp_data_format(
 
 
 def _standardize(x):
-    """
-    Scaling variances to mean variance of the group
-    """
+    """Scaling variances to mean variance of the group."""
     return (x.data / x.data.std(dim=...)) * x.mean_std
 
 
 def _center(data):
-    """
-    Center the data
-    """
+    """Center the data."""
     mean_last_dim = np.nanmean(data.values, axis=-1)
     mean_last_dim_expanded = np.expand_dims(mean_last_dim, axis=-1)
     centred = data.values - mean_last_dim_expanded
@@ -516,9 +522,7 @@ def _center(data):
 
 
 def zscore_xarray(data):
-    """
-    Zscore of the data in an xarray, avoiding any nans
-    """
+    """Zscore of the data in an xarray, avoiding any nans."""
     if isinstance(data, xr.Dataset):  # if no PCA
         data = data.data
     non_nan_mask = ~np.isnan(data.values)
@@ -529,21 +533,20 @@ def zscore_xarray(data):
     return data
 
 
-def stack_data(data, subjects_variable="participant", channel_variable="component", single=False):
-    """
-    Stacks the data going from format [participant * epochs * samples * channels] to [samples * channels]
-    with sample indexes starts and ends to delimitate the epochs.
+def stack_data(data, subjects_variable="participant"):
+    """Stack the data.
+
+    Going from format [participant * epochs * samples * channels] to
+    [samples * channels] with sample indexes starts and ends to delimitate the epochs.
 
 
     Parameters
     ----------
     data : xarray
-        unstacked xarray data from transform_data() or anyother source yielding an xarray with dimensions
-        [participant * epochs * samples * channels]
+        unstacked xarray data from transform_data() or anyother source yielding an xarray with
+        dimensions [participant * epochs * samples * channels]
     subjects_variable : str
         name of the dimension for subjects ID
-    single : bool
-        Whether participant is unique (True) or a group of participant (False)
 
     Returns
     -------
@@ -552,9 +555,10 @@ def stack_data(data, subjects_variable="participant", channel_variable="componen
     """
     if isinstance(data, (xr.DataArray, xr.Dataset)) and "component" not in data.dims:
         data = data.rename_dims({"channels": "component"})
-    if "participant" not in data.dims:
-        data = data.expand_dims("participant")
-    data = data.stack(all_samples=["participant", "epochs", "samples"]).dropna(dim="all_samples")
+    if subjects_variable not in data.dims:
+        data = data.expand_dims(subjects_variable)
+    data = data.stack(all_samples=[subjects_variable, "epochs", "samples"]).\
+        dropna(dim="all_samples")
     return data
 
 
@@ -591,7 +595,7 @@ def _pca(pca_ready_data, n_comp, channels):
     from sklearn.decomposition import PCA
 
     # pca_ready_data = pca_ready_data.transpose(...,'channels')
-    if n_comp == None:
+    if n_comp is None:
         import matplotlib.pyplot as plt
 
         n_comp = np.shape(pca_ready_data)[0] - 1
@@ -609,7 +613,11 @@ def _pca(pca_ready_data, n_comp, channels):
         plt.show()
         n_comp = int(
             input(
-                f"How many PCs (95 and 99% explained variance at component n{np.where(np.cumsum(pca.explained_variance_ratio_) >= 0.95)[0][0] + 1} and n{np.where(np.cumsum(pca.explained_variance_ratio_) >= 0.99)[0][0] + 1}; components till n{np.where(pca.explained_variance_ratio_ >= 0.01)[0][-1] + 1} explain at least 1%)?"
+                f"How many PCs (95 and 99% explained variance at component "
+                f"n{np.where(np.cumsum(pca.explained_variance_ratio_) >= 0.95)[0][0] + 1} and "
+                f"n{np.where(np.cumsum(pca.explained_variance_ratio_) >= 0.99)[0][0] + 1}; "
+                f"components till n{np.where(pca.explained_variance_ratio_ >= 0.01)[0][-1] + 1} "
+                f"explain at least 1%)?"
             )
         )
 
@@ -627,7 +635,7 @@ def transform_data(
     apply_standard=False,
     averaged=False,
     apply_zscore="trial",
-    zscore_acrossPCs=False,
+    zscore_across_pcs=False,
     method="pca",
     cov=True,
     centering=True,
@@ -637,34 +645,40 @@ def transform_data(
     bandfilter=None,
     mcca_reg=0,
 ):
-    """
-    Adapts EEG epoched data (in xarray format) to the expected data format for hmps.
+    """Adapt EEG epoched data (in xarray format) to the expected data format for hmp.
+
     First this code can apply standardization of individual variances (if apply_standard=True).
-    Second, a spatial PCA on the average variance-covariance matrix is performed (if method='pca', more methods in development)
-    Third,stacks the data going from format [participant * epochs * samples * channels] to [samples * channels]
-    Last, performs z-scoring on each epoch and for each principal component (PC), or for each participant and PC,
-    or across all data for each PC.
+    Second, a spatial PCA on the average variance-covariance matrix is performed (if method='pca',
+    more methods in development).
+    Third,stacks the data going from format [participant * epochs * samples * channels] to
+    [samples * channels].
+    Last, performs z-scoring on each epoch and for each principal component (PC), or for each
+    participant and PC, or across all data for each PC.
 
     Parameters
     ----------
     data : xarray
-        unstacked xarray data from transform_data() or anyother source yielding an xarray with dimensions
-        [participant * epochs * samples * channels]
+        unstacked xarray data from transform_data() or anyother source yielding an xarray with
+        dimensions [participant * epochs * samples * channels]
     participants_variable : str
         name of the dimension for participants ID
     apply_standard : bool
-        Whether to apply standardization of variance between participants, recommended when they are few of them (e.g. < 10)
+        Whether to apply standardization of variance between participants, recommended when they
+        are few of them (e.g. < 10)
     averaged : bool
-        Applying the pca on the averaged ERP (True) or single trial ERP (False, default). No effect if cov = True
+        Applying the pca on the averaged ERP (True) or single trial ERP (False, default).
+        No effect if cov = True
     apply_zscore : str
-        Whether to apply z-scoring and on what data, either None, 'all', 'participant', 'trial', for zscoring across all data, by participant, or by trial, respectively. If set to true, evaluates to 'trial' for backward compatibility.
+        Whether to apply z-scoring and on what data, either None, 'all', 'participant', 'trial',
+        for zscoring across all data, by participant, or by trial, respectively. If set to true,
+        evaluates to 'trial' for backward compatibility.
     method : str
         Method to apply, 'pca' or 'mcca'
     cov : bool
         Wether to apply the pca/mcca to the variance covariance (True, default) or the epoched data
     n_comp : int
-        How many components to select from the PC space, if None plots the scree plot and a prompt requires user
-        to specify how many PCs should be retained
+        How many components to select from the PC space, if None plots the scree plot and a prompt
+        requires user to specify how many PCs should be retained
     n_ppcas : int
         If method = 'mcca', controls the number of components retained for the by-participant PCAs
     pca_weigths : xarray
@@ -672,7 +686,7 @@ def transform_data(
     bandfilter: None | (lfreq, hfreq)
         If none, no filtering is appliedn. If tuple, data is filtered between lfreq-hfreq.
         NOTE: filtering at this step is suboptimal, filter before epoching if at all possible, see
-              also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
+            also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
     mcca_reg: float
         regularization used for the mcca computation (see mcca.py)
 
@@ -706,7 +720,9 @@ def transform_data(
     if apply_standard:
         if "participant" not in data.dims or len(data.participant) == 1:
             warn(
-                "Requested standardization of between participant variance yet no participant dimension is found in the data or only one participant is present. No standardization is done, set apply_standard to False to avoid this warning."
+                "Requested standardization of between participant variance yet no participant "
+                "dimension is found in the data or only one participant is present. "
+                "No standardization is done, set apply_standard to False to avoid this warning."
             )
         else:
             mean_std = data.groupby(participants_variable, squeeze=False).std(dim=...).data.mean()
@@ -716,7 +732,7 @@ def transform_data(
         data = data.data
     if centering or method == "mcca":
         data = _center(data)
-    if apply_zscore == True:
+    if apply_zscore:
         apply_zscore = "trial"  # defaults to trial
     data = data.transpose("participant", "epochs", "channels", "samples")
     if method == "pca":
@@ -802,7 +818,7 @@ def transform_data(
         ori_coords = data.coords
         match apply_zscore:
             case "all":
-                if zscore_acrossPCs:
+                if zscore_across_pcs:
                     data = zscore_xarray(data)
                 else:
                     data = (
@@ -812,7 +828,7 @@ def transform_data(
                         .unstack()
                     )
             case "participant":
-                if zscore_acrossPCs:
+                if zscore_across_pcs:
                     data = data.groupby("participant").map(zscore_xarray)
                 else:
                     data = (
@@ -822,7 +838,7 @@ def transform_data(
                         .unstack()
                     )
             case "trial":
-                if zscore_acrossPCs:
+                if zscore_across_pcs:
                     data = (
                         data.stack(trial=[participants_variable, "epochs"])
                         .groupby("trial")
@@ -847,11 +863,9 @@ def transform_data(
 
 def event_times(
     estimates,
-    init=None,
     duration=False,
     fill_value=None,
     mean=False,
-    mean_in_participant=True,
     add_rt=False,
     extra_dim=None,
     as_time=False,
@@ -859,13 +873,10 @@ def event_times(
     center_measure="mean",
     estimate_method="max",
 ):
-    """
-    Compute the likeliest peak times for each event
+    """Compute the likeliest peak times for each event.
 
     Parameters
     ----------
-    init :
-        Initialized HMP object
     estimates : xr.Dataset
         Estimated instance of an HMP model
     duration : bool
@@ -875,8 +886,6 @@ def event_times(
     mean : bool
         Whether to compute the mean (True) or return the single trial estimates
         Note that mean and errorbars cannot both be true.
-    mean_in_partipant : bool
-        Whether the mean is first computed within participant before calculating the overall mean.
     add_rt : bool
         whether to append the last stage up to the RT
     extra_dim : str
@@ -890,17 +899,16 @@ def event_times(
     center_measure : string
         mean (default) or median, used to calculate the measure within participant if mean is True
     estimate_method : string
-        'max' or 'mean', either take the max probability of each event on each trial, or the weighted
-        average.
+        'max' or 'mean', either take the max probability of each event on each trial, or the
+        weighted average.
 
     Returns
     -------
     times : xr.DataArray
-        Transition event peak or stage duration with trial_x_participant*event dimensions or only event dimension if mean = True
-        Contains nans for missing stages.
+        Transition event peak or stage duration with trial_x_participant*event dimensions or
+        only event dimension if mean = True contains nans for missing stages.
     """
     assert not (mean and errorbars is not None), "Only one of mean and errorbars can be set."
-    sfreq = estimates.sfreq
     rts = estimates.rts
     if estimate_method is None:
         estimate_method = "max"
@@ -933,7 +941,7 @@ def event_times(
         times = times * 1000 / estimates.sfreq
     if duration:
         fill_value = 0
-    if fill_value != None:
+    if fill_value is None:
         added = xr.DataArray(
             np.repeat(fill_value, len(times.trial_x_participant))[np.newaxis, :],
             coords={"event": [0], "trial_x_participant": times.trial_x_participant},
@@ -1019,13 +1027,9 @@ def event_times(
                     errorbars_model[c, :, :] = np.tile(std_errs[c, :], (2, 1))
             else:
                 raise ValueError(
-                    "Unknown error bars, 'std' is for now the only accepted argument in the multilevel models"
+                    "Unknown error bars, 'std' is for now the only accepted argument in the "
+                    "multilevel models"
                 )
-            # elif errorbars == 'se':
-            #     se_errs = times.groupby('participant').mean('trial_x_participant').groupby('levels').reduce(sem, dim='participant', axis=0).values
-            #     for c in np.unique(times['levels']):
-            #         errorbars_model[c,:,:] = np.tile(se_errs[c,:], (2,1))
-        elif extra_dim == "n_events":
             errorbars_model = np.zeros((times.shape[0], 2, times.shape[2]))
             if errorbars == "std":
                 std_errs = times.reduce(np.std, dim="trial_x_participant").values
@@ -1066,13 +1070,11 @@ def event_topo(
     estimated,
     extra_dim=None,
     mean=True,
-    mean_in_participant=True,
     peak=True,
     estimate_method="max",
     template=None,
 ):
-    """
-    Compute topographies for each trial.
+    """Compute topographies for each trial.
 
     Parameters
     ----------
@@ -1084,15 +1086,15 @@ def event_topo(
             if True the topography is computed in the extra dimension
         mean: bool
             if True mean will be computed instead of single-trial channel activities
-        mean_in_partipant : bool
-            Whether the mean is first computed within participant before calculating the overall mean.
         peak : bool
-            if true, return topography at peak of the event. If false, return topographies weighted by a normalized template.
+            if true, return topography at peak of the event. If false, return topographies weighted
+            by a normalized template.
         estimate_method : string
-            'max' or 'mean', either take the max probability of each event on each trial, or the weighted
-            average.
+            'max' or 'mean', either take the max probability of each event on each trial, or the
+            weighted average.
         template: int
-            Length of the pattern in samples (e.g. 5 for a pattern of 50 ms with a 100Hz sampling frequency)
+            Length of the pattern in samples (e.g. 5 for a pattern of 50 ms with a 100Hz sampling
+            frequency)
 
     Returns
     -------
@@ -1219,9 +1221,7 @@ def event_topo(
 
 
 def save(data, filename):
-    """
-    Save fit
-    """
+    """Save fit."""
     data = data.copy()
     attributes = data.attrs.copy()
     for attr in attributes:
@@ -1233,9 +1233,7 @@ def save(data, filename):
 
 
 def load(filename):
-    """
-    Load fit or data
-    """
+    """Load fit or data."""
     with xr.open_dataset(filename) as data:
         data.load()
     if "trials" in data:
@@ -1258,9 +1256,7 @@ def load(filename):
 
 
 def save_eventprobs(eventprobs, filename):
-    """
-    Saves eventprobs to filename csv file
-    """
+    """Save eventprobs to filename csv file."""
     eventprobs = eventprobs.unstack()
     eventprobs.to_dataframe().to_csv(filename)
     print(f"Saved at {filename}")
@@ -1279,8 +1275,7 @@ def centered_activity(
     event_width=0,
     impute=None,
 ):
-    """
-    Parses the single trial signal of a given channel in a given number of samples before and after an event.
+    """Parse the single trial signal of channels in a given number of samples around one event.
 
     Parameters
     ----------
@@ -1293,20 +1288,23 @@ def centered_activity(
     event : int
         Which event is used to parse the signal
     n_samples : int
-        How many samples to record after the event (default = maximum duration between event and the consecutive event)
+        How many samples to record after the event (default = maximum duration between event and
+        the consecutive event)
     cut_after_event: int
         Which event after ```event``` to cut samples off, if 1 (Default) cut at the next event
     baseline: int
         How much samples should be kept before the event
     cut_before_event: int
-        At which previous event to cut samples from, ```baseline``` if 0 (Default), no effect if baseline = 0
+        At which previous event to cut samples from, ```baseline``` if 0 (Default), no effect if
+        baseline = 0
     event_width: int
         Duration of the fitted events, used when cut_before_event is True
 
     Returns
     -------
     centered_data : xr.Dataset
-        Xarray dataset with electrode value (data) and trial event time (time) and with trial_x_participant * samples dimension
+        Xarray dataset with electrode value (data) and trial event time (time) and with
+        trial_x_participant * samples dimension
     """
     if event == 0:  # no samples before stim onset
         baseline = 0
@@ -1317,7 +1315,8 @@ def centered_activity(
     if n_samples is None:
         if cut_after_event is None:
             raise ValueError(
-                "One of ```n_samples``` or ```cut_after_event``` has to be filled to use an upper limit"
+                "One of ```n_samples``` or ```cut_after_event``` has to be filled to use an upper"
+                "limit"
             )
         n_samples = (
             max(times.sel(event=event + cut_after_event).data - times.sel(event=event).data) + 1
@@ -1413,9 +1412,9 @@ def centered_activity(
 
 
 def condition_selection(hmp_data, condition_string, variable="event", method="equal"):
-    """
-    condition_selection select a subset from hmp_data. It selects epochs for which
-    'condition_string' is in 'variable' based on 'method'.
+    """Select a subset from hmp_data.
+
+    The function selects epochs for which 'condition_string' is in 'variable' based on 'method'.
 
     Parameters
     ----------
@@ -1431,9 +1430,8 @@ def condition_selection(hmp_data, condition_string, variable="event", method="eq
 
     Returns
     -------
-    dat : xr.Dataset
+    data : xr.Dataset
         Subset of hmp_data.
-
     """
     unstacked = hmp_data.unstack()
     unstacked[variable] = unstacked[variable].fillna("")
@@ -1450,6 +1448,27 @@ def condition_selection(hmp_data, condition_string, variable="event", method="eq
 
 
 def condition_selection_epoch(epoch_data, condition_string, variable="event", method="equal"):
+    """Select a subset from epoch_data.
+
+    The function selects epochs for which 'condition_string' is in 'variable' based on 'method'.
+
+    Parameters
+    ----------
+    epoch_data : xr.Dataset
+        transformed EEG data for hmp, e.g. from utils.read_mne_data()
+    condition_string : str | num
+        condition indicator for selection
+    variable : str
+        variable present in hmp_data that is used for condition selection
+    method : str
+        'equal' selects equal trials, 'contains' selects trial in which conditions_string
+        appears in variable
+
+    Returns
+    -------
+    data : xr.Dataset
+        Subset of hmp_data.
+    """
     if len(epoch_data.dims) == 4:
         stacked_epoch_data = epoch_data.stack(trial_x_participant=("participant", "epochs")).dropna(
             "trial_x_participant", how="all"
@@ -1467,6 +1486,20 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
 
 
 def participant_selection(hmp_data, participant):
+    """Select a participant from hmp_data.
+
+    Parameters
+    ----------
+    hmp_data : xr.Dataset
+        transformed EEG data for hmp, from utils.transform_data
+    participant : str | num
+        Name of the participant
+
+    Returns
+    -------
+    data : xr.Dataset
+        Subset of hmp_data.
+    """
     unstacked = hmp_data.unstack().sel(participant=participant)
     stacked = stack_data(unstacked)
     return stacked
