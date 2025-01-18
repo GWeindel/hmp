@@ -1,4 +1,4 @@
-"""Models to compute analysis."""
+"""Models to estimate event probabilities."""
 
 import gc
 import itertools
@@ -66,29 +66,29 @@ class HMP:
             case "gamma":
                 from scipy.stats import gamma as sp_dist
 
-                from hmp.utils import gamma_mean_to_scale, gamma_scale_to_mean
+                from hmp.utils import _gamma_mean_to_scale, _gamma_scale_to_mean
 
-                self.scale_to_mean, self.mean_to_scale = gamma_scale_to_mean, gamma_mean_to_scale
+                self.scale_to_mean, self.mean_to_scale = _gamma_scale_to_mean, _gamma_mean_to_scale
             case "lognormal":
                 from scipy.stats import lognorm as sp_dist
 
-                from hmp.utils import logn_mean_to_scale, logn_scale_to_mean
+                from hmp.utils import _logn_mean_to_scale, _logn_scale_to_mean
 
-                self.scale_to_mean, self.mean_to_scale = logn_scale_to_mean, logn_mean_to_scale
+                self.scale_to_mean, self.mean_to_scale = _logn_scale_to_mean, _logn_mean_to_scale
             case "wald":
                 from scipy.stats import invgauss as sp_dist
 
-                from hmp.utils import wald_mean_to_scale, wald_scale_to_mean
+                from hmp.utils import _wald_mean_to_scale, _wald_scale_to_mean
 
-                self.scale_to_mean, self.mean_to_scale = wald_scale_to_mean, wald_mean_to_scale
+                self.scale_to_mean, self.mean_to_scale = _wald_scale_to_mean, _wald_mean_to_scale
             case "weibull":
                 from scipy.stats import weibull_min as sp_dist
 
-                from hmp.utils import weibull_mean_to_scale, weibull_scale_to_mean
+                from hmp.utils import _weibull_mean_to_scale, _weibull_scale_to_mean
 
                 self.scale_to_mean, self.mean_to_scale = (
-                    weibull_scale_to_mean,
-                    weibull_mean_to_scale,
+                    _weibull_scale_to_mean,
+                    _weibull_mean_to_scale,
                 )
             case _:
                 raise ValueError(f"Unknown Distribution {distribution}")
