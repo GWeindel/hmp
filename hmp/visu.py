@@ -198,7 +198,7 @@ def plot_topo_timecourse(
         elif "levels" in estimates:
             ydim = "levels"
     channel_data = event_topo(
-        channel_data, estimates, ydim, estimate_method=estimate_method
+        epoch_data, estimates, ydim, estimate_method=estimate_method
     ).data  # compute topographies
     times = event_times(
         estimates,
