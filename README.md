@@ -5,7 +5,7 @@ HMP
 ![](plots/general_illustration.png)
 
 > [!WARNING]
-> To follow the tutorial install from a github clone (see below) or check [previous versions of tutorials for older HMP versions (< 1.0.0)](https://github.com/GWeindel/hmp/commit/b26ab6939e8221475af19914da8dddc02df55ca0)
+> To follow the tutorial install from a github clone (see below) or check [previous versions of tutorials for older HMP versions (< 1.0.0)](https://github.com/GWeindel/hmp/tree/b26ab6939e8221475af19914da8dddc02df55ca0)
 
 > [!NOTE]
 > The paper on HMP was accepted at Imaging Neuroscience, see : [Trial-by-trial detection of cognitive events in neural time-series](https://direct.mit.edu/imag/article/doi/10.1162/imag_a_00400/125469)
