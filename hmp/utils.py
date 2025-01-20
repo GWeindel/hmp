@@ -533,7 +533,7 @@ def zscore_xarray(data):
     return data
 
 
-def stack_data(data, subjects_variable="participant"):
+def stack_data(data):
     """Stack the data.
 
     Going from format [participant * epochs * samples * channels] to
@@ -555,10 +555,9 @@ def stack_data(data, subjects_variable="participant"):
     """
     if isinstance(data, (xr.DataArray, xr.Dataset)) and "component" not in data.dims:
         data = data.rename_dims({"channels": "component"})
-    if subjects_variable not in data.dims:
-        data = data.expand_dims(subjects_variable)
-    data = data.stack(all_samples=[subjects_variable, "epochs", "samples"]).\
-        dropna(dim="all_samples")
+    if "participant" not in data.dims:
+        data = data.expand_dims("participant")
+    data = data.stack(all_samples=["participant", "epochs", "samples"]).dropna(dim="all_samples")
     return data
 
 
@@ -941,7 +940,7 @@ def event_times(
         times = times * 1000 / estimates.sfreq
     if duration:
         fill_value = 0
-    if fill_value is None:
+    if fill_value is not None:
         added = xr.DataArray(
             np.repeat(fill_value, len(times.trial_x_participant))[np.newaxis, :],
             coords={"event": [0], "trial_x_participant": times.trial_x_participant},
@@ -1030,6 +1029,7 @@ def event_times(
                     "Unknown error bars, 'std' is for now the only accepted argument in the "
                     "multilevel models"
                 )
+        elif extra_dim == "n_events":
             errorbars_model = np.zeros((times.shape[0], 2, times.shape[2]))
             if errorbars == "std":
                 std_errs = times.reduce(np.std, dim="trial_x_participant").values
