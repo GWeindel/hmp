@@ -229,7 +229,7 @@ def read_mne_data(
                 ev_i += 1
             if reference is not None:
                 data = data.set_eeg_reference(reference)
-            data = _pick_channels(pick_channels, data, stim=True)
+            data = _pick_channels(pick_channels, data)
             data.load_data()
 
             if sfreq < data.info["sfreq"]:  # Downsampling
@@ -301,7 +301,7 @@ def read_mne_data(
                 raise ValueError("Incorrect file format")
             if reference is not None:
                 epochs = epochs.set_eeg_reference(reference)
-            _pick_channels(pick_channels, epochs, stim=False)
+            _pick_channels(pick_channels, epochs)
             if metadata is None:
                 try:
                     metadata_i = epochs.metadata  # accounts for dropped epochs
