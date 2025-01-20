@@ -59,19 +59,19 @@ def test_integration():
                                          metadata=df_real_metadata, pick_channels=['Cz'])
     epoch_data = hmp.utils.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq,
             events_provided=events, verbose=True, reference='average', high_pass=1, low_pass=45,
-                subj_idx=['a','b'],pick_channels='eeg', lower_limit_RT=0.01, upper_limit_RT=2 ) 
+                subj_idx=['a','b'],pick_channels='eeg', lower_limit_rt=0.01, upper_limit_rt=2 ) 
     epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
     positions = simulations.simulation_positions()
     
     
     # Testing transform data
     hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, method=None, apply_zscore=True, centering=False)
-    hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, apply_zscore=False, centering=False, zscore_acrossPCs=True)
+    hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, apply_zscore=False, centering=False, zscore_across_pcs=True)
     hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, bandfilter=(1,40),cov=False,apply_zscore='all', centering=False)
     hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, bandfilter=(1,40),cov=False, averaged=True, apply_zscore='participant', centering=False)
-    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', apply_zscore='all', bandfilter=(1,40), zscore_acrossPCs=True, centering=False)
-    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', cov=False, apply_zscore='participant', mcca_reg=1, zscore_acrossPCs=True, centering=False)
-    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', cov=False, apply_zscore='participant', mcca_reg=1, zscore_acrossPCs=True, centering=False, averaged=True)
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', apply_zscore='all', bandfilter=(1,40), zscore_across_pcs=True, centering=False)
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', cov=False, apply_zscore='participant', mcca_reg=1, zscore_across_pcs=True, centering=False)
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', cov=False, apply_zscore='participant', mcca_reg=1, zscore_across_pcs=True, centering=False, averaged=True)
     hmp_data = hmp.utils.transform_data(epoch_data, n_comp=2,)
 
     # Testing condition selection functions and methods      
@@ -151,9 +151,9 @@ def test_integration():
     hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0], times_to_display=np.array([1,2]))
     
     # Testing comoput_times
-    hmp.utils.event_times(backward_speed.sel(n_events=1), duration=False, fill_value=None, mean=False, mean_in_participant=True, add_rt=False, as_time=False, errorbars='se', center_measure='mean',estimate_method='max')
-    hmp.utils.event_times(backward_speed, duration=False, fill_value=None, mean=False, mean_in_participant=True, add_rt=True, as_time=False, errorbars='se', center_measure='mean')
-    hmp.utils.event_times(model_stage_removed, duration=True, fill_value=None, mean=False, mean_in_participant=True, add_rt=True, as_time=True, errorbars='std', center_measure='median',estimate_method='mean')
+    hmp.utils.event_times(backward_speed.sel(n_events=1), duration=False, fill_value=None, mean=False, add_rt=False, as_time=False, errorbars='se', center_measure='mean',estimate_method='max')
+    hmp.utils.event_times(backward_speed, duration=False, fill_value=None, mean=False, add_rt=True, as_time=False, errorbars='se', center_measure='mean')
+    hmp.utils.event_times(model_stage_removed, duration=True, fill_value=None, mean=False, add_rt=True, as_time=True, errorbars='std', center_measure='median',estimate_method='mean')
     
     
     # Testing diverse plotting functions

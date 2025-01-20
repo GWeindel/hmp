@@ -32,7 +32,6 @@ def plot_topo_timecourse(
     title=False,
     ax=None,
     sensors=False,
-    skip_channels_computation=False,
     contours=6,
     event_lines="tab:orange",
     colorbar=True,
@@ -198,10 +197,9 @@ def plot_topo_timecourse(
             ydim = "n_events"  # set ydim to 'n_events'
         elif "levels" in estimates:
             ydim = "levels"
-    if not skip_channels_computation:
-        epoch_data = event_topo(
-            epoch_data, estimates, ydim, estimate_method=estimate_method
-        ).data  # compute topographies
+    channel_data = event_topo(
+        epoch_data, estimates, ydim, estimate_method=estimate_method
+    ).data  # compute topographies
     times = event_times(
         estimates,
         mean=True,
@@ -212,14 +210,14 @@ def plot_topo_timecourse(
     ).data  # compute corresponding times
 
     times = times
-    if len(np.shape(epoch_data)) == 2:
-        epoch_data = epoch_data[np.newaxis]
+    if len(np.shape(channel_data)) == 2:
+        channel_data = channel_data[np.newaxis]
 
     if level_plot:  # reverse order, to make correspond to level maps
-        epoch_data = np.flipud(epoch_data)
+        channel_data = np.flipud(channel_data)
         times = np.flipud(times)
 
-    n_iter = np.shape(epoch_data)[0]
+    n_iter = np.shape(channel_data)[0]
 
     if n_iter == 1:
         times = [times]
@@ -242,9 +240,9 @@ def plot_topo_timecourse(
 
     # fix vmin/vmax across topos, while keeping symmetric
     if vmax == None:  # vmax = absolute max, unless no positive values
-        vmax = np.nanmax(np.abs(epoch_data[:]))
-        vmin = -vmax if np.nanmin(epoch_data[:]) < 0 else 0
-        if np.nanmax(epoch_data[:]) < 0:
+        vmax = np.nanmax(np.abs(channel_data[:]))
+        vmin = -vmax if np.nanmin(channel_data[:]) < 0 else 0
+        if np.nanmax(channel_data[:]) < 0:
             vmax = 0
 
     # make axis
@@ -266,8 +264,8 @@ def plot_topo_timecourse(
         times_iteration = times[iteration]
         missing_evts = np.where(np.isnan(times_iteration))[0]
         times_iteration = np.delete(times_iteration, missing_evts)
-        epoch_data_ = epoch_data[iteration, :, :]
-        epoch_data_ = np.delete(epoch_data_, missing_evts, axis=0)
+        channel_data_ = channel_data[iteration, :, :]
+        channel_data_ = np.delete(channel_data_, missing_evts, axis=0)
         n_event = len(times_iteration)
         ylow = iteration * rowheight
 
@@ -286,7 +284,7 @@ def plot_topo_timecourse(
                 )
             )
             plot_topomap(
-                epoch_data_[event, :],
+                channel_data_[event, :],
                 channel_position,
                 axes=axes[-1],
                 show=False,
