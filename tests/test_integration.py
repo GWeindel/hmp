@@ -59,19 +59,19 @@ def test_integration():
                                          metadata=df_real_metadata, pick_channels=['Cz'])
     epoch_data = hmp.utils.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq,
             events_provided=events, verbose=True, reference='average', high_pass=1, low_pass=45,
-                subj_idx=['a','b'],pick_channels='eeg', lower_limit_RT=0.01, upper_limit_RT=2 ) 
+                subj_idx=['a','b'],pick_channels='eeg', lower_limit_rt=0.01, upper_limit_rt=2 ) 
     epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
     positions = simulations.simulation_positions()
     
     
     # Testing transform data
     hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, method=None, apply_zscore=True, centering=False)
-    hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, apply_zscore=False, centering=False, zscore_acrossPCs=True)
+    hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, apply_zscore=False, centering=False, zscore_across_pcs=True)
     hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, bandfilter=(1,40),cov=False,apply_zscore='all', centering=False)
     hmp_data_sim = hmp.utils.transform_data(epoch_data, apply_standard=False, n_comp=2, bandfilter=(1,40),cov=False, averaged=True, apply_zscore='participant', centering=False)
-    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', apply_zscore='all', bandfilter=(1,40), zscore_acrossPCs=True, centering=False)
-    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', cov=False, apply_zscore='participant', mcca_reg=1, zscore_acrossPCs=True, centering=False)
-    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', cov=False, apply_zscore='participant', mcca_reg=1, zscore_acrossPCs=True, centering=False, averaged=True)
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', apply_zscore='all', bandfilter=(1,40), zscore_across_pcs=True, centering=False)
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', cov=False, apply_zscore='participant', mcca_reg=1, zscore_across_pcs=True, centering=False)
+    hmp_data = hmp.utils.transform_data(epoch_data, apply_standard=True, n_comp=2, method='mcca', cov=False, apply_zscore='participant', mcca_reg=1, zscore_across_pcs=True, centering=False, averaged=True)
     hmp_data = hmp.utils.transform_data(epoch_data, n_comp=2,)
 
     # Testing condition selection functions and methods      
