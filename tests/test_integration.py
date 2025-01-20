@@ -151,9 +151,9 @@ def test_integration():
     hmp.visu.plot_topo_timecourse(epoch_data, model_stage_removed, info, magnify=1, sensors=False, as_time=True, xlabel='Time (ms)', event_lines=True, colorbar=True, title="Remove one event",ax=ax[0], times_to_display=np.array([1,2]))
     
     # Testing comoput_times
-    hmp.utils.event_times(backward_speed.sel(n_events=1), duration=False, fill_value=None, mean=False, mean_in_participant=True, add_rt=False, as_time=False, errorbars='se', center_measure='mean',estimate_method='max')
-    hmp.utils.event_times(backward_speed, duration=False, fill_value=None, mean=False, mean_in_participant=True, add_rt=True, as_time=False, errorbars='se', center_measure='mean')
-    hmp.utils.event_times(model_stage_removed, duration=True, fill_value=None, mean=False, mean_in_participant=True, add_rt=True, as_time=True, errorbars='std', center_measure='median',estimate_method='mean')
+    hmp.utils.event_times(backward_speed.sel(n_events=1), duration=False, fill_value=None, mean=False, add_rt=False, as_time=False, errorbars='se', center_measure='mean',estimate_method='max')
+    hmp.utils.event_times(backward_speed, duration=False, fill_value=None, mean=False, add_rt=True, as_time=False, errorbars='se', center_measure='mean')
+    hmp.utils.event_times(model_stage_removed, duration=True, fill_value=None, mean=False, add_rt=True, as_time=True, errorbars='std', center_measure='median',estimate_method='mean')
     
     
     # Testing diverse plotting functions
