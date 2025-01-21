@@ -1,4 +1,4 @@
-""" """
+"""Module containing functions to visualize the results of the HMP model."""
 
 from itertools import cycle
 
@@ -43,7 +43,7 @@ def plot_topo_timecourse(
     estimate_method=None,
 ):
     """
-    Plotting the event topographies at the average time of the onset of the next stage.
+    Plot the event topographies at the average time of the onset of the next stage.
 
     Parameters
     ----------
@@ -52,8 +52,9 @@ def plot_topo_timecourse(
     estimates : hmp object
         the result from a fitted hmp
     channel_position : ndarray
-        Either a 2D array with dimension channel and [x,y] storing channel location in meters or an info object from
-        the mne package containning digit. points for channel location
+        Either a 2D array with dimension channel and [x,y] storing channel
+        location in meters or an info object from the mne package containing
+        digit points for channel location
     ydim: str
         name for the extra dimensions (e.g. iteration)
     figsize : list | tuple | ndarray
@@ -61,29 +62,32 @@ def plot_topo_timecourse(
     dpi : float
         DPI of the  matplotlib plot
     magnify : float
-        How much should the events be enlarged, useful to zoom on topographies, providing any other value than 1 will
-        however change the displayed size of the event
+        How much should the events be enlarged, useful to zoom on topographies,
+        providing any other value than 1 will however change the displayed size
+        of the event
     times_to_display : ndarray
-        Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
+        Times to display (e.g. Reaction time or any other relevant time)
+        in the time unit of the fitted data
     cmap : str
         Colormap of matplotlib
     xlabel : str
-        label of x-axis, default = None, which give "Time (samples)" or "Time (ms)" in case as_time = True
+        label of x-axis, default = None, which give "Time (samples)"
+        or "Time (ms)" in case as_time = True
     ylabels : dict
         dictonary with {label_name : label_values}. E.g. {'Condition': ['Speed','Accuracy']}
     max_time : float
         limit of the x (time) axe
     vmin : float
-        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html). If not explicitly
-        set, uses min across all topos while keeping colormap symmetric.
+        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html).
+        If not explicitly set, uses min across all topos while keeping colormap symmetric.
     vmax : float
-        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html). If not explicitly
-        set, uses max across all topos while keeping colormap symmetric.
+        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html).
+        If not explicitly set, uses max across all topos while keeping colormap symmetric.
     title : str
         title of the plot
     ax : matplotlib.pyplot.ax
-        Matplotlib object on which to draw the plot, can be useful if you want to control specific aspects of the plots
-        outside of this function
+        Matplotlib object on which to draw the plot, can be useful if you want
+        to control specific aspects of the plots outside of this function
     sensors : bool
         Whether to plot the sensors on the topographies
     skip_channel_contribution: bool
@@ -91,20 +95,21 @@ def plot_topo_timecourse(
     contours : int / array_like
         The number of contour lines to draw (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
     event_lines : bool / color
-        Whether to plot lines and shading to indicate the moment of the event. If True uses tab:orange, if
-        set as color, uses the color
+        Whether to plot lines and shading to indicate the moment of the event.
+        If True uses tab:orange, if set as color, uses the color
     colorbar : bool
         Whether a colorbar is plotted.
     topo_size_scaling : bool
-        Whether to scale the size of the topographies with the event size. If True, size of topographies depends
-        on total plotted time interval, if False it is only dependent on magnify.
+        Whether to scale the size of the topographies with the event size. If True,
+        size of topographies depends on total plotted time interval, if False it is
+        only dependent on magnify.
     as_time : bool
         if true, plot time (ms) instead of samples. Ignored if times are provided as array.
     center_measure : string
         mean (default) or median, used to calculate the time within participant
     estimate_method : string
-        'max' or 'mean', either take the max probability of each event on each trial, or the weighted
-        average.
+        'max' or 'mean', either take the max probability of each event on each trial,
+        or the weighted average.
 
     Returns
     -------
@@ -134,7 +139,6 @@ def plot_topo_timecourse(
     # if multilevel estimates, prep levels
     if isinstance(estimates, xr.Dataset) and "levels" in estimates:
         level_plot = True
-        levels = estimates["levels"].values
         n_level = estimates.parameters.shape[0]
 
         # make times_to_display in list with lines per level
@@ -160,7 +164,8 @@ def plot_topo_timecourse(
                 times_to_display = times_to_display * n_level
             elif len(times_to_display) != n_level:
                 print(
-                    "times_to_display should either be a list of length n_level or an ndarray which will be repeated across levels"
+                    "times_to_display should either be a list of length n_level or \
+                    an ndarray which will be repeated across levels"
                 )
                 times_to_display = default
         elif isinstance(times_to_display, np.ndarray):  # only one set of times
@@ -184,7 +189,7 @@ def plot_topo_timecourse(
             xlabel = "Time (in samples)"
 
     # set color of event_lines
-    if event_lines == True:
+    if event_lines:
         event_color = "tab:orange"
     else:
         event_color = event_lines
@@ -211,7 +216,6 @@ def plot_topo_timecourse(
         estimate_method=estimate_method,
     ).data  # compute corresponding times
 
-    times = times
     if len(np.shape(epoch_data)) == 2:
         epoch_data = epoch_data[np.newaxis]
 
@@ -241,7 +245,7 @@ def plot_topo_timecourse(
         topo_size = 0.08 * timescale * magnify  # 8% of time scale
 
     # fix vmin/vmax across topos, while keeping symmetric
-    if vmax == None:  # vmax = absolute max, unless no positive values
+    if vmax is None:  # vmax = absolute max, unless no positive values
         vmax = np.nanmax(np.abs(epoch_data[:]))
         vmin = -vmax if np.nanmin(epoch_data[:]) < 0 else 0
         if np.nanmax(epoch_data[:]) < 0:
@@ -367,7 +371,8 @@ def plot_topo_timecourse(
     # legend
     if colorbar:
         cheight = 1 if n_iter == 1 else 2 / n_iter
-        # axins = ax.inset_axes(width="0.5%", height=cheight, loc="lower left", bbox_to_anchor=(1.025, 0, 2, 1), bbox_transform=ax.transAxes, borderpad=0)
+        # axins = ax.inset_axes(width="0.5%", height=cheight, loc="lower left", \
+        #         bbox_to_anchor=(1.025, 0, 2, 1), bbox_transform=ax.transAxes, borderpad=0)
         axins = ax.inset_axes([1.025, 0, 0.03, cheight])
         if isinstance(channel_position, Info):
             lab = (
@@ -431,7 +436,9 @@ def save_model_topos(
     colorbar=True,
 ):
     """
-    Saving the event topographies to files, one per topography. Typically used for saving high quality topos.
+    Save the event topographies to files, one per topography.
+
+    Typically used for saving high quality topos.
 
     Parameters
     ----------
@@ -440,8 +447,8 @@ def save_model_topos(
     estimates : hmp object
         a fitted hmp (either from fit_n, or backward_estimation)
     channel_position : ndarray
-        Either a 2D array with dimension channel and [x,y] storing channel location in meters or an info object from
-        the mne package containning digit. points for channel location
+        Either a 2D array with dimension channel and [x,y] storing channel location in meters or
+        an info object from the mne package containning digit. points for channel location
     fname : str
         file name, other model specifications will be appended. Should not include extension.
     figsize : list | tuple | ndarray
@@ -451,11 +458,11 @@ def save_model_topos(
     cmap : str
         Colormap of matplotlib
     vmin : float
-        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html). If not explicitly
-        set, uses min across all topos while keeping colormap symmetric.
+        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html).
+        If not explicitly set, uses min across all topos while keeping colormap symmetric.
     vmax : float
-        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html). If not explicitly
-        set, uses max across all topos while keeping colormap symmetric.
+        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html).
+        If not explicitly set, uses max across all topos while keeping colormap symmetric.
     sensors : bool
         Whether to plot the sensors on the topographies
     contours : int / array_like
@@ -473,7 +480,6 @@ def save_model_topos(
     # if multilevel estimates, prep levels
     if isinstance(estimates, xr.Dataset) and "levels" in estimates:
         plot_type = "levels"
-        levels = estimates["levels"].values
         n_level = estimates.parameters.shape[0]
         level_names = estimates.clabels
         ydim = "levels"
@@ -485,14 +491,14 @@ def save_model_topos(
     epoch_data = event_topo(epoch_data, estimates, ydim).data  # compute topographies
 
     # fix vmin/vmax across topos, while keeping symmetric
-    if vmax == None:  # vmax = absolute max, unless no positive values
+    if vmax is None:  # vmax = absolute max, unless no positive values
         vmax = np.nanmax(np.abs(epoch_data[:]))
         vmin = -vmax if np.nanmin(epoch_data[:]) < 0 else 0
         if np.nanmax(epoch_data[:]) < 0:
             vmax = 0
 
     # make axis
-    if figsize == None:
+    if figsize is None:
         figsize = (2, 2)
 
     # make sure it doesn't display plots
@@ -604,14 +610,14 @@ def save_model_topos(
 
 def plot_components_sensor(hmp_data, positions):
     """
-     This function is used to visualize the topomap of the HMP principal components.
+    Visualize the topomap of the HMP principal components.
 
     Parameters
     ----------
-             hmp_data: xr.Dataset
-           Data returned from the function hmp.utils.transform_data()
-             positions: mne.info | ndarray
-           List of x and y positions to plot channels on head model OR MNE info object
+    hmp_data : xr.Dataset
+        Data returned from the function hmp.utils.transform_data()
+    positions : mne.info | ndarray
+        List of x and y positions to plot channels on head model OR MNE info object
     """
     from mne.viz import plot_topomap
 
@@ -637,7 +643,7 @@ def plot_loocv(
     additional_points=None,
 ):
     """
-    Plotting the LOOCV results
+    Plot the LOOCV results.
 
     Parameters
     ----------
@@ -646,14 +652,15 @@ def plot_loocv(
     pvals : bool
         Whether to display the pvalue with the associated test
     test : str
-        which statistical test to compute for the difference in LOOCV-likelihood (one sample t-test or sign test)
+        which statistical test to compute for the difference in LOOCV-likelihood (one sample t-test
+        or sign test)
     figsize : list | tuple | ndarray
         Length and heigth of the matplotlib plot
     indiv : bool
         Whether to plot individual lines
     ax : matplotlib.pyplot.ax
-        Matplotlib object on which to draw the plot, can be useful if you want to control specific aspects of the plots
-        outside of this function
+        Matplotlib object on which to draw the plot, can be useful if you want to control specific
+        aspects of the plots outside of this function
     mean : bool
         Whether to plot the mean
     additional_points :
@@ -766,7 +773,6 @@ def plot_loocv(
 
 
 def __display_times(ax, times_to_display, yoffset, time_step, max_time, times, linecolors, ymax=1):
-    n_iter = len(times)
     times = np.asarray(times, dtype=object)
     if isinstance(times_to_display, (np.ndarray, np.generic)):
         ax.vlines(
@@ -795,15 +801,17 @@ def plot_latencies(
     as_time=False,
 ):
     """
-    Plots the average of stage latencies with choosen errors bars
+    Plot the average of stage latencies with choosen errors bars.
 
     Parameters
     ----------
     estimates : hmp results object
         hmp results object
     event_width : float
-        Display size of the event in time unit given sampling frequency, if drawing a fitted object using hmp you
-        can provide the event_width_sample of fitted hmp (e.g. init.event_width_sample)
+        Display size of the event in time unit given sampling frequency.
+
+        If drawing a fitted object using hmp you can provide the event_width_sample of
+        fitted hmp (e.g. init.event_width_sample)
     labels : tuples | list
         labels to draw on the y axis
     colors : ndarray
@@ -814,7 +822,8 @@ def plot_latencies(
         Whether to display no error bars (None), standard deviation ('std'),
         or standard error ('se')
     times_to_display : ndarray
-        Times to display (e.g. Reaction time or any other relevant time) in the time unit of the fitted data
+        Times to display (e.g. Reaction time or any other relevant time) in the time unit of the
+        fitted data
     max_time : float
         limit of the x (time) axe
     kind : str
@@ -978,14 +987,18 @@ def plot_latencies(
 
 def erp_data(epoched_data, times, channel, n_samples=None, pad=1):
     """
-    Create a data array compatible with the plot ERP function. Optionnally this function can resample the epochs to fit some provided times (e.g. onset of the events)
+    Create a data array compatible with the plot ERP function.
+
+    Optionnally this function can resample the epochs to fit some provided times (e.g. onset of
+    the events).
 
     Parameters
     ----------
         epoched_data: xr.Dataset
             Epoched physiological data with dims 'participant'X 'epochs' X 'channels'X 'samples'
         times: xr.Dataset
-            Times between wich to extract or resample the data with dims 'trial_x_participant' X 'event'
+            Times between wich to extract or resample the data with dims 'trial_x_participant' X
+            'event'
         channel: str
             For which channel to extract the data
         n_samples: int
@@ -996,7 +1009,8 @@ def erp_data(epoched_data, times, channel, n_samples=None, pad=1):
     Returns
     -------
     data : nd.array
-        array containing the extracted times for each epoch and stage with format epochs X events X samples.
+        array containing the extracted times for each epoch and stage with format epochs X events X
+        samples.
     """
     epoched_data = epoched_data.sel(channels=channel)
     if n_samples is None:
@@ -1045,7 +1059,9 @@ def plot_erp(
     times, data, color="k", ax=None, minmax_lines=None, upsample=1, bootstrap=None, label=None
 ):
     """
-    Plot the ERP based on the times extracted by HMP (or just stimulus and response and the data extracted from ```erp_data```.
+    Plot the ERP based on the times extracted by HMP.
+
+    (or just stimulus and response and the data extracted from ```erp_data```.
 
     Parameters
     ----------
