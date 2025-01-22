@@ -1061,7 +1061,7 @@ def plot_erp(
     """
     Plot the ERP based on the times extracted by HMP.
 
-    (or just stimulus and response and the data extracted from ```erp_data```.
+    Either around an event or just stimulus and response and the data extracted from ```erp_data```.
 
     Parameters
     ----------
