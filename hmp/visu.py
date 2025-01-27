@@ -121,7 +121,6 @@ def plot_topo_timecourse(
     sfreq = estimates.sfreq
     level_plot = False
     estimates = estimates.copy()
-    epoch_data = epoch_data.copy()
     # Stacking is necessary to retain the common indices, otherwise absent trials are just Nan'd out
     if "trial_x_participant" not in epoch_data.dims:
         epoch_data = epoch_data.rename({"epochs": "trials"}).stack(
