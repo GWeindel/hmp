@@ -97,7 +97,7 @@ def read_mne_data(
         frequency. The event structure is passed at the resample() function of MNE to ensure that
         events are approriately timed after downsampling.
         0.4) epochs are created based on stimulus onsets (event_id) and tmin and tmax. Epoching
-        removes any epoch where a 'BAD' annotiation is present and all epochs where an channel
+        removes any epoch where a 'BAD' annotation is present and all epochs where an channel
         exceeds reject_threshold. Epochs are baseline corrected from tmin to stim. onset (time 0).
     1) Reaction times (RT) are computed based on the sample difference between onset of stimulus and
     response triggers. If no response event happens after a stimulus or if RT > upper_limit_rt
@@ -185,7 +185,7 @@ def read_mne_data(
         print(f"Processing participant {participant}'s {dict_datatype[epoched]} {pick_channels}")
 
         # loading data
-        if not epoched:  # performs epoching on raw data
+        if epoched is False:  # performs epoching on raw data
             if ".fif" in participant:
                 data = mne.io.read_raw_fif(participant, preload=True, verbose=verbose)
             elif ".bdf" in participant:
@@ -206,7 +206,7 @@ def read_mne_data(
                     events = mne.events_from_annotations(data, verbose=verbose)[0]
                 if (
                     events[0, 1] > 0
-                ):  # bug from some stim channel, should be 0 otherwise indicates offset in trggers
+                ):  # bug from some stim channel, should be 0 otherwise indicates offset in triggers
                     print(
                         f"Correcting event values as trigger channel has offset "
                         f"{np.unique(events[:, 1])}"
@@ -731,7 +731,7 @@ def transform_data(
         data = data.data
     if centering or method == "mcca":
         data = _center(data)
-    if apply_zscore:
+    if apply_zscore is True:
         apply_zscore = "trial"  # defaults to trial
     data = data.transpose("participant", "epochs", "channels", "samples")
     if method == "pca":
