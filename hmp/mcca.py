@@ -103,8 +103,8 @@ class MCCA:
         lim = 0
         # obtain subject-specific PCAs
         for i in range(n_subjects):
-            pca = PCA(n_components=self.n_pcs, svd_solver="full")
-            x_i = np.squeeze(X[i]).copy()  # time x sensors
+            pca = PCA(n_components=self.n_pcs, svd_solver="full", copy=False)
+            x_i = np.squeeze(X[i])  # time x sensors
             score = pca.fit_transform(x_i[~np.isnan(x_i[:, 0]), :])
             self.mu[i] = pca.mean_
             self.sigma[i] = np.sqrt(pca.explained_variance_)
@@ -142,8 +142,8 @@ class MCCA:
         self.sigma = np.ones((n_subjects, self.n_pcs))
         # obtain subject-specific PCAs
         for i in range(n_subjects):
-            pca = PCA(n_components=self.n_pcs, svd_solver="full")
-            x_i = np.squeeze(X[i]).copy()  # time x sensors
+            pca = PCA(n_components=self.n_pcs, svd_solver="full", copy=False)
+            x_i = np.squeeze(X[i])  # time x sensors
             av_vcov = np.mean(
                 [
                     np.cov(x_i[trial, ~np.isnan(x_i[trial, :, 0]), :].T)
