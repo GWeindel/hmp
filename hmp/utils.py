@@ -700,7 +700,8 @@ def transform_data(
     else:
         data = epoch_data
         warn(
-                "Data will be modified inplace, re-read the data if needed or use copy=False"
+                "Data will be modified inplace, re-read the data or use copy=False if multiple"
+                "calls to this function"
             )
     if isinstance(data, xr.DataArray):
         raise ValueError(
