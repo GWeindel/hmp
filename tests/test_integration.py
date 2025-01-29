@@ -10,6 +10,10 @@ import gc
 
 import hmp
 from hmp import simulations
+from hmp.models import FixedEventModel, ForwardEstimationModel, BackwardEstimationModel
+from hmp.models.base import EventProperties
+from hmp.trialdata import TrialData
+
 
 real_data = os.path.join("tutorials", "sample_data", "eeg", "processed_0022_epo.fif")
 real_metadata = os.path.join("tutorials", "sample_data", "eeg", "0022.csv")
@@ -84,39 +88,50 @@ def test_integration():
     # Comparing to simulated data, asserting that results are the one simulated
     events_a = np.load(event_a)
     data_a = hmp.utils.participant_selection(hmp_data, 'a')
-    init_sim = hmp.models.HMP(data=data_a)
+    event_properties = EventProperties.from_standard_data(data=data_a)
+    trial_data = TrialData.from_standard_data(data=data_a, template=event_properties.template)
+    init_sim = FixedEventModel(trial_data=trial_data, event_properties=event_properties)
     sim_source_times, true_pars, true_magnitudes, _ = simulations.simulated_times_and_parameters(events_a, init_sim)
-    true_estimates = init_sim.fit_n(n_events, parameters = np.array([true_pars]), magnitudes=np.array([true_magnitudes]), maximization=False, verbose=True)
+    true_estimates = init_sim.fit(n_events, parameters = np.array([true_pars]), magnitudes=np.array([true_magnitudes]), maximization=False, verbose=True)
     true_topos = hmp.utils.event_topo(epoch_data, true_estimates, mean=True)
-    estimates = init_sim.fit_n(n_events, verbose=True)
+    estimates = init_sim.fit(n_events, verbose=True)
     test_topos = hmp.utils.event_topo(epoch_data, estimates, mean=True)
     assert (np.array(simulations.classification_true(true_topos,test_topos)) == np.array(([0,1,2],[0,1,2]))).all()
     assert np.sum(np.abs(true_topos.data - test_topos.data)) < 2.65e-05
     assert np.round(estimates.loglikelihood.values,4) > np.array(-1)
-    
-    
+
     # Initializing models
     ## Testing different distribution implementation
+    event_properties = EventProperties.from_standard_data(hmp_data_sim, width=50, shape=2)
+    trial_data = TrialData.from_standard_data(hmp_data_sim, event_properties.template)
     for distribution in  ['lognormal','wald','weibull','gamma']:
-        init_sim = hmp.models.HMP(data=hmp_data_sim,  
-                            event_width=50, distribution=distribution, shape=2)
-        estimates = init_sim.fit_n(n_events, verbose=True)
-    
+        fixed_sim_model = FixedEventModel(trial_data, event_properties, distribution=distribution)
+        estimates = fixed_sim_model.fit(n_events, verbose=True)
+
     ## different init parameters
-    init = hmp.models.HMP(hmp_data, sfreq=epoch_data.sfreq)
-    init_speed = hmp.models.HMP(hmp_speed_data, sfreq=epoch_data.sfreq)
+    _events = EventProperties.from_standard_data(hmp_data, epoch_data.sfreq)
+    _trial_data = TrialData.from_standard_data(hmp_data, _events.template)
+    fixed_sim_model = FixedEventModel(_trial_data, _events)
+
+    _events_speed = EventProperties.from_standard_data(hmp_speed_data, epoch_data.sfreq)
+    _trial_data_speed = TrialData.from_standard_data(hmp_speed_data, _events.template)
+    fixed_speedsim_model = FixedEventModel(_trial_data, _events)
     
-    # Testing fit 
+    
+    # init = hmp.models.HMP(hmp_data, sfreq=epoch_data.sfreq)
+    # init_speed = hmp.models.HMP(hmp_speed_data, sfreq=epoch_data.sfreq)
+
+    # Testing fit
     ## fit_n tests
-    selected = init_sim.fit_n(n_events, starting_points=2,
-                            return_max=False,verbose=True)#funct
-    elected = init_sim.fit_n(3, parameters=estimates.parameters, magnitudes=estimates.magnitudes)#funct
-    selected = init_sim.fit_n(3, parameters=estimates.parameters, magnitudes=estimates.magnitudes, cpus=2)#funct
+    selected = fixed_sim_model.fit(n_events, starting_points=2,
+                                   return_max=False,verbose=True)#funct
+    selected = fixed_sim_model.fit(3, parameters=estimates.parameters, magnitudes=estimates.magnitudes)#funct
+    selected = fixed_sim_model.fit(3, parameters=estimates.parameters, magnitudes=estimates.magnitudes, cpus=2)#funct
     # ## Fit function
-    estimates_speed, _ = init_speed.fit(tolerance=1e-1, step=10, diagnostic=True, by_sample=True, pval=1, return_estimates=True)
-    estimates_speed, _ = init_speed.fit(tolerance=1e-1, step=10, diagnostic=True, by_sample=True,return_estimates=True)
+    estimates_speed, _ = ForwardEstimationModel(_trial_data_speed, _events_speed).fit(tolerance=1e-1, step=10, diagnostic=True, by_sample=True, pval=1, return_estimates=True)
+    estimates_speed, _ = ForwardEstimationModel(_trial_data_speed, _events_speed).fit(tolerance=1e-1, step=10, diagnostic=True, by_sample=True,return_estimates=True)
     ## Backward function 
-    backward_speed = init_speed.backward_estimation(max_fit=estimates_speed, tolerance=1e-1, max_events=2)
+    backward_speed = BackwardEstimationModel(_trial_data_speed, _events_speed).fit(max_fit=estimates_speed, tolerance=1e-1, max_events=2)
     ## Condition fit
     mags_map = np.array([[1, -1],
                     [1, 0]])
@@ -125,7 +140,7 @@ def test_integration():
     conds = {'condition': ['a', 'b']} #dictionary with conditions to analyze as well as the levels.
     mags4 = backward_speed.sel(n_events=2).magnitudes.dropna('event').data
     pars4 = backward_speed.sel(n_events=2).parameters.dropna('stage').data
-    model_stage_removed = init.fit_n(magnitudes=mags4, parameters=pars4, pars_map=pars_map, mags_map=mags_map, level_dict=conds,  cpus=1, tolerance=1e-1, verbose=True)
+    model_stage_removed = FixedEventModel(_trial_data, _events).fit(magnitudes=mags4, parameters=pars4, pars_map=pars_map, mags_map=mags_map, level_dict=conds,  cpus=1, tolerance=1e-1, verbose=True)
     
     # LOOCV
     loocv_model_speed = hmp.loocv.loocv(init_speed, hmp_speed_data, backward_speed, print_warning=True, verbose=True, cpus=1)

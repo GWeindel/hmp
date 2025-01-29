@@ -1,8 +1,7 @@
-"""Models to estimate event probabilities."""
-
 import gc
 import itertools
 import multiprocessing as mp
+from abc import ABC, abstractmethod
 from itertools import cycle, product
 from warnings import resetwarnings, warn
 
@@ -13,195 +12,18 @@ from pandas import MultiIndex
 from scipy.signal import correlate
 from scipy.stats import norm as norm_pval
 
+from hmp.models.base import BaseModel
+
 try:
     __IPYTHON__
     from tqdm.notebook import tqdm
 except NameError:
     from tqdm import tqdm
 
-default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
 
-class HMP:
-    """The model to analyze the raw data.
-
-    Parameters
-    ----------
-    data : xr.Dataset
-        xr.Dataset obtained through the hmp.utils.transform_data() function
-    sfreq : float
-        (optional) Sampling frequency of the signal if not provided, inferred from the epoch_data
-    cpus: int
-        How many cpus to use for the functions`using multiprocessing`
-    event_width : float
-        width of events in milliseconds, by default 50 ms.
-    shape: float
-        shape of the probability distributions of the by-trial stage onset
-        (one shape for all stages)
-    template: ndarray
-        Expected shape for the transition event used in the cross-correlation,
-        should be a vector of values capturing the expected shape over the sampling frequency
-        of the data. If None, the template is created as a half-sine shape with a frequency
-        derived from the event_width argument
-    location : float
-        Minimum duration between events in samples. Default is the event_width.
-    distribution : str
-        Probability distribution for the by-trial onset of stages can be
-        one of 'gamma','lognormal','wald', or 'weibull'
-    """
-
-    def __init__(
-        self,
-        data,
-        sfreq=None,
-        cpus=1,
-        event_width=50,
-        shape=2,
-        template=None,
-        location=None,
-        distribution="gamma",
-    ):
-
-        match distribution:
-            case "gamma":
-                from scipy.stats import gamma as sp_dist
-
-                from hmp.utils import _gamma_mean_to_scale, _gamma_scale_to_mean
-
-                self.scale_to_mean, self.mean_to_scale = _gamma_scale_to_mean, _gamma_mean_to_scale
-            case "lognormal":
-                from scipy.stats import lognorm as sp_dist
-
-                from hmp.utils import _logn_mean_to_scale, _logn_scale_to_mean
-
-                self.scale_to_mean, self.mean_to_scale = _logn_scale_to_mean, _logn_mean_to_scale
-            case "wald":
-                from scipy.stats import invgauss as sp_dist
-
-                from hmp.utils import _wald_mean_to_scale, _wald_scale_to_mean
-
-                self.scale_to_mean, self.mean_to_scale = _wald_scale_to_mean, _wald_mean_to_scale
-            case "weibull":
-                from scipy.stats import weibull_min as sp_dist
-
-                from hmp.utils import _weibull_mean_to_scale, _weibull_scale_to_mean
-
-                self.scale_to_mean, self.mean_to_scale = (
-                    _weibull_scale_to_mean,
-                    _weibull_mean_to_scale,
-                )
-            case _:
-                raise ValueError(f"Unknown Distribution {distribution}")
-        self.distribution = distribution
-        self.pdf = sp_dist.pdf
-        if sfreq is None:
-            sfreq = data.sfreq
-        self.sfreq = sfreq
-        self.steps = 1000 / self.sfreq
-        self.shape = float(shape)
-        self.event_width = event_width
-        self.event_width_samples = int(np.round(self.event_width / self.steps))
-        if location is None:
-            self.location = int(self.event_width / self.steps)
-        else:
-            self.location = int(np.rint(location))
-        if template is None:
-            self.template = self._event_shape()
-        else:
-            self.template = template
-        # compute sequence durations based on number of samples
-        durations = (
-            data.unstack()
-            .sel(component=0)
-            .rename({"epochs": "trials"})
-            .stack(trial_x_participant=["participant", "trials"])
-            .dropna(dim="trial_x_participant", how="all")
-            .groupby("trial_x_participant")
-            .count(dim="samples")
-            .cumsum()
-            .squeeze()
-        )
-
-        if durations.trial_x_participant.count() > 1:
-            dur_dropped_na = durations.dropna("trial_x_participant")
-            starts = np.roll(dur_dropped_na.data, 1)
-            starts[0] = 0
-            ends = dur_dropped_na.data - 1
-            self.named_durations = durations.dropna("trial_x_participant") - durations.dropna(
-                "trial_x_participant"
-            ).shift(trial_x_participant=1, fill_value=0)
-            self.coords = durations.reset_index("trial_x_participant").coords
-        else:
-            dur_dropped_na = durations
-            starts = np.array([0])
-            ends = np.array([dur_dropped_na.data - 1])
-            self.named_durations = durations
-            self.coords = durations.coords
-
-        self.starts = starts
-        self.ends = ends
-        self.durations = self.ends - self.starts + 1
-        self.mean_d = self.durations.mean()
-        self.n_trials = durations.trial_x_participant.count().values
-        self.cpus = cpus
-        self.n_samples, self.n_dims = np.shape(data.data.T)
-        self.crosscorr = self.cross_correlation(data.data.T)  # Equation 1 in 2024 paper
-        self.max_d = self.durations.max()
-        self.trial_coords = (
-            data.unstack()
-            .sel(component=0, samples=0)
-            .rename({"epochs": "trials"})
-            .stack(trial_x_participant=["participant", "trials"])
-            .dropna(dim="trial_x_participant", how="all")
-            .coords
-        )
-
-    def _event_shape(self):
-        """Compute the event shape.
-
-        Computes the template of a half-sine (event) with given frequency f and sampling frequency.
-
-        Equations in section 2.4 in the 2024 paper
-        """
-        event_idx = np.arange(self.event_width_samples) * self.steps + self.steps / 2
-        event_frequency = 1000 / (
-            self.event_width * 2
-        )  # gives event frequency given that events are defined as half-sines
-        template = np.sin(
-            2 * np.pi * event_idx / 1000 * event_frequency
-        )  # event morph based on a half sine with given event width and sampling frequency
-        template = template / np.sum(template**2)  # Weight normalized
-        return template
-
-    def cross_correlation(self, data):
-        """Set the correlation between the samples and the pattern.
-
-        This function puts on each sample the correlation of that sample and the next
-        x samples (depends on sampling frequency and event size) with a half sine on time domain.
-
-        Parameters
-        ----------
-        data : ndarray
-            2D ndarray with n_samples * components
-
-        Returns
-        -------
-        events : ndarray
-            a 2D ndarray with samples * PC components where cell values have
-            been correlated with event morphology
-        """
-        events = np.zeros(data.shape)
-        for trial in range(self.n_trials):  # avoids confusion of gains between trials
-            for dim in np.arange(self.n_dims):
-                events[self.starts[trial] : self.ends[trial] + 1, dim] = correlate(
-                    data[self.starts[trial] : self.ends[trial] + 1, dim],
-                    self.template,
-                    mode="same",
-                    method="direct",
-                )
-        return events
-
-    def fit_n(
+class FixedEventModel(BaseModel):
+    def fit(
         self,
         n_events=None,
         magnitudes=None,
@@ -215,7 +37,7 @@ class HMP:
         starting_points=1,
         return_max=True,
         verbose=True,
-        cpus=None,
+        cpus=1,
         mags_map=None,
         pars_map=None,
         level_dict=None,
@@ -317,8 +139,8 @@ class HMP:
                 )
             else:
                 print(f"Estimating {n_events} events model")
-        if cpus is None:
-            cpus = self.cpus
+        # if cpus is None:
+            # cpus = self.cpus
 
         # Formatting parameters
         if isinstance(parameters, (xr.DataArray, xr.Dataset)):
@@ -550,108 +372,6 @@ class HMP:
             print(f"parameters estimated for {n_events} events model")
         return estimated
 
-    def _level_constructor(self, magnitudes, parameters, mags_map, pars_map, level_dict, verbose):
-        """Adapt model to levels."""
-        ## levels
-        assert isinstance(level_dict, dict), "levels have to be specified as a dictionary"
-
-        # collect level names, levels, and trial coding
-        level_names = []
-        level_mods = []
-        level_trials = []
-        for level in level_dict.keys():
-            level_names.append(level)
-            level_mods.append(level_dict[level])
-            level_trials.append(self.trial_coords[level])
-            if verbose:
-                print('Level "' + level_names[-1] + '" analyzed, with levels:', level_mods[-1])
-
-        level_mods = list(product(*level_mods))
-        level_mods = np.array(level_mods, dtype=object)
-        print(level_mods)
-        n_levels = len(level_mods)
-
-        # build level array with digit indicating the combined levels
-        level_trials = np.vstack(level_trials).T
-        levels = np.zeros((level_trials.shape[0])) * np.nan
-        if verbose:
-            print("\nCoded as follows: ")
-        for i, mod in enumerate(level_mods):
-            assert len(np.where((level_trials == mod).all(axis=1))[0]) > 0, (
-                f"Modality {mod} of level does not occur in the data"
-            )
-            levels[np.where((level_trials == mod).all(axis=1))] = i
-            if verbose:
-                print(str(i) + ": " + str(level))
-        levels = np.int8(levels)
-        clabels = {"level " + str(level_names): level_mods}
-
-        # check maps
-        n_levels_mags = 0 if mags_map is None else mags_map.shape[0]
-        n_levels_pars = 0 if pars_map is None else pars_map.shape[0]
-        if (
-            n_levels_mags > 0 and n_levels_pars > 0
-        ):  # either both maps should have the same number of levels, or 0
-            assert n_levels_mags == n_levels_pars, (
-                "magnitude and parameters maps have to indicate the same number of levels"
-            )
-            # make sure nr of events correspond per row
-            for c in range(n_levels):
-                assert sum(mags_map[c, :] >= 0) + 1 == sum(pars_map[c, :] >= 0), (
-                    "nr of events in magnitudes map and parameters map do not correspond on row "
-                    + str(c)
-                )
-        elif n_levels_mags == 0:
-            assert not (pars_map < 0).any(), (
-                "If negative parameters are provided, magnitude map is required."
-            )
-            mags_map = np.zeros((n_levels, pars_map.shape[1] - 1), dtype=int)
-        else:
-            pars_map = np.zeros((n_levels, mags_map.shape[1] + 1), dtype=int)
-            if (mags_map < 0).any():
-                for c in range(n_levels):
-                    pars_map[c, np.where(mags_map[c, :] < 0)[0]] = -1
-                    pars_map[c, np.where(mags_map[c, :] < 0)[0] + 1] = 1
-
-        # print maps to check level/row mathcing
-        if verbose:
-            print("\nMagnitudes map:")
-            for cnt in range(n_levels):
-                print(str(cnt) + ": ", mags_map[cnt, :])
-
-            print("\nParameters map:")
-            for cnt in range(n_levels):
-                print(str(cnt) + ": ", pars_map[cnt, :])
-
-            # give explanation if negative parameters:
-            if (pars_map < 0).any():
-                print("\n-----")
-                print("Negative parameters. Note that this stage is left out, while the parameters")
-                print(
-                    "of the other stages are compared column by column. "
-                    "In this parameter map example:"
-                )
-                print(np.array([[0, 0, 0, 0], [0, -1, 0, 0]]))
-                print(
-                    "the parameters of stage 1 are shared, as well as the parameters of stage 3 of"
-                )
-                print("level 1 with stage 2 (column 3) of level 2 and the last stage of both")
-                print("levels.")
-                print("Given that event 2 is probably missing in level 2, it would typically")
-                print("make more sense to let both stages around event 2 in level 1 vary as")
-                print("compared to level 2:")
-                print(np.array([[0, 0, 0, 0], [0, -1, 1, 0]]))
-                print("-----")
-
-        # at this point, all should indicate the same number of levels
-        assert n_levels == mags_map.shape[0] == pars_map.shape[0], (
-            "number of unique levels should correspond to number of rows in map(s)"
-        )
-
-        assert levels.shape[0] == self.durations.shape[0], (
-            "levels parameter should contain the level per epoch."
-        )
-        return n_levels, levels, clabels, pars_map, mags_map
 
     def _EM_star(self, args):  # for tqdm usage  #noqa
         return self.EM(*args)
@@ -849,6 +569,35 @@ class HMP:
         )
 
         return [magnitudes, parameters]
+
+    def scale_parameters(self, eventprobs=None, n_events=None, averagepos=None):
+        """Scale the parameters for the distribution.
+
+        Used for the re-estimation in the EM procdure. The likeliest location of
+        the event is computed from eventprobs. The scale parameter are then taken as the average
+        distance between the events
+
+        Parameters
+        ----------
+        eventprobs : ndarray
+            [samples(max_d)*n_trials*n_events] = [max_d*trials*nTransition events]
+        durations : ndarray
+            1D array of trial length
+        mags : ndarray
+            2D ndarray components * nTransition events, initial conditions for events magnitudes
+        shape : float
+            shape parameter for the gamma, defaults to 2
+
+        Returns
+        -------
+        params : ndarray
+            shape and scale for the gamma distributions
+        """
+        params = np.zeros((n_events + 1, 2), dtype=np.float64)
+        params[:, 0] = self.shape
+        params[:, 1] = np.diff(averagepos, prepend=0)
+        params[:, 1] = [self.mean_to_scale(x[1], x[0]) for x in params]
+        return params
 
     def estim_probs(
         self,
@@ -1110,468 +859,105 @@ class HMP:
         p[np.isnan(p)] = 0  # remove potential nans
         return p
 
-    def scale_parameters(self, eventprobs=None, n_events=None, averagepos=None):
-        """Scale the parameters for the distribution.
+    def _level_constructor(self, magnitudes, parameters, mags_map, pars_map, level_dict, verbose):
+        """Adapt model to levels."""
+        ## levels
+        assert isinstance(level_dict, dict), "levels have to be specified as a dictionary"
 
-        Used for the re-estimation in the EM procdure. The likeliest location of
-        the event is computed from eventprobs. The scale parameter are then taken as the average
-        distance between the events
+        # collect level names, levels, and trial coding
+        level_names = []
+        level_mods = []
+        level_trials = []
+        for level in level_dict.keys():
+            level_names.append(level)
+            level_mods.append(level_dict[level])
+            level_trials.append(self.trial_coords[level])
+            if verbose:
+                print('Level "' + level_names[-1] + '" analyzed, with levels:', level_mods[-1])
 
-        Parameters
-        ----------
-        eventprobs : ndarray
-            [samples(max_d)*n_trials*n_events] = [max_d*trials*nTransition events]
-        durations : ndarray
-            1D array of trial length
-        mags : ndarray
-            2D ndarray components * nTransition events, initial conditions for events magnitudes
-        shape : float
-            shape parameter for the gamma, defaults to 2
+        level_mods = list(product(*level_mods))
+        level_mods = np.array(level_mods, dtype=object)
+        print(level_mods)
+        n_levels = len(level_mods)
 
-        Returns
-        -------
-        params : ndarray
-            shape and scale for the gamma distributions
-        """
-        params = np.zeros((n_events + 1, 2), dtype=np.float64)
-        params[:, 0] = self.shape
-        params[:, 1] = np.diff(averagepos, prepend=0)
-        params[:, 1] = [self.mean_to_scale(x[1], x[0]) for x in params]
-        return params
-
-    def backward_estimation(
-        self,
-        max_events=None,
-        min_events=0,
-        max_fit=None,
-        max_starting_points=1,
-        tolerance=1e-4,
-        maximization=True,
-        max_iteration=1e3,
-    ):
-        """Perform the backward estimation.
-
-        First read or estimate max_event solution then estimate max_event - 1 solution by
-        iteratively removing one of the event and pick the one with the highest
-        loglikelihood
-
-        Parameters
-        ----------
-        max_events : int
-            Maximum number of events to be estimated, by default the output of
-            hmp.models.hmp.compute_max_events()
-        min_events : int
-            The minimum number of events to be estimated
-        max_fit : xarray
-            To avoid re-estimating the model with maximum number of events it can be provided
-            with this arguments, defaults to None
-        max_starting_points: int
-            how many random starting points iteration to try for the model estimating the maximal
-            number of events
-        tolerance: float
-            Tolerance applied to the expectation maximization in the EM() function
-        maximization: bool
-            If True (Default) perform the maximization phase in EM() otherwhise skip
-        max_iteration: int
-            Maximum number of iteration for the expectation maximization in the EM() function
-        """
-        if max_events is None and max_fit is None:
-            max_events = self.compute_max_events()
-        if not max_fit:
-            if max_starting_points > 0:
-                print(
-                    f"Estimating all solutions for maximal number of events ({max_events}) with 1 "
-                    "pre-defined starting point and {max_starting_points - 1} starting points"
-                )
-            event_loo_results = [
-                self.fit_n(max_events, starting_points=max_starting_points, verbose=False)
-            ]
-        else:
-            event_loo_results = [max_fit]
-        max_events = event_loo_results[0].event.max().values + 1
-
-        for n_events in np.arange(max_events - 1, min_events, -1):
-            # only take previous model forward when it's actually fitting ok
-            if event_loo_results[-1].loglikelihood.values != -np.inf:
-                print(f"Estimating all solutions for {n_events} events")
-
-                pars_prev = event_loo_results[-1].dropna("stage").parameters.values
-                mags_prev = event_loo_results[-1].dropna("event").magnitudes.values
-
-                events_temp, pars_temp = [], []
-
-                for event in np.arange(n_events + 1):  # creating all possible solutions
-                    events_temp.append(mags_prev[np.arange(n_events + 1) != event,])
-
-                    temp_pars = np.copy(pars_prev)
-                    temp_pars[event, 1] = (
-                        temp_pars[event, 1] + temp_pars[event + 1, 1]
-                    )  # combine two stages into one
-                    temp_pars = np.delete(temp_pars, event + 1, axis=0)
-                    pars_temp.append(temp_pars)
-
-                if self.cpus == 1:
-                    event_loo_likelihood_temp = []
-                    for i in range(len(events_temp)):
-                        event_loo_likelihood_temp.append(
-                            self.fit_n(
-                                n_events,
-                                events_temp[i],
-                                pars_temp[i],
-                                tolerance=tolerance,
-                                max_iteration=max_iteration,
-                                maximization=maximization,
-                                verbose=False,
-                            )
-                        )
-                else:
-                    inputs = zip(
-                        itertools.repeat(n_events),
-                        events_temp,
-                        pars_temp,
-                        itertools.repeat([]),
-                        itertools.repeat([]),
-                        itertools.repeat(tolerance),
-                        itertools.repeat(max_iteration),
-                        itertools.repeat(maximization),
-                        itertools.repeat(1),
-                        itertools.repeat(1),
-                        itertools.repeat(True),
-                        itertools.repeat(False),
-                        itertools.repeat(1),
-                    )
-                    with mp.Pool(processes=self.cpus) as pool:
-                        event_loo_likelihood_temp = pool.starmap(self.fit_n, inputs)
-
-                lkhs = [x.loglikelihood.values for x in event_loo_likelihood_temp]
-                event_loo_results.append(event_loo_likelihood_temp[np.nanargmax(lkhs)])
-
-                # remove event_loo_likelihood
-                del event_loo_likelihood_temp
-                # Force garbage collection
-                gc.collect()
-
-            else:
-                print(
-                    f"Previous model did not fit well. Estimating a neutral {n_events} event model."
-                )
-                event_loo_results.append(
-                    self.fit_n(
-                        n_events,
-                        tolerance=tolerance,
-                        max_iteration=max_iteration,
-                        maximization=maximization,
-                    )
-                )
-        event_loo_results = xr.concat(event_loo_results, dim="n_events", fill_value=np.nan)
-        event_loo_results = event_loo_results.assign_coords(
-            {"n_events": np.arange(max_events, min_events, -1)}
-        )
-        event_loo_results = event_loo_results.assign_attrs(method="backward")
-        if "sp_parameters" in event_loo_results.attrs:
-            del event_loo_results.attrs["sp_parameters"]
-            del event_loo_results.attrs["sp_magnitudes"]
-            del event_loo_results.attrs["maximization"]
-        return event_loo_results
-
-    def compute_max_events(self):
-        """Compute the maximum possible number of events given event width minimum reaction time."""
-        return int(np.rint(np.percentile(self.durations, 10) // (self.location)))
-
-    def gen_random_stages(self, n_events):
-        """Compute random stage duration.
-
-        Returns random stage duration between 0 and mean RT by iteratively drawind sample from a
-        uniform distribution between the last stage duration (equal to 0 for first iteration) and 1.
-        Last stage is equal to 1-previous stage duration.
-        The stages are then scaled to the mean RT
-
-        Parameters
-        ----------
-        n_events : int
-            how many events
-
-        Returns
-        -------
-        random_stages : ndarray
-            random partition between 0 and mean_d
-        """
-        mean_d = int(self.mean_d)
-        rnd_durations = np.zeros(n_events + 1)
-        while any(rnd_durations < self.event_width_samples):  # at least event_width
-            rnd_events = np.random.default_rng().integers(
-                low=0, high=mean_d, size=n_events
-            )  # n_events between 0 and mean_d
-            rnd_events = np.sort(rnd_events)
-            rnd_durations = np.hstack((rnd_events, mean_d)) - np.hstack(
-                (0, rnd_events)
-            )  # associated durations
-        random_stages = np.array(
-            [[self.shape, self.mean_to_scale(x, self.shape)] for x in rnd_durations]
-        )
-        return random_stages
-
-    def fit(
-        self,
-        step=None,
-        verbose=True,
-        end=None,
-        tolerance=1e-3,
-        diagnostic=False,
-        return_estimates=False,
-        by_sample=False,
-        pval=None,
-    ):
-        """Fit the model starting with 1 event model.
-
-        Instead of fitting an n event model this method starts by fitting a 1 event model
-        (two stages) using each sample from the time 0 (stimulus onset) to the mean RT.
-        Therefore it tests for the landing point of the expectation maximization algorithm given
-        each sample as starting point and the likelihood associated with this landing point.
-        As soon as a starting points reaches the convergence criterion, the function fits an n+1
-        event model and uses the next samples in the RT as starting point for the following event
-
-        Parameters
-        ----------
-        step: float
-            The size of the step from 0 to the mean RT, defaults to the widths of
-            the expected event.
-        verbose: bool
-            If True print information about the fit
-        end: int
-            The maximum number of samples to explore within each trial
-        trace: bool
-            If True keep the scale and magnitudes parameters for each iteration
-        tolerance: float
-            The tolerance used for the convergence in the EM() function
-        diagnostic: bool
-            If True print a diagnostic plot of the EM traces for each iteration and several
-            statistics at each iteration
-        return_estimates : bool
-            return all intermediate models
-        by_sample : bool
-            try every sample as the starting point, even if a later event has already
-            been identified. This in case the method jumped over a local maximum in an earlier
-            estimation.
-        pval: float
-            p-value for the detection of the first event, test the first location for significance
-            compared to a distribution of noise estimates
-
-        Returns
-        -------
-                  A the fitted HMP mo
-        """
-        if end is None:
-            end = self.mean_d
-        if step is None:
-            step = self.event_width_samples
-        max_event_n = self.compute_max_events() * 10  # not really nedded, if it fits it fits
-        if diagnostic:
-            cycol = cycle(default_colors)
-        pbar = tqdm(total=int(np.rint(end)))  # progress bar
-        n_events, j, time = 1, 1, 0  # j = sample after last placed event
-        # Init pars (need this for min_model)
-        pars = np.zeros((max_event_n + 1, 2))
-        pars[:, 0] = self.shape  # final gamma parameters during estimation, shape x scale
-        pars_prop = pars[: n_events + 1].copy()  # gamma params of current estimation
-        pars_prop[0, 1] = self.mean_to_scale(
-            j * step, self.shape
-        )  # initialize gamma_parameters at 1 sample
-        last_stage = self.mean_to_scale(end - j * step, self.shape)  # remainder of time
-        pars_prop[-1, 1] = last_stage
-
-        # Init mags
-        mags = np.zeros((max_event_n, self.n_dims))  # final mags during estimation
-
-        # The first new detected event should be higher than the bias induced by splitting the RT
-        # in two random partition
-        if pval is not None:
-            lkh = self.fit_n(
-                1, maximization=False, starting_points=100, return_max=False, verbose=False
-            )
-            lkh_prev = lkh.loglikelihood.mean() + lkh.loglikelihood.std() * norm_pval.ppf(1 - pval)
-        else:
-            lkh_prev = -np.inf
-        if return_estimates:
-            estimates = []  # store all n_event solutions
-
-        # Iterative fit
-        while (
-            self.scale_to_mean(last_stage, self.shape) >= self.location and n_events <= max_event_n
-        ):
-            prev_time = time
-
-            # get new parameters
-            mags_props, pars_prop = self.propose_fit_params(
-                n_events, by_sample, step, j, mags, pars, end
-            )
-            last_stage = pars_prop[n_events, 1]
-            pars_prop = np.array([pars_prop])
-
-            # Estimate model based on these propositions
-            solutions = self.fit_n(
-                n_events,
-                mags_props,
-                pars_prop,
-                None,
-                None,
-                verbose=False,
-                cpus=1,
-                tolerance=tolerance,
-            )
-            sol_lkh = solutions.loglikelihood.values
-            sol_sample_new_event = int(
-                np.round(
-                    self.scale_to_mean(
-                        np.sum(solutions.parameters.values[:n_events, 1]), self.shape
-                    )
-                )
-            )
-
-            # Diagnostic plot
-            if diagnostic:
-                plt.plot(solutions.traces.T, alpha=0.3, c="k")
-                print()
-                print("Event found at sample " + str(sol_sample_new_event))
-                events_at = np.round(self.scale_to_mean(
-                                  np.cumsum(solutions.parameters.values[:, 1]),
-                                  self.shape)).astype(int)
-                print(
-                    f"Events at {events_at}"
-                )
-                print("lkh change: " + str(solutions.loglikelihood.values - lkh_prev))
-            # check solution
-            if sol_lkh - lkh_prev > 0:  # accept solution if likelihood improved
-                lkh_prev = sol_lkh
-
-                # update mags, params,
-                mags[:n_events] = solutions.magnitudes.values
-                pars[: n_events + 1] = solutions.parameters.values
-
-                # store solution
-                if return_estimates:
-                    estimates.append(solutions)
-
-                # search for an additional event, starting again at sample 1 from prev event,
-                # or next sample if by_sample
-                n_events += 1
-                if by_sample:
-                    j += 1
-                    time = j * step
-                else:
-                    j = 1
-                    time = sol_sample_new_event + j * step
-
-                # Diagnostic plot
-                if diagnostic:
-                    color = next(cycol)
-                    plt.plot(solutions.traces.T, c=color, label=f"n-events {n_events - 1}")
-                if verbose:
-                    print(
-                        f"Transition event {n_events - 1} found around sample "
-                        f"{sol_sample_new_event}"
-                    )
-
-            else:  # reject solution, search on
-                prev_sample = int(
-                    np.round(self.scale_to_mean(np.sum(pars[: n_events - 1, 1]), self.shape))
-                )
-                # find furthest explored param. Note: this also work by_sample
-                # just a tiny bit faster this way
-                if not by_sample:
-                    max_scale = np.max(
-                        [np.sum(x[:n_events, 1]) for x in solutions.param_dev.values]
-                    )
-                    max_sample = int(np.round(self.scale_to_mean(max_scale, self.shape)))
-                    j = (
-                        np.max([max_sample - prev_sample + 1, (j + 1) * step]) / step
-                    )  # either ffwd to furthest explored sample or add 1 to j
-                    time = prev_sample + j * step
-                else:
-                    j += 1
-                    time = j * step
-
-            pbar.update(int(np.rint(time - prev_time)))
-
-        # done estimating
-
-        n_events = n_events - 1
+        # build level array with digit indicating the combined levels
+        level_trials = np.vstack(level_trials).T
+        levels = np.zeros((level_trials.shape[0])) * np.nan
         if verbose:
-            print()
-            print("All events found, refitting final combination.")
-        if diagnostic:
-            plt.ylabel("Log-likelihood")
-            plt.xlabel("EM iteration")
-            plt.legend()
-        mags = mags[:n_events, :]
-        pars = pars[: n_events + 1, :]
-        if n_events > 0:
-            fit = self.fit_n(
-                n_events,
-                parameters=np.array([pars]),
-                magnitudes=np.array([mags]),
-                verbose=verbose,
-                cpus=1,
+            print("\nCoded as follows: ")
+        for i, mod in enumerate(level_mods):
+            assert len(np.where((level_trials == mod).all(axis=1))[0]) > 0, (
+                f"Modality {mod} of level does not occur in the data"
             )
-            fit = fit.assign_attrs(step=step, by_sample=int(by_sample))
-            fit = fit.assign_attrs(method="fit", step=step, by_sample=int(by_sample))
-        else:
-            warn("Failed to find more than two stages, returning None")
-            fit = None
-        del fit.attrs["sp_parameters"]
-        del fit.attrs["sp_magnitudes"]
-        del fit.attrs["maximization"]
-        pbar.update(int(np.rint(end) - int(np.rint(time))))
-        if return_estimates:
-            return fit, estimates
-        else:
-            return fit
+            levels[np.where((level_trials == mod).all(axis=1))] = i
+            if verbose:
+                print(str(i) + ": " + str(level))
+        levels = np.int8(levels)
+        clabels = {"level " + str(level_names): level_mods}
 
-    def propose_fit_params(self, n_events, by_sample, step, j, mags, pars, end):
+        # check maps
+        n_levels_mags = 0 if mags_map is None else mags_map.shape[0]
+        n_levels_pars = 0 if pars_map is None else pars_map.shape[0]
         if (
-            by_sample and n_events > 1
-        ):  # go through the whole range sample-by-sample, j is sample since start
-            scale_j = self.mean_to_scale(step * j, self.shape)
-
-            # New parameter proposition
-            pars_prop = pars[:n_events].copy()  # pars so far
-            n_event_j = np.argwhere(scale_j > np.cumsum(pars_prop[:, 1])) + 2  # counting from 1
-            n_event_j = np.max(n_event_j) if len(n_event_j) > 0 else 1
-            n_event_j = np.min([n_event_j, n_events])  # do not insert even after last stage
-
-            # insert j at right spot, subtract prev scales
-            pars_prop = np.insert(
-                pars_prop,
-                n_event_j - 1,
-                [self.shape, scale_j - np.sum(pars_prop[: n_event_j - 1, 1])],
-                axis=0,
+            n_levels_mags > 0 and n_levels_pars > 0
+        ):  # either both maps should have the same number of levels, or 0
+            assert n_levels_mags == n_levels_pars, (
+                "magnitude and parameters maps have to indicate the same number of levels"
             )
-            # subtract inserted scale from next event
-            pars_prop[n_event_j, 1] = pars_prop[n_event_j, 1] - pars_prop[n_event_j - 1, 1]
-            last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:-1, 1])
-            pars_prop[n_events, 1] = last_stage
-            mags_props = np.zeros((1, n_events, self.n_dims))  # always 0?
-            mags_props[:, : n_events - 1, :] = np.tile(
-                mags[: n_events - 1, :], (len(mags_props), 1, 1)
+            # make sure nr of events correspond per row
+            for c in range(n_levels):
+                assert sum(mags_map[c, :] >= 0) + 1 == sum(pars_map[c, :] >= 0), (
+                    "nr of events in magnitudes map and parameters map do not correspond on row "
+                    + str(c)
+                )
+        elif n_levels_mags == 0:
+            assert not (pars_map < 0).any(), (
+                "If negative parameters are provided, magnitude map is required."
             )
-            # shift new event to correct position
-            mags_props = np.insert(
-                mags_props[:, :-1, :], n_event_j - 1, mags_props[:, -1, :], axis=1
-            )
-
+            mags_map = np.zeros((n_levels, pars_map.shape[1] - 1), dtype=int)
         else:
-            # New parameter proposition
-            pars_prop = pars[: n_events + 1].copy()
-            pars_prop[n_events - 1, 1] = self.mean_to_scale(step * j, self.shape)
-            last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:-1, 1])
-            pars_prop[n_events, 1] = last_stage
+            pars_map = np.zeros((n_levels, mags_map.shape[1] + 1), dtype=int)
+            if (mags_map < 0).any():
+                for c in range(n_levels):
+                    pars_map[c, np.where(mags_map[c, :] < 0)[0]] = -1
+                    pars_map[c, np.where(mags_map[c, :] < 0)[0] + 1] = 1
 
-            mags_props = np.zeros((1, n_events, self.n_dims))  # always 0?
-            mags_props[:, : n_events - 1, :] = np.tile(
-                mags[: n_events - 1, :], (len(mags_props), 1, 1)
-            )
+        # print maps to check level/row mathcing
+        if verbose:
+            print("\nMagnitudes map:")
+            for cnt in range(n_levels):
+                print(str(cnt) + ": ", mags_map[cnt, :])
 
-        # in edge cases scale can get negative, make sure that doesn't happen:
-        pars_prop[:, 1] = np.maximum(pars_prop[:, 1], self.mean_to_scale(1, self.shape))
+            print("\nParameters map:")
+            for cnt in range(n_levels):
+                print(str(cnt) + ": ", pars_map[cnt, :])
 
-        return mags_props, pars_prop
+            # give explanation if negative parameters:
+            if (pars_map < 0).any():
+                print("\n-----")
+                print("Negative parameters. Note that this stage is left out, while the parameters")
+                print(
+                    "of the other stages are compared column by column. "
+                    "In this parameter map example:"
+                )
+                print(np.array([[0, 0, 0, 0], [0, -1, 0, 0]]))
+                print(
+                    "the parameters of stage 1 are shared, as well as the parameters of stage 3 of"
+                )
+                print("level 1 with stage 2 (column 3) of level 2 and the last stage of both")
+                print("levels.")
+                print("Given that event 2 is probably missing in level 2, it would typically")
+                print("make more sense to let both stages around event 2 in level 1 vary as")
+                print("compared to level 2:")
+                print(np.array([[0, 0, 0, 0], [0, -1, 1, 0]]))
+                print("-----")
+
+        # at this point, all should indicate the same number of levels
+        assert n_levels == mags_map.shape[0] == pars_map.shape[0], (
+            "number of unique levels should correspond to number of rows in map(s)"
+        )
+
+        assert levels.shape[0] == self.durations.shape[0], (
+            "levels parameter should contain the level per epoch."
+        )
+        return n_levels, levels, clabels, pars_map, mags_map
