@@ -593,13 +593,12 @@ def _filtering(data, filter, sfreq):
 def _pca(pca_ready_data, n_comp, channels):
     from sklearn.decomposition import PCA
 
-    # pca_ready_data = pca_ready_data.transpose(...,'channels')
     if n_comp is None:
         import matplotlib.pyplot as plt
 
         n_comp = np.shape(pca_ready_data)[0] - 1
         fig, ax = plt.subplots(1, 2, figsize=(0.2 * n_comp, 4))
-        pca = PCA(n_components=n_comp, svd_solver="full")  # selecting Principale components (PC)
+        pca = PCA(n_components=n_comp, svd_solver="full", copy=False)  # selecting PCs
         pca.fit(pca_ready_data)
 
         ax[0].plot(np.arange(pca.n_components) + 1, pca.explained_variance_ratio_, ".-")
@@ -643,6 +642,7 @@ def transform_data(
     pca_weights=None,
     bandfilter=None,
     mcca_reg=0,
+    copy=False,
 ):
     """Adapt EEG epoched data (in xarray format) to the expected data format for hmp.
 
@@ -688,13 +688,21 @@ def transform_data(
             also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
     mcca_reg: float
         regularization used for the mcca computation (see mcca.py)
-
+    copy: bool
+        Whether to copy the data before transforming
     Returns
     -------
     data : xarray.Dataset
         xarray dataset [n_samples * n_comp] data expressed in the PC space, ready for HMP fit
     """
-    data = epoch_data.copy(deep=True)
+    if copy is True:
+        data = epoch_data.copy(deep=True)
+    else:
+        data = epoch_data
+        warn(
+                "Data will be modified inplace, re-read the data or use copy=True if multiple"
+                "calls to this function"
+            )
     if isinstance(data, xr.DataArray):
         raise ValueError(
             "Expected a xarray Dataset with data and event as DataArrays, check the data format"
@@ -1104,13 +1112,14 @@ def event_topo(
     """
     if estimate_method is None:
         estimate_method = "max"
-    epoch_data = (
-        epoch_data.rename({"epochs": "trials"})
-        .stack(trial_x_participant=["participant", "trials"])
-        .data.fillna(0)
-        .drop_duplicates("trial_x_participant")
-    )
-    estimated = estimated.eventprobs.fillna(0).copy()
+    if "trial_x_participant" not in epoch_data.dims:
+        epoch_data = (
+            epoch_data.rename({"epochs": "trials"})
+            .stack(trial_x_participant=["participant", "trials"])
+            .data.fillna(0)
+            .drop_duplicates("trial_x_participant")
+        )
+    estimated = estimated.eventprobs.copy().fillna(0)
     n_events = estimated.event.count().values
     n_trials = estimated.trial_x_participant.count().values
     n_channels = epoch_data.channels.count().values
