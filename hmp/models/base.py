@@ -35,10 +35,10 @@ class EventProperties():
     template: Any
 
     @classmethod
-    def from_standard_data(cls, data, sfreq=None, shape=2, width=50, template=None, location=None):
+    def create_expected(cls, sfreq=None, shape=2, width=50, template=None, location=None):
 
-        if sfreq is None:
-            sfreq = data.sfreq
+        # if sfreq is None:
+            # sfreq = data.sfreq
         steps = 1000 / sfreq
         shape = float(shape)
 
@@ -149,38 +149,6 @@ class BaseModel(ABC):
         """Compute the maximum possible number of events given event width minimum reaction time."""
         return int(np.rint(np.percentile(self.durations, 10) // (self.location)))
 
-    def gen_random_stages(self, n_events):
-        """Compute random stage duration.
-
-        Returns random stage duration between 0 and mean RT by iteratively drawind sample from a
-        uniform distribution between the last stage duration (equal to 0 for first iteration) and 1.
-        Last stage is equal to 1-previous stage duration.
-        The stages are then scaled to the mean RT
-
-        Parameters
-        ----------
-        n_events : int
-            how many events
-
-        Returns
-        -------
-        random_stages : ndarray
-            random partition between 0 and mean_d
-        """
-        mean_d = int(self.mean_d)
-        rnd_durations = np.zeros(n_events + 1)
-        while any(rnd_durations < self.event_width_samples):  # at least event_width
-            rnd_events = np.random.default_rng().integers(
-                low=0, high=mean_d, size=n_events
-            )  # n_events between 0 and mean_d
-            rnd_events = np.sort(rnd_events)
-            rnd_durations = np.hstack((rnd_events, mean_d)) - np.hstack(
-                (0, rnd_events)
-            )  # associated durations
-        random_stages = np.array(
-            [[self.shape, self.mean_to_scale(x, self.shape)] for x in rnd_durations]
-        )
-        return random_stages
 
     def __getattribute__(self, attr):
         if attr in ["sfreq", "steps", "shape", "location", "template"]:

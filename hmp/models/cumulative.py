@@ -25,7 +25,7 @@ except NameError:
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
 
-class ForwardEstimationModel(BaseModel):
+class CumulativeEstimationModel(BaseModel):
     def fit(
         self,
         step=None,

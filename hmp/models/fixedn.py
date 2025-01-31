@@ -570,6 +570,40 @@ class FixedEventModel(BaseModel):
 
         return [magnitudes, parameters]
 
+    def gen_random_stages(self, n_events):
+        """Compute random stage duration.
+
+        Returns random stage duration between 0 and mean RT by iteratively drawind sample from a
+        uniform distribution between the last stage duration (equal to 0 for first iteration) and 1.
+        Last stage is equal to 1-previous stage duration.
+        The stages are then scaled to the mean RT
+
+        Parameters
+        ----------
+        n_events : int
+            how many events
+
+        Returns
+        -------
+        random_stages : ndarray
+            random partition between 0 and mean_d
+        """
+        mean_d = int(self.mean_d)
+        rnd_durations = np.zeros(n_events + 1)
+        while any(rnd_durations < self.event_width_samples):  # at least event_width
+            rnd_events = np.random.default_rng().integers(
+                low=0, high=mean_d, size=n_events
+            )  # n_events between 0 and mean_d
+            rnd_events = np.sort(rnd_events)
+            rnd_durations = np.hstack((rnd_events, mean_d)) - np.hstack(
+                (0, rnd_events)
+            )  # associated durations
+        random_stages = np.array(
+            [[self.shape, self.mean_to_scale(x, self.shape)] for x in rnd_durations]
+        )
+        return random_stages
+
+
     def scale_parameters(self, eventprobs=None, n_events=None, averagepos=None):
         """Scale the parameters for the distribution.
 

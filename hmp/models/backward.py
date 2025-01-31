@@ -28,7 +28,7 @@ class BackwardEstimationModel(BaseModel):
         self,
         max_events=None,
         min_events=0,
-        max_fit=None,
+        base_fit=None,
         max_starting_points=1,
         tolerance=1e-4,
         maximization=True,
@@ -48,7 +48,7 @@ class BackwardEstimationModel(BaseModel):
             hmp.models.hmp.compute_max_events()
         min_events : int
             The minimum number of events to be estimated
-        max_fit : xarray
+        base_fit : xarray
             To avoid re-estimating the model with maximum number of events it can be provided
             with this arguments, defaults to None
         max_starting_points: int
@@ -63,9 +63,9 @@ class BackwardEstimationModel(BaseModel):
         """
         fixed_n_model = FixedEventModel(self.trial_data, self.events, self.distribution)
 
-        if max_events is None and max_fit is None:
+        if max_events is None and base_fit is None:
             max_events = self.compute_max_events()
-        if not max_fit:
+        if not base_fit:
             if max_starting_points > 0:
                 print(
                     f"Estimating all solutions for maximal number of events ({max_events}) with 1 "
@@ -75,7 +75,7 @@ class BackwardEstimationModel(BaseModel):
                 fixed_n_model.fit(max_events, starting_points=max_starting_points, verbose=False)
             ]
         else:
-            event_loo_results = [max_fit]
+            event_loo_results = [base_fit]
         max_events = event_loo_results[0].event.max().values + 1
 
         for n_events in np.arange(max_events - 1, min_events, -1):

@@ -10,7 +10,7 @@ import gc
 
 import hmp
 from hmp import simulations
-from hmp.models import FixedEventModel, ForwardEstimationModel, BackwardEstimationModel
+from hmp.models import FixedEventModel, CumulativeEstimationModel, BackwardEstimationModel
 from hmp.models.base import EventProperties
 from hmp.trialdata import TrialData
 
@@ -88,7 +88,7 @@ def test_integration():
     # Comparing to simulated data, asserting that results are the one simulated
     events_a = np.load(event_a)
     data_a = hmp.utils.participant_selection(hmp_data, 'a')
-    event_properties = EventProperties.from_standard_data(data=data_a)
+    event_properties = EventProperties.create_expected(sfreq=data_a.sfreq)
     trial_data = TrialData.from_standard_data(data=data_a, template=event_properties.template)
     init_sim = FixedEventModel(trial_data=trial_data, event_properties=event_properties)
     sim_source_times, true_pars, true_magnitudes, _ = simulations.simulated_times_and_parameters(events_a, init_sim)
@@ -102,18 +102,18 @@ def test_integration():
 
     # Initializing models
     ## Testing different distribution implementation
-    event_properties = EventProperties.from_standard_data(hmp_data_sim, width=50, shape=2)
+    event_properties = EventProperties.create_expected(hmp_data_sim.sfreq, width=50, shape=2)
     trial_data = TrialData.from_standard_data(hmp_data_sim, event_properties.template)
     for distribution in  ['lognormal','wald','weibull','gamma']:
         fixed_sim_model = FixedEventModel(trial_data, event_properties, distribution=distribution)
         estimates = fixed_sim_model.fit(n_events, verbose=True)
 
     ## different init parameters
-    _events = EventProperties.from_standard_data(hmp_data, epoch_data.sfreq)
+    _events = EventProperties.create_expected(sfreq=epoch_data.sfreq)
     _trial_data = TrialData.from_standard_data(hmp_data, _events.template)
     fixed_sim_model = FixedEventModel(_trial_data, _events)
 
-    _events_speed = EventProperties.from_standard_data(hmp_speed_data, epoch_data.sfreq)
+    _events_speed = EventProperties.create_expected(sfreq=epoch_data.sfreq)
     _trial_data_speed = TrialData.from_standard_data(hmp_speed_data, _events.template)
     fixed_speedsim_model = FixedEventModel(_trial_data, _events)
     
@@ -128,10 +128,10 @@ def test_integration():
     selected = fixed_sim_model.fit(3, parameters=estimates.parameters, magnitudes=estimates.magnitudes)#funct
     selected = fixed_sim_model.fit(3, parameters=estimates.parameters, magnitudes=estimates.magnitudes, cpus=2)#funct
     # ## Fit function
-    estimates_speed, _ = ForwardEstimationModel(_trial_data_speed, _events_speed).fit(tolerance=1e-1, step=10, diagnostic=True, by_sample=True, pval=1, return_estimates=True)
-    estimates_speed, _ = ForwardEstimationModel(_trial_data_speed, _events_speed).fit(tolerance=1e-1, step=10, diagnostic=True, by_sample=True,return_estimates=True)
+    estimates_speed, _ = CumulativeEstimationModel(_trial_data_speed, _events_speed).fit(tolerance=1e-1, step=10, diagnostic=True, by_sample=True, pval=1, return_estimates=True)
+    estimates_speed, _ = CumulativeEstimationModel(_trial_data_speed, _events_speed).fit(tolerance=1e-1, step=10, diagnostic=True, by_sample=True,return_estimates=True)
     ## Backward function 
-    backward_speed = BackwardEstimationModel(_trial_data_speed, _events_speed).fit(max_fit=estimates_speed, tolerance=1e-1, max_events=2)
+    backward_speed = BackwardEstimationModel(_trial_data_speed, _events_speed).fit(base_fit=estimates_speed, tolerance=1e-1, max_events=2)
     ## Condition fit
     mags_map = np.array([[1, -1],
                     [1, 0]])
