@@ -23,19 +23,37 @@ except NameError:
 
 
 class FixedEventModel(BaseModel):
-    def fit(
-        self,
-        n_events=None,
-        magnitudes=None,
-        parameters=None,
-        parameters_to_fix=None,
-        magnitudes_to_fix=None,
+    def __init__(
+        self, *args, n_events=None, parameters_to_fix=None, magnitudes_to_fix=None,
         tolerance=1e-4,
         max_iteration=1e3,
         maximization=True,
         min_iteration=1,
         starting_points=1,
         return_max=True,
+        **kwargs
+    ):
+        self.n_events = n_events
+        self.parameters_to_fix = parameters_to_fix
+        self.magnitudes_to_fix = magnitudes_to_fix
+        self.tolerance = tolerance
+        self.max_iteration = max_iteration
+        self.maximization = maximization
+        self.min_iteration = min_iteration
+        self.starting_points = starting_points
+        self.return_max = return_max
+        self._fitted = False
+
+        super().__init__(*args, **kwargs)
+
+    def fit(
+        self,
+        trial_data,
+        magnitudes=None,
+        parameters=None,
+        parameters_to_fix=None,
+        magnitudes_to_fix=None,
+        # return_max=True,
         verbose=True,
         cpus=1,
         mags_map=None,
@@ -96,25 +114,27 @@ class FixedEventModel(BaseModel):
             the first level as many times as there are levels in the selevel level. E.g., SP-left,
             SP-right, AC-left, AC-right.
         """
+        self.trial_data = trial_data
+
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
         infos_to_store["sfreq"] = self.sfreq
         infos_to_store["event_width_samples"] = self.event_width_samples
-        infos_to_store["tolerance"] = tolerance
-        infos_to_store["maximization"] = int(maximization)
+        infos_to_store["tolerance"] = self.tolerance
+        infos_to_store["maximization"] = int(self.maximization)
 
-        if n_events is None:
+        if self.n_events is None:
             if parameters is not None:
-                n_events = len(parameters) - 1
+                self.n_events = len(parameters) - 1
             elif magnitudes is not None:
-                n_events = len(magnitudes)
+                self.n_events = len(magnitudes)
             else:
                 raise ValueError(
                     "The fit_n() function needs to be provided with a number of expected transition"
                     " events"
                 )
-        assert n_events <= self.compute_max_events(), (
-            f"{n_events} events do not fit given the minimum duration of {min(self.durations)}"
+        assert self.n_events <= self.compute_max_events(), (
+            f"{self.n_events} events do not fit given the minimum duration of {min(self.durations)}"
             " and a location of {self.location}"
         )
 
@@ -123,7 +143,7 @@ class FixedEventModel(BaseModel):
                 n_levels,
                 levels,
             ) = 1, np.zeros(self.n_trials)
-            pars_map, mags_map = np.zeros((1, n_events + 1)), np.zeros((1, n_events))
+            pars_map, mags_map = np.zeros((1, self.n_events + 1)), np.zeros((1, self.n_events))
         else:
             n_levels, levels, clabels, pars_map, mags_map = self._level_constructor(
                 magnitudes, parameters, mags_map, pars_map, level_dict, verbose
@@ -135,12 +155,10 @@ class FixedEventModel(BaseModel):
         if verbose:
             if parameters is None:
                 print(
-                    f"Estimating {n_events} events model with {starting_points} starting point(s)"
+                    f"Estimating {self.n_events} events model with {self.starting_points} starting point(s)"
                 )
             else:
-                print(f"Estimating {n_events} events model")
-        # if cpus is None:
-            # cpus = self.cpus
+                print(f"Estimating {self.n_events} events model")
 
         # Formatting parameters
         if isinstance(parameters, (xr.DataArray, xr.Dataset)):
@@ -151,18 +169,20 @@ class FixedEventModel(BaseModel):
             magnitudes = magnitudes.copy()
         if isinstance(parameters, np.ndarray):
             parameters = parameters.copy()
-        if parameters_to_fix is None:
+        if self.parameters_to_fix is None:
             parameters_to_fix = []
         else:
+            parameters_to_fix = self.parameters_to_fix
             infos_to_store["parameters_to_fix"] = parameters_to_fix
-        if magnitudes_to_fix is None:
+        if self.magnitudes_to_fix is None:
             magnitudes_to_fix = []
         else:
+            magnitudes_to_fix = self.magnitudes_to_fix
             infos_to_store["magnitudes_to_fix"] = magnitudes_to_fix
 
         if parameters is None:
             parameters = (
-                np.zeros((n_levels, n_events + 1, 2)) * np.nan
+                np.zeros((n_levels, self.n_events + 1, 2)) * np.nan
             )  # by default nan for missing stages
             for c in range(n_levels):
                 pars_level = np.where(pars_map[c, :] >= 0)[0]
@@ -181,9 +201,9 @@ class FixedEventModel(BaseModel):
             infos_to_store["sp_parameters"] = parameters
             if len(np.shape(parameters)) == 2:  # broadcast provided parameters across levels
                 parameters = np.tile(parameters, (n_levels, 1, 1))
-            assert parameters.shape[1] == n_events + 1, (
+            assert parameters.shape[1] == self.n_events + 1, (
                 f"Provided parameters ({parameters.shape[1]} should match number of "
-                f"stages {n_events + 1}"
+                f"stages {self.n_events + 1}"
             )
 
             # set params missing stages to nan to make it obvious in the results
@@ -193,7 +213,7 @@ class FixedEventModel(BaseModel):
 
         if magnitudes is None:
             # By defaults mags are initiated to 0
-            magnitudes = np.zeros((n_levels, n_events, self.n_dims), dtype=np.float64)
+            magnitudes = np.zeros((n_levels, self.n_events, self.n_dims), dtype=np.float64)
             if (mags_map < 0).any():  # set missing mags to nan
                 for c in range(n_levels):
                     magnitudes[c, np.where(mags_map[c, :] < 0)[0], :] = np.nan
@@ -201,7 +221,7 @@ class FixedEventModel(BaseModel):
             infos_to_store["sp_magnitudes"] = magnitudes
             if len(np.shape(magnitudes)) == 2:  # broadcast provided magnitudes across levels
                 magnitudes = np.tile(magnitudes, (n_levels, 1, 1))
-            assert magnitudes.shape[1] == n_events, (
+            assert magnitudes.shape[1] == self.n_events, (
                 "Provided magnitudes should match number of events in magnitudes map"
             )
 
@@ -212,12 +232,12 @@ class FixedEventModel(BaseModel):
         initial_p = parameters
         initial_m = magnitudes
         parameters = [initial_p]
-        magnitudes = np.tile(initial_m, (starting_points + 1, 1, 1, 1))
-        if starting_points > 1:
-            infos_to_store["starting_points"] = starting_points
-            for _ in np.arange(starting_points):
+        magnitudes = np.tile(initial_m, (self.starting_points + 1, 1, 1, 1))
+        if self.starting_points > 1:
+            infos_to_store["starting_points"] = self.starting_points
+            for _ in np.arange(self.starting_points):
                 proposal_p = (
-                    np.zeros((n_levels, n_events + 1, 2)) * np.nan
+                    np.zeros((n_levels, self.n_events + 1, 2)) * np.nan
                 )  # by default nan for missing stages
                 for c in range(n_levels):
                     pars_level = np.where(pars_map[c, :] >= 0)[0]
@@ -231,19 +251,19 @@ class FixedEventModel(BaseModel):
             inputs = zip(
                 magnitudes,
                 parameters,
-                itertools.repeat(maximization),
+                itertools.repeat(self.maximization),
                 itertools.repeat(magnitudes_to_fix),
                 itertools.repeat(parameters_to_fix),
-                itertools.repeat(max_iteration),
-                itertools.repeat(tolerance),
-                itertools.repeat(min_iteration),
+                itertools.repeat(self.max_iteration),
+                itertools.repeat(self.tolerance),
+                itertools.repeat(self.min_iteration),
                 itertools.repeat(mags_map),
                 itertools.repeat(pars_map),
                 itertools.repeat(levels),
                 itertools.repeat(1),
             )
             with mp.Pool(processes=cpus) as pool:
-                if starting_points > 1:
+                if self.starting_points > 1:
                     estimates = list(tqdm(pool.imap(self._EM_star, inputs), total=len(magnitudes)))
                 else:
                     estimates = pool.starmap(self.EM, inputs)
@@ -255,12 +275,12 @@ class FixedEventModel(BaseModel):
                     self.EM(
                         mags,
                         pars,
-                        maximization,
+                        self.maximization,
                         magnitudes_to_fix,
                         parameters_to_fix,
-                        max_iteration,
-                        tolerance,
-                        min_iteration,
+                        self.max_iteration,
+                        self.tolerance,
+                        self.min_iteration,
                         mags_map,
                         pars_map,
                         levels,
@@ -269,108 +289,147 @@ class FixedEventModel(BaseModel):
                 )
             resetwarnings()
 
-        lkhs_sp = [x[0] for x in estimates]
-        mags_sp = [x[1] for x in estimates]
-        pars_sp = [x[2] for x in estimates]
-        eventprobs_sp = [x[3] for x in estimates]
-        traces_sp = [x[4] for x in estimates]
-        param_dev_sp = [x[5] for x in estimates]
-        if starting_points > 1 and return_max:
-            max_lkhs = np.argmax(lkhs_sp)
-            lkhs_sp = [lkhs_sp[max_lkhs]]
-            mags_sp = [mags_sp[max_lkhs]]
-            pars_sp = [pars_sp[max_lkhs]]
-            eventprobs_sp = [eventprobs_sp[max_lkhs]]
-            traces_sp = [traces_sp[max_lkhs]]
-            param_dev_sp = [param_dev_sp[max_lkhs]]
-            starting_points = 1
+        self.lkhs = np.array([x[0] for x in estimates])
+        self.mags = np.array([x[1] for x in estimates])
+        self.pars = np.array([x[2] for x in estimates])
+        self.traces = np.array([x[3] for x in estimates])
+        self.param_dev = np.array([x[4] for x in estimates])
+        if self.starting_points > 1 and self.return_max:
+            max_lkhs = np.argmax(self.lkhs)
+            self.lkhs = self.lkhs[[max_lkhs]]
+            self.mags = self.mags[[max_lkhs]]
+            self.pars = self.pars[[max_lkhs]]
+            self.traces = self.traces[[max_lkhs]]
+            self.param_dev = self.param_dev[[max_lkhs]]
 
-        # make output object
-        estimated = []
-        for sp in range(starting_points):
-            xrlikelihoods = xr.DataArray(lkhs_sp[sp], name="loglikelihood")
-            xrtraces = xr.DataArray(
-                traces_sp[sp],
-                dims=("em_iteration"),
-                name="traces",
-                coords={"em_iteration": range(len(traces_sp[sp]))},
+        self.levels = levels
+        self.n_levels = n_levels
+        self.mags_map = mags_map
+        self.pars_map = pars_map
+
+        self._fitted = True
+
+    def transform(self, trial_data, cpus=1):
+        all_event_probs = []
+        for i_sp in range(self.mags.shape[0]):
+            _, eventprobs = self._estim_probs_levels(
+                self.mags[i_sp],
+                self.pars[i_sp],
+                np.zeros((self.n_levels, self.n_events+1)).astype(int),
+                self.mags_map,
+                self.pars_map,
+                self.levels,
+                cpus=cpus,
             )
-            xrparam_dev = xr.DataArray(
-                param_dev_sp[sp],
-                dims=("em_iteration", "level", "stage", "parameter"),
-                name="param_dev",
-                coords=[
-                    range(len(param_dev_sp[sp])),
-                    range(n_levels),
-                    range(n_events + 1),
-                    ["shape", "scale"],
-                ],
-            )
-            xrparams = xr.DataArray(
-                pars_sp[sp],
-                dims=("level", "stage", "parameter"),
-                name="parameters",
-                coords={
-                    "level": range(n_levels),
-                    "stage": range(n_events + 1),
-                    "parameter": ["shape", "scale"],
-                },
-            )
-            xrmags = xr.DataArray(
-                mags_sp[sp],
-                dims=("level", "event", "component"),
-                name="magnitudes",
-                coords={
-                    "level": range(n_levels),
-                    "event": range(n_events),
-                    "component": range(self.n_dims),
-                },
-            )
-            part, trial = self.coords["participant"].values, self.coords["trials"].values
+            part = trial_data.coords["participant"].values
+            trial = trial_data.coords["trials"].values
             trial_x_part = xr.Coordinates.from_pandas_multiindex(
                 MultiIndex.from_arrays([part, trial], names=("participant", "trials")),
                 "trial_x_participant",
             )
             xreventprobs = xr.Dataset(
-                {"eventprobs": (("event", "trial_x_participant", "samples"), eventprobs_sp[sp].T)},
+                {"eventprobs": (("event", "trial_x_participant", "samples"), eventprobs.T)},
                 {
-                    "event": ("event", range(n_events)),
-                    "samples": ("samples", range(np.shape(eventprobs_sp[sp])[0])),
+                    "event": ("event", range(self.n_events)),
+                    "samples": ("samples", range(np.shape(eventprobs)[0])),
                 },
             )
             xreventprobs = xreventprobs.assign_coords(trial_x_part)
-            if n_levels > 1:
-                xreventprobs = xreventprobs.assign_coords(levels=("trial_x_participant", levels))
+            if self.n_levels > 1:
+                xreventprobs = xreventprobs.assign_coords(levels=("trial_x_participant", self.levels))
             xreventprobs = xreventprobs.transpose("trial_x_participant", "samples", "event")
+            all_event_probs.append(xreventprobs)
 
-            estimated.append(
-                xr.merge((xrlikelihoods, xrparams, xrmags, xreventprobs, xrtraces, xrparam_dev))
-            )
-
-        if starting_points > 1:
-            estimated = xr.concat(estimated, "starting_points")
-            estimated = estimated.assign_coords(
-                starting_points=("starting_points", np.arange(starting_points))
-            )
-        else:
-            estimated = estimated[0]
-
+        all_xreventprobs = xr.concat(all_event_probs, dim="starting_points")
+        all_xreventprobs.coords["starting_points"] = np.arange(len(all_event_probs))
+        return all_xreventprobs
         # Adding infos
-        estimated = estimated.assign_coords(rts=("trial_x_participant", self.named_durations.data))
+        # estimated = estimated.assign_coords(rts=("trial_x_participant", self.named_durations.data))
 
-        for x, y in infos_to_store.items():
-            estimated.attrs[x] = y
+        # for x, y in infos_to_store.items():
+            # estimated.attrs[x] = y
 
-        if n_levels == 1:
-            estimated = estimated.squeeze(dim="level")
-            # Drops empty coords incuced by squeeze
-            estimated = estimated.drop_vars(
-                lambda x: [v for v, da in x.coords.items() if not da.dims]
+        # if n_levels == 1:  # Remove: never squeeze dimensions
+        #     estimated = estimated.squeeze(dim="level")
+        #     # Drops empty coords incuced by squeeze
+        #     estimated = estimated.drop_vars(
+        #         lambda x: [v for v, da in x.coords.items() if not da.dims]
+        #     )
+
+        # if verbose:
+        #     print(f"parameters estimated for {n_events} events model")
+        # return estimated
+
+
+    def _check_fitted(self, op):
+        if not self._fitted:
+            raise ValueError(f"Cannot {op}, because the model has not been fitted yet.")
+
+    @property
+    def xrtraces(self):
+        self._check_fitted("get traces")
+        return xr.DataArray(
+            self.traces,
+            dims=("starting_points", "em_iteration"),
+            name="traces",
+            coords={
+                "starting_points": range(self.traces.shape[0]),
+                "em_iteration": range(len(self.traces.shape[1]))}
+        )
+
+    @property
+    def xrlikelihoods(self):
+        self._check_fitted("get likelihoods")
+        return xr.DataArray(self.lkhs, name="loglikelihood", dims=("starting_points",),
+                            coords={"starting_points": range(self.lkhs.shape[0])})
+
+    @property
+    def xrparam_dev(self):
+        self._check_fitted("get dev params")
+        return xr.DataArray(
+                self.param_dev,
+                dims=("starting_points", "em_iteration", "level", "stage", "parameter"),
+                name="param_dev",
+                coords=[
+                    range(len(self.param_dev.shape[0])),
+                    range(len(self.param_deve.shape[1])),
+                    range(len(self.param_deve.shape[2])),
+                    range(self.n_events + 1),
+                    ["shape", "scale"],
+                ],
+        )
+
+    @property
+    def xrparams(self):
+        self._check_fitted("get xrparams")
+        return xr.DataArray(
+                self.pars,
+                dims=("starting_point", "level", "stage", "parameter"),
+                name="parameters",
+                coords={
+                    "starting_point": range(self.pars.shape[0]),
+                    "level": range(self.pars.shape[1]),
+                    "stage": range(self.n_events + 1),
+                    "parameter": ["shape", "scale"],
+                },
+        )
+
+    @property
+    def xrmags(self):
+        self._check_fitted("get xrmags")
+        return xr.DataArray(
+                self.mags,
+                dims=("starting_points", "level", "event", "component"),
+                name="magnitudes",
+                coords={
+                    "starting_points": range(self.mags.shape[0]),
+                    "level": range(self.mags.shape[1]),
+                    "event": range(self.n_events),
+                    "component": range(self.n_dims),
+                },
             )
 
-        if verbose:
-            print(f"parameters estimated for {n_events} events model")
-        return estimated
+
 
 
     def _EM_star(self, args):  # for tqdm usage  #noqa
@@ -452,7 +511,7 @@ class FixedEventModel(BaseModel):
         lkh, eventprobs = self._estim_probs_levels(
             magnitudes, parameters, locations, mags_map, pars_map, levels, cpus=cpus
         )
-        initial_magnitudes = magnitudes.copy()
+        initial_magnitudes = magnitudes.copy()  # Reverse this
         initial_parameters = parameters.copy()
 
         traces = [lkh]
@@ -515,22 +574,14 @@ class FixedEventModel(BaseModel):
                 traces.append(lkh)
                 param_dev.append(parameters.copy())
                 i += 1
-        _, eventprobs = self._estim_probs_levels(
-            magnitudes,
-            parameters,
-            np.zeros(locations.shape).astype(int),
-            mags_map,
-            pars_map,
-            levels,
-            cpus=cpus,
-        )
+
         if i == max_iteration:
             warn(
-                f"Convergence failed, estimation hitted the maximum number of iteration "
+                f"Convergence failed, estimation hit the maximum number of iterations: "
                 f"({int(max_iteration)})",
                 RuntimeWarning,
             )
-        return lkh, magnitudes, parameters, eventprobs, np.array(traces), np.array(param_dev)
+        return lkh, magnitudes, parameters, np.array(traces), np.array(param_dev)
 
     def get_magnitudes_parameters_expectation(self, eventprobs, subset_epochs=None):
         n_events = eventprobs.shape[2]

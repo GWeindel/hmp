@@ -1,27 +1,9 @@
 """Models to estimate event probabilities."""
-import gc
-import itertools
-import multiprocessing as mp
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from itertools import cycle, product
 from typing import Any
-from warnings import resetwarnings, warn
 
-import matplotlib.pyplot as plt
 import numpy as np
-import xarray as xr
-from pandas import MultiIndex
-from scipy.signal import correlate
-from scipy.stats import norm as norm_pval
-
-from hmp.trialdata import TrialData
-
-try:
-    __IPYTHON__
-    from tqdm.notebook import tqdm
-except NameError:
-    from tqdm import tqdm
 
 
 @dataclass
@@ -73,8 +55,6 @@ class EventProperties():
         return template
 
 
-
-
 class BaseModel(ABC):
     """The model to analyze the raw data.
 
@@ -105,7 +85,7 @@ class BaseModel(ABC):
 
     def __init__(
         self,
-        trial_data: TrialData,
+        # trial_data: TrialData,
         event_properties: EventProperties,
         distribution: str = "gamma",
     ):
@@ -141,7 +121,7 @@ class BaseModel(ABC):
             case _:
                 raise ValueError(f"Unknown Distribution {distribution}")
         self.distribution = distribution
-        self.trial_data = trial_data
+        # self.trial_data = trial_data
         self.events = event_properties
         self.pdf = sp_dist.pdf
 
@@ -171,3 +151,15 @@ class BaseModel(ABC):
             return self.trial_data.cross_corr
 
         return super().__getattribute__(attr)
+
+    @abstractmethod
+    def fit(self, trial_data):
+        ...
+
+    @abstractmethod
+    def transform(self, data):
+        ...
+
+    def fit_transform(self, data, *args, **kwargs):
+        self.fit(data, *args, **kwargs)
+        return self.transform(data)

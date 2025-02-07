@@ -1,16 +1,10 @@
 """Models to estimate event probabilities."""
 
-import gc
-import itertools
-import multiprocessing as mp
-from itertools import cycle, product
-from warnings import resetwarnings, warn
+from itertools import cycle
+from warnings import warn
 
 import matplotlib.pyplot as plt
 import numpy as np
-import xarray as xr
-from pandas import MultiIndex
-from scipy.signal import correlate
 from scipy.stats import norm as norm_pval
 
 from hmp.models.base import BaseModel
@@ -28,6 +22,7 @@ default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgree
 class CumulativeEstimationModel(BaseModel):
     def fit(
         self,
+        trial_data,
         step=None,
         verbose=True,
         end=None,
@@ -76,6 +71,7 @@ class CumulativeEstimationModel(BaseModel):
         -------
                   A the fitted HMP mo
         """
+        self.trial_data = trial_data
         if end is None:
             end = self.mean_d
         if step is None:
