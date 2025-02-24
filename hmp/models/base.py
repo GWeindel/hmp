@@ -17,10 +17,8 @@ class EventProperties():
     template: Any
 
     @classmethod
-    def create_expected(cls, sfreq=None, shape=2, width=50, template=None, location=None):
+    def create_expected(cls, sfreq, shape=2, width=50, template=None, location=None):
 
-        # if sfreq is None:
-            # sfreq = data.sfreq
         steps = 1000 / sfreq
         shape = float(shape)
 
