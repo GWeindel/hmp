@@ -123,9 +123,9 @@ class BaseModel(ABC):
         self.events = event_properties
         self.pdf = sp_dist.pdf
 
-    def compute_max_events(self):
+    def compute_max_events(self, trial_data):
         """Compute the maximum possible number of events given event width minimum reaction time."""
-        return int(np.rint(np.percentile(self.durations, 10) // (self.location)))
+        return int(np.rint(np.percentile(trial_data.durations, 10) // (self.location)))
 
 
     def __getattribute__(self, attr):
@@ -136,17 +136,17 @@ class BaseModel(ABC):
         if attr == "event_width_samples":
             return self.events.width_samples
 
-        if attr in ["named_durations", "coords", "starts", "ends", "n_trials", "n_samples",
-                    "n_dims", "trial_coords", "max_duration", "mean_duration",
-                    "durations"]:
-            return getattr(self.trial_data, attr)
+        # if attr in ["named_durations", "coords", "starts", "ends", "n_trials", "n_samples",
+        #             "n_dims", "trial_coords", "max_duration", "mean_duration",
+        #             "durations"]:
+        #     return getattr(self.trial_data, attr)
 
-        if attr == "mean_d":
-            return self.trial_data.mean_duration
-        if attr == "max_d":
-            return self.trial_data.max_duration
-        if attr == "crosscorr":
-            return self.trial_data.cross_corr
+        # if attr == "mean_d":
+        #     return self.trial_data.mean_duration
+        # if attr == "max_d":
+        #     return self.trial_data.max_duration
+        # if attr == "crosscorr":
+        #     return self.trial_data.cross_corr
 
         return super().__getattribute__(attr)
 

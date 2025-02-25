@@ -13,6 +13,7 @@ from scipy.signal import correlate
 from scipy.stats import norm as norm_pval
 
 from hmp.models.base import BaseModel
+from hmp.trialdata import TrialData
 
 try:
     __IPYTHON__
@@ -114,7 +115,7 @@ class FixedEventModel(BaseModel):
             the first level as many times as there are levels in the selevel level. E.g., SP-left,
             SP-right, AC-left, AC-right.
         """
-        self.trial_data = trial_data
+        # self.trial_data = trial_data
 
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
@@ -133,8 +134,8 @@ class FixedEventModel(BaseModel):
                     "The fit_n() function needs to be provided with a number of expected transition"
                     " events"
                 )
-        assert self.n_events <= self.compute_max_events(), (
-            f"{self.n_events} events do not fit given the minimum duration of {min(self.durations)}"
+        assert self.n_events <= self.compute_max_events(trial_data), (
+            f"{self.n_events} events do not fit given the minimum duration of {min(trial_data.durations)}"
             " and a location of {self.location}"
         )
 
@@ -142,7 +143,7 @@ class FixedEventModel(BaseModel):
             (
                 n_levels,
                 levels,
-            ) = 1, np.zeros(self.n_trials)
+            ) = 1, np.zeros(trial_data.n_trials)
             pars_map, mags_map = np.zeros((1, self.n_events + 1)), np.zeros((1, self.n_events))
         else:
             n_levels, levels, clabels, pars_map, mags_map = self._level_constructor(
@@ -192,7 +193,7 @@ class FixedEventModel(BaseModel):
                     [
                         self.shape,
                         self.mean_to_scale(
-                            np.mean(self.durations[levels == c]) / (n_stage_level), self.shape
+                            np.mean(trial_data.durations[levels == c]) / (n_stage_level), self.shape
                         ),
                     ],
                     (n_stage_level, 1),
@@ -213,7 +214,7 @@ class FixedEventModel(BaseModel):
 
         if magnitudes is None:
             # By defaults mags are initiated to 0
-            magnitudes = np.zeros((n_levels, self.n_events, self.n_dims), dtype=np.float64)
+            magnitudes = np.zeros((n_levels, self.n_events, trial_data.n_dims), dtype=np.float64)
             if (mags_map < 0).any():  # set missing mags to nan
                 for c in range(n_levels):
                     magnitudes[c, np.where(mags_map[c, :] < 0)[0], :] = np.nan
@@ -249,6 +250,7 @@ class FixedEventModel(BaseModel):
 
         if cpus > 1:
             inputs = zip(
+                trial_data,
                 magnitudes,
                 parameters,
                 itertools.repeat(self.maximization),
@@ -273,6 +275,7 @@ class FixedEventModel(BaseModel):
             for pars, mags in zip(parameters, magnitudes):
                 estimates.append(
                     self.EM(
+                        trial_data,
                         mags,
                         pars,
                         self.maximization,
@@ -302,24 +305,23 @@ class FixedEventModel(BaseModel):
             self.traces = self.traces[[max_lkhs]]
             self.param_dev = self.param_dev[[max_lkhs]]
 
-        self.levels = levels
-        self.n_levels = n_levels
+        # self.levels = levels
+        # self.n_levels = n_levels
         self.mags_map = mags_map
         self.pars_map = pars_map
 
         self._fitted = True
 
-    def transform(self, trial_data, cpus=1):
+    def transform(self, trial_data, level_id=0):
         all_event_probs = []
+        all_likelihoods = []
         for i_sp in range(self.mags.shape[0]):
-            _, eventprobs = self._estim_probs_levels(
-                self.mags[i_sp],
-                self.pars[i_sp],
-                np.zeros((self.n_levels, self.n_events+1)).astype(int),
-                self.mags_map,
-                self.pars_map,
-                self.levels,
-                cpus=cpus,
+            likelihood, eventprobs = self.estim_probs(
+                trial_data,
+                self.mags[i_sp][level_id],
+                self.pars[i_sp][level_id],
+                np.zeros((self.n_events+1)).astype(int),
+                lkh_only=False
             )
             part = trial_data.coords["participant"].values
             trial = trial_data.coords["trials"].values
@@ -335,14 +337,15 @@ class FixedEventModel(BaseModel):
                 },
             )
             xreventprobs = xreventprobs.assign_coords(trial_x_part)
-            if self.n_levels > 1:
-                xreventprobs = xreventprobs.assign_coords(levels=("trial_x_participant", self.levels))
+            # if self.n_levels > 1:
+                # xreventprobs = xreventprobs.assign_coords(levels=("trial_x_participant", self.levels))
             xreventprobs = xreventprobs.transpose("trial_x_participant", "samples", "event")
             all_event_probs.append(xreventprobs)
+            all_likelihoods.append(likelihood)
 
         all_xreventprobs = xr.concat(all_event_probs, dim="starting_points")
         all_xreventprobs.coords["starting_points"] = np.arange(len(all_event_probs))
-        return all_xreventprobs
+        return np.array(all_likelihoods), all_xreventprobs
         # Adding infos
         # estimated = estimated.assign_coords(rts=("trial_x_participant", self.named_durations.data))
 
@@ -414,8 +417,7 @@ class FixedEventModel(BaseModel):
                 },
         )
 
-    @property
-    def xrmags(self):
+    def xrmags(self, trial_data):
         self._check_fitted("get xrmags")
         return xr.DataArray(
                 self.mags,
@@ -425,7 +427,7 @@ class FixedEventModel(BaseModel):
                     "starting_points": range(self.mags.shape[0]),
                     "level": range(self.mags.shape[1]),
                     "event": range(self.n_events),
-                    "component": range(self.n_dims),
+                    "component": range(trial_data.n_dims),
                 },
             )
 
@@ -437,6 +439,7 @@ class FixedEventModel(BaseModel):
 
     def EM(  #noqa
         self,
+        trial_data,
         magnitudes,
         parameters,
         maximization=True,
@@ -509,7 +512,7 @@ class FixedEventModel(BaseModel):
         locations[1:-1] = self.location
         locations = np.tile(locations, (n_levels, 1))
         lkh, eventprobs = self._estim_probs_levels(
-            magnitudes, parameters, locations, mags_map, pars_map, levels, cpus=cpus
+            trial_data, magnitudes, parameters, locations, mags_map, pars_map, levels, cpus=cpus
         )
         initial_magnitudes = magnitudes.copy()  # Reverse this
         initial_parameters = parameters.copy()
@@ -541,7 +544,8 @@ class FixedEventModel(BaseModel):
                     # get mags/pars by level
                     magnitudes[c, mags_map_level, :], parameters[c, pars_map_level, :] = (
                         self.get_magnitudes_parameters_expectation(
-                            eventprobs[np.ix_(range(self.max_d), epochs_level, mags_map_level)],
+                            trial_data,
+                            eventprobs[np.ix_(range(trial_data.max_duration), epochs_level, mags_map_level)],
                             subset_epochs=epochs_level,
                         )
                     )
@@ -569,7 +573,7 @@ class FixedEventModel(BaseModel):
                                 parameters[pars_map[:, p] == p_set, p, :], axis=0
                             )
                 lkh, eventprobs = self._estim_probs_levels(
-                    magnitudes, parameters, locations, mags_map, pars_map, levels, cpus=cpus
+                    trial_data, magnitudes, parameters, locations, mags_map, pars_map, levels, cpus=cpus
                 )
                 traces.append(lkh)
                 param_dev.append(parameters.copy())
@@ -583,22 +587,22 @@ class FixedEventModel(BaseModel):
             )
         return lkh, magnitudes, parameters, np.array(traces), np.array(param_dev)
 
-    def get_magnitudes_parameters_expectation(self, eventprobs, subset_epochs=None):
+    def get_magnitudes_parameters_expectation(self, trial_data, eventprobs, subset_epochs=None):
         n_events = eventprobs.shape[2]
         n_trials = eventprobs.shape[1]
         if subset_epochs is None:  # all trials
             subset_epochs = range(n_trials)
 
-        magnitudes = np.zeros((n_events, self.n_dims))
+        magnitudes = np.zeros((n_events, trial_data.n_dims))
 
         # Magnitudes from Expectation, Eq 11 from 2024 paper
         for event in range(n_events):
-            for comp in range(self.n_dims):
-                event_data = np.zeros((self.max_d, len(subset_epochs)))
+            for comp in range(trial_data.n_dims):
+                event_data = np.zeros((trial_data.max_duration, len(subset_epochs)))
                 for trial_idx, trial in enumerate(subset_epochs):
-                    start, end = self.starts[trial], self.ends[trial]
+                    start, end = trial_data.starts[trial], trial_data.ends[trial]
                     duration = end - start + 1
-                    event_data[:duration, trial_idx] = self.crosscorr[start : end + 1, comp]
+                    event_data[:duration, trial_idx] = trial_data.cross_corr[start : end + 1, comp]
                 magnitudes[event, comp] = np.mean(
                     np.sum(eventprobs[:, :, event] * event_data, axis=0)
                 )
@@ -611,8 +615,8 @@ class FixedEventModel(BaseModel):
         # it's general
         event_times_mean = np.concatenate(
             [
-                np.arange(self.max_d) @ eventprobs.mean(axis=1),
-                [np.mean(self.durations[subset_epochs]) - 1],
+                np.arange(trial_data.max_duration) @ eventprobs.mean(axis=1),
+                [np.mean(trial_data.durations[subset_epochs]) - 1],
             ]
         )
         parameters = self.scale_parameters(
@@ -686,6 +690,7 @@ class FixedEventModel(BaseModel):
 
     def estim_probs(
         self,
+        trial_data : TrialData,
         magnitudes,
         parameters,
         locations,
@@ -733,31 +738,31 @@ class FixedEventModel(BaseModel):
         n_stages = n_events + 1
 
         if subset_epochs is not None:
-            if len(subset_epochs) == self.n_trials:  # boolean indices
+            if len(subset_epochs) == trial_data.n_trials:  # boolean indices
                 subset_epochs = np.where(subset_epochs)[0]
             n_trials = len(subset_epochs)
-            durations = self.durations[subset_epochs]
-            starts = self.starts[subset_epochs]
-            ends = self.ends[subset_epochs]
+            durations = trial_data.durations[subset_epochs]
+            starts = trial_data.starts[subset_epochs]
+            ends = trial_data.ends[subset_epochs]
         else:
-            n_trials = self.n_trials
-            durations = self.durations
-            starts = self.starts
-            ends = self.ends
+            n_trials = trial_data.n_trials
+            durations = trial_data.durations
+            starts = trial_data.starts
+            ends = trial_data.ends
 
-        gains = np.zeros((self.n_samples, n_events), dtype=np.float64)
-        for i in range(self.n_dims):
+        gains = np.zeros((trial_data.n_samples, n_events), dtype=np.float64)
+        for i in range(trial_data.n_dims):
             # computes the gains, i.e. congruence between the pattern shape
             # and the data given the magnitudes of the sensors
             gains = (
                 gains
-                + self.crosscorr[:, i][np.newaxis].T * magnitudes[:, i]
+                + trial_data.cross_corr[:, i][np.newaxis].T * magnitudes[:, i]
                 - magnitudes[:, i] ** 2 / 2
             )
         gains = np.exp(gains)
-        probs = np.zeros([self.max_d, n_trials, n_events], dtype=np.float64)  # prob per trial
+        probs = np.zeros([trial_data.max_duration, n_trials, n_events], dtype=np.float64)  # prob per trial
         probs_b = np.zeros(
-            [self.max_d, n_trials, n_events], dtype=np.float64
+            [trial_data.max_duration, n_trials, n_events], dtype=np.float64
         )  # Sample and state reversed
         for trial in np.arange(n_trials):
             # Following assigns gain per trial to variable probs
@@ -768,20 +773,20 @@ class FixedEventModel(BaseModel):
                 ::-1, ::-1
             ]
 
-        pmf = np.zeros([self.max_d, n_stages], dtype=np.float64)  # Gamma pmf for each stage scale
+        pmf = np.zeros([trial_data.max_duration, n_stages], dtype=np.float64)  # Gamma pmf for each stage scale
         for stage in range(n_stages):
             pmf[:, stage] = np.concatenate(
                 (
                     np.repeat(0, locations[stage]),
-                    self.distribution_pmf(parameters[stage, 0], parameters[stage, 1])[
+                    self.distribution_pmf(parameters[stage, 0], parameters[stage, 1], trial_data.max_duration)[
                         locations[stage] :
                     ],
                 )
             )
         pmf_b = pmf[:, ::-1]  # Stage reversed gamma pmf, same order as prob_b
 
-        forward = np.zeros((self.max_d, n_trials, n_events), dtype=np.float64)
-        backward = np.zeros((self.max_d, n_trials, n_events), dtype=np.float64)
+        forward = np.zeros((trial_data.max_duration, n_trials, n_events), dtype=np.float64)
+        backward = np.zeros((trial_data.max_duration, n_trials, n_events), dtype=np.float64)
         # Computing forward and backward helper variable
         #  when stage = 0:
         forward[:, :, 0] = (
@@ -798,11 +803,11 @@ class FixedEventModel(BaseModel):
             for trial in np.arange(n_trials):
                 # convolution between gamma * gains at previous event and event
                 forward[:, trial, event] = np.convolve(forward[:, trial, event - 1], pmf[:, event])[
-                    : self.max_d
+                    : trial_data.max_duration
                 ]
                 # same but backwards
                 backward[:, trial, event] = np.convolve(add_b[:, trial], pmf_b[:, event])[
-                    : self.max_d
+                    : trial_data.max_duration
                 ]
             forward[:, :, event] = forward[:, :, event] * probs[:, :, event]
         # re-arranging backward to the expected variable
@@ -846,7 +851,8 @@ class FixedEventModel(BaseModel):
             return [likelihood, eventprobs]
 
     def _estim_probs_levels(
-        self, magnitudes, parameters, locations, mags_map, pars_map, levels, lkh_only=False, cpus=1
+        self, trial_data, magnitudes, parameters, locations, mags_map, pars_map, levels,
+        lkh_only=False, cpus=1
     ):
         """Estimate probability levels.
 
@@ -887,6 +893,7 @@ class FixedEventModel(BaseModel):
                 likes_events_level = pool.starmap(
                     self.estim_probs,
                     zip(
+                        itertools.repeat(trial_data),
                         [magnitudes[c, mags_map[c, :] >= 0, :] for c in range(n_levels)],
                         [parameters[c, pars_map[c, :] >= 0, :] for c in range(n_levels)],
                         [locations[c, pars_map[c, :] >= 0] for c in range(n_levels)],
@@ -903,6 +910,7 @@ class FixedEventModel(BaseModel):
                 parameters_level = parameters[c, pars_map[c, :] >= 0, :]  # select existing params
                 likes_events_level.append(
                     self.estim_probs(
+                        trial_data,
                         magnitudes_level,
                         parameters_level,
                         locations[c, pars_map[c, :] >= 0],
@@ -911,9 +919,9 @@ class FixedEventModel(BaseModel):
                 )
 
         likelihood = np.sum([x[0] for x in likes_events_level])
-        eventprobs = np.zeros((self.max_d, len(levels), mags_map.shape[1]))
+        eventprobs = np.zeros((trial_data.max_duration, len(levels), mags_map.shape[1]))
         for c in range(n_levels):
-            eventprobs[np.ix_(range(self.max_d), levels == c, mags_map[c, :] >= 0)] = (
+            eventprobs[np.ix_(range(trial_data.max_duration), levels == c, mags_map[c, :] >= 0)] = (
                 likes_events_level[c][1]
             )
 
@@ -922,7 +930,7 @@ class FixedEventModel(BaseModel):
         else:
             return [likelihood, eventprobs]
 
-    def distribution_pmf(self, shape, scale):
+    def distribution_pmf(self, shape, scale, max_duration):
         """Return PMF for a provided scipy disttribution.
 
         Uses the shape and scale, on a range from 0 to max_length.
@@ -939,7 +947,7 @@ class FixedEventModel(BaseModel):
         p : ndarray
             probabilty mass function for the distribution with given scale
         """
-        p = self.pdf(np.arange(self.max_d), shape, scale=scale)
+        p = self.pdf(np.arange(max_duration), shape, scale=scale)
         p = p / np.sum(p)
         p[np.isnan(p)] = 0  # remove potential nans
         return p
@@ -1042,7 +1050,7 @@ class FixedEventModel(BaseModel):
             "number of unique levels should correspond to number of rows in map(s)"
         )
 
-        assert levels.shape[0] == self.durations.shape[0], (
-            "levels parameter should contain the level per epoch."
-        )
+        # assert levels.shape[0] == trial_data.durations.shape[0], (
+            # "levels parameter should contain the level per epoch."
+        # )
         return n_levels, levels, clabels, pars_map, mags_map
