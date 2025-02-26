@@ -477,7 +477,7 @@ def classification_true(true_topologies, test_topologies):
     return idx_true_positive, corresp_true_idx
 
 
-def simulated_times_and_parameters(generating_events, init, resampling_freq=None, data=None):
+def simulated_times_and_parameters(generating_events, init, trial_data, resampling_freq=None, data=None):
     """Recover the generating HMP parameters from the simulated EEG data.
 
     Parameters,
@@ -526,16 +526,16 @@ def simulated_times_and_parameters(generating_events, init, resampling_freq=None
     true_parameters[true_parameters[:, 1] <= 0, 1] = 1e-3  # Can happen in corner cases
     random_source_times = random_source_times * (1000 / sfreq) / (1000 / resampling_freq)
     ## Recover magnitudes
-    sample_times = np.zeros((init.n_trials, n_events), dtype=int)
+    sample_times = np.zeros((trial_data.n_trials, n_events), dtype=int)
     for event in range(n_events):
-        for trial in range(init.n_trials):
-            trial_time = init.starts[trial] + np.sum(random_source_times[trial, : event + 1])
-            if init.ends[trial] >= trial_time:  # exceeds RT
+        for trial in range(trial_data.n_trials):
+            trial_time = trial_data.starts[trial] + np.sum(random_source_times[trial, : event + 1])
+            if trial_data.ends[trial] >= trial_time:  # exceeds RT
                 sample_times[trial, event] = trial_time
             else:
-                sample_times[trial, event] = init.ends[trial]
+                sample_times[trial, event] = trial_data.ends[trial]
     if data is None:  # use crosscorrelated data
-        true_activities = init.crosscorr[sample_times[:, :]]
+        true_activities = trial_data.cross_corr[sample_times[:, :]]
     else:
         true_activities = data[sample_times[:, :]]
     true_magnitudes = np.mean(true_activities, axis=0)
