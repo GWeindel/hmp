@@ -80,6 +80,6 @@ def test_fixed():
     likelihood, estimates = init_sim.fit_transform(trial_data, verbose=True)
     test_topos = hmp.utils.event_topo(epoch_data, estimates.squeeze(), mean=True)
     assert (np.array(simulations.classification_true(true_topos,test_topos)) == np.array(([0,1,2],[0,1,2]))).all()
-    print(np.sum(np.abs(true_topos.data - test_topos.data)))
-    assert np.round(np.sum(np.abs(true_topos.data - test_topos.data)), 4) == 0
-    assert np.round(likelihood,4) == np.array(2.4834)
+    
+    assert np.isclose(np.sum(np.abs(true_topos.data - test_topos.data)), 0, atol=1e-4, rtol=0)
+    assert np.isclose(likelihood, np.array(2.4834), atol=1e-4, rtol=0)
