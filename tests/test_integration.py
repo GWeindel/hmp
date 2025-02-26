@@ -63,7 +63,7 @@ def test_integration():
                                          metadata=df_real_metadata, pick_channels=['Cz'])
     epoch_data = hmp.utils.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq,
             events_provided=events, verbose=True, reference='average', high_pass=1, low_pass=45,
-                subj_idx=['a','b'],pick_channels='eeg', lower_limit_rt=0.01, upper_limit_rt=2 ) 
+                subj_idx=['a','b'],pick_channels='eeg', lower_limit_rt=0.01, upper_limit_rt=2 )
     epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
     positions = simulations.simulation_positions()
     
@@ -85,20 +85,23 @@ def test_integration():
     hmp.utils.condition_selection_epoch(epoch_data, 'a', variable='condition', method='contains')
     hmp_speed_data = hmp_data
 
-    # Comparing to simulated data, asserting that results are the one simulated
+        
+   # Comparing to simulated data, asserting that results are the one simulated
     events_a = np.load(event_a)
     data_a = hmp.utils.participant_selection(hmp_data, 'a')
     event_properties = EventProperties.create_expected(sfreq=data_a.sfreq)
     trial_data = TrialData.from_standard_data(data=data_a, template=event_properties.template)
-    init_sim = FixedEventModel(trial_data=trial_data, event_properties=event_properties)
-    sim_source_times, true_pars, true_magnitudes, _ = simulations.simulated_times_and_parameters(events_a, init_sim)
-    true_estimates = init_sim.fit(n_events, parameters = np.array([true_pars]), magnitudes=np.array([true_magnitudes]), maximization=False, verbose=True)
-    true_topos = hmp.utils.event_topo(epoch_data, true_estimates, mean=True)
-    estimates = init_sim.fit(n_events, verbose=True)
-    test_topos = hmp.utils.event_topo(epoch_data, estimates, mean=True)
+    init_sim = FixedEventModel(event_properties, n_events=n_events, maximization=False,)
+    sim_source_times, true_pars, true_magnitudes, _ = simulations.simulated_times_and_parameters(events_a, init_sim, trial_data)
+    true_loglikelihood, true_estimates = init_sim.fit_transform(trial_data, parameters = np.array([true_pars]), magnitudes=np.array([true_magnitudes]),  verbose=True)
+    true_topos = hmp.utils.event_topo(epoch_data, true_estimates.squeeze(), mean=True)
+    init_sim = FixedEventModel(event_properties, n_events=n_events, maximization=True,)
+    likelihood, estimates = init_sim.fit_transform(trial_data, verbose=True)
+    test_topos = hmp.utils.event_topo(epoch_data, estimates.squeeze(), mean=True)
     assert (np.array(simulations.classification_true(true_topos,test_topos)) == np.array(([0,1,2],[0,1,2]))).all()
     assert np.sum(np.abs(true_topos.data - test_topos.data)) < 2.65e-05
-    assert np.round(estimates.loglikelihood.values,4) > np.array(-1)
+    assert np.round(likelihood,4) > np.array(-1)
+
 
     # Initializing models
     ## Testing different distribution implementation
