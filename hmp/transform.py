@@ -1,27 +1,51 @@
-from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import xarray as xr
+from enum import Enum
+from mne.filter import filter_data
+from sklearn.decomposition import PCA
+from typing import Union
 from warnings import filterwarnings, warn
+
+class ApplyZScore(Enum):
+    ALL = 'all'
+    PARTICIPANT = 'participant'
+    TRIAL = 'trial'
+
+    def __str__(self) -> str:
+        return self.value
+
+class Method(Enum):
+    PCA = 'pca'
+    MCCA = 'mcca'
+
+    def __str__(self) -> str:
+        return self.value
+
+
+# TODO: replace apply_zscore str w/ Enum in calling scripts
+# TODO: replace method str w/ Enum in calling scripts
 
 class DataTransformer:
 
     def __init__(
         self,
-        epoch_data,
-        participants_variable="participant",
-        apply_standard=False,
-        averaged=False,
-        apply_zscore="trial",
-        zscore_across_pcs=False,
-        method="pca",
-        cov=True,
-        centering=True,
-        n_comp=None,
-        n_ppcas=None,
-        pca_weights=None,
-        bandfilter=None,
-        mcca_reg=0,
-        copy=False,
+        epoch_data: xarray,
+        participants_variable: str = 'participant',
+        apply_standard: bool = False,
+        averaged: bool = False,
+        apply_zscore: Union[None, str, bool] = 'trial',
+        # apply_zscore: Union[None, ApplyZScore, bool] = Method.TRIAL,
+        zscore_across_pcs: bool = False,
+        method: str = 'pca',
+        # method: Method = Method.PCA,
+        cov: bool = True,
+        centering: bool = True,
+        n_comp: int  = None,
+        n_ppcas: int = None,
+        pca_weights: xarray = None,
+        bandfilter: Union[None, tuple(float, float)] = None,
+        mcca_reg: float = 0,
+        copy: bool = False,
     ):
         """Adapt EEG epoched data (in xarray format) to the expected data format for hmp.
 
@@ -35,7 +59,7 @@ class DataTransformer:
 
         Parameters
         ----------
-        data : xarray
+        epoch_data : xarray
             unstacked xarray data from transform_data() or anyother source yielding an xarray with
             dimensions [participant * epochs * samples * channels]
         participants_variable : str
@@ -82,27 +106,51 @@ class DataTransformer:
                     "Data will be modified inplace, re-read the data or use copy=True if multiple"
                     "calls to this function"
                 )
+
         if isinstance(data, xr.DataArray):
             raise ValueError(
                 "Expected a xarray Dataset with data and event as DataArrays, check the data format"
-            )
-        if apply_zscore not in ["all", "participant", "trial"] and not isinstance(apply_zscore, bool):
-            raise ValueError(
-                "apply_zscore should be either a boolean or one of ['all', 'participant', 'trial']"
-            )
-        assert (
-            np.sum(
-                np.isnan(
-                    data.groupby("participant", squeeze=False).mean(["epochs", "samples"]).data.values
                 )
-            )
-            == 0
-        ), "at least one participant has an empty channel"
-        if method == "mcca" and data.sizes["participant"] == 1:
+
+
+        if apply_zscore is True:
+            apply_zscore = ApplyZScore.TRIAL # defaults to trial
+        else:
+            match apply_zscore:
+                case 'all':
+                    apply_zscore = ApplyZScore.ALL
+                case 'participant':
+                    apply_zscore = ApplyZScore.PARTICIPANT
+                case 'trial':
+                    apply_zscore = ApplyZScore.TRIAL
+
+        if not isinstance(apply_zscore, ApplyZScore) and not apply_zscore is False:
+            raise ValueError(
+                f"apply_zscore should be either a boolean or one of [{', '.join([e.value for e in ApplyZscore])}]"
+                )
+        
+        if np.sum(np.isnan(data.groupby("participant", squeeze=False).mean(["epochs", "samples"]).data.values)) != 0:
+            raise ValueError(
+                "at least one participant has an empty channel"
+                )
+
+        match method:
+            case 'pca':
+                method = Method.PCA
+            case 'mcca':
+                method = Method.MCCA
+
+        if not isinstance(method, Method) and method is not None:
+            raise ValueError(f"method {method} is unknown, choose either {', '.join([e.value for e in Method])} or None")
+
+        if method == Method.MCCA and data.sizes["participant"] == 1:
             raise ValueError("MCCA cannot be applied to only one participant")
+
         sfreq = data.sfreq
+
         if bandfilter:
-            data = _filtering(data, bandfilter, sfreq)
+            data = self._apply_filtering(data, bandfilter, sfreq)
+
         if apply_standard:
             if "participant" not in data.dims or len(data.participant) == 1:
                 warn(
@@ -113,15 +161,16 @@ class DataTransformer:
             else:
                 mean_std = data.groupby(participants_variable, squeeze=False).std(dim=...).data.mean()
                 data = data.assign(mean_std=mean_std.data)
-                data = data.groupby(participants_variable, squeeze=False).map(_standardize)
+                data = data.groupby(participants_variable, squeeze=False).map(self._standardize)
+
         if isinstance(data, xr.Dataset):  # needs to be a dataset if apply_standard is used
             data = data.data
-        if centering or method == "mcca":
+
+        if centering or method == Method.MCCA:
             data = self._center(data)
-        if apply_zscore is True:
-            apply_zscore = "trial"  # defaults to trial
+
         data = data.transpose("participant", "epochs", "channels", "samples")
-        if method == "pca":
+        if method == Method.PCA:
             if pca_weights is None:
                 if cov:
                     indiv_data = np.zeros(
@@ -152,7 +201,8 @@ class DataTransformer:
                 pca_weights = self._pca(pca_ready_data, n_comp, data.coords["channels"].values)
                 data = data @ pca_weights
                 data.attrs["pca_weights"] = pca_weights
-        elif method == "mcca":
+
+        elif method == Method.MCCA:
             ori_coords = data.drop_vars("channels").coords
             if n_ppcas is None:
                 n_ppcas = n_comp * 3
@@ -197,8 +247,6 @@ class DataTransformer:
             data = data.rename({"channels": "component"})
             data["component"] = np.arange(len(data.component))
             data.attrs["pca_weights"] = np.identity(len(data.component))
-        else:
-            raise ValueError(f"method {method} is unknown, choose either 'pca', 'mcca' or None")
 
         if apply_zscore:
             ori_coords = data.coords
@@ -261,7 +309,6 @@ class DataTransformer:
 
     @staticmethod
     def _pca(pca_ready_data, n_comp, channels):
-        from sklearn.decomposition import PCA
 
         if n_comp is None:
             import matplotlib.pyplot as plt
@@ -336,62 +383,40 @@ class DataTransformer:
         data = data.stack(all_samples=["participant", "epochs", "samples"]).dropna(dim="all_samples")
         return data
 
+    @staticmethod
+    def _apply_filtering(data, bandfilter, sfreq):
+        print(
+            "NOTE: filtering at this step is suboptimal, filter before epoching if at all possible, see"
+        )
+        print("also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html")
+        
 
+        lfreq, hfreq = bandfilter
+        n_participant, n_epochs, _, _ = data.data.values.shape
+        for pp in range(n_participant):
+            for trial in range(n_epochs):
+                dat = data.data.values[pp, trial, :, :]
 
+                if not np.isnan(dat).all():
+                    dat = dat[:, ~np.isnan(dat[0, :])]  # remove nans
 
-def transform_data(
-):
-    """Adapt EEG epoched data (in xarray format) to the expected data format for hmp.
+                    # pad by reflecting the whole trial twice
+                    trial_len = dat.shape[1] * 2
+                    dat = np.pad(dat, ((0, 0), (trial_len, trial_len)), mode="reflect")
 
-    First this code can apply standardization of individual variances (if apply_standard=True).
-    Second, a spatial PCA on the average variance-covariance matrix is performed (if method='pca',
-    more methods in development).
-    Third,stacks the data going from format [participant * epochs * samples * channels] to
-    [samples * channels].
-    Last, performs z-scoring on each epoch and for each principal component (PC), or for each
-    participant and PC, or across all data for each PC.
+                    # filter
+                    dat = filter_data(dat, sfreq, lfreq, hfreq, verbose=False)
 
-    Parameters
-    ----------
-    data : xarray
-        unstacked xarray data from transform_data() or anyother source yielding an xarray with
-        dimensions [participant * epochs * samples * channels]
-    participants_variable : str
-        name of the dimension for participants ID
-    apply_standard : bool
-        Whether to apply standardization of variance between participants, recommended when they
-        are few of them (e.g. < 10)
-    averaged : bool
-        Applying the pca on the averaged ERP (True) or single trial ERP (False, default).
-        No effect if cov = True
-    apply_zscore : str
-        Whether to apply z-scoring and on what data, either None, 'all', 'participant', 'trial',
-        for zscoring across all data, by participant, or by trial, respectively. If set to true,
-        evaluates to 'trial' for backward compatibility.
-    method : str
-        Method to apply, 'pca' or 'mcca'
-    cov : bool
-        Wether to apply the pca/mcca to the variance covariance (True, default) or the epoched data
-    n_comp : int
-        How many components to select from the PC space, if None plots the scree plot and a prompt
-        requires user to specify how many PCs should be retained
-    n_ppcas : int
-        If method = 'mcca', controls the number of components retained for the by-participant PCAs
-    pca_weigths : xarray
-        Weights of a PCA to apply to the data (e.g. in the resample function)
-    bandfilter: None | (lfreq, hfreq)
-        If none, no filtering is appliedn. If tuple, data is filtered between lfreq-hfreq.
-        NOTE: filtering at this step is suboptimal, filter before epoching if at all possible, see
-            also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
-    mcca_reg: float
-        regularization used for the mcca computation (see mcca.py)
-    copy: bool
-        Whether to copy the data before transforming
-    Returns
-    -------
-    data : xarray.Dataset
-        xarray dataset [n_samples * n_comp] data expressed in the PC space, ready for HMP fit
-    """
+                    # remove padding
+                    dat = dat[:, trial_len:-trial_len]
+                    data.data.values[pp, trial, :, : dat.shape[1]] = dat
+            return data
+
+    @staticmethod
+    def _standardize(x):
+        """Scaling variances to mean variance of the group."""
+        return (x.data / x.data.std(dim=...)) * x.mean_std
+
 
 if __name__=="__main__":
     
