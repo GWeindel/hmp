@@ -22,8 +22,8 @@ class Method(Enum):
         return self.value
 
 
-# TODO: replace apply_zscore str w/ Enum in calling scripts
-# TODO: replace method str w/ Enum in calling scripts
+# TODO: n_comp  None value input
+
 
 class DataTransformer:
 
@@ -253,7 +253,7 @@ class DataTransformer:
         if apply_zscore:
             ori_coords = data.coords
             match apply_zscore:
-                case "all":
+                case ApplyZScore.ALL:
                     if zscore_across_pcs:
                         data = self.zscore_xarray(data)
                     else:
@@ -263,7 +263,7 @@ class DataTransformer:
                             .map(self.zscore_xarray)
                             .unstack()
                         )
-                case "participant":
+                case ApplyZScore.PARTICIPANT:
                     if zscore_across_pcs:
                         data = data.groupby("participant").map(self.zscore_xarray)
                     else:
@@ -273,7 +273,7 @@ class DataTransformer:
                             .map(self.zscore_xarray)
                             .unstack()
                         )
-                case "trial":
+                case ApplyZScore.TRIAL:
                     if zscore_across_pcs:
                         data = (
                             data.stack(trial=[participants_variable, "epochs"])
