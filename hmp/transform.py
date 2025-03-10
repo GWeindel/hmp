@@ -33,11 +33,11 @@ class DataTransformer:
         participants_variable: str = 'participant',
         apply_standard: bool = False,
         averaged: bool = False,
-        apply_zscore: Union[None, str, bool] = 'trial',
-        # apply_zscore: Union[None, ApplyZScore, bool] = Method.TRIAL,
+        # apply_zscore: Union[None, str, bool] = 'trial',
+        apply_zscore: Union[None, ApplyZScore, bool] = Method.TRIAL,
         zscore_across_pcs: bool = False,
-        method: str = 'pca',
-        # method: Method = Method.PCA,
+        # method: str = 'pca',
+        method: Method = Method.PCA,
         cov: bool = True,
         centering: bool = True,
         n_comp: int  = None,
@@ -115,14 +115,14 @@ class DataTransformer:
 
         if apply_zscore is True:
             apply_zscore = ApplyZScore.TRIAL # defaults to trial
-        else:
-            match apply_zscore:
-                case 'all':
-                    apply_zscore = ApplyZScore.ALL
-                case 'participant':
-                    apply_zscore = ApplyZScore.PARTICIPANT
-                case 'trial':
-                    apply_zscore = ApplyZScore.TRIAL
+        # else:
+        #     match apply_zscore:
+        #         case 'all':
+        #             apply_zscore = ApplyZScore.ALL
+        #         case 'participant':
+        #             apply_zscore = ApplyZScore.PARTICIPANT
+        #         case 'trial':
+        #             apply_zscore = ApplyZScore.TRIAL
 
         if not isinstance(apply_zscore, ApplyZScore) and not apply_zscore is False:
             raise ValueError(
@@ -134,11 +134,11 @@ class DataTransformer:
                 "at least one participant has an empty channel"
                 )
 
-        match method:
-            case 'pca':
-                method = Method.PCA
-            case 'mcca':
-                method = Method.MCCA
+        # match method:
+        #     case 'pca':
+        #         method = Method.PCA
+        #     case 'mcca':
+        #         method = Method.MCCA
 
         if not isinstance(method, Method) and method is not None:
             raise ValueError(f"method {method} is unknown, choose either {', '.join([e.value for e in Method])} or None")
@@ -197,6 +197,7 @@ class DataTransformer:
                         {"all": ["participant", "epochs", "samples"]}
                     ).dropna("all")
                     pca_ready_data = pca_ready_data.transpose("all", "channels")
+
                 # Performing spatial PCA on the average var-cov matrix
                 pca_weights = self._pca(pca_ready_data, n_comp, data.coords["channels"].values)
                 data = data @ pca_weights
@@ -243,6 +244,7 @@ class DataTransformer:
             data = data.assign_coords(ori_coords)
             data.attrs["mcca_weights"] = mcca_m.mcca_weights
             data.attrs["pca_weights"] = mcca_m.pca_weights
+
         elif method is None:
             data = data.rename({"channels": "component"})
             data["component"] = np.arange(len(data.component))
@@ -429,7 +431,7 @@ if __name__=="__main__":
     import hmp
     from hmp import simulations
 
-    if 1==2:
+    if False:
 
         cpus = 6 # For multiprocessing, usually a good idea to use multiple CPUs as long as you have enough RAM
 
