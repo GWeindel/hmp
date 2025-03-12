@@ -7,19 +7,12 @@ from warnings import warn
 
 import mne
 import numpy as np
-from mne.datasets import sample
-
+root = os.path.dirname(os.path.abspath(__file__))
 
 def available_sources():
     """List available sources for sample subject in MNE."""
-    data_path = sample.data_path()
-    subjects_dir = op.join(data_path, "subjects")
-    labels = mne.read_labels_from_annot("sample", subjects_dir=subjects_dir, verbose=False)
-    named_labels = []
-    for label in range(len(labels)):
-        named_labels.append(labels[label].name)
-    named_labels = np.array(named_labels)
-    return named_labels
+    labels = np.load(op.join(root,'simulation_parameters','sources_list.npy'))
+    return labels
 
 
 def simulation_sfreq():
@@ -38,10 +31,7 @@ def simulation_positions():
 
 def simulation_info():
     """Recovering MNE's info file for simulated data."""
-    data_path = sample.data_path()
-    subject = "sample"
-    evoked_fname = op.join(data_path, "MEG", subject, "sample_audvis-ave.fif")
-    info = mne.io.read_info(evoked_fname, verbose=False)
+    info = mne.io.read_info(op.join(root,'simulation_parameters','info.fif'))
     return info
 
 
@@ -146,17 +136,11 @@ def simulate(
     # https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html)
     # It loads the data, info structure and forward solution for one example subject,
     # Note that all 'subject' will use this forward solution
-    data_path = sample.data_path()
-    subjects_dir = op.join(data_path, "subjects")
-    subject = "sample"
     # First, we get an info structure from the test subject.
-    evoked_fname = op.join(data_path, "MEG", subject, "sample_audvis-ave.fif")
-    # mne read raw
-    info = mne.io.read_info(evoked_fname, verbose=verbose)
+    info = simulation_info()
     # To simulate sources, we also need a source space. It can be obtained from the
     # forward solution of the sample subject.
-    fwd_fname = op.join(data_path, "MEG", subject, "sample_audvis-meg-eeg-oct-6-fwd.fif")
-    fwd = mne.read_forward_solution(fwd_fname, verbose=verbose)
+    fwd = mne.read_forward_solution(op.join(root,'simulation_parameters','sample_fwd.fif'))
     with info._unlock():
         info["sfreq"] = sfreq
     if data_type == "eeg":
