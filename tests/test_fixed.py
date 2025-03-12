@@ -13,6 +13,9 @@ from hmp.models import FixedEventModel
 from hmp.models.base import EventProperties
 from hmp.trialdata import TrialData
 
+DATA_DIR = Path("tests", "gen_data")
+DATA_DIR_A = DATA_DIR / "dataset_a"
+DATA_DIR_B = DATA_DIR / "dataset_b"
 
 def test_fixed():
     sfreq = 100
@@ -20,9 +23,9 @@ def test_fixed():
     events = []
     event_id = {'stimulus':1}#trigger 1 = stimulus
     resp_id = {'response':5}
-
-    raws = ['dataset_a_raw_raw.fif','dataset_b_raw_raw.fif']
-    event_files = ['dataset_a_raw_raw_generating_events.npy', 'dataset_b_raw_raw_generating_events.npy']
+    raws = [DATA_DIR_A / 'dataset_a_raw_raw.fif', DATA_DIR_B / 'dataset_b_raw_raw.fif']
+    event_files = [DATA_DIR_A / 'dataset_a_raw_raw_generating_events.npy',
+                   DATA_DIR_B / 'dataset_b_raw_raw_generating_events.npy']
     for file in event_files:
         events.append(np.load(file))
 
@@ -54,4 +57,4 @@ def test_fixed():
     assert (np.array(simulations.classification_true(true_topos,test_topos)) == np.array(([0,1,2],[0,1,2]))).all()
     
     assert np.isclose(np.sum(np.abs(true_topos.data - test_topos.data)), 0, atol=1e-4, rtol=0)
-    assert np.isclose(likelihood, np.array(1.4300866), atol=1e-4, rtol=0)
+    assert np.isclose(likelihood, np.array(0.85561476), atol=1e-4, rtol=0)

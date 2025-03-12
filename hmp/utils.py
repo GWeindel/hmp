@@ -9,6 +9,7 @@ import xarray as xr
 from pandas import MultiIndex
 from scipy.special import gamma as gamma_func
 from scipy.stats import sem
+from pathlib import Path
 
 from hmp import mcca
 
@@ -163,7 +164,7 @@ def read_mne_data(
     """
     dict_datatype = {False: "continuous", True: "epoched"}
     epoch_data = []
-    if isinstance(pfiles, str):  # only one participant
+    if isinstance(pfiles, (str, Path)):  # only one participant
         pfiles = [pfiles]
     if not subj_idx:
         subj_idx = ["S" + str(x) for x in np.arange(len(pfiles))]
@@ -185,10 +186,15 @@ def read_mne_data(
         print(f"Processing participant {participant}'s {dict_datatype[epoched]} {pick_channels}")
 
         # loading data
+<<<<<<< HEAD
         if epoched is False:  # performs epoching on raw data
             if ".fif" in participant:
+=======
+        if not epoched:  # performs epoching on raw data
+            if Path(participant).suffix == ".fif":
+>>>>>>> 1932edb (Fix tests (#3))
                 data = mne.io.read_raw_fif(participant, preload=True, verbose=verbose)
-            elif ".bdf" in participant:
+            elif Path(participant).suffix == ".bdf":
                 data = mne.io.read_raw_bdf(participant, preload=True, verbose=verbose)
             else:
                 raise ValueError(f"Unknown EEG file format for participant {participant}")
@@ -287,7 +293,7 @@ def read_mne_data(
             epochs.metadata.rename({"response": "rt"}, axis=1, inplace=True)
             metadata_i = epochs.metadata
         else:
-            if ".fif" in participant:
+            if Path(participant).suffix == ".fif":
                 epochs = mne.read_epochs(participant, preload=True, verbose=verbose)
                 if high_pass is not None or low_pass is not None:
                     epochs.filter(high_pass, low_pass, fir_design="firwin", verbose=verbose)
