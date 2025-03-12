@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import gc
+from pytest import mark
 
 import hmp
 from hmp import simulations
@@ -29,21 +30,23 @@ def test_fixed():
     # Data reading
     epoch_data = hmp.utils.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq,
             events_provided=events, verbose=True, reference='average', high_pass=1, low_pass=45,
-                subj_idx=['a','b'],pick_channels='eeg', lower_limit_rt=0.01, upper_limit_rt=2 ) 
+                subj_idx=['a','b'], pick_channels='eeg', lower_limit_rt=0.01, upper_limit_rt=2)
     epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
     positions = simulations.simulation_positions()
 
     hmp_data = hmp.utils.transform_data(epoch_data, n_comp=2,)
 
-        
    # Comparing to simulated data, asserting that results are the one simulated
     data_a = hmp.utils.participant_selection(hmp_data, 'a')
     event_properties = EventProperties.create_expected(sfreq=data_a.sfreq)
     trial_data = TrialData.from_standard_data(data=data_a, template=event_properties.template)
-    init_sim = FixedEventModel(event_properties, n_events=n_events, maximization=False,)
+    model = FixedEventModel(event_properties, n_events=n_events, maximization=False)
     sim_source_times, true_pars, true_magnitudes, _ = \
-        simulations.simulated_times_and_parameters(event_a, init_sim, trial_data)
-    true_loglikelihood, true_estimates = init_sim.fit_transform(trial_data, parameters = np.array([true_pars]), magnitudes=np.array([true_magnitudes]),  verbose=True)
+        simulations.simulated_times_and_parameters(event_a, model, trial_data)
+
+    true_loglikelihood, true_estimates = model.fit_transform(
+        trial_data, parameters = np.array([true_pars]), magnitudes=np.array([true_magnitudes]),
+        verbose=True)
     true_topos = hmp.utils.event_topo(epoch_data, true_estimates.squeeze(), mean=True)
     init_sim = FixedEventModel(event_properties, n_events=n_events, maximization=True,)
     likelihood, estimates = init_sim.fit_transform(trial_data, verbose=True)

@@ -155,7 +155,7 @@ class BaseModel(ABC):
         ...
 
     @abstractmethod
-    def transform(self, data):
+    def transform(self, trial_data):
         ...
 
     def fit_transform(self, data, *args, **kwargs):

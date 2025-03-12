@@ -305,8 +305,8 @@ class FixedEventModel(BaseModel):
             self.traces = self.traces[[max_lkhs]]
             self.param_dev = self.param_dev[[max_lkhs]]
 
-        # self.levels = levels
-        # self.n_levels = n_levels
+        self.levels = levels
+        self.n_levels = n_levels
         self.mags_map = mags_map
         self.pars_map = pars_map
 
