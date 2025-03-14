@@ -114,6 +114,7 @@ def simulate(
     files: list
         list of file names (file + number of subject)
     """
+    os.environ["SUBJECTS_DIR"] = op.join(root,'simulation_parameters')
     if not verbose:
         mne.set_log_level("warning")
     else:
@@ -218,10 +219,10 @@ def simulate(
 
             # Fake source, actually stimulus onset
             selected_label = mne.read_labels_from_annot(
-                subject, regexp=sources_subj[0][0], subjects_dir=subjects_dir, verbose=verbose
+                '', regexp=sources_subj[0][0], subjects_dir=op.join(root,'simulation_parameters'), verbose=verbose
             )[0]
             label = mne.label.select_sources(
-                subject, selected_label, subjects_dir=subjects_dir, random_state=random_state
+                '', selected_label, subjects_dir=op.join(root,'simulation_parameters'), random_state=random_state
             )
             source_time_series = np.array([1e-20])  # stim trigger
             source_simulator.add_data(label, source_time_series, events)
@@ -232,12 +233,12 @@ def simulate(
                 if trigger == len(sources_subj) + 1:
                     source[2] = 1e-20  # Last source defines RT and is not an event per se
                 selected_label = mne.read_labels_from_annot(
-                    subject, regexp=source[0], subjects_dir=subjects_dir, verbose=verbose
+                    '', regexp=source[0], subjects_dir=op.join(root,'simulation_parameters'), verbose=verbose
                 )[0]
                 label = mne.label.select_sources(
-                    subject,
+                    '',
                     selected_label,
-                    subjects_dir=subjects_dir,
+                    subjects_dir=op.join(root,'simulation_parameters'),
                     location=0,
                     grow_outside=False,
                     random_state=random_state,
