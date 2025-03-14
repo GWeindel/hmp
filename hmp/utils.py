@@ -186,13 +186,8 @@ def read_mne_data(
         print(f"Processing participant {participant}'s {dict_datatype[epoched]} {pick_channels}")
 
         # loading data
-<<<<<<< HEAD
-        if epoched is False:  # performs epoching on raw data
-            if ".fif" in participant:
-=======
         if not epoched:  # performs epoching on raw data
             if Path(participant).suffix == ".fif":
->>>>>>> 1932edb (Fix tests (#3))
                 data = mne.io.read_raw_fif(participant, preload=True, verbose=verbose)
             elif Path(participant).suffix == ".bdf":
                 data = mne.io.read_raw_bdf(participant, preload=True, verbose=verbose)
@@ -926,7 +921,7 @@ def event_times(
     if estimate_method is None:
         estimate_method = "max"
     event_shift = 0
-    eventprobs = estimates.eventprobs.fillna(0).copy()
+    eventprobs = estimates.fillna(0).copy()
     if estimate_method == "max":
         times = eventprobs.argmax("samples") - event_shift  # Most likely event location
     else:
@@ -1118,6 +1113,7 @@ def event_topo(
     """
     if estimate_method is None:
         estimate_method = "max"
+<<<<<<< HEAD
     if "trial_x_participant" not in epoch_data.dims:
         epoch_data = (
             epoch_data.rename({"epochs": "trials"})
@@ -1126,6 +1122,15 @@ def event_topo(
             .drop_duplicates("trial_x_participant")
         )
     estimated = estimated.eventprobs.copy().fillna(0)
+=======
+    epoch_data = (
+        epoch_data.rename({"epochs": "trials"})
+        .stack(trial_x_participant=["participant", "trials"])
+        .data.fillna(0)
+        .drop_duplicates("trial_x_participant")
+    )
+    estimated = estimated.fillna(0).copy()
+>>>>>>> 516db5c (Work on fixedn (#5))
     n_events = estimated.event.count().values
     n_trials = estimated.trial_x_participant.count().values
     n_channels = epoch_data.channels.count().values
@@ -1260,11 +1265,11 @@ def load(filename):
     ):
         # Ensures correct order of dimensions for later index use
         if "iteration" in data:
-            data["eventprobs"] = data.eventprobs.transpose(
+            data = data.transpose(
                 "iteration", "trial_x_participant", "samples", "event"
             )
         else:
-            data["eventprobs"] = data.eventprobs.transpose(
+            data = data.transpose(
                 "trial_x_participant", "samples", "event"
             )
     return data
