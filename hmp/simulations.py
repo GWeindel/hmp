@@ -164,7 +164,6 @@ def simulate(
     for subj in range(n_subj):
         sources_subj = sources[subj]
         # Pre-allocate the random times to avoid generating too long 'recordings'
-
         rand_times = np.zeros((len(sources_subj), n_trials))
         random_indices_list = []
         for s, source in enumerate(sources_subj):
@@ -180,12 +179,16 @@ def simulate(
                 size=len(random_indices_list[-1]), random_state=random_state
             )
         seq_index = np.diff(relations, prepend=0) > 0
-        if seq_index.all():  # If all events are sequential
-            trial_time = np.sum(rand_times, axis=0)
+        if times is None:
+            if seq_index.all():  # If all events are sequential
+                trial_time = np.sum(rand_times, axis=0)
+            else:
+                trial_time_seq = np.sum(rand_times[seq_index], axis=0)
+                trial_time_nonseq = np.sum(rand_times[~seq_index], axis=0)
+                
+                trial_time = np.maximum(trial_time_seq, trial_time_nonseq)
         else:
-            trial_time_seq = np.sum(rand_times[seq_index], axis=0)
-            trial_time_nonseq = np.sum(rand_times[~seq_index], axis=0)
-            trial_time = np.maximum(trial_time_seq, trial_time_nonseq)
+            trial_time = np.sum(times, axis=1)
         trial_time /= 1000  # to seconds
         trial_time[1:] += trial_time[:-1] + 0.5
         trial_time = np.cumsum(trial_time)

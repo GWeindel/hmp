@@ -25,7 +25,6 @@ class TrialData():
     ends: Any
     n_trials: int
     n_samples: int
-    n_dims: int
     cross_corr: Any
     trial_coords: Any
 
@@ -73,20 +72,16 @@ class TrialData():
             .coords
         )
         return cls(named_durations=named_durations, coords=coords, starts=starts, ends=ends,
-                   n_trials=n_trials, n_samples=n_samples, n_dims=n_dims, cross_corr=cross_corr,
+                   n_trials=n_trials, n_samples=n_samples, cross_corr=cross_corr,
                    trial_coords=trial_coords)
-
-    @cached_property
-    def max_duration(self):
-        return self.durations.max()
-
-    @cached_property
-    def mean_duration(self):
-        return self.durations.mean()
 
     @cached_property
     def durations(self):
         return self.ends - self.starts + 1
+
+    @property
+    def n_dims(self):
+        return self.cross_corr.shape[1]
 
 
 def cross_correlation(data, n_trials, n_dims, starts, ends, template):
