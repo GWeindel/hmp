@@ -5,6 +5,7 @@ from mne.filter import filter_data
 from sklearn.decomposition import PCA
 from typing import Union
 from warnings import filterwarnings, warn
+from hmp import mcca
 
 #TODO: Move to utils
 def user_input_n_comp(data):
@@ -61,22 +62,22 @@ class DataTransformer:
 
     def __init__(
         self,
-        epoch_data: xarray,
+        epoch_data: xr.DataArray,
         participants_variable: str = 'participant',
         apply_standard: bool = False,
         averaged: bool = False,
-        apply_zscore: Union[None, ApplyZScore, bool] = Method.TRIAL,
+        apply_zscore: Union[None, ApplyZScore, bool] = ApplyZScore.TRIAL,
         zscore_across_pcs: bool = False,
         method: Method = Method.PCA,
         cov: bool = True,
         centering: bool = True,
         n_comp: int  = None,
         n_ppcas: int = None,
-        pca_weights: xarray = None,
-        bandfilter: Union[None, tuple(float, float)] = None,
+        pca_weights: xr.DataArray = None,
+        bandfilter: Union[None, tuple[float, float]] = None,
         mcca_reg: float = 0,
         copy: bool = False,
-    ):
+    ) -> None:
         """Adapt EEG epoched data (in xarray format) to the expected data format for hmp.
 
         First this code can apply standardization of individual variances (if apply_standard=True).
@@ -147,7 +148,7 @@ class DataTransformer:
 
         if not isinstance(apply_zscore, ApplyZScore) and not apply_zscore is False:
             raise ValueError(
-                f"apply_zscore should be either a boolean or one of [{', '.join([e.value for e in ApplyZscore])}]"
+                f"apply_zscore should be either a boolean or one of [{', '.join([e.value for e in ApplyZScore])}]"
                 )
         
         if np.sum(np.isnan(data.groupby("participant", squeeze=False).mean(["epochs", "samples"]).data.values)) != 0:
@@ -317,11 +318,11 @@ class DataTransformer:
         self.this_data = self.stack_data(data)
     
     @property
-    def data(self):
+    def data(self) -> xr.DataArray:
         return self.this_data
 
     @staticmethod
-    def _center(data):
+    def _center(data: xr.DataArray) -> xr.DataArray:
         """Center the data."""
         mean_last_dim = np.nanmean(data.values, axis=-1)
         mean_last_dim_expanded = np.expand_dims(mean_last_dim, axis=-1)
@@ -354,7 +355,7 @@ class DataTransformer:
         return data
 
     @staticmethod
-    def stack_data(data):
+    def stack_data(data: xr.DataArray) -> xr.DataArray:
         """Stack the data.
 
         Going from format [participant * epochs * samples * channels] to
