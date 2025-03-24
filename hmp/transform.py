@@ -6,6 +6,38 @@ from sklearn.decomposition import PCA
 from typing import Union
 from warnings import filterwarnings, warn
 
+#TODO: Move to utils
+def user_input_n_comp(data):
+    n_comp = np.shape(data)[0] - 1
+    fig, ax = plt.subplots(1, 2, figsize=(0.2 * n_comp, 4))
+    pca = PCA(n_components=n_comp, svd_solver="full", copy=False)  # selecting PCs
+    pca.fit(data)
+
+    ax[0].plot(np.arange(pca.n_components) + 1, pca.explained_variance_ratio_, ".-")
+    ax[0].set_ylabel("Normalized explained variance")
+    ax[0].set_xlabel("Component")
+    ax[1].plot(np.arange(pca.n_components) + 1, np.cumsum(pca.explained_variance_ratio_), ".-")
+    ax[1].set_ylabel("Cumulative normalized explained variance")
+    ax[1].set_xlabel("Component")
+    plt.tight_layout()
+    plt.show()
+
+    #TODO: needs user input validation?
+    n_comp = int(
+        input(
+            f"How many PCs (95 and 99% explained variance at component "
+            f"n{np.where(np.cumsum(pca.explained_variance_ratio_) >= 0.95)[0][0] + 1} and "
+            f"n{np.where(np.cumsum(pca.explained_variance_ratio_) >= 0.99)[0][0] + 1}; "
+            f"components till n{np.where(pca.explained_variance_ratio_ >= 0.01)[0][-1] + 1} "
+            f"explain at least 1%)?"
+        )
+    )
+
+
+    return n_comp
+
+
+
 class ApplyZScore(Enum):
     ALL = 'all'
     PARTICIPANT = 'participant'
@@ -22,8 +54,8 @@ class Method(Enum):
         return self.value
 
 
-# TODO: n_comp  None value input
-
+#TODO: n_comp  None value input
+#TODO: printing to proper logging
 
 class DataTransformer:
 
@@ -33,10 +65,8 @@ class DataTransformer:
         participants_variable: str = 'participant',
         apply_standard: bool = False,
         averaged: bool = False,
-        # apply_zscore: Union[None, str, bool] = 'trial',
         apply_zscore: Union[None, ApplyZScore, bool] = Method.TRIAL,
         zscore_across_pcs: bool = False,
-        # method: str = 'pca',
         method: Method = Method.PCA,
         cov: bool = True,
         centering: bool = True,
@@ -112,17 +142,8 @@ class DataTransformer:
                 "Expected a xarray Dataset with data and event as DataArrays, check the data format"
                 )
 
-
         if apply_zscore is True:
             apply_zscore = ApplyZScore.TRIAL # defaults to trial
-        # else:
-        #     match apply_zscore:
-        #         case 'all':
-        #             apply_zscore = ApplyZScore.ALL
-        #         case 'participant':
-        #             apply_zscore = ApplyZScore.PARTICIPANT
-        #         case 'trial':
-        #             apply_zscore = ApplyZScore.TRIAL
 
         if not isinstance(apply_zscore, ApplyZScore) and not apply_zscore is False:
             raise ValueError(
@@ -133,12 +154,6 @@ class DataTransformer:
             raise ValueError(
                 "at least one participant has an empty channel"
                 )
-
-        # match method:
-        #     case 'pca':
-        #         method = Method.PCA
-        #     case 'mcca':
-        #         method = Method.MCCA
 
         if not isinstance(method, Method) and method is not None:
             raise ValueError(f"method {method} is unknown, choose either {', '.join([e.value for e in Method])} or None")
@@ -170,7 +185,9 @@ class DataTransformer:
             data = self._center(data)
 
         data = data.transpose("participant", "epochs", "channels", "samples")
+
         if method == Method.PCA:
+
             if pca_weights is None:
                 if cov:
                     indiv_data = np.zeros(
@@ -204,6 +221,7 @@ class DataTransformer:
                 data.attrs["pca_weights"] = pca_weights
 
         elif method == Method.MCCA:
+
             ori_coords = data.drop_vars("channels").coords
             if n_ppcas is None:
                 n_ppcas = n_comp * 3
@@ -246,12 +264,15 @@ class DataTransformer:
             data.attrs["pca_weights"] = mcca_m.pca_weights
 
         elif method is None:
+
             data = data.rename({"channels": "component"})
             data["component"] = np.arange(len(data.component))
             data.attrs["pca_weights"] = np.identity(len(data.component))
 
         if apply_zscore:
+
             ori_coords = data.coords
+
             match apply_zscore:
                 case ApplyZScore.ALL:
                     if zscore_across_pcs:
@@ -311,33 +332,8 @@ class DataTransformer:
 
     @staticmethod
     def _pca(pca_ready_data, n_comp, channels):
-
-        if n_comp is None:
-            import matplotlib.pyplot as plt
-
-            n_comp = np.shape(pca_ready_data)[0] - 1
-            fig, ax = plt.subplots(1, 2, figsize=(0.2 * n_comp, 4))
-            pca = PCA(n_components=n_comp, svd_solver="full", copy=False)  # selecting PCs
-            pca.fit(pca_ready_data)
-
-            ax[0].plot(np.arange(pca.n_components) + 1, pca.explained_variance_ratio_, ".-")
-            ax[0].set_ylabel("Normalized explained variance")
-            ax[0].set_xlabel("Component")
-            ax[1].plot(np.arange(pca.n_components) + 1, np.cumsum(pca.explained_variance_ratio_), ".-")
-            ax[1].set_ylabel("Cumulative normalized explained variance")
-            ax[1].set_xlabel("Component")
-            plt.tight_layout()
-            plt.show()
-            n_comp = int(
-                input(
-                    f"How many PCs (95 and 99% explained variance at component "
-                    f"n{np.where(np.cumsum(pca.explained_variance_ratio_) >= 0.95)[0][0] + 1} and "
-                    f"n{np.where(np.cumsum(pca.explained_variance_ratio_) >= 0.99)[0][0] + 1}; "
-                    f"components till n{np.where(pca.explained_variance_ratio_ >= 0.01)[0][-1] + 1} "
-                    f"explain at least 1%)?"
-                )
-            )
-
+        #TODO: test
+        n_comp = user_input_n_comp(pca_ready_data=pca_ready_data) if n_comp is None else n_comp
         pca = PCA(n_components=n_comp, svd_solver="full")  # selecting Principale components (PC)
         pca.fit(pca_ready_data)
         # Rebuilding pca PCs as xarray to ease computation
@@ -420,6 +416,8 @@ class DataTransformer:
         return (x.data / x.data.std(dim=...)) * x.mean_std
 
 
+#TODO: for testing refactoring only
+#TODO: implement in notebook
 if __name__=="__main__":
     
     import numpy as np
@@ -487,7 +485,7 @@ if __name__=="__main__":
 
     trf = DataTransformer(epoch_data=eeg_data, apply_standard=False, n_comp=5)
 
+    #TODO: actual compare
     print(hmp_data)
     print(trf.data)
-
 
