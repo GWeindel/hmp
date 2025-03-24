@@ -7,6 +7,9 @@ from typing import Union
 from warnings import filterwarnings, warn
 from hmp import mcca
 
+
+#TODO: write tests
+
 #TODO: Move to utils
 def user_input_n_comp(data):
     n_comp = np.shape(data)[0] - 1
@@ -332,7 +335,7 @@ class DataTransformer:
         return data
 
     @staticmethod
-    def _pca(pca_ready_data, n_comp, channels):
+    def _pca(pca_ready_data: xr.DataArray, n_comp: int, channels: str):
         #TODO: test
         n_comp = user_input_n_comp(pca_ready_data=pca_ready_data) if n_comp is None else n_comp
         pca = PCA(n_components=n_comp, svd_solver="full")  # selecting Principale components (PC)
