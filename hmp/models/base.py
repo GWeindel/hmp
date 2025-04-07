@@ -122,6 +122,8 @@ class BaseModel(ABC):
         # self.trial_data = trial_data
         self.events = event_properties
         self.pdf = sp_dist.pdf
+        self._fitted = False
+
 
     def compute_max_events(self, trial_data):
         """Compute the maximum possible number of events given event width minimum reaction time."""
@@ -149,6 +151,11 @@ class BaseModel(ABC):
         #     return self.trial_data.cross_corr
 
         return super().__getattribute__(attr)
+
+    def _check_fitted(self, op):
+        if not self._fitted:
+            raise ValueError(f"Cannot {op}, because the model has not been fitted yet.")
+
 
     @abstractmethod
     def fit(self, trial_data):

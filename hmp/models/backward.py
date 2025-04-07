@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from pandas import MultiIndex
+import pandas as pd
 from scipy.signal import correlate
 from scipy.stats import norm as norm_pval
 
@@ -24,15 +25,22 @@ from hmp.models.base import BaseModel
 from hmp.models.fixedn import FixedEventModel
 
 class BackwardEstimationModel(BaseModel):
+    def __init__(self, *args, max_events=None, min_events=0, max_starting_points=1,
+                 tolerance=1e-4, max_iteration=1e3, **kwargs):
+        self.max_events = max_events
+        self.min_events = min_events
+        self.max_starting_points = max_starting_points
+        self.tolerance = tolerance
+        self.max_iteration = max_iteration
+        self.submodels = {}
+        super().__init__(*args, **kwargs)
+
     def fit(
         self,
+        trial_data,
         max_events=None,
         min_events=0,
         base_fit=None,
-        max_starting_points=1,
-        tolerance=1e-4,
-        maximization=True,
-        max_iteration=1e3,
         cpus=1,
     ):
         """Perform the backward estimation.
@@ -51,9 +59,6 @@ class BackwardEstimationModel(BaseModel):
         base_fit : xarray
             To avoid re-estimating the model with maximum number of events it can be provided
             with this arguments, defaults to None
-        max_starting_points: int
-            how many random starting points iteration to try for the model estimating the maximal
-            number of events
         tolerance: float
             Tolerance applied to the expectation maximization in the EM() function
         maximization: bool
@@ -61,103 +66,83 @@ class BackwardEstimationModel(BaseModel):
         max_iteration: int
             Maximum number of iteration for the expectation maximization in the EM() function
         """
-        fixed_n_model = FixedEventModel(self.trial_data, self.events, self.distribution)
-
         if max_events is None and base_fit is None:
-            max_events = self.compute_max_events()
+            max_events = self.compute_max_events(trial_data)
         if not base_fit:
-            if max_starting_points > 0:
-                print(
-                    f"Estimating all solutions for maximal number of events ({max_events}) with 1 "
-                    "pre-defined starting point and {max_starting_points - 1} starting points"
-                )
-            event_loo_results = [
-                fixed_n_model.fit(max_events, starting_points=max_starting_points, verbose=False)
-            ]
+            print(
+                f"Estimating all solutions for maximal number of events ({max_events})"
+            )
+            fixed_n_model = self.get_fixed_model(n_events=max_events, starting_points=1)
+            loglikelihood, eventprobs = fixed_n_model.fit_transform(trial_data, verbose=False,
+                                                                    cpus=cpus)
         else:
-            event_loo_results = [base_fit]
-        max_events = event_loo_results[0].event.max().values + 1
+            loglikelihood, eventprobs = base_fit
+        max_events = eventprobs.event.max().values + 1
+        self.submodels[max_events] = fixed_n_model
 
         for n_events in np.arange(max_events - 1, min_events, -1):
-            # only take previous model forward when it's actually fitting ok
-            if event_loo_results[-1].loglikelihood.values != -np.inf:
-                print(f"Estimating all solutions for {n_events} events")
+            fixed_n_model = self.get_fixed_model(n_events, starting_points=n_events+1)
 
-                pars_prev = event_loo_results[-1].dropna("stage").parameters.values
-                mags_prev = event_loo_results[-1].dropna("event").magnitudes.values
+            print(f"Estimating all solutions for {n_events} events")
 
-                events_temp, pars_temp = [], []
+            pars_prev = self.submodels[n_events+1].xrparams.dropna("stage").values
+            mags_prev = self.submodels[n_events+1].xrmags.dropna("event").values
 
-                for event in np.arange(n_events + 1):  # creating all possible solutions
-                    events_temp.append(mags_prev[np.arange(n_events + 1) != event,])
+            events_temp, pars_temp = [], []
 
-                    temp_pars = np.copy(pars_prev)
-                    temp_pars[event, 1] = (
-                        temp_pars[event, 1] + temp_pars[event + 1, 1]
-                    )  # combine two stages into one
-                    temp_pars = np.delete(temp_pars, event + 1, axis=0)
-                    pars_temp.append(temp_pars)
+            for event in np.arange(n_events + 1):  # creating all possible starting points
+                events_temp.append(mags_prev[:, np.arange(n_events + 1) != event,])
 
-                if cpus == 1:
-                    event_loo_likelihood_temp = []
-                    for i in range(len(events_temp)):
-                        event_loo_likelihood_temp.append(
-                            fixed_n_model.fit(
-                                n_events,
-                                events_temp[i],
-                                pars_temp[i],
-                                tolerance=tolerance,
-                                max_iteration=max_iteration,
-                                maximization=maximization,
-                                verbose=False,
-                            )
+                temp_pars = np.copy(pars_prev)
+                temp_pars[:, event, 1] = (
+                    temp_pars[:, event, 1] + temp_pars[:, event + 1, 1]
+                )  # combine two stages into one
+                temp_pars = np.delete(temp_pars, event + 1, axis=1)
+                pars_temp.append(temp_pars)
+            fixed_n_model.fit(
+                            trial_data,
+                            magnitudes=np.array(events_temp),
+                            parameters=np.array(pars_temp),
+                            verbose=False,
+                            cpus=cpus
                         )
-                else:
-                    inputs = zip(
-                        itertools.repeat(n_events),
-                        events_temp,
-                        pars_temp,
-                        itertools.repeat([]),
-                        itertools.repeat([]),
-                        itertools.repeat(tolerance),
-                        itertools.repeat(max_iteration),
-                        itertools.repeat(maximization),
-                        itertools.repeat(1),
-                        itertools.repeat(1),
-                        itertools.repeat(True),
-                        itertools.repeat(False),
-                        itertools.repeat(1),
-                    )
-                    with mp.Pool(processes=cpus) as pool:
-                        event_loo_likelihood_temp = pool.starmap(fixed_n_model.fit, inputs)
 
-                lkhs = [x.loglikelihood.values for x in event_loo_likelihood_temp]
-                event_loo_results.append(event_loo_likelihood_temp[np.nanargmax(lkhs)])
+            gc.collect()
+            self.submodels[n_events] = fixed_n_model
+        self._fitted = True
 
-                # remove event_loo_likelihood
-                del event_loo_likelihood_temp
-                # Force garbage collection
-                gc.collect()
+    def transform(self, trial_data):
+        if len(self.submodels) == 0:
+            raise ValueError("Model has not been (succesfully) fitted yet, no fixed models.")
+        likelihoods = []
+        event_probs = []
+        for n_events, fixed_n_model in self.submodels.items():
+            lkh, prob = fixed_n_model.transform(trial_data)
+            likelihoods.append(lkh)
+            event_probs.append(prob)
+        xr_eventprobs = xr.concat(event_probs, dim=pd.Index(list(self.submodels), name="n_events"))
+        return likelihoods, xr_eventprobs
 
-            else:
-                print(
-                    f"Previous model did not fit well. Estimating a neutral {n_events} event model."
-                )
-                event_loo_results.append(
-                    self.fixed_n_model(
-                        n_events,
-                        tolerance=tolerance,
-                        max_iteration=max_iteration,
-                        maximization=maximization,
-                    )
-                )
-        event_loo_results = xr.concat(event_loo_results, dim="n_events", fill_value=np.nan)
-        event_loo_results = event_loo_results.assign_coords(
-            {"n_events": np.arange(max_events, min_events, -1)}
-        )
-        event_loo_results = event_loo_results.assign_attrs(method="backward")
-        if "sp_parameters" in event_loo_results.attrs:
-            del event_loo_results.attrs["sp_parameters"]
-            del event_loo_results.attrs["sp_magnitudes"]
-            del event_loo_results.attrs["maximization"]
-        return event_loo_results
+    def _concatted_attr(self, attr_name):
+        return xr.concat([getattr(model, attr_name) for model in self.submodels.values()],
+                         dim=pd.Index(list(self.submodels), name="n_events"))
+
+    def __getattribute__(self, attr):
+        property_list = {
+            "xrtraces": "get traces",
+            "xrlikelihoods": "get likelihoods",
+            "xrparam_dev": "get dev params",
+            "xrmags": "get xrmags",
+            "xrparams": "get xrparams"
+        }
+        if attr in property_list:
+            self._check_fitted(property_list[attr])
+            return self._concatted_attr(attr)
+        return super().__getattribute__(attr)
+
+    def get_fixed_model(self, n_events, starting_points):
+        return FixedEventModel(
+            self.events, self.distribution, n_events=n_events,
+            starting_points=starting_points,
+            tolerance=self.tolerance,
+            max_iteration=self.max_iteration)
