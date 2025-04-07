@@ -7,9 +7,6 @@ from typing import Union
 from warnings import filterwarnings, warn
 from hmp import mcca
 
-
-#TODO: write tests
-
 #TODO: Move to utils
 def user_input_n_comp(data):
     n_comp = np.shape(data)[0] - 1
@@ -335,8 +332,9 @@ class DataTransformer:
         return data
 
     @staticmethod
-    def _pca(pca_ready_data: xr.DataArray, n_comp: int, channels: str):
-        #TODO: test
+    def _pca(pca_ready_data: xr.DataArray, n_comp: int, channels) -> xr.DataArray:
+
+        #TODO: test seperate function
         n_comp = user_input_n_comp(pca_ready_data=pca_ready_data) if n_comp is None else n_comp
         pca = PCA(n_components=n_comp, svd_solver="full")  # selecting Principale components (PC)
         pca.fit(pca_ready_data)
@@ -346,7 +344,7 @@ class DataTransformer:
         return pca_weights
 
     @staticmethod
-    def zscore_xarray(data):
+    def zscore_xarray(data: Union[xr.Dataset, xr.DataArray]) -> xr.DataArray:
         """Zscore of the data in an xarray, avoiding any nans."""
         if isinstance(data, xr.Dataset):  # if no PCA
             data = data.data
@@ -418,78 +416,3 @@ class DataTransformer:
     def _standardize(x):
         """Scaling variances to mean variance of the group."""
         return (x.data / x.data.std(dim=...)) * x.mean_std
-
-
-#TODO: for testing refactoring only
-#TODO: implement in notebook
-if __name__=="__main__":
-    
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    from scipy.stats import gamma
-
-    ## Importing HMP
-    import hmp
-    from hmp import simulations
-
-    if False:
-
-        cpus = 6 # For multiprocessing, usually a good idea to use multiple CPUs as long as you have enough RAM
-
-        n_trials = 100 #Number of trials to simulate
-        sfreq = 500
-        ##### Here we define the sources of the brain activity (event) for each trial
-        n_events = 4
-        frequency = 10. #Frequency of the event defining its duration, half-sine of 10Hz = 50ms
-        amplitude = .2e-7 #Amplitude of the event in nAm, defining signal to noise ratio
-        shape = 2 #shape of the gamma distribution
-        means = np.array([60, 150, 200, 100, 80])/shape #Mean duration of the between event times in ms
-        names = ['inferiortemporal-lh','caudalanteriorcingulate-rh','bankssts-lh','superiorparietal-lh','superiorparietal-lh']#Which source to activate for each event (see atlas when calling simulations.available_sources())
-
-        sources = []
-        for source in zip(names, means): #One source = one frequency, one amplitude and a given by-trial variability distribution
-            sources.append([source[0], frequency, amplitude, gamma(shape, scale=source[1])])
-
-        # Function used to generate the data
-        file = simulations.simulate(sources, n_trials, cpus, 'dataset_raw', overwrite=False, sfreq=sfreq, seed=1)
-        #load electrode position, specific to the simulations
-        info = simulations.simulation_positions()
-
-        #Recovering the events to epoch the data (in the number of trials defined above)
-        generating_events = np.load(file[1])
-        resp_trigger = int(np.max(np.unique(generating_events[:,2])))#Resp trigger is the last source in each trial
-        event_id = {'stimulus':1}#trigger 1 = stimulus
-        resp_id = {'response':resp_trigger}
-        #Keeping only stimulus and response triggers
-        events = generating_events[(generating_events[:,2] == 1) | (generating_events[:,2] == resp_trigger)]#only retain stimulus and response triggers
-
-        #Visualising the raw simulated EEG data
-        import mne
-        raw = mne.io.read_raw_fif(file[0], preload=False, verbose=False)
-        raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events, block=True);
-
-        # Reading the data
-        eeg_data = hmp.utils.read_mne_data(file[0], event_id=event_id, resp_id=resp_id, sfreq=sfreq, 
-                    events_provided=events, verbose=False)
-
-        with open('filename.pickle', 'wb') as handle:
-            pickle.dump(eeg_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-    import pickle
-
-    with open('filename.pickle', 'rb') as handle:
-        eeg_data = pickle.load(handle)
-
-    # print(eeg_data)
-    # print(type(eeg_data))
-    # print(dir(eeg_data))
-
-    hmp_data = hmp.utils.transform_data(eeg_data, apply_standard=False, n_comp=5)
-
-    trf = DataTransformer(epoch_data=eeg_data, apply_standard=False, n_comp=5)
-
-    #TODO: actual compare
-    print(hmp_data)
-    print(trf.data)
-
