@@ -1009,16 +1009,6 @@ def event_topo(
     """
     if estimate_method is None:
         estimate_method = "max"
-<<<<<<< HEAD
-    if "trial_x_participant" not in epoch_data.dims:
-        epoch_data = (
-            epoch_data.rename({"epochs": "trials"})
-            .stack(trial_x_participant=["participant", "trials"])
-            .data.fillna(0)
-            .drop_duplicates("trial_x_participant")
-        )
-    estimated = estimated.eventprobs.copy().fillna(0)
-=======
     epoch_data = (
         epoch_data.rename({"epochs": "trials"})
         .stack(trial_x_participant=["participant", "trials"])
@@ -1026,7 +1016,6 @@ def event_topo(
         .drop_duplicates("trial_x_participant")
     )
     estimated = estimated.fillna(0).copy()
->>>>>>> 516db5c (Work on fixedn (#5))
     n_events = estimated.event.count().values
     n_trials = estimated.trial_x_participant.count().values
     n_channels = epoch_data.channels.count().values
