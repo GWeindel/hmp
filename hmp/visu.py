@@ -174,7 +174,7 @@ def plot_topo_timecourse(
     # Time to display
     if times_to_display is None:
         times_to_display = np.array([np.nanmax(times[:, -1])])
-    elif times_to_display == 'all':
+    elif isinstance(times_to_display, str) and times_to_display == 'all':
         times_to_display = times
     if len(times_to_display.shape) == 1:
         times_to_display = [times_to_display] * n_level
