@@ -33,10 +33,10 @@ def init_data():
             events_provided=events, verbose=True, reference='average', subj_idx=['a','b'], tmin=-.01)
     epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
     positions = simulations.simulation_positions()
-    hmp_data = hmp.utils.transform_data(epoch_data, n_comp=2,)
+    hmp_data = hmp.utils.transform_data(epoch_data, n_comp=5, apply_zscore=False)
     return event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events
 
-def test_fixed_simple():
+def test_cumulative_simple():
     """ test a simple fit_transform on perfect data and compare to ground truth."""
     event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events = init_data()
     # Data b is without noise, recovery should be perfect
@@ -54,15 +54,13 @@ def test_fixed_simple():
     # Ground truth
     true_loglikelihood, true_estimates = true_model.transform(trial_data_b)
 
-    # Backward estimation
-    model = CumulativeEstimationModel(event_properties)
-    # fit the model
+    # Cumulative estimation
+    model = CumulativeEstimationModel(event_properties, step=25)
     model.fit(trial_data_b)
-    # Transform the data
     estimates = model.transform(trial_data_b)
 
     # testing if bacward identifies the 3 real events
-    # assert np.isclose(model.submodels[3].magnitudes, true_model.magnitudes, atol=1).all()
+    assert np.isclose(model.fitted_model.magnitudes, true_model.magnitudes, atol=1).all()
 
     # testing recovery of attributes
     assert isinstance(model.xrlikelihoods, xr.DataArray)
