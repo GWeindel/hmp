@@ -7,19 +7,12 @@ from warnings import warn
 
 import mne
 import numpy as np
-from mne.datasets import sample
-
+root = os.path.dirname(os.path.abspath(__file__))
 
 def available_sources():
     """List available sources for sample subject in MNE."""
-    data_path = sample.data_path()
-    subjects_dir = op.join(data_path, "subjects")
-    labels = mne.read_labels_from_annot("sample", subjects_dir=subjects_dir, verbose=False)
-    named_labels = []
-    for label in range(len(labels)):
-        named_labels.append(labels[label].name)
-    named_labels = np.array(named_labels)
-    return named_labels
+    labels = np.load(op.join(root,'simulation_parameters','sources_list.npy'))
+    return labels
 
 
 def simulation_sfreq():
@@ -38,10 +31,7 @@ def simulation_positions():
 
 def simulation_info():
     """Recovering MNE's info file for simulated data."""
-    data_path = sample.data_path()
-    subject = "sample"
-    evoked_fname = op.join(data_path, "MEG", subject, "sample_audvis-ave.fif")
-    info = mne.io.read_info(evoked_fname, verbose=False)
+    info = mne.io.read_info(op.join(root,'simulation_parameters','info.fif'))
     return info
 
 
@@ -124,6 +114,7 @@ def simulate(
     files: list
         list of file names (file + number of subject)
     """
+    os.environ["SUBJECTS_DIR"] = op.join(root,'simulation_parameters')
     if not verbose:
         mne.set_log_level("warning")
     else:
@@ -146,17 +137,11 @@ def simulate(
     # https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html)
     # It loads the data, info structure and forward solution for one example subject,
     # Note that all 'subject' will use this forward solution
-    data_path = sample.data_path()
-    subjects_dir = op.join(data_path, "subjects")
-    subject = "sample"
     # First, we get an info structure from the test subject.
-    evoked_fname = op.join(data_path, "MEG", subject, "sample_audvis-ave.fif")
-    # mne read raw
-    info = mne.io.read_info(evoked_fname, verbose=verbose)
+    info = simulation_info()
     # To simulate sources, we also need a source space. It can be obtained from the
     # forward solution of the sample subject.
-    fwd_fname = op.join(data_path, "MEG", subject, "sample_audvis-meg-eeg-oct-6-fwd.fif")
-    fwd = mne.read_forward_solution(fwd_fname, verbose=verbose)
+    fwd = mne.read_forward_solution(op.join(root,'simulation_parameters','sample_fwd.fif'))
     with info._unlock():
         info["sfreq"] = sfreq
     if data_type == "eeg":
@@ -179,7 +164,6 @@ def simulate(
     for subj in range(n_subj):
         sources_subj = sources[subj]
         # Pre-allocate the random times to avoid generating too long 'recordings'
-
         rand_times = np.zeros((len(sources_subj), n_trials))
         random_indices_list = []
         for s, source in enumerate(sources_subj):
@@ -195,12 +179,16 @@ def simulate(
                 size=len(random_indices_list[-1]), random_state=random_state
             )
         seq_index = np.diff(relations, prepend=0) > 0
-        if seq_index.all():  # If all events are sequential
-            trial_time = np.sum(rand_times, axis=0)
+        if times is None:
+            if seq_index.all():  # If all events are sequential
+                trial_time = np.sum(rand_times, axis=0)
+            else:
+                trial_time_seq = np.sum(rand_times[seq_index], axis=0)
+                trial_time_nonseq = np.sum(rand_times[~seq_index], axis=0)
+                
+                trial_time = np.maximum(trial_time_seq, trial_time_nonseq)
         else:
-            trial_time_seq = np.sum(rand_times[seq_index], axis=0)
-            trial_time_nonseq = np.sum(rand_times[~seq_index], axis=0)
-            trial_time = np.maximum(trial_time_seq, trial_time_nonseq)
+            trial_time = np.sum(times, axis=1)
         trial_time /= 1000  # to seconds
         trial_time[1:] += trial_time[:-1] + 0.5
         trial_time = np.cumsum(trial_time)
@@ -234,10 +222,10 @@ def simulate(
 
             # Fake source, actually stimulus onset
             selected_label = mne.read_labels_from_annot(
-                subject, regexp=sources_subj[0][0], subjects_dir=subjects_dir, verbose=verbose
+                '', regexp=sources_subj[0][0], subjects_dir=op.join(root,'simulation_parameters'), verbose=verbose
             )[0]
             label = mne.label.select_sources(
-                subject, selected_label, subjects_dir=subjects_dir, random_state=random_state
+                '', selected_label, subjects_dir=op.join(root,'simulation_parameters'), random_state=random_state
             )
             source_time_series = np.array([1e-20])  # stim trigger
             source_simulator.add_data(label, source_time_series, events)
@@ -248,12 +236,12 @@ def simulate(
                 if trigger == len(sources_subj) + 1:
                     source[2] = 1e-20  # Last source defines RT and is not an event per se
                 selected_label = mne.read_labels_from_annot(
-                    subject, regexp=source[0], subjects_dir=subjects_dir, verbose=verbose
+                    '', regexp=source[0], subjects_dir=op.join(root,'simulation_parameters'), verbose=verbose
                 )[0]
                 label = mne.label.select_sources(
-                    subject,
+                    '',
                     selected_label,
-                    subjects_dir=subjects_dir,
+                    subjects_dir=op.join(root,'simulation_parameters'),
                     location=0,
                     grow_outside=False,
                     random_state=random_state,
@@ -477,7 +465,7 @@ def classification_true(true_topologies, test_topologies):
     return idx_true_positive, corresp_true_idx
 
 
-def simulated_times_and_parameters(generating_events, init, resampling_freq=None, data=None):
+def simulated_times_and_parameters(generating_events, init, trial_data, resampling_freq=None, data=None):
     """Recover the generating HMP parameters from the simulated EEG data.
 
     Parameters,
@@ -526,16 +514,16 @@ def simulated_times_and_parameters(generating_events, init, resampling_freq=None
     true_parameters[true_parameters[:, 1] <= 0, 1] = 1e-3  # Can happen in corner cases
     random_source_times = random_source_times * (1000 / sfreq) / (1000 / resampling_freq)
     ## Recover magnitudes
-    sample_times = np.zeros((init.n_trials, n_events), dtype=int)
+    sample_times = np.zeros((trial_data.n_trials, n_events), dtype=int)
     for event in range(n_events):
-        for trial in range(init.n_trials):
-            trial_time = init.starts[trial] + np.sum(random_source_times[trial, : event + 1])
-            if init.ends[trial] >= trial_time:  # exceeds RT
+        for trial in range(trial_data.n_trials):
+            trial_time = trial_data.starts[trial] + np.sum(random_source_times[trial, : event + 1])
+            if trial_data.ends[trial] >= trial_time:  # exceeds RT
                 sample_times[trial, event] = trial_time
             else:
-                sample_times[trial, event] = init.ends[trial]
+                sample_times[trial, event] = trial_data.ends[trial]
     if data is None:  # use crosscorrelated data
-        true_activities = init.crosscorr[sample_times[:, :]]
+        true_activities = trial_data.cross_corr[sample_times[:, :]]
     else:
         true_activities = data[sample_times[:, :]]
     true_magnitudes = np.mean(true_activities, axis=0)

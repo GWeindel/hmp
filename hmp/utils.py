@@ -9,6 +9,7 @@ import xarray as xr
 from pandas import MultiIndex
 from scipy.special import gamma as gamma_func
 from scipy.stats import sem
+from pathlib import Path
 
 from hmp import mcca
 
@@ -163,7 +164,7 @@ def read_mne_data(
     """
     dict_datatype = {False: "continuous", True: "epoched"}
     epoch_data = []
-    if isinstance(pfiles, str):  # only one participant
+    if isinstance(pfiles, (str, Path)):  # only one participant
         pfiles = [pfiles]
     if not subj_idx:
         subj_idx = ["S" + str(x) for x in np.arange(len(pfiles))]
@@ -186,9 +187,9 @@ def read_mne_data(
 
         # loading data
         if epoched is False:  # performs epoching on raw data
-            if ".fif" in participant:
+            if Path(participant).suffix == ".fif":
                 data = mne.io.read_raw_fif(participant, preload=True, verbose=verbose)
-            elif ".bdf" in participant:
+            elif Path(participant).suffix == ".bdf":
                 data = mne.io.read_raw_bdf(participant, preload=True, verbose=verbose)
             else:
                 raise ValueError(f"Unknown EEG file format for participant {participant}")
@@ -287,7 +288,7 @@ def read_mne_data(
             epochs.metadata.rename({"response": "rt"}, axis=1, inplace=True)
             metadata_i = epochs.metadata
         else:
-            if ".fif" in participant:
+            if Path(participant).suffix == ".fif":
                 epochs = mne.read_epochs(participant, preload=True, verbose=verbose)
                 if high_pass is not None or low_pass is not None:
                     epochs.filter(high_pass, low_pass, fir_design="firwin", verbose=verbose)
@@ -871,13 +872,10 @@ def transform_data(
 def event_times(
     estimates,
     duration=False,
-    fill_value=None,
     mean=False,
     add_rt=False,
-    extra_dim=None,
     as_time=False,
     errorbars=None,
-    center_measure="mean",
     estimate_method="max",
 ):
     """Compute the likeliest peak times for each event.
@@ -888,23 +886,17 @@ def event_times(
         Estimated instance of an HMP model
     duration : bool
         Whether to compute peak location (False) or inter-peak duration (True)
-    fill_value : float | ndarray
-        What value to fill for the first peak/duration.
     mean : bool
         Whether to compute the mean (True) or return the single trial estimates
         Note that mean and errorbars cannot both be true.
     add_rt : bool
         whether to append the last stage up to the RT
-    extra_dim : str
-        if string the times are averaged within that dimension
     as_time : bool
         if true, return time (ms) instead of samples
     errorbars : str
         calculate 95% confidence interval ('ci'), standard deviation ('std'),
         standard error ('se') on the times or durations, or None.
         Note that mean and errorbars cannot both be true.
-    center_measure : string
-        mean (default) or median, used to calculate the measure within participant if mean is True
     estimate_method : string
         'max' or 'mean', either take the max probability of each event on each trial, or the
         weighted average.
@@ -916,158 +908,66 @@ def event_times(
         only event dimension if mean = True contains nans for missing stages.
     """
     assert not (mean and errorbars is not None), "Only one of mean and errorbars can be set."
-    rts = estimates.rts
+    tstep = 1000 / estimates.sfreq    
     if estimate_method is None:
         estimate_method = "max"
     event_shift = 0
-    eventprobs = estimates.eventprobs.fillna(0).copy()
+    eventprobs = estimates.fillna(0).copy()
     if estimate_method == "max":
         times = eventprobs.argmax("samples") - event_shift  # Most likely event location
     else:
         times = xr.dot(eventprobs, eventprobs.samples, dims="samples") - event_shift
     times = times.astype("float32")  # needed for eventual addition of NANs
-    # in case there is a single model, but there are empty stages at the end
-    # this happens with selected model from backward estimation
-    if "n_events" in times.coords and len(times.shape) == 2:
-        tmp = times.mean("trial_x_participant").values
-        if tmp[-1] == -event_shift:
-            filled_stages = np.where(tmp != -event_shift)[0]
-            times = times[:, filled_stages]
-    # set to nan if stage missing
-    if extra_dim == "levels":
-        times_level = (
-            times.groupby("levels").mean("trial_x_participant").values
-        )  # take average to make sure it's not just 0 on the trial-level
-        for c, e in np.argwhere(times_level == -event_shift):
-            times[times["levels"] == c, e] = np.nan
-    elif extra_dim == "n_events":
-        times_n_events = times.mean("trial_x_participant").values
-        for x, e in np.argwhere(times_n_events == -event_shift):
-            times[x, :, e] = np.nan
+    times_level = (
+        times.groupby("levels").mean("trial_x_participant").values
+    )  # take average to make sure it's not just 0 on the trial-level
+    for c, e in np.argwhere(times_level == -event_shift):
+        times[times["levels"] == c, e] = np.nan
     if as_time:
-        times = times * 1000 / estimates.sfreq
-    if duration:
-        fill_value = 0
-    if fill_value is not None:
+        times = times * tstep 
+    if add_rt:
+        rts = estimates.cumsum('samples').argmax('samples').max('event')+1 * tstep
+        if as_time:
+            rts = rts * 1000 / estimates.sfreq
+        rts = xr.DataArray(rts)
+        rts = rts.assign_coords(event=int(times.event.max().values + 1))
+        rts = rts.expand_dims(dim="event")
+        times = xr.concat([times, rts], dim="event")
+    
+    if duration:  # taking into account missing events, hence the ugly code
         added = xr.DataArray(
-            np.repeat(fill_value, len(times.trial_x_participant))[np.newaxis, :],
+            np.repeat(0, len(times.trial_x_participant))[np.newaxis, :],
             coords={"event": [0], "trial_x_participant": times.trial_x_participant},
         )
         times = times.assign_coords(event=times.event + 1)
         times = times.combine_first(added)
-    if add_rt:
-        if as_time:
-            rts = rts * 1000 / estimates.sfreq
-        rts = rts.assign_coords(event=int(times.event.max().values + 1))
-        rts = rts.expand_dims(dim="event")
-        times = xr.concat([times, rts], dim="event")
-        if extra_dim == "n_events":  # move rts inside the nans of the missing stages
-            for e in times["n_events"].values:
-                tmp = np.squeeze(
-                    times.isel(n_events=times["n_events"] == e).values
-                )  # seems overly complicated, but is necessary
-                # identify first nan column
-                first_nan = np.where(np.isnan(np.mean(tmp, axis=0)))[0]
-                if len(first_nan) > 0:
-                    first_nan = first_nan[0]
-                    tmp[:, first_nan] = tmp[:, -1]
-                    tmp[:, -1] = np.nan
-                    times[times["n_events"] == e, :, :] = tmp
-    if duration:  # taking into account missing events, hence the ugly code
-        times = times.rename({"event": "stage"})
-        if not extra_dim:
-            times = times.diff(dim="stage")
-        elif extra_dim == "levels":  # by level, ignore missing events
-            for c in np.unique(times["levels"].values):
-                tmp = times.isel(trial_x_participant=estimates["levels"] == c).values
-                # identify nan columns == missing events
-                missing_evts = np.where(np.isnan(np.mean(tmp, axis=0)))[0]
-                tmp = np.diff(
-                    np.delete(tmp, missing_evts, axis=1)
-                )  # remove 0 columns, calc difference
-                # insert nan columns (to maintain shape),
-                for missing in missing_evts:
-                    tmp = np.insert(tmp, missing - 1, np.nan, axis=1)
-                # add extra column to match shape
-                tmp = np.hstack((tmp, np.tile(np.nan, (tmp.shape[0], 1))))
-                times[estimates["levels"] == c, :] = tmp
-            times = times[:, :-1]  # remove extra column
-        elif extra_dim == "n_events":
-            for e in times["n_events"].values:
-                tmp = np.squeeze(
-                    times.isel(n_events=times["n_events"] == e).values
-                )  # seems overly complicated, but is necessary
-                # identify nan columns == missing events
-                missing_evts = np.where(np.isnan(np.mean(tmp, axis=0)))[0]
-                tmp = np.diff(
-                    np.delete(tmp, missing_evts, axis=1)
-                )  # remove 0 columns, calc difference
-                # insert nan columns (to maintain shape), in contrast to above,
-                # here add columns at the end, as no actually 'missing' events
-                tmp = np.hstack((tmp, np.tile(np.nan, (tmp.shape[0], len(missing_evts)))))
-                # add extra column to match shape
-                tmp = np.hstack((tmp, np.tile(np.nan, (tmp.shape[0], 1))))
-                times[times["n_events"] == e, :, :] = tmp
-            times = times[:, :, :-1]  # remove extra column
+        for c in np.unique(times["levels"].values):
+            tmp = times.isel(trial_x_participant=estimates["levels"] == c).values
+            # identify nan columns == missing events
+            missing_evts = np.where(np.isnan(np.mean(tmp, axis=0)))[0]
+            tmp = np.diff(
+                np.delete(tmp, missing_evts, axis=1)
+            )  # remove 0 columns, calc difference
+            # insert nan columns (to maintain shape),
+            for missing in missing_evts:
+                tmp = np.insert(tmp, missing - 1, np.nan, axis=1)
+            # add extra column to match shape
+            tmp = np.hstack((tmp, np.tile(np.nan, (tmp.shape[0], 1))))
+            times[estimates["levels"] == c, :] = tmp
+        times = times[:, :-1]  # remove extra column
 
     if mean:
-        if extra_dim == "levels":  # calculate mean only in trials of specific level
-            if center_measure == "mean":
-                times = times.groupby("levels").mean("trial_x_participant")
-            elif center_measure == "median":
-                times = times.groupby("levels").mean("trial_x_participant")
-            else:
-                print("center measure not recognized")
-        elif center_measure == "mean":
-            times = times.mean("trial_x_participant")
-        elif center_measure == "median":
-            times = times.median("trial_x_participant")
-        else:
-            print("center measure not recognized")
-
+        times = times.groupby("levels").mean("trial_x_participant")
     elif errorbars:
-        if extra_dim == "levels":
-            errorbars_model = np.zeros((len(np.unique(times["levels"])), 2, times.shape[1]))
-            if errorbars == "std":
-                std_errs = times.groupby("levels").reduce(np.std, dim="trial_x_participant").values
-                for c in np.unique(times["levels"]):
-                    errorbars_model[c, :, :] = np.tile(std_errs[c, :], (2, 1))
-            else:
-                raise ValueError(
-                    "Unknown error bars, 'std' is for now the only accepted argument in the "
-                    "multilevel models"
-                )
-        elif extra_dim == "n_events":
-            errorbars_model = np.zeros((times.shape[0], 2, times.shape[2]))
-            if errorbars == "std":
-                std_errs = times.reduce(np.std, dim="trial_x_participant").values
-                for e in np.unique(times["n_events"]):
-                    errorbars_model[times["n_events"] == e, :, :] = np.tile(
-                        std_errs[times["n_events"] == e, :], (2, 1)
-                    )
-            elif errorbars == "se":
-                se_errs = (
-                    times.groupby("participant")
-                    .mean("trial_x_participant")
-                    .groupby("n_events")
-                    .reduce(sem, dim="participant", axis=0)
-                    .values
-                )
-                for c in np.unique(times["levels"]):
-                    errorbars_model[c, :, :] = np.tile(se_errs[c, :], (2, 1))
-            else:
-                raise ValueError("Unknown error bars, 'std' or 'se'")
-        elif errorbars == "std":
-            errorbars_model = np.tile(
-                times.reduce(np.std, dim="trial_x_participant").values, (2, 1)
-            )
-        elif errorbars == "se":
-            errorbars_model = np.tile(
-                times.groupby("participant")
-                .mean("trial_x_participant")
-                .reduce(sem, dim="participant")
-                .values,
-                (2, 1),
+        errorbars_model = np.zeros((len(np.unique(times["levels"])), 2, times.shape[1]))
+        if errorbars == "std":
+            std_errs = times.groupby("levels").reduce(np.std, dim="trial_x_participant").values
+            for c in np.unique(times["levels"]):
+                errorbars_model[c, :, :] = np.tile(std_errs[c, :], (2, 1))
+        else:
+            raise ValueError(
+                "Unknown error bars, 'std' is for now the only accepted argument in the "
+                "multilevel models"
             )
         times = errorbars_model
     return times
@@ -1076,7 +976,6 @@ def event_times(
 def event_topo(
     epoch_data,
     estimated,
-    extra_dim=None,
     mean=True,
     peak=True,
     estimate_method="max",
@@ -1090,8 +989,6 @@ def event_topo(
             Epoched data
         estimated: xr.Dataset
             estimated model parameters and event probabilities
-        extra_dim: str
-            if True the topography is computed in the extra dimension
         mean: bool
             if True mean will be computed instead of single-trial channel activities
         peak : bool
@@ -1112,14 +1009,13 @@ def event_topo(
     """
     if estimate_method is None:
         estimate_method = "max"
-    if "trial_x_participant" not in epoch_data.dims:
-        epoch_data = (
-            epoch_data.rename({"epochs": "trials"})
-            .stack(trial_x_participant=["participant", "trials"])
-            .data.fillna(0)
-            .drop_duplicates("trial_x_participant")
-        )
-    estimated = estimated.eventprobs.copy().fillna(0)
+    epoch_data = (
+        epoch_data.rename({"epochs": "trials"})
+        .stack(trial_x_participant=["participant", "trials"])
+        .data.fillna(0)
+        .drop_duplicates("trial_x_participant")
+    )
+    estimated = estimated.fillna(0).copy()
     n_events = estimated.event.count().values
     n_trials = estimated.trial_x_participant.count().values
     n_channels = epoch_data.channels.count().values
@@ -1131,15 +1027,13 @@ def event_topo(
     if not peak:
         normed_template = template / np.sum(template)
 
-    if not extra_dim or extra_dim == "levels":  # also in the level case, only one fit per trial
-        if estimate_method == "max":
-            times = estimated.argmax("samples")  # Most likely event location
-        else:
-            times = np.round(xr.dot(estimated, estimated.samples, dims="samples"))
-
-        event_values = np.zeros((n_channels, n_trials, n_events))
-        for ev in range(n_events):
-            for tr in range(n_trials):
+    times = event_times(estimated, mean=False, estimate_method=estimate_method,)
+    
+    event_values = np.zeros((n_channels, n_trials, n_events))*np.nan
+    for ev in range(n_events):
+        for tr in range(n_trials):
+            # If time is nan, means that no event was estimated for that trial/level
+            if np.isfinite(times.values[tr, ev]):
                 samp = int(times.values[tr, ev])
                 if peak:
                     event_values[:, tr, ev] = epoch_data.values[:, samp, tr]
@@ -1147,86 +1041,27 @@ def event_topo(
                     vals = epoch_data.values[:, samp : samp + template // 2, tr]
                     event_values[:, tr, ev] = np.dot(vals, normed_template[: vals.shape[1]])
 
-        event_values = xr.DataArray(
-            event_values,
-            dims=[
-                "channels",
-                "trial_x_participant",
-                "event",
-            ],
-            coords={
-                "trial_x_participant": estimated.trial_x_participant,
-                "event": estimated.event,
-                "channels": epoch_data.channels,
-            },
-        )
-        event_values = event_values.transpose(
-            "trial_x_participant", "event", "channels"
-        )  # to maintain previous behavior
+    event_values = xr.DataArray(
+        event_values,
+        dims=[
+            "channels",
+            "trial_x_participant",
+            "event",
+        ],
+        coords={
+            "trial_x_participant": estimated.trial_x_participant,
+            "event": estimated.event,
+            "channels": epoch_data.channels,
+        },
+    )
 
-        if not extra_dim:
-            # set to nan if stage missing
-            times = times.mean("trial_x_participant").values
-            for e in np.argwhere(times == 0):
-                event_values[:, e, :] = np.nan
-
-        if extra_dim == "levels":
-            event_values = event_values.assign_coords(
-                levels=("trial_x_participant", times.levels.data)
-            )
-
-            # set to nan if stage missing
-            times_avg = times.groupby("levels").mean("trial_x_participant").values
-            for c, e in np.argwhere(times_avg == 0):
-                trials = (np.argwhere(times.levels.values == c)).flatten()
-                event_values[trials, e, :] = np.nan
-            times = times_avg
-
-    elif extra_dim == "n_events":  # here we need values per fit
-        n_dim = estimated[extra_dim].count().values
-        event_values = np.zeros((n_dim, n_channels, n_trials, n_events)) * np.nan
-        for x in range(n_dim):
-            if estimate_method == "max":
-                times = estimated[x].argmax("samples")
-            else:
-                times = np.round(xr.dot(estimated[x], estimated.samples, dims="samples"))
-            for ev in range(n_events):
-                for tr in range(n_trials):
-                    samp = int(times.values[tr, ev])
-                    if peak:
-                        event_values[x, :, tr, ev] = epoch_data.values[:, samp, tr]
-                    else:
-                        vals = epoch_data.values[:, samp : samp + template // 2, tr]
-                        event_values[x, :, tr, ev] = np.dot(vals, normed_template[: vals.shape[1]])
-
-            # set to nan if missing
-            times = times.mean("trial_x_participant").values
-            for e in np.argwhere(times == 0):
-                event_values[x, :, :, e] = np.nan
-
-        event_values = xr.DataArray(
-            event_values,
-            dims=[extra_dim, "channels", "trial_x_participant", "event"],
-            coords={
-                extra_dim: estimated[extra_dim],
-                "trial_x_participant": estimated.trial_x_participant,
-                "event": estimated.event,
-                "channels": epoch_data.channels,
-            },
-        )
-        event_values = event_values.transpose(
-            extra_dim, "trial_x_participant", "event", "channels"
-        )  # to maintain previous behavior
-    else:
-        print("Unknown extra dimension")
+    event_values = event_values.assign_coords(
+        levels=("trial_x_participant", times.levels.data)
+    )
 
     if mean:
-        if extra_dim == "levels":  # calculate mean within level trials
-            return event_values.groupby("levels").mean("trial_x_participant")
-        else:
-            return event_values.mean("trial_x_participant")
-    else:
-        return event_values
+        event_values = event_values.groupby("levels").mean("trial_x_participant")
+    return event_values
 
 
 def save(data, filename):
@@ -1254,11 +1089,11 @@ def load(filename):
     ):
         # Ensures correct order of dimensions for later index use
         if "iteration" in data:
-            data["eventprobs"] = data.eventprobs.transpose(
+            data = data.transpose(
                 "iteration", "trial_x_participant", "samples", "event"
             )
         else:
-            data["eventprobs"] = data.eventprobs.transpose(
+            data = data.transpose(
                 "trial_x_participant", "samples", "event"
             )
     return data

@@ -487,7 +487,7 @@ def loocv_loglikelihood(data, init, participant, estimate, cpus=None, verbose=Fa
     locations = np.zeros(estimate.parameters.dropna("stage").values.shape[-2], dtype=int)
     locations[1:-1] = init.location
     if "level" in estimate.dims:
-        locations = np.tile(locations, (initial_fit.parameters.shape[0], 1))  # Fix this
+        locations = np.tile(locations, (estimate.parameters.shape[0], 1))  # Fix this
         from itertools import product
 
         # create levels for this participant based on estimate.levels_dict and model_pp
