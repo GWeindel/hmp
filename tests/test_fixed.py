@@ -1,11 +1,7 @@
 ## Importing these packages is specific for this simulation case
-import os
+from pathlib import Path
 
 import numpy as np
-import pandas as pd
-from pathlib import Path
-import gc
-from pytest import mark
 
 import hmp
 from hmp import simulations

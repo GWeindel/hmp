@@ -1,16 +1,11 @@
-import gc
 import itertools
 import multiprocessing as mp
-from abc import ABC, abstractmethod
-from itertools import cycle, product
+from itertools import product
 from warnings import resetwarnings, warn
 
-import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from pandas import MultiIndex
-from scipy.signal import correlate
-from scipy.stats import norm as norm_pval
 
 from hmp.models.base import BaseModel
 from hmp.trialdata import TrialData
