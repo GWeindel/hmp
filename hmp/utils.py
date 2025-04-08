@@ -186,7 +186,7 @@ def read_mne_data(
         print(f"Processing participant {participant}'s {dict_datatype[epoched]} {pick_channels}")
 
         # loading data
-        if not epoched:  # performs epoching on raw data
+        if epoched is False:  # performs epoching on raw data
             if Path(participant).suffix == ".fif":
                 data = mne.io.read_raw_fif(participant, preload=True, verbose=verbose)
             elif Path(participant).suffix == ".bdf":
