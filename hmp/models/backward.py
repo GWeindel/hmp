@@ -1,18 +1,13 @@
 """Models to estimate event probabilities."""
 
 import gc
-import itertools
-import multiprocessing as mp
-from itertools import cycle, product
-from warnings import resetwarnings, warn
 
-import matplotlib.pyplot as plt
 import numpy as np
-import xarray as xr
-from pandas import MultiIndex
 import pandas as pd
-from scipy.signal import correlate
-from scipy.stats import norm as norm_pval
+import xarray as xr
+
+from hmp.models.base import BaseModel
+from hmp.models.fixedn import FixedEventModel
 
 try:
     __IPYTHON__
@@ -21,8 +16,7 @@ except NameError:
     from tqdm import tqdm
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
-from hmp.models.base import BaseModel
-from hmp.models.fixedn import FixedEventModel
+
 
 class BackwardEstimationModel(BaseModel):
     def __init__(self, *args, max_events=None, min_events=0, max_starting_points=1,
