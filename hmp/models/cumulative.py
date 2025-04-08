@@ -133,7 +133,7 @@ class CumulativeEstimationModel(BaseModel):
             print(pars_prop.shape)
 
             # Estimate model based on these propositions
-            likelihoods, event_probs = fixed_n_model.fit(
+            likelihoods, event_probs = fixed_n_model.fit_transform(
                 trial_data,
                 np.array([mags_props]),
                 np.array([pars_prop]),
@@ -143,7 +143,7 @@ class CumulativeEstimationModel(BaseModel):
             sol_sample_new_event = int(
                 np.round(
                     self.scale_to_mean(
-                        np.sum(fixed_n_model.parameters.values[:n_events, 1]), self.shape
+                        np.sum(fixed_n_model.parameters[:n_events, 1]), self.shape
                     )
                 )
             )
@@ -157,8 +157,8 @@ class CumulativeEstimationModel(BaseModel):
                 lkh_prev = likelihoods
 
                 # update mags, params,
-                mags[:n_events] = fixed_n_model.magnitudes.values
-                pars[: n_events + 1] = fixed_n_model.parameters.values
+                mags[:n_events] = fixed_n_model.magnitudes
+                pars[: n_events + 1] = fixed_n_model.parameters
 
                 # search for an additional event, starting again at sample 1 from prev event,
                 # or next sample if by_sample
@@ -213,12 +213,15 @@ class CumulativeEstimationModel(BaseModel):
         #     plt.legend()
         mags = mags[:n_events, :]
         pars = pars[: n_events + 1, :]
+        # print(np.array([pars]).shape)
+        # print(np.array([mags]).shape)
+        self.fitted_model = FixedEventModel(self.events, self.distribution, tolerance=self.tolerance,
+                                        n_events=n_events)
         if n_events > 0:
-            self.fitted_model = fixed_n_model.fit(
-                self.events,
-                n_events=n_events,
-                parameters=np.array([pars]),
-                magnitudes=np.array([mags]),
+            self.fitted_model.fit(
+                trial_data,
+                parameters=np.array([[pars]]),
+                magnitudes=np.array([[mags]]),
                 verbose=verbose,
                 cpus=1,
             )
