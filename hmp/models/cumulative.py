@@ -135,8 +135,8 @@ class CumulativeEstimationModel(BaseModel):
             # Estimate model based on these propositions
             likelihoods, event_probs = fixed_n_model.fit(
                 trial_data,
-                mags_props,
-                pars_prop,
+                np.array([mags_props]),
+                np.array([pars_prop]),
                 verbose=False,
                 cpus=cpus,
             )
