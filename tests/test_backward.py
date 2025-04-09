@@ -48,11 +48,8 @@ def test_fixed_simple():
     # Recover generating parameters
     sim_source_times, true_pars, true_magnitudes, _ = \
         simulations.simulated_times_and_parameters(event_b, true_model, trial_data_b)
-    # Fixing true parameter in model
-    true_model.parameters = np.array([true_pars])
-    true_model.magnitudes = np.array([true_magnitudes])
     # Ground truth
-    true_loglikelihood, true_estimates = true_model.transform(trial_data_b)
+    true_loglikelihood, true_estimates = true_model.transform(trial_data_b, np.array([true_magnitudes]),  np.array([true_pars]))
 
     # Backward estimation
     model = BackwardEstimationModel(event_properties)
@@ -62,7 +59,7 @@ def test_fixed_simple():
     estimates = model.transform(trial_data_b)
 
     # testing if bacward identifies the 3 real events
-    assert np.isclose(model.submodels[3].magnitudes, true_model.magnitudes, atol=1).all()
+    assert np.isclose(model.submodels[3].magnitudes, np.array([true_magnitudes]), atol=1).all()
 
     # testing recovery of attributes
     assert isinstance(model.xrlikelihoods, xr.DataArray)

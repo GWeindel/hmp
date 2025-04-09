@@ -46,11 +46,9 @@ def test_fixed_simple():
     # Recover generating parameters
     sim_source_times, true_pars, true_magnitudes, _ = \
         simulations.simulated_times_and_parameters(event_b, model, trial_data_b)
-    # Fixing true parameter in model
-    model.parameters = np.array([true_pars])
-    model.magnitudes = np.array([true_magnitudes])
+
     # Ground truth
-    true_loglikelihood, true_estimates = model.transform(trial_data_b)
+    true_loglikelihood, true_estimates = model.transform(trial_data_b,  np.array([true_magnitudes]),  np.array([true_pars]))
     true_topos = hmp.utils.event_topo(epoch_data, true_estimates, mean=True)
     true_topos = hmp.utils.event_topo(epoch_data, true_estimates, mean=True)
     #Estimate
@@ -93,11 +91,9 @@ def test_fixed_multilevel():
     # Recover generating parameters
     sim_source_times, true_pars, true_magnitudes, _ = \
         simulations.simulated_times_and_parameters(event_a, model, trial_data_a)
-    # Fixing true parameter in model
-    model.parameters = np.array([true_pars])
-    model.magnitudes = np.array([true_magnitudes])
+
     # Ground truth
-    true_loglikelihood, true_estimates = model.transform(trial_data_a)
+    true_loglikelihood, true_estimates = model.transform(trial_data_a, np.array([true_magnitudes]),  np.array([true_pars]))
     true_topos = hmp.utils.event_topo(epoch_data, true_estimates.squeeze(), mean=True)
     
     # Perform a fit on a (should be too noisy)
@@ -125,7 +121,7 @@ def test_starting_points():
     event_properties = EventProperties.create_expected(sfreq=hmp_data.sfreq)
     trial_data = TrialData.from_standard_data(data=hmp_data, template=event_properties.template)
     # Testing starting points
-    model_sp = FixedEventModel(event_properties, n_events=n_events, starting_points=2, max_scale=21)
-    model_sp.fit(trial_data, verbose=True)
+    model_sp = FixedEventModel(event_properties, n_events=n_events)
+    model_sp.fit_transform(trial_data, verbose=True, starting_points=2)
 
 
