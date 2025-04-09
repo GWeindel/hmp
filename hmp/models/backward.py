@@ -19,9 +19,7 @@ default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgree
 
 
 class BackwardEstimationModel(BaseModel):
-    def __init__(self, *args, max_events=None, min_events=0,  **kwargs):
-        self.max_events = max_events
-        self.min_events = min_events
+    def __init__(self, *args,  **kwargs):
         self.submodels = {}
         super().__init__(*args, **kwargs)
 

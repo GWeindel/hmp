@@ -54,7 +54,7 @@ def test_fixed_simple():
     # Backward estimation
     model = BackwardEstimationModel(event_properties)
     # fit the model
-    model.fit(trial_data_b)
+    model.fit(trial_data_b, max_events=5)
     # Transform the data
     estimates = model.transform(trial_data_b)
 
