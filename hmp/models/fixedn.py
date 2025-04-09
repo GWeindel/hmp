@@ -20,26 +20,11 @@ except NameError:
 
 class FixedEventModel(BaseModel):
     def __init__(
-        self, *args, n_events=None, parameters_to_fix=None, magnitudes_to_fix=None,
-        tolerance=1e-4,
-        max_iteration=1e3,
-        min_iteration=1,
-        starting_points=1,
-        max_scale=None,
+        self, *args, n_events=None,
+
         **kwargs
     ):
         self.n_events = n_events
-        self.n_dims = None
-        self.parameters_to_fix = parameters_to_fix
-        self.magnitudes_to_fix = magnitudes_to_fix
-        self.tolerance = tolerance
-        self.max_iteration = max_iteration
-        self.min_iteration = min_iteration
-        self.starting_points = starting_points
-        self.max_scale = max_scale
-        self.level_dict = {}
-        self.pars_map = np.zeros((1,self.n_events+1))
-        self.mags_map = np.zeros((1,self.n_events))
         super().__init__(*args, **kwargs)
 
     def fit(
@@ -54,6 +39,11 @@ class FixedEventModel(BaseModel):
         mags_map=None,
         pars_map=None,
         level_dict=None,
+        tolerance=1e-4,
+        max_iteration=1e3,
+        min_iteration=1,
+        starting_points=1,
+        max_scale=None,
     ):
         """Fit HMP for a single n_events model.
 
@@ -110,7 +100,7 @@ class FixedEventModel(BaseModel):
         infos_to_store = {}
         infos_to_store["sfreq"] = self.sfreq
         infos_to_store["event_width_samples"] = self.event_width_samples
-        infos_to_store["tolerance"] = self.tolerance
+        infos_to_store["tolerance"] = tolerance
 
         self.n_dims = trial_data.n_dims
         if self.n_events is None:
@@ -125,9 +115,10 @@ class FixedEventModel(BaseModel):
                 )
 
         if level_dict is None:
-            level_dict = self.level_dict
-            mags_map = self.mags_map
-            pars_map = self.pars_map
+            level_dict = {}
+            pars_map = np.zeros((1,self.n_events+1))
+            mags_map = np.zeros((1,self.n_events))
+ 
         n_levels, levels, clabels = self.level_constructor(
             trial_data, level_dict, mags_map, pars_map, verbose
         )
@@ -138,7 +129,7 @@ class FixedEventModel(BaseModel):
         if verbose:
             if parameters is None:
                 print(
-                    f"Estimating {self.n_events} events model with {self.starting_points} starting point(s)"
+                    f"Estimating {self.n_events} events model with {starting_points} starting point(s)"
                 )
             else:
                 print(f"Estimating {self.n_events} events model")
@@ -152,16 +143,12 @@ class FixedEventModel(BaseModel):
             magnitudes = magnitudes.copy()
         if isinstance(parameters, np.ndarray):
             parameters = parameters.copy()
-        if self.parameters_to_fix is None:
+        if parameters_to_fix is None:
             parameters_to_fix = []
-        else:
-            parameters_to_fix = self.parameters_to_fix
-            infos_to_store["parameters_to_fix"] = parameters_to_fix
-        if self.magnitudes_to_fix is None:
+        infos_to_store["parameters_to_fix"] = parameters_to_fix
+        if magnitudes_to_fix is None:
             magnitudes_to_fix = []
-        else:
-            magnitudes_to_fix = self.magnitudes_to_fix
-            infos_to_store["magnitudes_to_fix"] = magnitudes_to_fix
+        infos_to_store["magnitudes_to_fix"] = magnitudes_to_fix
 
         if parameters is None:
             # If no parameters starting points are provided generate standard ones
@@ -184,14 +171,12 @@ class FixedEventModel(BaseModel):
                 )
             initial_p = parameters
             parameters = [initial_p]
-            if self.starting_points > 1:
-                if self.max_scale is None:
-                    raise ValueError(
-                            "If using multiple starting points, a maximum distance between events needs "
-                            " to be provided using the max_scale argument."
-                        )
-                infos_to_store["starting_points"] = self.starting_points
-                for _ in np.arange(self.starting_points):
+            if starting_points > 1:
+                if max_scale is None: #max random duration for starting points
+                    max_scale = trial_data.durations.max()
+                self.max_scale = max_scale
+                infos_to_store["starting_points"] = starting_points
+                for _ in np.arange(starting_points):
                     proposal_p = (
                         np.zeros((n_levels, self.n_events + 1, 2)) * np.nan
                     )  # by default nan for missing stages
@@ -212,7 +197,7 @@ class FixedEventModel(BaseModel):
                 for cur_level in range(n_levels):
                     magnitudes[cur_level, np.where(mags_map[cur_level, :] < 0)[0], :] = np.nan
             initial_m = magnitudes
-            magnitudes = np.tile(initial_m, (self.starting_points + 1, 1, 1, 1))
+            magnitudes = np.tile(initial_m, (starting_points + 1, 1, 1, 1))
         else:
             infos_to_store["sp_magnitudes"] = magnitudes
 
@@ -223,16 +208,16 @@ class FixedEventModel(BaseModel):
                 parameters,
                 itertools.repeat(magnitudes_to_fix),
                 itertools.repeat(parameters_to_fix),
-                itertools.repeat(self.max_iteration),
-                itertools.repeat(self.tolerance),
-                itertools.repeat(self.min_iteration),
+                itertools.repeat(max_iteration),
+                itertools.repeat(tolerance),
+                itertools.repeat(min_iteration),
                 itertools.repeat(mags_map),
                 itertools.repeat(pars_map),
                 itertools.repeat(levels),
                 itertools.repeat(1),
             )
             with mp.Pool(processes=cpus) as pool:
-                if self.starting_points > 1:
+                if starting_points > 1:
                     estimates = list(tqdm(pool.imap(self._EM_star, inputs), total=len(magnitudes)))
                 else:
                     estimates = pool.starmap(self.EM, inputs)
@@ -247,9 +232,9 @@ class FixedEventModel(BaseModel):
                         pars,
                         magnitudes_to_fix,
                         parameters_to_fix,
-                        self.max_iteration,
-                        self.tolerance,
-                        self.min_iteration,
+                        max_iteration,
+                        tolerance,
+                        min_iteration,
                         mags_map,
                         pars_map,
                         levels,
@@ -259,7 +244,7 @@ class FixedEventModel(BaseModel):
             resetwarnings()
 
         self.lkhs = np.array([x[0] for x in estimates])
-        if self.starting_points > 1 :
+        if starting_points > 1 :
             max_lkhs = np.argmax(self.lkhs)
         else:
             max_lkhs = 0
@@ -276,13 +261,24 @@ class FixedEventModel(BaseModel):
 
         self._fitted = True
 
-    def transform(self, trial_data):
+    def transform(self, trial_data, magnitudes=None, parameters=None, level_dict={}):
+        if magnitudes is None:
+            mags_map = self.mags_map
+            pars_map = self.pars_map
+            magnitudes = self.magnitudes
+            parameters = self.parameters
+            level_dict = self.level_dict
+        else:
+            if self._fitted == True:
+                warn('Using provided parameters instead of the fitted ones')
+            pars_map = np.zeros((1,self.n_events+1))
+            mags_map = np.zeros((1,self.n_events))
         _, levels, clabels = self.level_constructor(
-                trial_data, self.level_dict
+                trial_data, level_dict
             )
         likelihoods, xreventprobs = self._distribute_levels(
-            trial_data, self.magnitudes, self.parameters,
-            self.mags_map, self.pars_map, levels, False
+            trial_data, magnitudes, parameters,
+            mags_map, pars_map, levels, False
         )
         return likelihoods, xreventprobs
 
