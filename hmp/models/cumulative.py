@@ -1,14 +1,13 @@
 """Models to estimate event probabilities."""
 
-from itertools import cycle
 from warnings import warn
 
-import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import norm as norm_pval
 
 from hmp.models.base import BaseModel
 from hmp.models.fixedn import FixedEventModel
+from hmp.trialdata import TrialData
 
 try:
     __IPYTHON__
@@ -22,21 +21,6 @@ default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgree
 class CumulativeEstimationModel(BaseModel):
     def __init__(self, *args, step=None, end=None, by_sample=False, pval=None, tolerance=1e-3,
                  **kwargs):
-        self.step = step
-        self.end = end
-        self.by_sample = by_sample
-        self.pval = pval
-        self.tolerance = tolerance
-        self.fitted_model = None
-        super().__init__(*args, **kwargs)
-
-    def fit(
-        self,
-        trial_data,
-        verbose=True,
-        diagnostic=False,
-        cpus=1,
-    ):
         """Fit the model starting with 1 event model.
 
         Instead of fitting an n event model this method starts by fitting a 1 event model
@@ -48,22 +32,16 @@ class CumulativeEstimationModel(BaseModel):
 
         Parameters
         ----------
+        args:
+            Extra arguments to be passed through to the BaseModel, at least events and distribution
+            objects.
         step: float
             The size of the step from 0 to the mean RT, defaults to the widths of
             the expected event.
-        verbose: bool
-            If True print information about the fit
         end: int
             The maximum number of samples to explore within each trial
-        trace: bool
-            If True keep the scale and magnitudes parameters for each iteration
         tolerance: float
             The tolerance used for the convergence in the EM() function
-        diagnostic: bool
-            If True print a diagnostic plot of the EM traces for each iteration and several
-            statistics at each iteration
-        return_estimates : bool
-            return all intermediate models
         by_sample : bool
             try every sample as the starting point, even if a later event has already
             been identified. This in case the method jumped over a local maximum in an earlier
@@ -71,21 +49,40 @@ class CumulativeEstimationModel(BaseModel):
         pval: float
             p-value for the detection of the first event, test the first location for significance
             compared to a distribution of noise estimates
+        kwargs:
+            Keyword estimates to be passed on to the BaseModel.
+        """
+        self.step = step
+        self.end = end
+        self.by_sample = by_sample
+        self.pval = pval
+        self.tolerance = tolerance
+        self.fitted_model = None
+        super().__init__(*args, **kwargs)
 
-        Returns
-        -------
-                  A the fitted HMP mo
+    def fit(
+        self,
+        trial_data: TrialData,
+        verbose: bool = True,
+        cpus: int = 1,
+    ):
+        """Fit the model starting with 1 event model.
+
+        Parameters
+        ----------
+        trial_data:
+            Trial data to fit the data on.
+        verbose:
+            Set to True for more detail on what is happening.
+        cpus:
+            Number of cpu cores to be used for the computation.
         """
         self.trial_data = trial_data
         end = trial_data.durations.mean() if self.end is None else self.end
         step = self.event_width_samples if self.step is None else self.step
-        # if self.end is None:
-            # end = self.mean_d
-        # if step is None:
-            # step = self.event_width_samples
+
         max_event_n = self.compute_max_events(trial_data) * 10  # not really nedded, if it fits it fits
-        if diagnostic:
-            cycol = cycle(default_colors)
+
         pbar = tqdm(total=int(np.rint(end)))  # progress bar
         n_events, j, time = 1, 1, 0  # j = sample after last placed event
         # Init pars (need this for min_model)
@@ -112,8 +109,6 @@ class CumulativeEstimationModel(BaseModel):
             lkh_prev = lkh.loglikelihood.mean() + lkh.loglikelihood.std() * norm_pval.ppf(1 - self.pval)
         else:
             lkh_prev = -np.inf
-        # if return_estimates:
-            # estimates = []  # store all n_event solutions
 
         # Iterative fit
         while (
@@ -147,10 +142,6 @@ class CumulativeEstimationModel(BaseModel):
                     )
                 )
             )
-
-            # Diagnostic plot
-            if diagnostic:
-                self.plot_diagnosis(fixed_n_model)
 
             # check solution
             if likelihoods - lkh_prev > 0:  # accept solution if likelihood improved
@@ -207,16 +198,12 @@ class CumulativeEstimationModel(BaseModel):
         if verbose:
             print()
             print("All events found, refitting final combination.")
-        # if diagnostic:
-        #     plt.ylabel("Log-likelihood")
-        #     plt.xlabel("EM iteration")
-        #     plt.legend()
+
         mags = mags[:n_events, :]
         pars = pars[: n_events + 1, :]
-        # print(np.array([pars]).shape)
-        # print(np.array([mags]).shape)
-        self.fitted_model = FixedEventModel(self.events, self.distribution, tolerance=self.tolerance,
-                                        n_events=n_events)
+
+        self.fitted_model = FixedEventModel(
+            self.events, self.distribution, tolerance=self.tolerance, n_events=n_events)
         if n_events > 0:
             self.fitted_model.fit(
                 trial_data,
@@ -226,14 +213,10 @@ class CumulativeEstimationModel(BaseModel):
                 cpus=1,
             )
             self._fitted = True
-            # fit = fit.assign_attrs(step=step, by_sample=int(self.by_sample))
-            # fit = fit.assign_attrs(method="fit", step=step, by_sample=int(self.by_sample))
+
         else:
             warn("Failed to find more than two stages, returning None")
             self._fitted = False
-        # del fit.attrs["sp_parameters"]
-        # del fit.attrs["sp_magnitudes"]
-        # del fit.attrs["maximization"]
         pbar.update(int(np.rint(end) - int(np.rint(time))))
 
     def transform(self, *args, **kwargs):
@@ -301,16 +284,3 @@ class CumulativeEstimationModel(BaseModel):
             self._check_fitted(property_list[attr])
             return getattr(self.fitted_model, attr)
         return super().__getattribute__(attr)
-
-
-    def plot_diagnosis(self, solutions):
-        plt.plot(solutions.traces.T, alpha=0.3, c="k")
-        print()
-        print("Event found at sample " + str(sol_sample_new_event))
-        events_at = np.round(self.scale_to_mean(
-                            np.cumsum(solutions.parameters.values[:, 1]),
-                            self.shape)).astype(int)
-        print(
-            f"Events at {events_at}"
-        )
-        print("lkh change: " + str(solutions.loglikelihood.values - lkh_prev))
