@@ -2,9 +2,9 @@ name: Continuous integration for development
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, devel ]
   push:
-    branches: [ main ]
+    branches: [ main, devel ]
 
 jobs:
   # check:

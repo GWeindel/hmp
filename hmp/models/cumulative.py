@@ -1,14 +1,13 @@
 """Models to estimate event probabilities."""
 
-from itertools import cycle
 from warnings import warn
 
-import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import norm as norm_pval
 
 from hmp.models.base import BaseModel
 from hmp.models.fixedn import FixedEventModel
+from hmp.trialdata import TrialData
 
 try:
     __IPYTHON__
@@ -20,18 +19,8 @@ default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgree
 
 
 class CumulativeEstimationModel(BaseModel):
-    def fit(
-        self,
-        trial_data,
-        step=None,
-        verbose=True,
-        end=None,
-        tolerance=1e-3,
-        diagnostic=False,
-        return_estimates=False,
-        by_sample=False,
-        pval=None,
-    ):
+    def __init__(self, *args, step=None, end=None, by_sample=False, pval=None, tolerance=1e-3,
+                 **kwargs):
         """Fit the model starting with 1 event model.
 
         Instead of fitting an n event model this method starts by fitting a 1 event model
@@ -43,22 +32,16 @@ class CumulativeEstimationModel(BaseModel):
 
         Parameters
         ----------
+        args:
+            Extra arguments to be passed through to the BaseModel, at least events and distribution
+            objects.
         step: float
             The size of the step from 0 to the mean RT, defaults to the widths of
             the expected event.
-        verbose: bool
-            If True print information about the fit
         end: int
             The maximum number of samples to explore within each trial
-        trace: bool
-            If True keep the scale and magnitudes parameters for each iteration
         tolerance: float
             The tolerance used for the convergence in the EM() function
-        diagnostic: bool
-            If True print a diagnostic plot of the EM traces for each iteration and several
-            statistics at each iteration
-        return_estimates : bool
-            return all intermediate models
         by_sample : bool
             try every sample as the starting point, even if a later event has already
             been identified. This in case the method jumped over a local maximum in an earlier
@@ -66,19 +49,40 @@ class CumulativeEstimationModel(BaseModel):
         pval: float
             p-value for the detection of the first event, test the first location for significance
             compared to a distribution of noise estimates
+        kwargs:
+            Keyword estimates to be passed on to the BaseModel.
+        """
+        self.step = step
+        self.end = end
+        self.by_sample = by_sample
+        self.pval = pval
+        self.tolerance = tolerance
+        self.fitted_model = None
+        super().__init__(*args, **kwargs)
 
-        Returns
-        -------
-                  A the fitted HMP mo
+    def fit(
+        self,
+        trial_data: TrialData,
+        verbose: bool = True,
+        cpus: int = 1,
+    ):
+        """Fit the model starting with 1 event model.
+
+        Parameters
+        ----------
+        trial_data:
+            Trial data to fit the data on.
+        verbose:
+            Set to True for more detail on what is happening.
+        cpus:
+            Number of cpu cores to be used for the computation.
         """
         self.trial_data = trial_data
-        if end is None:
-            end = self.mean_d
-        if step is None:
-            step = self.event_width_samples
-        max_event_n = self.compute_max_events() * 10  # not really nedded, if it fits it fits
-        if diagnostic:
-            cycol = cycle(default_colors)
+        end = trial_data.durations.mean() if self.end is None else self.end
+        step = self.event_width_samples if self.step is None else self.step
+
+        max_event_n = self.compute_max_events(trial_data) * 10  # not really nedded, if it fits it fits
+
         pbar = tqdm(total=int(np.rint(end)))  # progress bar
         n_events, j, time = 1, 1, 0  # j = sample after last placed event
         # Init pars (need this for min_model)
@@ -92,21 +96,19 @@ class CumulativeEstimationModel(BaseModel):
         pars_prop[-1, 1] = last_stage
 
         # Init mags
-        mags = np.zeros((max_event_n, self.n_dims))  # final mags during estimation
+        mags = np.zeros((max_event_n, trial_data.n_dims))  # final mags during estimation
 
-        fixed_n_model = FixedEventModel(self.trial_data, self.events, self.distribution)
+        fixed_n_model = FixedEventModel(self.events, self.distribution, tolerance=self.tolerance, n_events=n_events)
 
         # The first new detected event should be higher than the bias induced by splitting the RT
         # in two random partition
-        if pval is not None:
+        if self.pval is not None:
             lkh = fixed_n_model.fit(
                 1, maximization=False, starting_points=100, return_max=False, verbose=False
             )
-            lkh_prev = lkh.loglikelihood.mean() + lkh.loglikelihood.std() * norm_pval.ppf(1 - pval)
+            lkh_prev = lkh.loglikelihood.mean() + lkh.loglikelihood.std() * norm_pval.ppf(1 - self.pval)
         else:
             lkh_prev = -np.inf
-        if return_estimates:
-            estimates = []  # store all n_event solutions
 
         # Iterative fit
         while (
@@ -114,61 +116,45 @@ class CumulativeEstimationModel(BaseModel):
         ):
             prev_time = time
 
+            fixed_n_model = FixedEventModel(self.events, self.distribution, tolerance=self.tolerance, n_events=n_events)
             # get new parameters
             mags_props, pars_prop = self.propose_fit_params(
-                n_events, by_sample, step, j, mags, pars, end
+                trial_data,
+                n_events, self.by_sample, step, j, mags, pars, end
             )
             last_stage = pars_prop[n_events, 1]
             pars_prop = np.array([pars_prop])
+            print(mags_props.shape)
+            print(pars_prop.shape)
 
             # Estimate model based on these propositions
-            solutions = fixed_n_model.fit(
-                n_events,
-                mags_props,
-                pars_prop,
-                None,
-                None,
+            likelihoods, event_probs = fixed_n_model.fit_transform(
+                trial_data,
+                np.array([mags_props]),
+                np.array([pars_prop]),
                 verbose=False,
-                cpus=1,
-                tolerance=tolerance,
+                cpus=cpus,
             )
-            sol_lkh = solutions.loglikelihood.values
             sol_sample_new_event = int(
                 np.round(
                     self.scale_to_mean(
-                        np.sum(solutions.parameters.values[:n_events, 1]), self.shape
+                        np.sum(fixed_n_model.parameters[:n_events, 1]), self.shape
                     )
                 )
             )
 
-            # Diagnostic plot
-            if diagnostic:
-                plt.plot(solutions.traces.T, alpha=0.3, c="k")
-                print()
-                print("Event found at sample " + str(sol_sample_new_event))
-                events_at = np.round(self.scale_to_mean(
-                                  np.cumsum(solutions.parameters.values[:, 1]),
-                                  self.shape)).astype(int)
-                print(
-                    f"Events at {events_at}"
-                )
-                print("lkh change: " + str(solutions.loglikelihood.values - lkh_prev))
             # check solution
-            if sol_lkh - lkh_prev > 0:  # accept solution if likelihood improved
-                lkh_prev = sol_lkh
+            if likelihoods - lkh_prev > 0:  # accept solution if likelihood improved
+                lkh_prev = likelihoods
 
                 # update mags, params,
-                mags[:n_events] = solutions.magnitudes.values
-                pars[: n_events + 1] = solutions.parameters.values
-
-                # store solution
-                if return_estimates:
-                    estimates.append(solutions)
+                mags[:n_events] = fixed_n_model.magnitudes
+                pars[: n_events + 1] = fixed_n_model.parameters
 
                 # search for an additional event, starting again at sample 1 from prev event,
                 # or next sample if by_sample
                 n_events += 1
-                if by_sample:
+                if self.by_sample:
                     j += 1
                     time = j * step
                 else:
@@ -176,9 +162,9 @@ class CumulativeEstimationModel(BaseModel):
                     time = sol_sample_new_event + j * step
 
                 # Diagnostic plot
-                if diagnostic:
-                    color = next(cycol)
-                    plt.plot(solutions.traces.T, c=color, label=f"n-events {n_events - 1}")
+                # if diagnostic:
+                    # color = next(cycol)
+                    # plt.plot(solutions.traces.T, c=color, label=f"n-events {n_events - 1}")
                 if verbose:
                     print(
                         f"Transition event {n_events - 1} found around sample "
@@ -191,9 +177,9 @@ class CumulativeEstimationModel(BaseModel):
                 )
                 # find furthest explored param. Note: this also work by_sample
                 # just a tiny bit faster this way
-                if not by_sample:
+                if not self.by_sample:
                     max_scale = np.max(
-                        [np.sum(x[:n_events, 1]) for x in solutions.param_dev.values]
+                        [np.sum(x[:n_events, 1]) for x in fixed_n_model.param_dev.values]
                     )
                     max_sample = int(np.round(self.scale_to_mean(max_scale, self.shape)))
                     j = (
@@ -212,36 +198,32 @@ class CumulativeEstimationModel(BaseModel):
         if verbose:
             print()
             print("All events found, refitting final combination.")
-        if diagnostic:
-            plt.ylabel("Log-likelihood")
-            plt.xlabel("EM iteration")
-            plt.legend()
+
         mags = mags[:n_events, :]
         pars = pars[: n_events + 1, :]
+
+        self.fitted_model = FixedEventModel(
+            self.events, self.distribution, tolerance=self.tolerance, n_events=n_events)
         if n_events > 0:
-            fit = fixed_n_model.fit(
-                n_events,
-                parameters=np.array([pars]),
-                magnitudes=np.array([mags]),
+            self.fitted_model.fit(
+                trial_data,
+                parameters=np.array([[pars]]),
+                magnitudes=np.array([[mags]]),
                 verbose=verbose,
                 cpus=1,
             )
-            fit = fit.assign_attrs(step=step, by_sample=int(by_sample))
-            fit = fit.assign_attrs(method="fit", step=step, by_sample=int(by_sample))
+            self._fitted = True
+
         else:
             warn("Failed to find more than two stages, returning None")
-            fit = None
-        del fit.attrs["sp_parameters"]
-        del fit.attrs["sp_magnitudes"]
-        del fit.attrs["maximization"]
+            self._fitted = False
         pbar.update(int(np.rint(end) - int(np.rint(time))))
-        if return_estimates:
-            return fit, estimates
-        else:
-            return fit
 
+    def transform(self, *args, **kwargs):
+        self._check_fitted("transform data")
+        self.fitted_model.transform(*args, **kwargs)
 
-    def propose_fit_params(self, n_events, by_sample, step, j, mags, pars, end):
+    def propose_fit_params(self, trial_data, n_events, by_sample, step, j, mags, pars, end):
         if (
             by_sample and n_events > 1
         ):  # go through the whole range sample-by-sample, j is sample since start
@@ -264,7 +246,7 @@ class CumulativeEstimationModel(BaseModel):
             pars_prop[n_event_j, 1] = pars_prop[n_event_j, 1] - pars_prop[n_event_j - 1, 1]
             last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:-1, 1])
             pars_prop[n_events, 1] = last_stage
-            mags_props = np.zeros((1, n_events, self.n_dims))  # always 0?
+            mags_props = np.zeros((1, n_events, trial_data.n_dims))  # always 0?
             mags_props[:, : n_events - 1, :] = np.tile(
                 mags[: n_events - 1, :], (len(mags_props), 1, 1)
             )
@@ -280,7 +262,7 @@ class CumulativeEstimationModel(BaseModel):
             last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:-1, 1])
             pars_prop[n_events, 1] = last_stage
 
-            mags_props = np.zeros((1, n_events, self.n_dims))  # always 0?
+            mags_props = np.zeros((1, n_events, trial_data.n_dims))  # always 0?
             mags_props[:, : n_events - 1, :] = np.tile(
                 mags[: n_events - 1, :], (len(mags_props), 1, 1)
             )
@@ -289,3 +271,16 @@ class CumulativeEstimationModel(BaseModel):
         pars_prop[:, 1] = np.maximum(pars_prop[:, 1], self.mean_to_scale(1, self.shape))
 
         return mags_props, pars_prop
+
+    def __getattribute__(self, attr):
+        property_list = {
+            "xrtraces": "get traces",
+            "xrlikelihoods": "get likelihoods",
+            "xrparam_dev": "get dev params",
+            "xrmags": "get xrmags",
+            "xrparams": "get xrparams"
+        }
+        if attr in property_list:
+            self._check_fitted(property_list[attr])
+            return getattr(self.fitted_model, attr)
+        return super().__getattribute__(attr)
