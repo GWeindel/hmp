@@ -112,8 +112,6 @@ class CumulativeEstimationModel(BaseModel):
             )
             last_stage = pars_prop[n_events, 1]
             pars_prop = np.array([pars_prop])
-            print(mags_props.shape)
-            print(pars_prop.shape)
 
             # Estimate model based on these propositions
             likelihoods, event_probs = fixed_n_model.fit_transform(
@@ -150,9 +148,6 @@ class CumulativeEstimationModel(BaseModel):
                     time = sol_sample_new_event + j * step
 
                 # Diagnostic plot
-                # if diagnostic:
-                    # color = next(cycol)
-                    # plt.plot(solutions.traces.T, c=color, label=f"n-events {n_events - 1}")
                 if verbose:
                     print(
                         f"Transition event {n_events - 1} found around sample "
@@ -167,7 +162,7 @@ class CumulativeEstimationModel(BaseModel):
                 # just a tiny bit faster this way
                 if not self.by_sample:
                     max_scale = np.max(
-                        [np.sum(x[:n_events, 1]) for x in fixed_n_model.param_dev.values]
+                        [np.sum(x[:n_events, 1]) for x in fixed_n_model.param_dev]
                     )
                     max_sample = int(np.round(self.scale_to_mean(max_scale, self.shape)))
                     j = (
