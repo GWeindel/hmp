@@ -338,12 +338,10 @@ class DataTransformer:
         mean_last_dim_expanded = np.expand_dims(mean_last_dim, axis=-1)
         centred = data.values - mean_last_dim_expanded
         data.values = centred
-
         return data
 
     @staticmethod
     def _pca(pca_ready_data: xr.DataArray, n_comp: int, channels) -> xr.DataArray:
-
         # TODO: test seperate function
         n_comp = user_input_n_comp(pca_ready_data=pca_ready_data) if n_comp is None else n_comp
         pca = PCA(n_components=n_comp, svd_solver="full")  # selecting Principale components (PC)
@@ -397,8 +395,8 @@ class DataTransformer:
     @staticmethod
     def _apply_filtering(data, bandfilter, sfreq):
         print("""
-NOTE: filtering at this step is suboptimal, filter before epoching if at all possible, see
-also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
+        NOTE: filtering at this step is suboptimal, filter before epoching if at all possible,
+        see also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
         """)
 
         lfreq, hfreq = bandfilter
