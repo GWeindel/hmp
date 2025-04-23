@@ -19,7 +19,7 @@ default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgree
 
 
 class CumulativeEstimationModel(BaseModel):
-    def __init__(self, *args, step=None, end=None, by_sample=False, pval=None, tolerance=1e-3,
+    def __init__(self, *args, step=None, end=None, by_sample=False, tolerance=1e-3,
                  **kwargs):
         """Fit the model starting with 1 event model.
 
@@ -46,16 +46,12 @@ class CumulativeEstimationModel(BaseModel):
             try every sample as the starting point, even if a later event has already
             been identified. This in case the method jumped over a local maximum in an earlier
             estimation.
-        pval: float
-            p-value for the detection of the first event, test the first location for significance
-            compared to a distribution of noise estimates
         kwargs:
             Keyword estimates to be passed on to the BaseModel.
         """
         self.step = step
         self.end = end
         self.by_sample = by_sample
-        self.pval = pval
         self.tolerance = tolerance
         self.fitted_model = None
         super().__init__(*args, **kwargs)
@@ -81,7 +77,7 @@ class CumulativeEstimationModel(BaseModel):
         end = trial_data.durations.mean() if self.end is None else self.end
         step = self.event_width_samples if self.step is None else self.step
 
-        max_event_n = self.compute_max_events(trial_data) * 10  # not really nedded, if it fits it fits
+        max_event_n = self.compute_max_events(trial_data)
 
         pbar = tqdm(total=int(np.rint(end)))  # progress bar
         n_events, j, time = 1, 1, 0  # j = sample after last placed event
@@ -100,15 +96,7 @@ class CumulativeEstimationModel(BaseModel):
 
         fixed_n_model = FixedEventModel(self.events, self.distribution, tolerance=self.tolerance, n_events=n_events)
 
-        # The first new detected event should be higher than the bias induced by splitting the RT
-        # in two random partition
-        if self.pval is not None:
-            lkh = fixed_n_model.fit(
-                1, maximization=False, starting_points=100, return_max=False, verbose=False
-            )
-            lkh_prev = lkh.loglikelihood.mean() + lkh.loglikelihood.std() * norm_pval.ppf(1 - self.pval)
-        else:
-            lkh_prev = -np.inf
+        lkh_prev = -np.inf
 
         # Iterative fit
         while (
@@ -124,8 +112,6 @@ class CumulativeEstimationModel(BaseModel):
             )
             last_stage = pars_prop[n_events, 1]
             pars_prop = np.array([pars_prop])
-            print(mags_props.shape)
-            print(pars_prop.shape)
 
             # Estimate model based on these propositions
             likelihoods, event_probs = fixed_n_model.fit_transform(
@@ -162,9 +148,6 @@ class CumulativeEstimationModel(BaseModel):
                     time = sol_sample_new_event + j * step
 
                 # Diagnostic plot
-                # if diagnostic:
-                    # color = next(cycol)
-                    # plt.plot(solutions.traces.T, c=color, label=f"n-events {n_events - 1}")
                 if verbose:
                     print(
                         f"Transition event {n_events - 1} found around sample "
@@ -179,7 +162,7 @@ class CumulativeEstimationModel(BaseModel):
                 # just a tiny bit faster this way
                 if not self.by_sample:
                     max_scale = np.max(
-                        [np.sum(x[:n_events, 1]) for x in fixed_n_model.param_dev.values]
+                        [np.sum(x[:n_events, 1]) for x in fixed_n_model.param_dev]
                     )
                     max_sample = int(np.round(self.scale_to_mean(max_scale, self.shape)))
                     j = (
