@@ -8,6 +8,8 @@ from hmp import simulations
 from hmp.models import FixedEventModel
 from hmp.models.base import EventProperties
 from hmp.trialdata import TrialData
+from hmp.transform import DataTransformer
+
 
 DATA_DIR = Path("tests", "gen_data")
 DATA_DIR_A = DATA_DIR / "dataset_a"
@@ -32,7 +34,7 @@ def init_data():
             events_provided=events, verbose=True, reference='average', subj_idx=['a','b'], tmin=-.01)
     epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
     positions = simulations.simulation_positions()
-    hmp_data = hmp.utils.transform_data(epoch_data, n_comp=2,)
+    hmp_data = DataTransformer(epoch_data, n_comp=2,).data
     return event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events
 
 def test_fixed_simple():

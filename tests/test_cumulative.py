@@ -9,36 +9,20 @@ from hmp import simulations
 from hmp.models import CumulativeEstimationModel, FixedEventModel
 from hmp.models.base import EventProperties
 from hmp.trialdata import TrialData
+from hmp.transform import DataTransformer
+
+from test_fixed import init_data
+
 
 DATA_DIR = Path("tests", "gen_data")
 DATA_DIR_A = DATA_DIR / "dataset_a"
 DATA_DIR_B = DATA_DIR / "dataset_b"
 
-def init_data():
-    """ Initialize all data and model related info."""
-    sfreq = 100
-    n_events = 3
-    events = []
-    event_id = {'stimulus':1}#trigger 1 = stimulus
-    resp_id = {'response':5}
-    raws = [DATA_DIR_A / 'dataset_a_raw_raw.fif', DATA_DIR_B / 'dataset_b_raw_raw.fif']
-    event_files = [DATA_DIR_A / 'dataset_a_raw_raw_generating_events.npy',
-                   DATA_DIR_B / 'dataset_b_raw_raw_generating_events.npy']
-    for file in event_files:
-        events.append(np.load(file))
-    event_a = events[0]
-    event_b = events[1]
-    # Data reading
-    epoch_data = hmp.utils.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq,
-            events_provided=events, verbose=True, reference='average', subj_idx=['a','b'], tmin=-.01)
-    epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
-    positions = simulations.simulation_positions()
-    hmp_data = hmp.utils.transform_data(epoch_data, n_comp=5, apply_zscore=False)
-    return event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events
-
 def test_cumulative_simple():
     """ test a simple fit_transform on perfect data and compare to ground truth."""
     event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events = init_data()
+    # Change transformed data for the assertion
+    hmp_data = DataTransformer(epoch_data, n_comp=5, apply_zscore=False).data
     # Data b is without noise, recovery should be perfect
     data_b = hmp.utils.participant_selection(hmp_data, 'b')
     event_properties = EventProperties.create_expected(sfreq=data_b.sfreq)
