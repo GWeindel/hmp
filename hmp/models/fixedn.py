@@ -28,6 +28,11 @@ class FixedEventModel(BaseModel):
         max_scale=None,
         **kwargs
     ):
+        if n_events is None:
+            raise ValueError(
+                "The fit_n() function needs to be provided with a number of expected transition"
+                " events"
+            )
         self.n_events = n_events
         self.n_dims = None
         self.parameters_to_fix = parameters_to_fix
@@ -113,16 +118,6 @@ class FixedEventModel(BaseModel):
         infos_to_store["tolerance"] = self.tolerance
 
         self.n_dims = trial_data.n_dims
-        if self.n_events is None:
-            if parameters is not None:
-                self.n_events = len(parameters) - 1
-            elif magnitudes is not None:
-                self.n_events = len(magnitudes)
-            else:
-                raise ValueError(
-                    "The fit_n() function needs to be provided with a number of expected transition"
-                    " events"
-                )
 
         if level_dict is None:
             level_dict = self.level_dict
