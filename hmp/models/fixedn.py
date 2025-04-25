@@ -20,7 +20,7 @@ except NameError:
 
 class FixedEventModel(BaseModel):
     def __init__(
-        self, *args, n_events=None, parameters_to_fix=None, magnitudes_to_fix=None,
+        self, *args, n_events, parameters_to_fix=None, magnitudes_to_fix=None,
         tolerance=1e-4,
         max_iteration=1e3,
         min_iteration=1,
@@ -28,11 +28,11 @@ class FixedEventModel(BaseModel):
         max_scale=None,
         **kwargs
     ):
-        if n_events is None:
-            raise ValueError(
-                "The fit_n() function needs to be provided with a number of expected transition"
-                " events"
-            )
+        assert np.issubdtype(type(n_events), np.integer), \
+         (
+             f"An integer for the number of expected transition events"
+             f" is expected, got {n_events} instead"
+         )
         self.n_events = n_events
         self.n_dims = None
         self.parameters_to_fix = parameters_to_fix
