@@ -672,7 +672,7 @@ class FixedEventModel(BaseModel):
         for stage in range(n_stages):
             pmf[:, stage] = np.concatenate(
                 (
-                    np.repeat(0, locations[stage]),
+                    np.repeat(1e-15, locations[stage]),
                     self.distribution_pmf(parameters[stage, 0], parameters[stage, 1], max_duration)[
                         locations[stage] :
                     ],
@@ -710,7 +710,7 @@ class FixedEventModel(BaseModel):
         for trial in np.arange(n_trials):  # Undoes sample inversion
             backward[: durations[trial], trial, :] = backward[: durations[trial], trial, :][::-1]
         eventprobs = forward * backward
-        eventprobs = np.clip(eventprobs, 1e-15, None)  # floating point precision error
+        eventprobs = np.clip(eventprobs, 0, None)  # floating point precision error
         likelihood = np.sum(
             np.log(eventprobs[:, :, 0].sum(axis=0))
         )  # sum over max_samples to avoid 0s in log
