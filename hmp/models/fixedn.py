@@ -258,23 +258,20 @@ class FixedEventModel(BaseModel):
             max_lkhs = np.argmax(lkhs)
         else:
             max_lkhs = 0
-            
-        if lkhs.sum() != -np.inf:
+
+        if np.isneginf(lkhs.sum()):
+            raise ValueError("Fit failed, inspect provided starting points")
+        else:
             self._fitted = True
             self.lkhs = lkhs[max_lkhs]
             self.magnitudes =  np.array(estimates[max_lkhs][1])
             self.parameters = np.array(estimates[max_lkhs][2])
             self.traces = np.array(estimates[max_lkhs][3])
             self.param_dev = np.array(estimates[max_lkhs][4])
-    
             self.level_dict = level_dict
             self.levels = levels
             self.mags_map = mags_map
             self.pars_map = pars_map
-        else:
-            raise ValueError("Fit failed, inspect provided starting points")
-        
-
 
     def transform(self, trial_data):
         _, levels, clabels = self.level_constructor(
