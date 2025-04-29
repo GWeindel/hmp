@@ -908,7 +908,8 @@ def event_times(
         only event dimension if mean = True contains nans for missing stages.
     """
     assert not (mean and errorbars is not None), "Only one of mean and errorbars can be set."
-    tstep = 1000 / estimates.sfreq    
+    tstep = 1000 / estimates.sfreq if as_time else 1
+    
     if estimate_method is None:
         estimate_method = "max"
     event_shift = 0
@@ -923,17 +924,15 @@ def event_times(
     )  # take average to make sure it's not just 0 on the trial-level
     for c, e in np.argwhere(times_level == -event_shift):
         times[times["levels"] == c, e] = np.nan
-    if as_time:
-        times = times * tstep 
+    
     if add_rt:
-        rts = estimates.cumsum('samples').argmax('samples').max('event')+1 * tstep
-        if as_time:
-            rts = rts * 1000 / estimates.sfreq
+        rts = estimates.cumsum('samples').argmax('samples').max('event')+1
         rts = xr.DataArray(rts)
         rts = rts.assign_coords(event=int(times.event.max().values + 1))
         rts = rts.expand_dims(dim="event")
         times = xr.concat([times, rts], dim="event")
-    
+
+    times = times * tstep     
     if duration:  # taking into account missing events, hence the ugly code
         added = xr.DataArray(
             np.repeat(0, len(times.trial_x_participant))[np.newaxis, :],
