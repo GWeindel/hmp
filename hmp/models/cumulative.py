@@ -19,7 +19,7 @@ default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgree
 
 
 class CumulativeEstimationModel(BaseModel):
-    def __init__(self, *args, step=None, end=None, by_sample=False, tolerance=1e-3,
+    def __init__(self, *args, step=None, end=None, by_sample=False, tolerance=1e-4, fitted_model_tolerance=1e-4,
                  **kwargs):
         """Fit the model starting with 1 event model.
 
@@ -41,7 +41,9 @@ class CumulativeEstimationModel(BaseModel):
         end: int
             The maximum number of samples to explore within each trial
         tolerance: float
-            The tolerance used for the convergence in the EM() function
+            The tolerance used for the convergence in the EM() function for the cumulative step
+        fitted_model_tolerance: float
+            The tolerance used for the final model
         by_sample : bool
             try every sample as the starting point, even if a later event has already
             been identified. This in case the method jumped over a local maximum in an earlier
@@ -53,6 +55,8 @@ class CumulativeEstimationModel(BaseModel):
         self.end = end
         self.by_sample = by_sample
         self.tolerance = tolerance
+        self.fitted_model_tolerance = tolerance if fitted_model_tolerance is None else fitted_model_tolerance
+
         self.fitted_model = None
         super().__init__(*args, **kwargs)
 
@@ -103,7 +107,6 @@ class CumulativeEstimationModel(BaseModel):
             self.scale_to_mean(last_stage, self.shape) >= self.location and n_events <= max_event_n
         ):
             prev_time = time
-
             fixed_n_model = FixedEventModel(self.events, self.distribution, tolerance=self.tolerance, n_events=n_events)
             # get new parameters
             mags_props, pars_prop = self.propose_fit_params(
@@ -114,7 +117,7 @@ class CumulativeEstimationModel(BaseModel):
             pars_prop = np.array([pars_prop])
 
             # Estimate model based on these propositions
-            likelihoods, event_probs = fixed_n_model.fit_transform(
+            fixed_n_model.fit(
                 trial_data,
                 np.array([mags_props]),
                 np.array([pars_prop]),
@@ -128,7 +131,7 @@ class CumulativeEstimationModel(BaseModel):
                     )
                 )
             )
-
+            likelihoods = fixed_n_model.lkhs.sum()
             # check solution
             if likelihoods - lkh_prev > 0:  # accept solution if likelihood improved
                 lkh_prev = likelihoods
@@ -186,7 +189,7 @@ class CumulativeEstimationModel(BaseModel):
         pars = pars[: n_events + 1, :]
 
         self.fitted_model = FixedEventModel(
-            self.events, self.distribution, tolerance=self.tolerance, n_events=n_events)
+            self.events, self.distribution, tolerance=self.fitted_model_tolerance, n_events=n_events)
         if n_events > 0:
             self.fitted_model.fit(
                 trial_data,
