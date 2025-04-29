@@ -253,23 +253,25 @@ class FixedEventModel(BaseModel):
                 )
             resetwarnings()
 
-        self.lkhs = np.array([x[0] for x in estimates])
+        lkhs = np.array([x[0] for x in estimates])
         if self.starting_points > 1 :
-            max_lkhs = np.argmax(self.lkhs)
+            max_lkhs = np.argmax(lkhs)
         else:
             max_lkhs = 0
-        self.lkhs = self.lkhs[max_lkhs]
-        self.magnitudes =  np.array(estimates[max_lkhs][1])
-        self.parameters = np.array(estimates[max_lkhs][2])
-        self.traces = np.array(estimates[max_lkhs][3])
-        self.param_dev = np.array(estimates[max_lkhs][4])
 
-        self.level_dict = level_dict
-        self.levels = levels
-        self.mags_map = mags_map
-        self.pars_map = pars_map
-
-        self._fitted = True
+        if np.isneginf(lkhs.sum()):
+            raise ValueError("Fit failed, inspect provided starting points")
+        else:
+            self._fitted = True
+            self.lkhs = lkhs[max_lkhs]
+            self.magnitudes =  np.array(estimates[max_lkhs][1])
+            self.parameters = np.array(estimates[max_lkhs][2])
+            self.traces = np.array(estimates[max_lkhs][3])
+            self.param_dev = np.array(estimates[max_lkhs][4])
+            self.level_dict = level_dict
+            self.levels = levels
+            self.mags_map = mags_map
+            self.pars_map = pars_map
 
     def transform(self, trial_data):
         _, levels, clabels = self.level_constructor(
@@ -431,7 +433,8 @@ class FixedEventModel(BaseModel):
 
         while i < max_iteration:  # Expectation-Maximization algorithm
             if i >= min_iteration and (
-                tolerance > ((lkh.sum() - lkh_prev.sum()) / np.abs(lkh_prev.sum()))
+                np.isneginf(lkh.sum()) or \
+                tolerance > (lkh.sum() - lkh_prev.sum()) / np.abs(lkh_prev.sum())
             ):
                 break
 
@@ -474,6 +477,8 @@ class FixedEventModel(BaseModel):
                         parameters[pars_map[:, p] == p_set, p, :] = np.mean(
                             parameters[pars_map[:, p] == p_set, p, :], axis=0
                         )
+
+            
             lkh, eventprobs = self._distribute_levels(
                 trial_data, magnitudes, parameters, mags_map, pars_map, levels, cpus=cpus
             )
@@ -664,7 +669,7 @@ class FixedEventModel(BaseModel):
         for stage in range(n_stages):
             pmf[:, stage] = np.concatenate(
                 (
-                    np.repeat(0, locations[stage]),
+                    np.repeat(1e-15, locations[stage]),
                     self.distribution_pmf(parameters[stage, 0], parameters[stage, 1], max_duration)[
                         locations[stage] :
                     ],
@@ -701,7 +706,6 @@ class FixedEventModel(BaseModel):
         backward = backward[:, :, ::-1]  # undoes stage inversion
         for trial in np.arange(n_trials):  # Undoes sample inversion
             backward[: durations[trial], trial, :] = backward[: durations[trial], trial, :][::-1]
-
         eventprobs = forward * backward
         eventprobs = np.clip(eventprobs, 0, None)  # floating point precision error
         likelihood = np.sum(
