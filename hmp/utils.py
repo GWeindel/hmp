@@ -908,9 +908,7 @@ def event_times(
         only event dimension if mean = True contains nans for missing stages.
     """
     assert not (mean and errorbars is not None), "Only one of mean and errorbars can be set."
-    tstep = 1
-    if as_time:
-        tstep = 1000 / estimates.sfreq    
+    tstep = 1000 / estimates.sfreq if as_time else 1
     
     if estimate_method is None:
         estimate_method = "max"
