@@ -4,7 +4,7 @@ import xarray as xr
 from enum import Enum
 from mne.filter import filter_data
 from sklearn.decomposition import PCA
-from typing import Union
+from typing import Union, Optional
 from warnings import warn
 from hmp import mcca
 
@@ -74,10 +74,10 @@ class DataTransformer:
         method: Method = Method.PCA,
         cov: bool = True,
         centering: bool = True,
-        n_comp: int = None,
-        n_ppcas: int = None,
-        pca_weights: xr.DataArray = None,
-        bandfilter: Union[None, tuple[float, float]] = None,
+        n_comp: Optional[int] = None,
+        n_ppcas: Optional[int] = None,
+        pca_weights: Optional[xr.DataArray] = None,
+        bandfilter: Optional[Union[tuple[float, float]]] = None,
         mcca_reg: float = 0,
         copy: bool = False,
     ) -> None:
@@ -393,7 +393,9 @@ class DataTransformer:
         return data
 
     @staticmethod
-    def _apply_filtering(data, bandfilter, sfreq):
+    def _apply_filtering(data: xr.DataArray,
+                         bandfilter:Optional[Union[tuple[float, float]]],
+                         sfreq: float):
         print("""
         NOTE: filtering at this step is suboptimal, filter before epoching if at all possible,
         see also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
