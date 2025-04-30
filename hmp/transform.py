@@ -45,6 +45,17 @@ class Method(Enum):
     def __str__(self) -> str:
         return self.value
 
+    @staticmethod
+    def parse(label):
+        if isinstance(label, Method):
+            return label
+        elif label and label.lower() == 'pca':
+            return Method.PCA
+        elif label and label.lower() == 'mcca':
+            return Method.MCCA
+        else:
+            raise NotImplementedError
+
 
 # TODO: move to utils
 def user_input_n_comp(data):
@@ -88,9 +99,9 @@ class DataTransformer:
         participants_variable: str = 'participant',
         apply_standard: bool = False,
         averaged: bool = False,
-        apply_zscore: Optional[ApplyZScore] = ApplyZScore.TRIAL,
+        apply_zscore: Union[bool, str, ApplyZScore] = ApplyZScore.TRIAL,
         zscore_across_pcs: bool = False,
-        method: Method = Method.PCA,
+        method: Union[str, Method] = Method.PCA,
         cov: bool = True,
         centering: bool = True,
         n_comp: Optional[int] = None,
@@ -172,15 +183,18 @@ class DataTransformer:
         try:
             apply_zscore = ApplyZScore(apply_zscore)
         except NotImplementedError as e:
-            raise NotImplementedError(f"apply_zscore should be either a boolean or one of [{', '.join([e.value for e in ApplyZScore])}]") from e  # noqa: E501
+            raise NotImplementedError(
+                f"Unknown value for apply_zscore: {apply_zscore!r}; valid options: [{', '.join([e.value for e in ApplyZScore])}] or Bool (True defaults to {ApplyZScore.TRIAL})") from e  # noqa: E501
 
         if np.sum(
             np.isnan(data.groupby("participant",
                                   squeeze=False).mean(["epochs", "samples"]).data.values)) != 0:
             raise ValueError("at least one participant has an empty channel")
 
-        if not isinstance(method, Method) and method is not None:
-            raise ValueError(f"method {method} is unknown, choose either {', '.join([e.value for e in Method])} or None")   # noqa: E501
+        try:
+            method = Method(method)
+        except NotImplementedError as e:
+            raise NotImplementedError(f"Unknown method: {method!r}; valid options: {', '.join([e.value for e in Method])} or None") from e  # noqa: E501
 
         if method == Method.MCCA and data.sizes["participant"] == 1:
             raise ValueError("MCCA cannot be applied to only one participant")
