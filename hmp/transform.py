@@ -26,7 +26,7 @@ class ApplyZScore(Enum):
     def parse(label):
         if isinstance(label, ApplyZScore):
             return label
-        elif label is False:
+        elif label is False or label is None:
             return ApplyZScore.DONT_APPLY
         elif label in ('trial', True):
             return ApplyZScore.TRIAL
@@ -38,21 +38,24 @@ class ApplyZScore(Enum):
             raise NotImplementedError
 
 
-class Method(Enum):
+class AnalysisMethod(Enum):
     PCA = 'pca'
     MCCA = 'mcca'
+    NO_ANALYSIS = 'no_analysis'
 
     def __str__(self) -> str:
         return self.value
 
     @staticmethod
     def parse(label):
-        if isinstance(label, Method):
+        if isinstance(label, AnalysisMethod):
             return label
+        elif label is False or label is None:
+            return AnalysisMethod.NO_ANALYSIS
         elif label and label.lower() == 'pca':
-            return Method.PCA
+            return AnalysisMethod.PCA
         elif label and label.lower() == 'mcca':
-            return Method.MCCA
+            return AnalysisMethod.MCCA
         else:
             raise NotImplementedError
 
@@ -101,7 +104,7 @@ class DataTransformer:
         averaged: bool = False,
         apply_zscore: Union[bool, str, ApplyZScore] = ApplyZScore.TRIAL,
         zscore_across_pcs: bool = False,
-        method: Union[str, Method] = Method.PCA,
+        method: Optional[Union[bool, str, AnalysisMethod]] = AnalysisMethod.PCA,
         cov: bool = True,
         centering: bool = True,
         n_comp: Optional[int] = None,
@@ -192,11 +195,11 @@ class DataTransformer:
             raise ValueError("at least one participant has an empty channel")
 
         try:
-            method = Method(method)
+            method = AnalysisMethod(method)
         except NotImplementedError as e:
-            raise NotImplementedError(f"Unknown method: {method!r}; valid options: {', '.join([e.value for e in Method])} or None") from e  # noqa: E501
+            raise NotImplementedError(f"Unknown method: {method!r}; valid options: {', '.join([e.value for e in AnalysisMethod])} or None") from e  # noqa: E501
 
-        if method == Method.MCCA and data.sizes["participant"] == 1:
+        if method == AnalysisMethod.MCCA and data.sizes["participant"] == 1:
             raise ValueError("MCCA cannot be applied to only one participant")
 
         sfreq = data.sfreq
@@ -225,7 +228,7 @@ class DataTransformer:
 
         data = data.transpose("participant", "epochs", "channels", "samples")
 
-        if method == Method.PCA:
+        if method == AnalysisMethod.PCA:
 
             if pca_weights is None:
                 if cov:
@@ -259,7 +262,7 @@ class DataTransformer:
                 data = data @ pca_weights
                 data.attrs["pca_weights"] = pca_weights
 
-        elif method == Method.MCCA:
+        elif method == AnalysisMethod.MCCA:
 
             ori_coords = data.drop_vars("channels").coords
             if n_ppcas is None:
@@ -306,11 +309,12 @@ class DataTransformer:
             data.attrs["mcca_weights"] = mcca_m.mcca_weights
             data.attrs["pca_weights"] = mcca_m.pca_weights
 
-        elif method is None:
+        elif method is AnalysisMethod.NO_ANALYSIS:
 
             data = data.rename({"channels": "component"})
             data["component"] = np.arange(len(data.component))
             data.attrs["pca_weights"] = np.identity(len(data.component))
+
 
         if apply_zscore.apply():
 
