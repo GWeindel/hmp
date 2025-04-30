@@ -361,11 +361,8 @@ class DataTransformer:
 
         data.attrs["pca_weights"] = pca_weights
         data.attrs["sfreq"] = sfreq
-        self.this_data = self.stack_data(data)
 
-    @property
-    def data(self) -> xr.DataArray:
-        return self.this_data
+        self.data = self.stack_data(data)
 
     @staticmethod
     def _center(data: xr.DataArray) -> xr.DataArray:
