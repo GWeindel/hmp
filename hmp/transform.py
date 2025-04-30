@@ -14,9 +14,28 @@ class ApplyZScore(Enum):
     ALL = 'all'
     PARTICIPANT = 'participant'
     TRIAL = 'trial'
+    DONT_APPLY = 'dont_apply'
 
     def __str__(self) -> str:
         return self.value
+
+    def apply(self) -> bool:
+        return self != ApplyZScore.DONT_APPLY
+
+    @staticmethod
+    def parse(label):
+        if isinstance(label, ApplyZScore):
+            return label
+        elif label is False:
+            return ApplyZScore.DONT_APPLY
+        elif label in ('trial', True):
+            return ApplyZScore.TRIAL
+        elif label == 'participant':
+            return ApplyZScore.PARTICIPANT
+        elif label == 'all':
+            return ApplyZScore.ALL
+        else:
+            raise NotImplementedError
 
 
 class Method(Enum):
@@ -69,7 +88,7 @@ class DataTransformer:
         participants_variable: str = 'participant',
         apply_standard: bool = False,
         averaged: bool = False,
-        apply_zscore: Union[None, ApplyZScore, bool] = ApplyZScore.TRIAL,
+        apply_zscore: Optional[ApplyZScore] = ApplyZScore.TRIAL,
         zscore_across_pcs: bool = False,
         method: Method = Method.PCA,
         cov: bool = True,
@@ -150,11 +169,10 @@ class DataTransformer:
                 "Expected a xarray Dataset with data and event as DataArrays, check the data format"
                 )
 
-        if apply_zscore is True:
-            apply_zscore = ApplyZScore.TRIAL   # defaults to trial
-
-        if not isinstance(apply_zscore, ApplyZScore) and apply_zscore is not False:
-            raise ValueError(f"apply_zscore should be either a boolean or one of [{', '.join([e.value for e in ApplyZScore])}]")   # noqa: E501
+        try:
+            apply_zscore = ApplyZScore(apply_zscore)
+        except NotImplementedError as e:
+            raise NotImplementedError(f"apply_zscore should be either a boolean or one of [{', '.join([e.value for e in ApplyZScore])}]") from e  # noqa: E501
 
         if np.sum(
             np.isnan(data.groupby("participant",
@@ -280,7 +298,7 @@ class DataTransformer:
             data["component"] = np.arange(len(data.component))
             data.attrs["pca_weights"] = np.identity(len(data.component))
 
-        if apply_zscore:
+        if apply_zscore.apply():
 
             ori_coords = data.coords
 
