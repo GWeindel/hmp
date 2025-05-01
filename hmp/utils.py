@@ -1011,10 +1011,10 @@ def event_topo(
     epoch_data = (
         epoch_data.rename({"epochs": "trials"})
         .stack(trial_x_participant=["participant", "trials"])
-        .data.fillna(0)
+        .data
         .drop_duplicates("trial_x_participant")
     )
-    estimated = estimated.fillna(0).copy()
+
     n_events = estimated.event.count().values
     n_trials = estimated.trial_x_participant.count().values
     n_channels = epoch_data.channels.count().values
@@ -1023,6 +1023,7 @@ def event_topo(
         estimated["trial_x_participant"].values, epoch_data["trial_x_participant"].values
     )
     epoch_data = epoch_data.sel(trial_x_participant=common_trials)
+    estimated = estimated.sel(trial_x_participant=common_trials)
     if not peak:
         normed_template = template / np.sum(template)
 
