@@ -629,11 +629,9 @@ class FixedEventModel(BaseModel):
         """
         n_events = magnitudes.shape[0]
         n_stages = n_events + 1
+        locations = np.zeros(n_stages, dtype=int)
         if location:
-            locations = np.zeros(n_stages, dtype=int)
             locations[1:-1] = self.location
-        else:
-            locations = np.zeros(n_stages, dtype=int)
         if subset_epochs is not None:
             if len(subset_epochs) == trial_data.n_trials:  # boolean indices
                 subset_epochs = np.where(subset_epochs)[0]
