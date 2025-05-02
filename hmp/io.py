@@ -2,7 +2,7 @@ import numpy as np
 import xarray as xr
 from pandas import DataFrame
 from pathlib import Path
-
+import pickle
 
 def read_mne_data(
     pfiles,
@@ -449,7 +449,7 @@ def hmp_data_format(
         data = data.set_coords("events")
     return data
 
-def save(data, filename):
+def save_eventprobs(data, filename):
     """Save fit."""
     data = data.copy()
     attributes = data.attrs.copy()
@@ -461,7 +461,7 @@ def save(data, filename):
     print(f"{filename} saved")
 
 
-def load(filename):
+def load_eventprobs(filename):
     """Load fit or data."""
     with xr.open_dataset(filename) as data:
         data.load()
@@ -469,23 +469,31 @@ def load(filename):
         data = data.stack(trial_x_participant=["participant", "trials"]).dropna(
             dim="trial_x_participant", how="all"
         )
-    if "eventprobs" in data and all(
-        key in data for key in ["trial_x_participant", "samples", "event"]
-    ):
-        # Ensures correct order of dimensions for later index use
-        if "iteration" in data:
-            data = data.transpose(
-                "iteration", "trial_x_participant", "samples", "event"
-            )
-        else:
-            data = data.transpose(
-                "trial_x_participant", "samples", "event"
-            )
-    return data
 
+    # Ensures correct order of dimensions for later index use
+    if "iteration" in data:
+        data = data.transpose(
+            "iteration", "trial_x_participant", "samples", "event"
+        )
+    else:
+        data = data.transpose(
+            "trial_x_participant", "samples", "event"
+        )
+    return data.to_dataarray().drop_vars('variable').squeeze()
 
-def save_probs_csv(estimates, filename):
+def save_model(model, filename):
+    output = open(f'{filename.split('.')[0]}.pkl', 'wb')
+    pickle.dump(model, output)
+    output.close()
+
+def load_model(filename):
+    pkl_file = open(f'{filename.split('.')[0]}.pkl', 'rb')
+    model = pickle.load(pkl_file)
+    pkl_file.close()
+    return model
+
+def save_eventprobs_csv(estimates, filename):
     """Save eventprobs to filename csv file."""
     estimates = estimates.unstack()
-    estimates.to_dataframe().to_csv(filename)
+    estimates.to_dataframe('eventprobs').to_csv(filename)
     print(f"Saved at {filename}")
