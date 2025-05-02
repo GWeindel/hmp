@@ -127,7 +127,7 @@ class CumulativeEstimationModel(BaseModel):
             sol_sample_new_event = int(
                 np.round(
                     self.scale_to_mean(
-                        np.sum(fixed_n_model.parameters[:n_events, 1]), self.shape
+                        np.sum(fixed_n_model.parameters[0, :n_events, 1]), self.shape
                     )
                 )
             )
@@ -153,8 +153,8 @@ class CumulativeEstimationModel(BaseModel):
                 # Diagnostic plot
                 if verbose:
                     print(
-                        f"Transition event {n_events - 1} found around sample "
-                        f"{sol_sample_new_event}"
+                        f"Transition event {n_events - 1} found around time "
+                        f"{sol_sample_new_event*(1000/self.sfreq)}"
                     )
 
             else:  # reject solution, search on

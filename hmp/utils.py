@@ -877,6 +877,7 @@ def event_times(
     as_time=False,
     errorbars=None,
     estimate_method="max",
+    add_stim=False,
 ):
     """Compute the likeliest peak times for each event.
 
@@ -900,6 +901,9 @@ def event_times(
     estimate_method : string
         'max' or 'mean', either take the max probability of each event on each trial, or the
         weighted average.
+    add_stim: bool
+        Adding stimulus as the first event (True) or let the first estimated HMP event be the
+        first one (False, default)
 
     Returns
     -------
@@ -954,6 +958,13 @@ def event_times(
             tmp = np.hstack((tmp, np.tile(np.nan, (tmp.shape[0], 1))))
             times[estimates["levels"] == c, :] = tmp
         times = times[:, :-1]  # remove extra column
+    elif add_stim:
+        added = xr.DataArray(
+            np.repeat(0, len(times.trial_x_participant))[np.newaxis, :],
+            coords={"event": [0], "trial_x_participant": times.trial_x_participant},
+        )
+        times = times.assign_coords(event=times.event + 1)
+        times = times.combine_first(added)
 
     if mean:
         times = times.groupby("levels").mean("trial_x_participant")
@@ -1011,10 +1022,10 @@ def event_topo(
     epoch_data = (
         epoch_data.rename({"epochs": "trials"})
         .stack(trial_x_participant=["participant", "trials"])
-        .data.fillna(0)
+        .data
         .drop_duplicates("trial_x_participant")
     )
-    estimated = estimated.fillna(0).copy()
+
     n_events = estimated.event.count().values
     n_trials = estimated.trial_x_participant.count().values
     n_channels = epoch_data.channels.count().values
@@ -1023,6 +1034,7 @@ def event_topo(
         estimated["trial_x_participant"].values, epoch_data["trial_x_participant"].values
     )
     epoch_data = epoch_data.sel(trial_x_participant=common_trials)
+    estimated = estimated.sel(trial_x_participant=common_trials)
     if not peak:
         normed_template = template / np.sum(template)
 
