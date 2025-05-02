@@ -29,7 +29,7 @@ def init_data():
     event_a = events[0]
     event_b = events[1]
     # Data reading
-    epoch_data = hmp.utils.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq,
+    epoch_data = hmp.io.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq,
             events_provided=events, verbose=True, reference='average', subj_idx=['a','b'], tmin=-.01)
     epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
     positions = simulations.simulation_positions()
