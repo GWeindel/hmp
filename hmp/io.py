@@ -256,7 +256,8 @@ def read_mne_data(
                 raise ValueError("Incorrect file format")
             if reference is not None:
                 epochs = epochs.set_eeg_reference(reference)
-            _pick_channels(pick_channels, epochs)
+            epochs = epochs.pick(pick_channels) 
+
             if metadata is None:
                 try:
                     metadata_i = epochs.metadata  # accounts for dropped epochs
