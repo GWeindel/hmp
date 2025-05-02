@@ -484,8 +484,8 @@ def load(filename):
     return data
 
 
-def save_eventprobs(eventprobs, filename):
+def save_probs_csv(estimates, filename):
     """Save eventprobs to filename csv file."""
-    eventprobs = eventprobs.unstack()
-    eventprobs.to_dataframe().to_csv(filename)
+    estimates = estimates.unstack()
+    estimates.to_dataframe().to_csv(filename)
     print(f"Saved at {filename}")
