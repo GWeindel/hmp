@@ -134,6 +134,8 @@ def read_mne_data(
             )
     else:
         metadata_i = None
+    
+    offset_after_resp_samples = np.rint(offset_after_resp * sfreq).astype(int)
     ev_i = 0  # syncing up indexing between event and raw files
     for participant in pfiles:
         print(f"Processing participant {participant}'s {dict_datatype[epoched]} {pick_channels}")
@@ -183,7 +185,7 @@ def read_mne_data(
                 ev_i += 1
             if reference is not None:
                 data = data.set_eeg_reference(reference)
-            data = _pick_channels(pick_channels, data)
+            data = data.pick(pick_channels) 
             data.load_data()
 
             if sfreq < data.info["sfreq"]:  # Downsampling
@@ -206,7 +208,6 @@ def read_mne_data(
             if verbose:
                 print(f"Creating epochs based on following event ID :{np.unique(events[:, 2])}")
 
-            offset_after_resp_samples = int(offset_after_resp * sfreq)
             if metadata is None:
                 metadata_i, meta_events, event_id = mne.epochs.make_metadata(
                     events=events,
@@ -277,7 +278,6 @@ def read_mne_data(
             upper_limit_rt = epochs.tmax - offset_after_resp + 1 * (1 / sfreq)
         if ignore_rt:
             metadata_i[rt_col] = epochs.tmax
-        offset_after_resp_samples = np.rint(offset_after_resp * sfreq).astype(int)
         valid_epoch_index = [x for x, y in enumerate(epochs.drop_log) if len(y) == 0]
         data_epoch = epochs.get_data(copy=False)  # preserves index
         rts = metadata_i[rt_col]
@@ -301,9 +301,7 @@ def read_mne_data(
                 f"{upper_limit_rt} seconds"
             )
         rts_arr[rts_arr > upper_limit_rt] = 0  # removes RT above x sec
-        rts_arr[rts_arr < lower_limit_rt] = (
-            0  # removes RT below x sec, important as determines max events
-        )
+        rts_arr[rts_arr < lower_limit_rt] = 0  # removes RT below x sec, determines max events
         rts_arr[np.isnan(rts_arr)] = 0  # too long trial
         rts_arr = np.rint(rts_arr * sfreq).astype(int)
         if verbose:
@@ -378,15 +376,6 @@ def read_mne_data(
         n_trials=n_trials,
     )
     return epoch_data
-
-
-def _pick_channels(pick_channels, data):
-    try:
-        data = data.pick(pick_channels)
-    except:
-        raise ValueError("incorrect channel pick specified")
-    return data
-
 
 def hmp_data_format(
     data, sfreq, events=None, offset=0, participants=[], epochs=None, channels=None, metadata=None
