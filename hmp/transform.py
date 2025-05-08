@@ -184,7 +184,7 @@ class DataTransformer:
                 )
 
         try:
-            apply_zscore = ApplyZScore(apply_zscore)
+            apply_zscore = ApplyZScore.parse(apply_zscore)
         except NotImplementedError as e:
             raise NotImplementedError(
                 f"Unknown value for apply_zscore: {apply_zscore!r}; valid options: [{', '.join([e.value for e in ApplyZScore])}] or Bool (True defaults to {ApplyZScore.TRIAL})") from e  # noqa: E501
