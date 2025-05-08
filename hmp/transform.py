@@ -58,7 +58,7 @@ class AnalysisMethod(Enum):
         elif label and label.lower() == 'mcca':
             return AnalysisMethod.MCCA
         else:
-            raise NotImplementedError
+            raise NotImplementedError(f"Unknown method: '{label}'; valid options: {', '.join([e.value for e in AnalysisMethod])} or None")  # noqa: E501
 
 
 # TODO: move to utils
@@ -191,10 +191,7 @@ class DataTransformer:
                                   squeeze=False).mean(["epochs", "samples"]).data.values)) != 0:
             raise ValueError("at least one participant has an empty channel")
 
-        try:
-            method = AnalysisMethod.parse(method)
-        except NotImplementedError as e:
-            raise NotImplementedError(f"Unknown method: {method!r}; valid options: {', '.join([e.value for e in AnalysisMethod])} or None") from e  # noqa: E501
+        method = AnalysisMethod.parse(method)
 
         if method == AnalysisMethod.MCCA and data.sizes["participant"] == 1:
             raise ValueError("MCCA cannot be applied to only one participant")
