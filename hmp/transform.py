@@ -47,6 +47,9 @@ class AnalysisMethod(Enum):
     def __str__(self) -> str:
         return self.value
 
+    def __bool__(self) -> bool:
+        return self != AnalysisMethod.NO_ANALYSIS
+
     @staticmethod
     def parse(label):
         if isinstance(label, AnalysisMethod):
