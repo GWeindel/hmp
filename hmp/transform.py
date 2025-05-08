@@ -195,7 +195,7 @@ class DataTransformer:
             raise ValueError("at least one participant has an empty channel")
 
         try:
-            method = AnalysisMethod(method)
+            method = AnalysisMethod.parse(method)
         except NotImplementedError as e:
             raise NotImplementedError(f"Unknown method: {method!r}; valid options: {', '.join([e.value for e in AnalysisMethod])} or None") from e  # noqa: E501
 
