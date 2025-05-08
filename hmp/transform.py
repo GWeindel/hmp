@@ -306,7 +306,7 @@ class DataTransformer:
             data.attrs["mcca_weights"] = mcca_m.mcca_weights
             data.attrs["pca_weights"] = mcca_m.pca_weights
 
-        elif method is AnalysisMethod.NO_ANALYSIS:
+        elif not method:
 
             data = data.rename({"channels": "component"})
             data["component"] = np.arange(len(data.component))
