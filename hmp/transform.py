@@ -35,7 +35,8 @@ class ApplyZScore(Enum):
         elif label == 'all':
             return ApplyZScore.ALL
         else:
-            raise NotImplementedError
+            raise NotImplementedError(f"Unknown value for apply_zscore: '{label}'; valid options: [{', '.join([e.value for e in ApplyZScore])}] or Bool (True defaults to {ApplyZScore.TRIAL})")# noqa: E501
+
 
 
 class AnalysisMethod(Enum):
@@ -183,11 +184,7 @@ class DataTransformer:
                 "Expected a xarray Dataset with data and event as DataArrays, check the data format"
                 )
 
-        try:
-            apply_zscore = ApplyZScore.parse(apply_zscore)
-        except NotImplementedError as e:
-            raise NotImplementedError(
-                f"Unknown value for apply_zscore: {apply_zscore!r}; valid options: [{', '.join([e.value for e in ApplyZScore])}] or Bool (True defaults to {ApplyZScore.TRIAL})") from e  # noqa: E501
+        apply_zscore = ApplyZScore.parse(apply_zscore)
 
         if np.sum(
             np.isnan(data.groupby("participant",
