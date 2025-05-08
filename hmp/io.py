@@ -482,14 +482,12 @@ def load_eventprobs(filename):
     return data.to_dataarray().drop_vars('variable').squeeze()
 
 def save_model(model, filename):
-    output = open('%s.pkl'%filename.split('.')[0], 'wb')
-    pickle.dump(model, output)
-    output.close()
+    with open(filename, 'wb') as output:
+        pickle.dump(model, output)
 
 def load_model(filename):
-    pkl_file = open('%s.pkl'%filename.split('.')[0], 'rb')
-    model = pickle.load(pkl_file)
-    pkl_file.close()
+    with open(filename, 'rb') as pkl_file:
+        model = pickle.load(pkl_file)
     return model
 
 def save_eventprobs_csv(estimates, filename):
