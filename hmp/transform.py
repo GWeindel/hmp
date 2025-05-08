@@ -19,7 +19,7 @@ class ApplyZScore(Enum):
     def __str__(self) -> str:
         return self.value
 
-    def apply(self) -> bool:
+    def __bool__(self) -> bool:
         return self != ApplyZScore.DONT_APPLY
 
     @staticmethod
@@ -316,7 +316,7 @@ class DataTransformer:
             data.attrs["pca_weights"] = np.identity(len(data.component))
 
 
-        if apply_zscore.apply():
+        if apply_zscore:
 
             ori_coords = data.coords
 
