@@ -38,6 +38,7 @@ def plot_topo_timecourse(
     as_time=False,
     linecolors="black",
     estimate_method=None,
+    combined=False
 ):
     """
     Plot the event topographies at the average time of the onset of the next stage.
@@ -103,6 +104,8 @@ def plot_topo_timecourse(
     estimate_method : string
         'max' or 'mean', either take the max probability of each event on each trial,
         or the weighted average.
+    combined: bool
+        Whether to combine levels by averaging across them (True) or plot each level (False, default)
 
     Returns
     -------
@@ -127,7 +130,6 @@ def plot_topo_timecourse(
     epoch_data = (
         epoch_data.sel(trial_x_participant=common_trials).unstack().rename({"trials": "epochs"})
     )
-    n_level = len(np.unique(estimates.levels))
 
     if xlabel is None:
         if as_time:
@@ -153,6 +155,13 @@ def plot_topo_timecourse(
         add_rt=True,
         estimate_method=estimate_method,
     ).data  # compute corresponding times
+    if combined:
+        times = np.array([np.mean(times, axis=0)])
+        levels = [0]
+    else:
+        levels = np.unique(estimates.levels)
+    n_level = len(np.unique(levels))
+
     # reverse order, to make correspond to level maps
     channel_data = np.flip(channel_data, axis=1)
     times =  np.flip(times, axis=0)
@@ -204,7 +213,7 @@ def plot_topo_timecourse(
     # plot row by row
     rowheight = 1 / n_level
     n_event = estimates.event.max()+1
-    for i, level in enumerate(np.unique(estimates.levels)):
+    for i, level in enumerate(levels):
         times_level = times[i]
         missing_evts = np.where(np.isnan(times_level))[0]
         times_level = np.delete(times_level, missing_evts)

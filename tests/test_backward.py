@@ -1,6 +1,3 @@
-## Importing these packages is specific for this simulation case
-from pathlib import Path
-
 import numpy as np
 import xarray as xr
 
@@ -10,16 +7,13 @@ from hmp.models import BackwardEstimationModel, FixedEventModel
 from hmp.models.base import EventProperties
 from hmp.trialdata import TrialData
 
-from test_fixed import init_data
 
+from test_io import init_data
 
-DATA_DIR = Path("tests", "gen_data")
-DATA_DIR_A = DATA_DIR / "dataset_a"
-DATA_DIR_B = DATA_DIR / "dataset_b"
-
-def test_fixed_simple():
+def test_backward_simple():
     """ test a simple fit_transform on perfect data and compare to ground truth."""
-    event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events = init_data()
+    event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
+    hmp_data = hmp.utils.transform_data(epoch_data, n_comp=2,)
     # Data b is without noise, recovery should be perfect
     data_b = hmp.utils.participant_selection(hmp_data, 'b')
     event_properties = EventProperties.create_expected(sfreq=data_b.sfreq)
