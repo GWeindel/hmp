@@ -35,7 +35,7 @@ class ApplyZScore(Enum):
         elif label == 'all':
             return ApplyZScore.ALL
         else:
-            raise NotImplementedError(f"Unknown value for apply_zscore: '{label}'; valid options: [{', '.join([e.value for e in ApplyZScore])}] or Bool (True defaults to {ApplyZScore.TRIAL})")# noqa: E501
+            raise KeyError(f"Unknown value for apply_zscore: '{label}'; valid options: [{', '.join([e.value for e in ApplyZScore])}] or Bool (True defaults to {ApplyZScore.TRIAL})")# noqa: E501
 
 
 
@@ -61,7 +61,7 @@ class AnalysisMethod(Enum):
         elif label and label.lower() == 'mcca':
             return AnalysisMethod.MCCA
         else:
-            raise NotImplementedError(f"Unknown method: '{label}'; valid options: {', '.join([e.value for e in AnalysisMethod])} or None")  # noqa: E501
+            raise KeyError(f"Unknown method: '{label}'; valid options: {', '.join([e.value for e in AnalysisMethod])} or None")  # noqa: E501
 
 
 # TODO: move to utils
