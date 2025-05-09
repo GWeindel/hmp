@@ -1,29 +1,17 @@
-import os
-
 import numpy as np
-import pandas as pd
-from pathlib import Path
-import gc
-from pytest import mark
-
 
 import hmp
-from hmp import simulations
 from hmp.models import FixedEventModel
 from hmp.models.base import EventProperties
 from hmp.trialdata import TrialData
 from hmp.visu import plot_topo_timecourse
 
-from test_fixed import init_data
+from test_io import init_data
 
-
-DATA_DIR = Path("tests", "gen_data")
-DATA_DIR_A = DATA_DIR / "dataset_a"
-DATA_DIR_B = DATA_DIR / "dataset_b"
 
 def test_plot():
-    _, _, epoch_data, hmp_data, positions, sfreq, n_events = init_data()
-    
+    _, _, epoch_data, positions, sfreq, n_events = init_data()
+    hmp_data = hmp.utils.transform_data(epoch_data, n_comp=2,)
     # Testing one event less in one condition
     mags_map = np.array([[0, 0, -1],
                          [0, 0, 0]])
