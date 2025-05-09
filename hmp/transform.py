@@ -9,7 +9,6 @@ from warnings import warn
 from hmp import mcca
 
 
-# TODO: move to utils
 class ApplyZScore(Enum):
     ALL = 'all'
     PARTICIPANT = 'participant'
@@ -22,21 +21,23 @@ class ApplyZScore(Enum):
     def __bool__(self) -> bool:
         return self != ApplyZScore.DONT_APPLY
 
-    @staticmethod
-    def parse(label):
-        if isinstance(label, ApplyZScore):
-            return label
-        elif label is False or label is None:
-            return ApplyZScore.DONT_APPLY
-        elif label in ('trial', True):
-            return ApplyZScore.TRIAL
-        elif label == 'participant':
-            return ApplyZScore.PARTICIPANT
-        elif label == 'all':
-            return ApplyZScore.ALL
-        else:
-            raise KeyError(f"Unknown value for apply_zscore: '{label}'; valid options: [{', '.join([e.value for e in ApplyZScore])}] or Bool (True defaults to {ApplyZScore.TRIAL})")# noqa: E501
+    @classmethod
+    def parse(cls, label):
+        if isinstance(label, str):
+            label = label.lower()
 
+        if isinstance(label, cls):
+            return label
+        elif label in (False, None, 'dont_apply'):
+            return cls.DONT_APPLY
+        elif label in ('trial', True):
+            return cls.TRIAL
+        elif label == 'participant':
+            return cls.PARTICIPANT
+        elif label == 'all':
+            return cls.ALL
+        else:
+            raise KeyError(f"Unknown value for apply_zscore: '{label}'; valid options: [{', '.join([e.value for e in cls])}] or Bool (True defaults to {cls.TRIAL})")# noqa: E501
 
 
 class AnalysisMethod(Enum):
@@ -48,20 +49,23 @@ class AnalysisMethod(Enum):
         return self.value
 
     def __bool__(self) -> bool:
-        return self != AnalysisMethod.NO_ANALYSIS
+        return self != cls.NO_ANALYSIS
 
-    @staticmethod
-    def parse(label):
-        if isinstance(label, AnalysisMethod):
+    @classmethod
+    def parse(cls, label):
+        if isinstance(label, str):
+            label = label.lower()
+
+        if isinstance(label, cls):
             return label
-        elif label is False or label is None:
-            return AnalysisMethod.NO_ANALYSIS
-        elif label and label.lower() == 'pca':
-            return AnalysisMethod.PCA
-        elif label and label.lower() == 'mcca':
-            return AnalysisMethod.MCCA
+        elif label in (None, 'no_analysis'):
+            return cls.NO_ANALYSIS
+        elif label == 'pca':
+            return cls.PCA
+        elif label == 'mcca':
+            return cls.MCCA
         else:
-            raise KeyError(f"Unknown method: '{label}'; valid options: {', '.join([e.value for e in AnalysisMethod])} or None")  # noqa: E501
+            raise KeyError(f"Unknown method: '{label}'; valid options: {', '.join([e.value for e in cls])} or None")  # noqa: E501
 
 
 # TODO: move to utils
