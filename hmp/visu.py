@@ -336,6 +336,9 @@ def plot_topo_timecourse(
             transparent=None,
         )
 
+    ax.set_xlim(0, (
+            max_time if max_time else (np.nanmax(times_to_display) * 1.05)
+        ))
     # plot ylabels
     if isinstance(ylabels, dict):
         tick_labels = [str(x) for x in list(ylabels.values())[0]]
