@@ -347,7 +347,7 @@ def demo(cpus, n_events, seed=123):
     ## Imports and code specific to the simulation (see tutorial 3 and 4 for real data)
     from scipy.stats import gamma
 
-    from hmp.utils import read_mne_data
+    from hmp.io import read_mne_data
 
     random_gen = np.random.default_rng(seed=seed)
 
