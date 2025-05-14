@@ -277,10 +277,11 @@ class FixedEventModel(BaseModel):
         _, levels, clabels = self.level_constructor(
                 trial_data, self.level_dict
             )
-        likelihoods, xreventprobs = self._distribute_levels(
+        likelihoods, eventprobs = self._distribute_levels(
             trial_data, self.magnitudes, self.parameters,
             self.mags_map, self.pars_map, levels, False
         )
+        xreventprobs = self.format_eventprobs(eventprobs, trial_data, levels, self.mags_map)
         return likelihoods, xreventprobs
 
 
@@ -346,7 +347,30 @@ class FixedEventModel(BaseModel):
                 },
             )
 
-
+    def format_eventprobs(self, eventprobs, trial_data, levels, mags_map):
+        all_xreventprobs = []
+        for i, cur_level in enumerate(np.unique(levels)):
+            part = trial_data.coords["participant"].values[(levels == cur_level)]
+            trial = trial_data.coords["trials"].values[(levels == cur_level)]
+            data_events =  mags_map[cur_level, :] >= 0
+            trial_x_part = xr.Coordinates.from_pandas_multiindex(
+                MultiIndex.from_arrays([part, trial], names=("participant", "trials")),
+                "trial_x_participant",
+            )
+            xreventprobs = xr.DataArray(eventprobs[i], dims=("trial_x_participant", "samples", "event"),
+                coords={
+                    "event": ("event", np.arange(self.n_events)[data_events]),
+                    "samples": ("samples", range(np.shape(eventprobs[i])[1])),
+                },
+            )
+            xreventprobs = xreventprobs.assign_coords(trial_x_part)
+            xreventprobs = xreventprobs.assign_coords(levels=("trial_x_participant", levels[levels == cur_level],))
+            all_xreventprobs.append(xreventprobs)
+        all_xreventprobs = xr.concat(all_xreventprobs,dim="trial_x_participant")
+        all_xreventprobs.attrs['sfreq'] = self.sfreq
+        all_xreventprobs.attrs['offset'] = trial_data.offset
+        all_xreventprobs.attrs['event_width_samples'] = self.event_width_samples
+        return all_xreventprobs
 
 
     def _EM_star(self, args):  # for tqdm usage  #noqa
@@ -450,7 +474,7 @@ class FixedEventModel(BaseModel):
                 magnitudes[cur_level, mags_map_level, :], parameters[cur_level, pars_map_level, :] = (
                     self.get_magnitudes_parameters_expectation(
                         trial_data,
-                        eventprobs.values[:, :np.max(trial_data.durations[epochs_level]), mags_map_level],
+                        eventprobs[cur_level][:, :np.max(trial_data.durations[epochs_level]), mags_map_level],
                         subset_epochs=epochs_level,
                     )
                 )
@@ -783,28 +807,8 @@ class FixedEventModel(BaseModel):
                 )
 
         likelihood = np.array([x[0] for x in likes_events_level])
-
-        for i, cur_level in enumerate(data_levels):
-            part = trial_data.coords["participant"].values[(levels == cur_level)]
-            trial = trial_data.coords["trials"].values[(levels == cur_level)]
-            data_events =  mags_map[cur_level, :] >= 0
-            trial_x_part = xr.Coordinates.from_pandas_multiindex(
-                MultiIndex.from_arrays([part, trial], names=("participant", "trials")),
-                "trial_x_participant",
-            )
-            xreventprobs = xr.DataArray(likes_events_level[i][1], dims=("trial_x_participant", "samples", "event"),
-                coords={
-                    "event": ("event", np.arange(self.n_events)[data_events]),
-                    "samples": ("samples", range(np.shape(likes_events_level[i][1])[1])),
-                },
-            )
-            xreventprobs = xreventprobs.assign_coords(trial_x_part)
-            xreventprobs = xreventprobs.assign_coords(levels=("trial_x_participant", levels[levels == cur_level],))
-            all_xreventprobs.append(xreventprobs)
-        all_xreventprobs = xr.concat(all_xreventprobs,dim="trial_x_participant")
-        all_xreventprobs.attrs['sfreq'] = self.sfreq
-        all_xreventprobs.attrs['event_width_samples'] = self.event_width_samples
-        return [np.array(likelihood), all_xreventprobs]
+        eventprobs = [x[1] for x in likes_events_level]
+        return [np.array(likelihood), eventprobs]
 
     def distribution_pmf(self, shape, scale, max_duration):
         """Return PMF for a provided scipy disttribution.
