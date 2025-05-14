@@ -22,7 +22,6 @@ def loocv_calcs_new(model, trial_data, participant):
     # dur_ratio = trialdata_with_pp.mean_duration / trialdata_without_pp.mean_duration
     n_events = model.n_events # Fix for backward/cumulative
     if "level" in model.dims:
-        # n_eve = model.pars_map.shape[1] - 1
         locations = np.zeros(model.pars_map.shape, dtype=int)
         for c in range(len(model.pars_map)):
             indexes = np.arange(len(model.pars_map[c]))[

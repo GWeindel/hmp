@@ -114,8 +114,17 @@ class BackwardEstimationModel(BaseModel):
             lkh, prob = fixed_n_model.transform(trial_data)
             likelihoods.append(lkh)
             event_probs.append(prob)
+        self.n_event_optimal = list(self.submodels)[np.argmax(likelihoods)]
         xr_eventprobs = xr.concat(event_probs, dim=pd.Index(list(self.submodels), name="n_events"))
         return likelihoods, xr_eventprobs
+
+    @property
+    def n_events(self) -> int:
+        try:
+            return self.submodels[self.n_event_optimal].n_events
+        except AttributeError as exc:
+            raise ValueError("Cannot get number of events: model hasn't been transformed yet."
+                             ) from exc
 
     def _concatted_attr(self, attr_name):
         return xr.concat([getattr(model, attr_name) for model in self.submodels.values()],
@@ -133,6 +142,9 @@ class BackwardEstimationModel(BaseModel):
             self._check_fitted(property_list[attr])
             return self._concatted_attr(attr)
         return super().__getattribute__(attr)
+
+    def get_copy_fixed(self):
+        return self.submodels[self.n_events_optimal].get_fixed_copy()
 
     def get_fixed_model(self, n_events, starting_points):
         return FixedEventModel(

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import itertools
 import multiprocessing as mp
 from itertools import product
@@ -46,6 +48,17 @@ class FixedEventModel(BaseModel):
         self.pars_map = np.zeros((1,self.n_events+1))
         self.mags_map = np.zeros((1,self.n_events))
         super().__init__(*args, **kwargs)
+
+    def get_copy_fixed(self) -> FixedEventModel:
+        return FixedEventModel(
+            self.events, self.distribution, self.n_events,
+            parameters_to_fix=self.parameters_to_fix,
+            magnitudes_to_fix=self.magnitudes_to_fix,
+            tolerance=self.tolerance,
+            max_iteration=self.max_iteration,
+            min_iteration=self.min_iteration,
+            starting_points=self.starting_points,
+            max_scale=self.max_scale)
 
     def fit(
         self,
