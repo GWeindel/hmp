@@ -2,7 +2,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
-import scipy.stats as stats
 import numpy as np
 
 
