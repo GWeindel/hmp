@@ -50,15 +50,15 @@ class EventProperties():
 
 @dataclass
 class TimeDistribution():
-    distribution: str
+    family: str
     shape: float
     pdf: callable = None
     scale_to_mean: callable = None
     mean_to_scale: callable = None
 
     @classmethod
-    def create_distribution(cls, distribution= "gamma", shape=2):
-        match distribution:
+    def create_distribution(cls, family= "gamma", shape=2):
+        match family:
             case "gamma":
                 from scipy.stats import gamma as sp_dist
     
@@ -87,8 +87,8 @@ class TimeDistribution():
                     _weibull_mean_to_scale,
                 )
             case _:
-                raise ValueError(f"Unknown Distribution {distribution}")
-        return cls(distribution, float(shape), sp_dist.pdf, scale_to_mean, mean_to_scale)
+                raise ValueError(f"Unknown Distribution {family}")
+        return cls(family, float(shape), sp_dist.pdf, scale_to_mean, mean_to_scale)
 
 
 class BaseModel(ABC):
@@ -137,8 +137,10 @@ class BaseModel(ABC):
 
 
     def __getattribute__(self, attr):
-        if attr in ["sfreq", "steps", "shape", "location", "template"]:
+        if attr in ["sfreq", "steps", "location", "template"]:
             return getattr(self.events, attr)
+        if attr in ["family", "shape", "pdf", "scale_to_mean", "mean_to_scale"]:
+            return getattr(self.distribution, attr)
         if attr == "event_width":
             return self.events.width
         if attr == "event_width_samples":
