@@ -90,8 +90,9 @@ def test_fixed_multilevel():
     # a_level should be closer to ground truth 
     test_topos_a = hmp.utils.event_topo(epoch_data, estimates_a, mean=True)
     test_topos_a_level = hmp.utils.event_topo(epoch_data, estimates_a_level, mean=True)
+    assert np.isclose(lkh_a_level, -3.60084297)
     assert np.sum(np.abs(true_topos.data - test_topos_a.data)) > np.sum(np.abs(true_topos.data - test_topos_a_level.data))
-
+    
     # Testing one event less in one condition
     mags_map = np.array([[0, 0, 0],
                          [0, 0, -1]])
