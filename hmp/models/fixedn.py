@@ -368,6 +368,7 @@ class FixedEventModel(BaseModel):
             all_xreventprobs.append(xreventprobs)
         all_xreventprobs = xr.concat(all_xreventprobs,dim="trial_x_participant")
         all_xreventprobs.attrs['sfreq'] = self.sfreq
+        all_xreventprobs.attrs['event_width_samples'] = self.event_width_samples
         return all_xreventprobs
 
 
