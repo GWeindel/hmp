@@ -529,7 +529,7 @@ class FixedEventModel(BaseModel):
                     duration = end - start + 1
                     event_data[trial_idx, :duration] = trial_data.cross_corr[start : end + 1, comp]
                 magnitudes[event, comp] = np.mean(
-                    np.sum(eventprobs[subset_epochs, :, event] * event_data, axis=1)
+                    np.sum(eventprobs[:, :, event] * event_data, axis=1)
                 )
             # scale cross-correlation with likelihood of the transition
             # sum by-trial these scaled activation for each transition events
@@ -540,7 +540,7 @@ class FixedEventModel(BaseModel):
         # it's general
         event_times_mean = np.concatenate(
             [
-                np.arange(np.max(trial_data.durations[subset_epochs])) @ eventprobs[subset_epochs].mean(axis=0),
+                np.arange(np.max(trial_data.durations[subset_epochs])) @ eventprobs.mean(axis=0),
                 [np.mean(trial_data.durations[subset_epochs]) - 1],
             ]
         )
