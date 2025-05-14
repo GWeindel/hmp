@@ -2,25 +2,21 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
-
+import scipy.stats as stats
 import numpy as np
 
 
 @dataclass
 class EventProperties():
     sfreq: float
-    steps: float
-    shape: float
-    width: int
     width_samples: int
     location: int
     template: Any
 
     @classmethod
-    def create_expected(cls, sfreq, shape=2, width=50, template=None, location=None):
+    def create_expected(cls, sfreq, width=50, template=None, location=None):
 
         steps = 1000 / sfreq
-        shape = float(shape)
 
         width_samples = int(np.round(width / steps))
         if location is None:
@@ -31,8 +27,9 @@ class EventProperties():
         # Use or compute the template
         if template is None:
             template = cls._create_template(width_samples, steps, width)
-
-        return cls(sfreq, steps, shape, width, width_samples, location, template)
+        else:
+            width_samples = len(template)
+        return cls(sfreq, width_samples, location, template)
 
 
     @staticmethod
@@ -51,6 +48,48 @@ class EventProperties():
         template = np.sin(2 * np.pi * event_idx / 1000 * event_frequency)
         template = template / np.sum(template**2)  # Weight normalized
         return template
+
+@dataclass
+class TimeDistribution():
+    distribution: str
+    shape: float
+    pdf: callable = None
+    scale_to_mean: callable = None
+    mean_to_scale: callable = None
+
+    @classmethod
+    def create_distribution(cls, distribution= "gamma", shape=2):
+        match distribution:
+            case "gamma":
+                from scipy.stats import gamma as sp_dist
+    
+                from hmp.utils import _gamma_mean_to_scale, _gamma_scale_to_mean
+    
+                scale_to_mean, mean_to_scale = _gamma_scale_to_mean, _gamma_mean_to_scale
+            case "lognormal":
+                from scipy.stats import lognorm as sp_dist
+    
+                from hmp.utils import _logn_mean_to_scale, _logn_scale_to_mean
+    
+                scale_to_mean, mean_to_scale = _logn_scale_to_mean, _logn_mean_to_scale
+            case "wald":
+                from scipy.stats import invgauss as sp_dist
+    
+                from hmp.utils import _wald_mean_to_scale, _wald_scale_to_mean
+    
+                scale_to_mean, mean_to_scale = _wald_scale_to_mean, _wald_mean_to_scale
+            case "weibull":
+                from scipy.stats import weibull_min as sp_dist
+    
+                from hmp.utils import _weibull_mean_to_scale, _weibull_scale_to_mean
+    
+                scale_to_mean, mean_to_scale = (
+                    _weibull_scale_to_mean,
+                    _weibull_mean_to_scale,
+                )
+            case _:
+                raise ValueError(f"Unknown Distribution {distribution}")
+        return cls(distribution, float(shape), sp_dist.pdf, scale_to_mean, mean_to_scale)
 
 
 class BaseModel(ABC):
@@ -83,45 +122,13 @@ class BaseModel(ABC):
 
     def __init__(
         self,
-        # trial_data: TrialData,
         event_properties: EventProperties,
-        distribution: str = "gamma",
+        time_distribution: TimeDistribution
     ):
 
-        match distribution:
-            case "gamma":
-                from scipy.stats import gamma as sp_dist
 
-                from hmp.utils import _gamma_mean_to_scale, _gamma_scale_to_mean
-
-                self.scale_to_mean, self.mean_to_scale = _gamma_scale_to_mean, _gamma_mean_to_scale
-            case "lognormal":
-                from scipy.stats import lognorm as sp_dist
-
-                from hmp.utils import _logn_mean_to_scale, _logn_scale_to_mean
-
-                self.scale_to_mean, self.mean_to_scale = _logn_scale_to_mean, _logn_mean_to_scale
-            case "wald":
-                from scipy.stats import invgauss as sp_dist
-
-                from hmp.utils import _wald_mean_to_scale, _wald_scale_to_mean
-
-                self.scale_to_mean, self.mean_to_scale = _wald_scale_to_mean, _wald_mean_to_scale
-            case "weibull":
-                from scipy.stats import weibull_min as sp_dist
-
-                from hmp.utils import _weibull_mean_to_scale, _weibull_scale_to_mean
-
-                self.scale_to_mean, self.mean_to_scale = (
-                    _weibull_scale_to_mean,
-                    _weibull_mean_to_scale,
-                )
-            case _:
-                raise ValueError(f"Unknown Distribution {distribution}")
-        self.distribution = distribution
-        # self.trial_data = trial_data
+        self.distribution = time_distribution
         self.events = event_properties
-        self.pdf = sp_dist.pdf
         self._fitted = False
 
 
