@@ -50,8 +50,8 @@ class EventProperties():
 
 @dataclass
 class TimeDistribution():
-    family: str
-    shape: float
+    family: str = "gamma"
+    shape: float = 2.
     pdf: callable = None
     scale_to_mean: callable = None
     mean_to_scale: callable = None
