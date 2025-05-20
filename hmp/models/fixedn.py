@@ -355,8 +355,8 @@ class FixedEventModel(BaseModel):
     def EM(  #noqa
         self,
         trial_data,
-        magnitudes,
-        parameters,
+        initial_magnitudes,
+        initial_parameters,
         magnitudes_to_fix=None,
         parameters_to_fix=None,
         max_iteration=1e3,
@@ -373,14 +373,14 @@ class FixedEventModel(BaseModel):
         ----------
         n_events : int
             how many events are estimated
-        magnitudes : ndarray
+        initial_magnitudes : ndarray
             2D ndarray n_events * components (or 3D iteration * n_events * n_components),
             initial levelitions for events magnitudes. If magnitudes are estimated,
             the list provided is used as starting point,
             if magnitudes are fixed, magnitudes estimated will be the same as the one provided.
             When providing a list, magnitudes need to be in the same order
             _n_th magnitudes parameter is  used for the _n_th event
-        parameters : list
+        initial_parameters : list
             list of initial conditions for Gamma distribution parameters parameter
             (2D stage * parameter or 3D iteration * n_events * n_components).
             If parameters are estimated, the list provided is used as starting point,
@@ -418,19 +418,17 @@ class FixedEventModel(BaseModel):
             "Both maps need to indicate the same number of levels."
         )
 
-
+        magnitudes = initial_magnitudes.copy()
+        parameters = initial_parameters.copy()
         lkh, eventprobs = self._distribute_levels(
             trial_data, magnitudes, parameters, mags_map, pars_map, levels, cpus=cpus
         )
         data_levels = np.unique(levels)
-        initial_magnitudes = magnitudes.copy()  # Reverse this
-        initial_parameters = parameters.copy()
         traces = [lkh]
-        param_dev = [parameters.copy()]  # ... and parameters
         i = 0
-
         lkh_prev = lkh
-        parameters_prev = parameters.copy()
+        param_dev = [parameters.copy()]
+        parameters_prev = param_dev[0]
 
         while i < max_iteration:  # Expectation-Maximization algorithm
             if i >= min_iteration and (
