@@ -511,7 +511,7 @@ class FixedEventModel(BaseModel):
             # sum by-trial these scaled activation for each transition events
             # average across trials
 
-        # Gamma parameters from Expectation Eq 10 from 2024 paper
+        # Time parameters from Expectation Eq 10 from 2024 paper
         # calc averagepos here as mean_d can be level dependent, whereas scale_parameters() assumes
         # it's general
         event_times_mean = np.concatenate(
@@ -553,7 +553,7 @@ class FixedEventModel(BaseModel):
                 (0, rnd_events)
             )  # associated durations
         random_stages = np.array(
-            [[self.shape, self.distribution.mean_to_scale(x, self.shape)] for x in rnd_durations]
+            [[self.distribution.shape, self.distribution.mean_to_scale(x)] for x in rnd_durations]
         )
         return random_stages
 
