@@ -52,8 +52,6 @@ class FixedEventModel(BaseModel):
         trial_data,
         magnitudes=None,
         parameters=None,
-        parameters_to_fix=None,
-        magnitudes_to_fix=None,
         verbose=True,
         cpus=1,
         mags_map=None,
@@ -80,11 +78,6 @@ class FixedEventModel(BaseModel):
             if parameters are fixed, parameters estimated will be the same as the one provided.
             When providing a list, stage need to be in the same order
             _n_th gamma parameter is  used for the _n_th stage
-        parameters_to_fix : bool
-            To fix (True) or to estimate (False, default) the parameters of the gammas
-        magnitudes_to_fix: bool
-            To fix (True) or to estimate (False, default) the magnitudes of the channel contribution
-            to the events
         tolerance: float
             Tolerance applied to the expectation maximization in the EM() function
         max_iteration: int
