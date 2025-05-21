@@ -35,9 +35,12 @@ class BaseModel(ABC):
     def __init__(
         self,
         pattern: Any,
-        distribution: Any
+        distribution: Any = None
     ):
         self.pattern = pattern
+        if distribution is None:
+            from hmp.distributions import GammaDistribution
+            distribution = GammaDistribution()
         self.distribution = distribution
         self._fitted = False
 
