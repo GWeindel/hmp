@@ -4,6 +4,36 @@ from dataclasses import dataclass
 from typing import Any
 import numpy as np
 
+def _gamma_scale_to_mean(scale, shape):
+    return scale * shape
+
+
+def _gamma_mean_to_scale(mean, shape):
+    return mean / shape
+
+
+def _logn_scale_to_mean(scale, shape):
+    return np.exp(scale + shape**2 / 2)
+
+
+def _logn_mean_to_scale(mean, shape):
+    return np.exp(np.log(mean) - (shape**2 / 2))
+
+
+def _wald_scale_to_mean(scale, shape):
+    return scale * shape
+
+
+def _wald_mean_to_scale(mean, shape):
+    return mean / shape
+
+
+def _weibull_scale_to_mean(scale, shape):
+    return scale * gamma_func(1 + 1 / shape)
+
+
+def _weibull_mean_to_scale(mean, shape):
+    return mean / gamma_func(1 + 1 / shape)
 
 @dataclass
 class EventProperties():
@@ -60,28 +90,16 @@ class TimeDistribution():
     def create_distribution(cls, family= "gamma", shape=2):
         match family:
             case "gamma":
-                from scipy.stats import gamma as sp_dist
-    
-                from hmp.utils import _gamma_mean_to_scale, _gamma_scale_to_mean
-    
+                from scipy.stats import gamma as sp_dist    
                 scale_to_mean, mean_to_scale = _gamma_scale_to_mean, _gamma_mean_to_scale
             case "lognormal":
-                from scipy.stats import lognorm as sp_dist
-    
-                from hmp.utils import _logn_mean_to_scale, _logn_scale_to_mean
-    
+                from scipy.stats import lognorm as sp_dist    
                 scale_to_mean, mean_to_scale = _logn_scale_to_mean, _logn_mean_to_scale
             case "wald":
-                from scipy.stats import invgauss as sp_dist
-    
-                from hmp.utils import _wald_mean_to_scale, _wald_scale_to_mean
-    
+                from scipy.stats import invgauss as sp_dist    
                 scale_to_mean, mean_to_scale = _wald_scale_to_mean, _wald_mean_to_scale
             case "weibull":
-                from scipy.stats import weibull_min as sp_dist
-    
-                from hmp.utils import _weibull_mean_to_scale, _weibull_scale_to_mean
-    
+                from scipy.stats import weibull_min as sp_dist    
                 scale_to_mean, mean_to_scale = (
                     _weibull_scale_to_mean,
                     _weibull_mean_to_scale,
@@ -145,18 +163,6 @@ class BaseModel(ABC):
             return self.events.width
         if attr == "event_width_samples":
             return self.events.width_samples
-
-        # if attr in ["named_durations", "coords", "starts", "ends", "n_trials", "n_samples",
-        #             "n_dims", "trial_coords", "max_duration", "mean_duration",
-        #             "durations"]:
-        #     return getattr(self.trial_data, attr)
-
-        # if attr == "mean_d":
-        #     return self.trial_data.mean_duration
-        # if attr == "max_d":
-        #     return self.trial_data.max_duration
-        # if attr == "crosscorr":
-        #     return self.trial_data.cross_corr
 
         return super().__getattribute__(attr)
 
