@@ -31,7 +31,7 @@ class TrialData():
     trial_coords: Any
 
     @classmethod
-    def from_standard_data(cls, data, template):
+    def from_standard_data(cls, data, pattern):
 
         # compute sequence durations based on number of samples
         durations = (
@@ -64,7 +64,7 @@ class TrialData():
 
         n_trials = durations.trial_x_participant.count().values
         n_samples, n_dims = np.shape(data.data.T)
-        cross_corr = cross_correlation(data.data.T, n_trials, n_dims, starts, ends, template)  # Equation 1 in 2024 paper
+        cross_corr = cross_correlation(data.data.T, n_trials, n_dims, starts, ends, pattern)  # Equation 1 in 2024 paper
         trial_coords = (
             data.unstack()
             .sel(component=0, samples=0)
@@ -86,7 +86,7 @@ class TrialData():
         return self.cross_corr.shape[1]
 
 
-def cross_correlation(data, n_trials, n_dims, starts, ends, template):
+def cross_correlation(data, n_trials, n_dims, starts, ends, pattern):
     """Set the correlation between the samples and the pattern.
 
     This function puts on each sample the correlation of that sample and the next
@@ -108,7 +108,7 @@ def cross_correlation(data, n_trials, n_dims, starts, ends, template):
         for dim in np.arange(n_dims):
             events[starts[trial] : ends[trial] + 1, dim] = correlate(
                 data[starts[trial] : ends[trial] + 1, dim],
-                template,
+                pattern,
                 mode="same",
                 method="direct",
             )

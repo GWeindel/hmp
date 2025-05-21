@@ -136,7 +136,7 @@ class BackwardEstimationModel(BaseModel):
 
     def get_fixed_model(self, n_events, starting_points):
         return FixedEventModel(
-            self.events, self.distribution, n_events=n_events,
+            self.pattern, self.distribution, n_events=n_events,
             starting_points=starting_points,
             tolerance=self.tolerance,
             max_iteration=self.max_iteration)

@@ -87,27 +87,25 @@ class CumulativeEstimationModel(BaseModel):
         n_events, j, time = 1, 1, 0  # j = sample after last placed event
         # Init pars (need this for min_model)
         pars = np.zeros((max_event_n + 1, 2))
-        pars[:, 0] = self.shape  # final gamma parameters during estimation, shape x scale
+        pars[:, 0] = self.distribution.shape  # final gamma parameters during estimation, shape x scale
         pars_prop = pars[: n_events + 1].copy()  # gamma params of current estimation
-        pars_prop[0, 1] = self.mean_to_scale(
-            j * step, self.shape
-        )  # initialize gamma_parameters at 1 sample
-        last_stage = self.mean_to_scale(end - j * step, self.shape)  # remainder of time
+        pars_prop[0, 1] = self.distribution.mean_to_scale(j * step)  # initialize gamma_parameters at 1 sample
+        last_stage = self.distribution.mean_to_scale(end - j * step)  # remainder of time
         pars_prop[-1, 1] = last_stage
 
         # Init mags
         mags = np.zeros((max_event_n, trial_data.n_dims))  # final mags during estimation
 
-        fixed_n_model = FixedEventModel(self.events, self.distribution, tolerance=self.tolerance, n_events=n_events)
+        fixed_n_model = FixedEventModel(self.pattern, self.distribution, tolerance=self.tolerance, n_events=n_events)
 
         lkh_prev = -np.inf
 
         # Iterative fit
         while (
-            self.scale_to_mean(last_stage, self.shape) >= self.location and n_events <= max_event_n
+            self.distribution.scale_to_mean(last_stage) >= self.location and n_events <= max_event_n
         ):
             prev_time = time
-            fixed_n_model = FixedEventModel(self.events, self.distribution, tolerance=self.tolerance, n_events=n_events)
+            fixed_n_model = FixedEventModel(self.pattern, self.distribution, tolerance=self.tolerance, n_events=n_events)
             # get new parameters
             mags_props, pars_prop = self.propose_fit_params(
                 trial_data,
@@ -126,8 +124,8 @@ class CumulativeEstimationModel(BaseModel):
             )
             sol_sample_new_event = int(
                 np.round(
-                    self.scale_to_mean(
-                        np.sum(fixed_n_model.parameters[0, :n_events, 1]), self.shape
+                    self.distribution.scale_to_mean(
+                        np.sum(fixed_n_model.parameters[0, :n_events, 1])
                     )
                 )
             )
@@ -159,7 +157,7 @@ class CumulativeEstimationModel(BaseModel):
 
             else:  # reject solution, search on
                 prev_sample = int(
-                    np.round(self.scale_to_mean(np.sum(pars[: n_events - 1, 1]), self.shape))
+                    np.round(self.distribution.scale_to_mean(np.sum(pars[: n_events - 1, 1])))
                 )
                 # find furthest explored param. Note: this also work by_sample
                 # just a tiny bit faster this way
@@ -167,7 +165,7 @@ class CumulativeEstimationModel(BaseModel):
                     max_scale = np.max(
                         [np.sum(x[:n_events, 1]) for x in fixed_n_model.param_dev]
                     )
-                    max_sample = int(np.round(self.scale_to_mean(max_scale, self.shape)))
+                    max_sample = int(np.round(self.distribution.scale_to_mean(max_scale)))
                     j = (
                         np.max([max_sample - prev_sample + 1, (j + 1) * step]) / step
                     )  # either ffwd to furthest explored sample or add 1 to j
@@ -189,7 +187,7 @@ class CumulativeEstimationModel(BaseModel):
         pars = pars[: n_events + 1, :]
 
         self.fitted_model = FixedEventModel(
-            self.events, self.distribution, tolerance=self.fitted_model_tolerance, n_events=n_events)
+            self.pattern, self.distribution, tolerance=self.fitted_model_tolerance, n_events=n_events)
         if n_events > 0:
             self.fitted_model.fit(
                 trial_data,
@@ -213,7 +211,7 @@ class CumulativeEstimationModel(BaseModel):
         if (
             by_sample and n_events > 1
         ):  # go through the whole range sample-by-sample, j is sample since start
-            scale_j = self.mean_to_scale(step * j, self.shape)
+            scale_j = self.distribution.mean_to_scale(step * j)
 
             # New parameter proposition
             pars_prop = pars[:n_events].copy()  # pars so far
@@ -225,12 +223,12 @@ class CumulativeEstimationModel(BaseModel):
             pars_prop = np.insert(
                 pars_prop,
                 n_event_j - 1,
-                [self.shape, scale_j - np.sum(pars_prop[: n_event_j - 1, 1])],
+                [self.distribution.shape, scale_j - np.sum(pars_prop[: n_event_j - 1, 1])],
                 axis=0,
             )
             # subtract inserted scale from next event
             pars_prop[n_event_j, 1] = pars_prop[n_event_j, 1] - pars_prop[n_event_j - 1, 1]
-            last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:-1, 1])
+            last_stage = self.distribution.mean_to_scale(end) - np.sum(pars_prop[:-1, 1])
             pars_prop[n_events, 1] = last_stage
             mags_props = np.zeros((1, n_events, trial_data.n_dims))  # always 0?
             mags_props[:, : n_events - 1, :] = np.tile(
@@ -244,8 +242,8 @@ class CumulativeEstimationModel(BaseModel):
         else:
             # New parameter proposition
             pars_prop = pars[: n_events + 1].copy()
-            pars_prop[n_events - 1, 1] = self.mean_to_scale(step * j, self.shape)
-            last_stage = self.mean_to_scale(end, self.shape) - np.sum(pars_prop[:-1, 1])
+            pars_prop[n_events - 1, 1] = self.distribution.mean_to_scale(step * j)
+            last_stage = self.distribution.mean_to_scale(end) - np.sum(pars_prop[:-1, 1])
             pars_prop[n_events, 1] = last_stage
 
             mags_props = np.zeros((1, n_events, trial_data.n_dims))  # always 0?
@@ -254,7 +252,7 @@ class CumulativeEstimationModel(BaseModel):
             )
 
         # in edge cases scale can get negative, make sure that doesn't happen:
-        pars_prop[:, 1] = np.maximum(pars_prop[:, 1], self.mean_to_scale(1, self.shape))
+        pars_prop[:, 1] = np.maximum(pars_prop[:, 1], self.distribution.mean_to_scale(1))
 
         return mags_props, pars_prop
 

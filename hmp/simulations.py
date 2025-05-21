@@ -381,7 +381,7 @@ def demo(cpus, n_events, seed=123):
 
     # Simulating and recover information on electrode location and true time of the simulated events
     files = simulate(
-        sources, n_trials, cpus, file, path='sample_data', overwrite=False, seed=seed, noise=True, sfreq=sfreq
+        sources, n_trials, cpus, file, path='sample_data/', overwrite=False, seed=seed, noise=True, sfreq=sfreq
     )
 
     generating_events = np.load(files[1])
@@ -511,8 +511,8 @@ def simulated_times_and_parameters(generating_events, init, trial_data, resampli
         x += 1
 
     ## Recover parameters
-    true_parameters = np.tile(init.shape, (n_stages, 2))
-    true_parameters[:, 1] = init.mean_to_scale(np.mean(random_source_times, axis=0), init.shape)
+    true_parameters = np.tile(init.distribution.shape, (n_stages, 2))
+    true_parameters[:, 1] = init.distribution.mean_to_scale(np.mean(random_source_times, axis=0))
     true_parameters[true_parameters[:, 1] <= 0, 1] = 1e-3  # Can happen in corner cases
     random_source_times = random_source_times * (1000 / sfreq) / (1000 / resampling_freq)
     ## Recover magnitudes
