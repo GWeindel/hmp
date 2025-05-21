@@ -597,7 +597,6 @@ class FixedEventModel(BaseModel):
         magnitudes,
         parameters,
         location=True,
-        by_trial_lkh=False,
     ):
         """Estimate probabilities.
 
@@ -707,10 +706,7 @@ class FixedEventModel(BaseModel):
         )  # sum over max_samples to avoid 0s in log
         eventprobs = eventprobs / eventprobs.sum(axis=0)
         eventprobs = eventprobs.transpose((1,0,2))
-        if by_trial_lkh:
-            return forward * backward
-        else:
-            return [likelihood, eventprobs]
+        return [likelihood, eventprobs]
 
     def _distribute_levels(
         self, 
@@ -767,7 +763,6 @@ class FixedEventModel(BaseModel):
                         [magnitudes[cur_level, mags_map[cur_level, :] >= 0, :] for cur_level in data_levels],
                         [parameters[cur_level, pars_map[cur_level, :] >= 0, :] for cur_level in data_levels],
                         itertools.repeat(location),
-                        itertools.repeat(False),
                     ),
                 )
         else:
