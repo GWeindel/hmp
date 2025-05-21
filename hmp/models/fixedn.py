@@ -845,7 +845,7 @@ class FixedEventModel(BaseModel):
             level_mods.append(level_dict[level])
             level_trials.append(trial_data.trial_coords[level])
             if verbose:
-                print('Level "' + level_names[-1] + '" analyzed, with levels:', level_mods[-1])
+                print('Level "' + level_names[-1] + '" analyzed, with modalities:', level_mods[-1])
 
         level_mods = list(product(*level_mods))
         level_mods = np.array(level_mods, dtype=object)
@@ -858,9 +858,10 @@ class FixedEventModel(BaseModel):
             if verbose:
                 print("\nCoded as follows: ")
             for i, mod in enumerate(level_mods):
-                # assert len(np.where((level_trials == mod).all(axis=1))[0]) > 0, (
-                #     f"Modality {mod} of level does not occur in the data"
-                # )
+                if len(np.where((level_trials == mod).all(axis=1))[0]) == 0:
+                    warn(
+                        f"Modality {mod} of level does not occur in the data"
+                    )
                 levels[np.where((level_trials == mod).all(axis=1))] = i
                 if verbose:
                     print(str(i) + ": " + str(mod))
