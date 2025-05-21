@@ -259,7 +259,7 @@ class FixedEventModel(BaseModel):
         else:
             max_lkhs = 0
 
-        if np.isneginf(lkhs.sum()):
+        if np.isneginf(lkhs.sum()) or np.isnan(lkhs.sum()):
             raise ValueError("Fit failed, inspect provided starting points")
         else:
             self._fitted = True
@@ -433,6 +433,7 @@ class FixedEventModel(BaseModel):
         while i < max_iteration:  # Expectation-Maximization algorithm
             if i >= min_iteration and (
                 np.isneginf(lkh.sum()) or \
+                np.isnan(lkh.sum()) or \
                 tolerance > (lkh.sum() - lkh_prev.sum()) / np.abs(lkh_prev.sum())
             ):
                 break
