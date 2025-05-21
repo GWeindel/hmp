@@ -211,9 +211,9 @@ class FixedEventModel(BaseModel):
         else:
             infos_to_store["sp_magnitudes"] = magnitudes
 
-        if cpus > 1:
+        if cpus > 1 and n_levels == 1:
             inputs = zip(
-                trial_data,
+                itertools.repeat(trial_data),
                 magnitudes,
                 parameters,
                 itertools.repeat(magnitudes_to_fix),
@@ -793,7 +793,7 @@ class FixedEventModel(BaseModel):
         for i, cur_level in enumerate(data_levels):
             part = trial_data.coords["participant"].values[(levels == cur_level)]
             trial = trial_data.coords["trials"].values[(levels == cur_level)]
-            events_in_level =  mags_map[cur_level, :] >= 0
+            events_in_level =  np.where(mags_map[cur_level, :] >= 0)[0]
             trial_x_part = xr.Coordinates.from_pandas_multiindex(
                 MultiIndex.from_arrays([part, trial], names=("participant", "trials")),
                 "trial_x_participant",
