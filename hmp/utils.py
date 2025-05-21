@@ -6,8 +6,6 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from pandas import MultiIndex
-from scipy.special import gamma as gamma_func
-from scipy.stats import sem
 
 from hmp import mcca
 
