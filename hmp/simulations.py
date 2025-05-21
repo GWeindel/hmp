@@ -164,29 +164,29 @@ def simulate(
     for subj in range(n_subj):
         sources_subj = sources[subj]
         # Pre-allocate the random times to avoid generating too long 'recordings'
-        rand_times = np.zeros((len(sources_subj), n_trials))
         random_indices_list = []
-        for s, source in enumerate(sources_subj):
-            # How many trials wil have the event, default is all
-            props_trial = int(np.round(n_trials * proportions[s]))
-            if proportions[s] < 1:
-                random_indices_list.append(
-                    random_state.choice(np.arange(n_trials), size=props_trial, replace=False)
-                )
-            else:
-                random_indices_list.append(np.arange(n_trials))
-            rand_times[s, random_indices_list[-1]] = source[-1].rvs(
-                size=len(random_indices_list[-1]), random_state=random_state
-            )
-        seq_index = np.diff(relations, prepend=0) > 0
         if times is None:
-            if seq_index.all():  # If all events are sequential
-                trial_time = np.sum(rand_times, axis=0)
-            else:
-                trial_time_seq = np.sum(rand_times[seq_index], axis=0)
-                trial_time_nonseq = np.sum(rand_times[~seq_index], axis=0)
-                
-                trial_time = np.maximum(trial_time_seq, trial_time_nonseq)
+            rand_times = np.zeros((len(sources_subj), n_trials))
+            for s, source in enumerate(sources_subj):
+                # How many trials wil have the event, default is all
+                props_trial = int(np.round(n_trials * proportions[s]))
+                if proportions[s] < 1:
+                    random_indices_list.append(
+                        random_state.choice(np.arange(n_trials), size=props_trial, replace=False)
+                    )
+                else:
+                    random_indices_list.append(np.arange(n_trials))
+                rand_times[s, random_indices_list[-1]] = source[-1].rvs(
+                    size=len(random_indices_list[-1]), random_state=random_state
+                )
+                seq_index = np.diff(relations, prepend=0) > 0
+                if seq_index.all():  # If all events are sequential
+                    trial_time = np.sum(rand_times, axis=0)
+                else:
+                    trial_time_seq = np.sum(rand_times[seq_index], axis=0)
+                    trial_time_nonseq = np.sum(rand_times[~seq_index], axis=0)
+                    
+                    trial_time = np.maximum(trial_time_seq, trial_time_nonseq)
         else:
             trial_time = np.sum(times, axis=1)
         trial_time /= 1000  # to seconds
@@ -264,12 +264,14 @@ def simulate(
                 # adding source event, take as previous time the event defined by relation (default
                 # is previous event)
                 events = generating_events[generating_events[:, -1] == relations[s]].copy()
-                random_indices = random_indices_list[s]
                 if times is None:
+                    random_indices = random_indices_list[s]
                     # Always at least one sample later
                     rand_i = np.maximum(1, rand_times[s] / (tstep * 1000))
                     rand_i = np.round(rand_i, decimals=0)
                 else:
+                    random_indices_list.append(np.arange(n_trials))
+                    random_indices = random_indices_list[s]
                     rand_i = times[:, s] / (tstep * 1000)
                 if len(rand_i[rand_i < 0]) > 0:
                     warn(
@@ -346,7 +348,6 @@ def demo(cpus, n_events, seed=123):
     """Create example data for the tutorials."""
     ## Imports and code specific to the simulation (see tutorial 3 and 4 for real data)
     from scipy.stats import gamma
-
     from hmp.io import read_mne_data
 
     random_gen = np.random.default_rng(seed=seed)
@@ -354,13 +355,13 @@ def demo(cpus, n_events, seed=123):
     ## Parameters for the simulations
     frequency, amplitude = (
         10.0,
-        0.3e-7,
-    )  # Frequency of the transition event and its amplitude in Volt
+        1e-7,
+    )  # Frequency of the transition event and its amplitude in nAm
     shape = 2  # shape of the gamma distribution
 
     # Storing electrode position, specific to the simulations
     positions = simulation_info()  # Electrode position
-    sfreq = 250
+    sfreq = 100
     all_source_names = available_sources()  # all brain sources you can play with
     n_trials = 50  # Number of trials to simulate
 
@@ -376,11 +377,11 @@ def demo(cpus, n_events, seed=123):
             [name_sources[source], frequency, amplitude, gamma(shape, scale=times[source])]
         )  # gamma returns times in ms
 
-    file = "dataset_tutorial2"  # Name of the file to save
+    file = "demo_dataset"  # Name of the file to save
 
     # Simulating and recover information on electrode location and true time of the simulated events
     files = simulate(
-        sources, n_trials, cpus, file, overwrite=False, seed=seed, noise=True, sfreq=sfreq
+        sources, n_trials, cpus, file, path='sample_data', overwrite=False, seed=seed, noise=True, sfreq=sfreq
     )
 
     generating_events = np.load(files[1])
@@ -401,7 +402,8 @@ def demo(cpus, n_events, seed=123):
     ]  # only retain stimulus and response triggers
 
     # Reading the data
-    eeg_dat = read_mne_data(files[0], event_id, resp_id, events_provided=events, verbose=False)
+    eeg_dat = read_mne_data(files[0], event_id, resp_id, events_provided=events,
+                            verbose=False, offset_after_resp=0.025)
 
     all_other_chans = range(len(positions.ch_names[:-61]))  # non-eeg
     chan_list = list(np.arange(len(positions.ch_names)))
