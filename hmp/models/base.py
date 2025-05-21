@@ -1,112 +1,7 @@
 """Models to estimate event probabilities."""
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import Any
 import numpy as np
-
-def _gamma_scale_to_mean(scale, shape):
-    return scale * shape
-
-
-def _gamma_mean_to_scale(mean, shape):
-    return mean / shape
-
-
-def _logn_scale_to_mean(scale, shape):
-    return np.exp(scale + shape**2 / 2)
-
-
-def _logn_mean_to_scale(mean, shape):
-    return np.exp(np.log(mean) - (shape**2 / 2))
-
-
-def _wald_scale_to_mean(scale, shape):
-    return scale * shape
-
-
-def _wald_mean_to_scale(mean, shape):
-    return mean / shape
-
-
-def _weibull_scale_to_mean(scale, shape):
-    return scale * gamma_func(1 + 1 / shape)
-
-
-def _weibull_mean_to_scale(mean, shape):
-    return mean / gamma_func(1 + 1 / shape)
-
-@dataclass
-class EventProperties():
-    sfreq: float
-    width_samples: int
-    location: int
-    template: Any
-
-    @classmethod
-    def create_expected(cls, sfreq, width=50, template=None, location=None):
-
-        steps = 1000 / sfreq
-
-        width_samples = int(np.round(width / steps))
-        if location is None:
-            location = int(width / steps)
-        else:
-            location = int(np.rint(location))
-
-        # Use or compute the template
-        if template is None:
-            template = cls._create_template(width_samples, steps, width)
-        else:
-            width_samples = len(template)
-        return cls(sfreq, width_samples, location, template)
-
-
-    @staticmethod
-    def _create_template(width_samples, steps, width):
-        """Compute the event shape.
-
-        Computes the template of a half-sine (event) with given frequency f and sampling frequency.
-
-        Equations in section 2.4 in the 2024 paper
-        """
-        event_idx = np.arange(width_samples) * steps + steps / 2
-        # gives event frequency given that events are defined as half-sines
-        event_frequency = 1000 / (width * 2)
-
-        # event morph based on a half sine with given event width and sampling frequency
-        template = np.sin(2 * np.pi * event_idx / 1000 * event_frequency)
-        template = template / np.sum(template**2)  # Weight normalized
-        return template
-
-@dataclass
-class TimeDistribution():
-    family: str = "gamma"
-    shape: float = 2.
-    pdf: callable = None
-    scale_to_mean: callable = None
-    mean_to_scale: callable = None
-
-    @classmethod
-    def create_distribution(cls, family= "gamma", shape=2):
-        match family:
-            case "gamma":
-                from scipy.stats import gamma as sp_dist    
-                scale_to_mean, mean_to_scale = _gamma_scale_to_mean, _gamma_mean_to_scale
-            case "lognormal":
-                from scipy.stats import lognorm as sp_dist    
-                scale_to_mean, mean_to_scale = _logn_scale_to_mean, _logn_mean_to_scale
-            case "wald":
-                from scipy.stats import invgauss as sp_dist    
-                scale_to_mean, mean_to_scale = _wald_scale_to_mean, _wald_mean_to_scale
-            case "weibull":
-                from scipy.stats import weibull_min as sp_dist    
-                scale_to_mean, mean_to_scale = (
-                    _weibull_scale_to_mean,
-                    _weibull_mean_to_scale,
-                )
-            case _:
-                raise ValueError(f"Unknown Distribution {family}")
-        return cls(family, float(shape), sp_dist.pdf, scale_to_mean, mean_to_scale)
 
 
 class BaseModel(ABC):
@@ -139,13 +34,11 @@ class BaseModel(ABC):
 
     def __init__(
         self,
-        event_properties: EventProperties,
-        time_distribution: TimeDistribution
+        pattern: Any,
+        distribution: Any
     ):
-
-
-        self.distribution = time_distribution
-        self.events = event_properties
+        self.pattern = pattern
+        self.distribution = distribution
         self._fitted = False
 
 
@@ -156,13 +49,11 @@ class BaseModel(ABC):
 
     def __getattribute__(self, attr):
         if attr in ["sfreq", "steps", "location", "template"]:
-            return getattr(self.events, attr)
-        if attr in ["family", "shape", "pdf", "scale_to_mean", "mean_to_scale"]:
-            return getattr(self.distribution, attr)
+            return getattr(self.pattern, attr)
         if attr == "event_width":
-            return self.events.width
+            return self.pattern.width
         if attr == "event_width_samples":
-            return self.events.width_samples
+            return self.pattern.width_samples
 
         return super().__getattribute__(attr)
 
