@@ -143,7 +143,7 @@ class Preprocessing:
             are few of them (e.g. < 10)
         averaged : bool
             Applying the pca on the averaged ERP (True) or single trial ERP (False, default).
-            No effect if cov = True
+            No effect if cov = True. Only works for MCCA method
         apply_zscore : str
             Whether to apply z-scoring and on what data, either None, 'all', 'participant', 'trial',
             for zscoring across all data, by participant, or by trial, respectively. If set to true,
@@ -152,7 +152,7 @@ class Preprocessing:
             Method to apply, 'pca' or 'mcca'
         cov : bool
             Wether to apply the pca/mcca to the variance covariance (True, default) or the epoched
-            data
+            data. Only works for MCCA method
         n_comp : int
             How many components to select from the PC space, if None plots the scree plot and a
             prompt requires user to specify how many PCs should be retained
@@ -228,36 +228,23 @@ class Preprocessing:
         data = data.transpose("participant", "epochs", "channels", "samples")
 
         if method == AnalysisMethod.PCA:
-
             if weights is None:
-                if cov:
-                    indiv_data = np.zeros(
-                        (data.sizes["participant"], data.sizes["channels"], data.sizes["channels"])
+                indiv_data = np.zeros(
+                    (data.sizes["participant"], data.sizes["channels"], data.sizes["channels"])
+                )
+                for i in range(data.sizes["participant"]):
+                    x_i = np.squeeze(data.data[i])
+                    indiv_data[i] = np.mean(
+                        [
+                            np.cov(x_i[trial, :, ~np.isnan(x_i[trial, 0, :])].T)
+                            for trial in range(x_i.shape[0])
+                            if ~np.isnan(x_i[trial, 0, :]).all()
+                        ],
+                        axis=0,
                     )
-                    for i in range(data.sizes["participant"]):
-                        x_i = np.squeeze(data.data[i])
-                        indiv_data[i] = np.mean(
-                            [
-                                np.cov(x_i[trial, :, ~np.isnan(x_i[trial, 0, :])].T)
-                                for trial in range(x_i.shape[0])
-                                if ~np.isnan(x_i[trial, 0, :]).all()
-                            ],
-                            axis=0,
-                        )
-                    pca_ready_data = np.mean(np.array(indiv_data), axis=0)
-                elif averaged:
-                    erps = []
-                    for part in data.participant:
-                        erps.append(data.sel(participant=part).groupby("samples").mean("epochs").T)
-                    pca_ready_data = np.nanmean(erps, axis=0)
-                else:
-                    pca_ready_data = data.stack(
-                        {"all": ["participant", "epochs", "samples"]}
-                    ).dropna("all")
-                    pca_ready_data = pca_ready_data.transpose("all", "channels")
-
+                pca_ready_data = np.mean(np.array(indiv_data), axis=0)
                 # Performing spatial PCA on the average var-cov matrix
-                weights, prepprocessing_model = self._pca(pca_ready_data, n_comp, data.coords["channels"].values)
+                weights, preprocessing_model = self._pca(pca_ready_data, n_comp, data.coords["channels"].values)
                 data = data @ weights
                 weights = weights
             else:
@@ -308,14 +295,14 @@ class Preprocessing:
             )
             data = data.assign_coords(ori_coords)
             weights = mcca_m.mcca_weights
-            prepprocessing_model = mcca_m
+            preprocessing_model = mcca_m
 
         elif not method:
 
             data = data.rename({"channels": "component"})
             data["component"] = np.arange(len(data.component))
             weights = np.identity(len(data.component))
-            prepprocessing_model = None
+            preprocessing_model = None
 
 
         if apply_zscore:
@@ -364,7 +351,7 @@ class Preprocessing:
         data.attrs["sfreq"] = sfreq
         self.data = self.stack_data(data)
         self.weights = weights
-        self.preprocessing_model = prepprocessing_model
+        self.preprocessing_model = preprocessing_model
 
     @staticmethod
     def _center(data: xr.DataArray) -> xr.DataArray:
