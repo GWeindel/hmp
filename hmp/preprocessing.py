@@ -19,7 +19,7 @@ class ApplyZScore(Enum):
         return self.value
 
     def __bool__(self) -> bool:
-        return self != ApplyZScore.DONT_APPLY
+        return self != self.DONT_APPLY
 
     @classmethod
     def parse(cls, label):
@@ -49,7 +49,7 @@ class AnalysisMethod(Enum):
         return self.value
 
     def __bool__(self) -> bool:
-        return self != cls.DONT_APPLY
+        return self != self.NO_ANALYSIS
 
     @classmethod
     def parse(cls, label):
