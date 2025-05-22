@@ -6,7 +6,7 @@ from hmp import simulations
 from hmp.models import CumulativeEstimationModel, FixedEventModel
 from hmp.models.base import EventProperties
 from hmp.trialdata import TrialData
-from hmp.transform import DataTransformer
+from hmp import preprocessing
 
 from test_fixed import init_data
 
