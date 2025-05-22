@@ -1,5 +1,4 @@
 import numpy as np
-
 import hmp
 from hmp.models import FixedEventModel
 from hmp.patterns import HalfSine
@@ -22,7 +21,7 @@ def test_plot():
                          [0, 0, 0, 0],])
     level_dict = {'condition': ['a', 'b']}
     
-    event_properties = HalfSine.create_expected(sfreq=hmp_data.sfreq)
+    event_properties = HalfSine.create_expected(sfreq=epoch_data.sfreq)
     hmp_data_b = hmp.utils.participant_selection(hmp_data.data, 'a')
     trial_data = TrialData.from_standard_data(data=hmp_data.data, pattern=event_properties.template)
     trial_data_b = TrialData.from_standard_data(data=hmp_data_b, pattern=event_properties.template)
