@@ -175,6 +175,7 @@ class Preprocessing:
         data : xarray.Dataset
             xarray dataset [n_samples * n_comp] data expressed in the PC space, ready for HMP fit
         """
+        offset = epoch_data.offset
         if copy is True:
             data = epoch_data.copy(deep=True)
         else:
@@ -349,6 +350,7 @@ class Preprocessing:
             data = data.assign_coords(ori_coords)
 
         data.attrs["sfreq"] = sfreq
+        data.attrs["offset"] = offset
         self.data = self.stack_data(data)
         self.weights = weights
         self.preprocessing_model = preprocessing_model
