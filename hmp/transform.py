@@ -49,7 +49,7 @@ class AnalysisMethod(Enum):
         return self.value
 
     def __bool__(self) -> bool:
-        return self != cls.NO_ANALYSIS
+        return self != cls.DONT_APPLY
 
     @classmethod
     def parse(cls, label):
@@ -68,7 +68,6 @@ class AnalysisMethod(Enum):
             raise KeyError(f"Unknown method: '{label}'; valid options: {', '.join([e.value for e in cls])} or None")  # noqa: E501
 
 
-# TODO: move to utils
 def user_input_n_comp(data):
 
     n_comp = np.shape(data)[0] - 1
@@ -102,7 +101,7 @@ def user_input_n_comp(data):
 # TODO: n_comp  None value input
 # TODO: printing to proper logging
 
-class DataTransformer:
+class Preprocessing:
 
     def __init__(
         self,
@@ -117,7 +116,7 @@ class DataTransformer:
         centering: bool = True,
         n_comp: Optional[int] = None,
         n_ppcas: Optional[int] = None,
-        pca_weights: Optional[xr.DataArray] = None,
+        weights: Optional[xr.DataArray] = None,
         bandfilter: Optional[Union[tuple[float, float]]] = None,
         mcca_reg: float = 0,
         copy: bool = False,
@@ -136,8 +135,7 @@ class DataTransformer:
         Parameters
         ----------
         epoch_data : xarray
-            unstacked xarray data from transform_data() or anyother source yielding an xarray with
-            dimensions [participant * epochs * samples * channels]
+            xarray with dimensions [participant * epochs * samples * channels]
         participants_variable : str
             name of the dimension for participants ID
         apply_standard : bool
@@ -231,7 +229,7 @@ class DataTransformer:
 
         if method == AnalysisMethod.PCA:
 
-            if pca_weights is None:
+            if weights is None:
                 if cov:
                     indiv_data = np.zeros(
                         (data.sizes["participant"], data.sizes["channels"], data.sizes["channels"])
@@ -259,9 +257,11 @@ class DataTransformer:
                     pca_ready_data = pca_ready_data.transpose("all", "channels")
 
                 # Performing spatial PCA on the average var-cov matrix
-                pca_weights = self._pca(pca_ready_data, n_comp, data.coords["channels"].values)
-                data = data @ pca_weights
-                data.attrs["pca_weights"] = pca_weights
+                weights, prepprocessing_model = self._pca(pca_ready_data, n_comp, data.coords["channels"].values)
+                data = data @ weights
+                weights = weights
+            else:
+                data = data @ weights
 
         elif method == AnalysisMethod.MCCA:
 
@@ -307,14 +307,15 @@ class DataTransformer:
                 ),  # n_comp
             )
             data = data.assign_coords(ori_coords)
-            data.attrs["mcca_weights"] = mcca_m.mcca_weights
-            data.attrs["pca_weights"] = mcca_m.pca_weights
+            weights = mcca_m.mcca_weights
+            prepprocessing_model = mcca_m
 
         elif not method:
 
             data = data.rename({"channels": "component"})
             data["component"] = np.arange(len(data.component))
-            data.attrs["pca_weights"] = np.identity(len(data.component))
+            weights = np.identity(len(data.component))
+            prepprocessing_model = None
 
 
         if apply_zscore:
@@ -360,10 +361,10 @@ class DataTransformer:
             data = data.transpose("participant", "epochs", "samples", "component")
             data = data.assign_coords(ori_coords)
 
-        data.attrs["pca_weights"] = pca_weights
         data.attrs["sfreq"] = sfreq
-
         self.data = self.stack_data(data)
+        self.weights = weights
+        self.preprocessing_model = prepprocessing_model
 
     @staticmethod
     def _center(data: xr.DataArray) -> xr.DataArray:
@@ -377,13 +378,13 @@ class DataTransformer:
     @staticmethod
     def _pca(pca_ready_data: xr.DataArray, n_comp: int, channels) -> xr.DataArray:
         # TODO: test seperate function
-        n_comp = user_input_n_comp(pca_ready_data=pca_ready_data) if n_comp is None else n_comp
+        n_comp = user_input_n_comp(data=pca_ready_data) if n_comp is None else n_comp
         pca = PCA(n_components=n_comp, svd_solver="full")  # selecting Principale components (PC)
         pca.fit(pca_ready_data)
         # Rebuilding pca PCs as xarray to ease computation
         coords = dict(channels=("channels", channels), component=("component", np.arange(n_comp)))
         pca_weights = xr.DataArray(pca.components_.T, dims=("channels", "component"), coords=coords)
-        return pca_weights
+        return pca_weights, pca
 
     @staticmethod
     def zscore_xarray(data: Union[xr.Dataset, xr.DataArray]) -> xr.DataArray:
@@ -408,8 +409,7 @@ class DataTransformer:
         Parameters
         ----------
         data : xarray
-            unstacked xarray data from transform_data() or anyother source yielding an xarray with
-            dimensions [participant * epochs * samples * channels]
+            xarray with dimensions [participant * epochs * samples * channels]
         subjects_variable : str
             name of the dimension for subjects ID
 
