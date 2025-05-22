@@ -362,7 +362,7 @@ def plot_topo_timecourse(
         return ax
 
 
-def plot_components_sensor(hmp_data, positions):
+def plot_components_sensor(weights, positions, cmap="Spectral_r"):
     """
     Visualize the topomap of the HMP principal components.
 
@@ -375,14 +375,14 @@ def plot_components_sensor(hmp_data, positions):
     """
     from mne.viz import plot_topomap
 
-    fig, ax = plt.subplots(1, len(hmp_data.attrs["pca_weights"].component))
-    for comp in hmp_data.attrs["pca_weights"].component:
+    fig, ax = plt.subplots(1, len(weights.component))
+    for comp in weights.component:
         plot_topomap(
-            hmp_data.attrs["pca_weights"].values[:, comp],
+            weights.values[:, comp],
             positions,
             axes=ax[comp],
             show=False,
-            cmap="Spectral_r",
+            cmap=cmap,
         )
 
 
