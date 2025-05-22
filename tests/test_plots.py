@@ -6,13 +6,15 @@ from hmp.patterns import HalfSine
 from hmp.distributions import GammaDistribution
 from hmp.trialdata import TrialData
 from hmp.visu import plot_topo_timecourse
+from hmp import preprocessing
+
 
 from test_io import init_data
 
 
 def test_plot():
     _, _, epoch_data, positions, sfreq, n_events = init_data()
-    hmp_data = hmp.utils.transform_data(epoch_data, n_comp=2,)
+    hmp_data = preprocessing.Preprocessing(epoch_data, n_comp=2,)
     # Testing one event less in one condition
     mags_map = np.array([[0, 0, -1],
                          [0, 0, 0]])
@@ -21,8 +23,8 @@ def test_plot():
     level_dict = {'condition': ['a', 'b']}
     
     event_properties = HalfSine.create_expected(sfreq=hmp_data.sfreq)
-    hmp_data_b = hmp.utils.participant_selection(hmp_data, 'a')
-    trial_data = TrialData.from_standard_data(data=hmp_data, pattern=event_properties.template)
+    hmp_data_b = hmp.utils.participant_selection(hmp_data.data, 'a')
+    trial_data = TrialData.from_standard_data(data=hmp_data.data, pattern=event_properties.template)
     trial_data_b = TrialData.from_standard_data(data=hmp_data_b, pattern=event_properties.template)
 
     model = FixedEventModel(event_properties, n_events=n_events)
@@ -31,7 +33,8 @@ def test_plot():
     lkh_b, estimates_b = model.fit_transform(trial_data_b)
 
     # Fit model on both conditions (noiseless b should help estimate a)
-    trial_data = TrialData.from_standard_data(data=hmp_data, pattern=event_properties.template)
+
+    trial_data = TrialData.from_standard_data(data=hmp_data.data, pattern=event_properties.template)
     lkh_comb, estimates_comb = model.fit_transform(trial_data, pars_map=pars_map, mags_map=mags_map, level_dict=level_dict)
     lkh_b_level, estimates_b_level = model.transform(trial_data_b)
 

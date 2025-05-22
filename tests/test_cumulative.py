@@ -7,6 +7,10 @@ from hmp.models import CumulativeEstimationModel, FixedEventModel
 from hmp.patterns import HalfSine
 from hmp.distributions import GammaDistribution
 from hmp.trialdata import TrialData
+from hmp import preprocessing
+
+from test_fixed import init_data
+
 
 from test_io import init_data
 

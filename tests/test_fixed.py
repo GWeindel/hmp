@@ -8,6 +8,9 @@ from hmp.models import FixedEventModel
 from hmp.patterns import HalfSine
 from hmp.distributions import GammaDistribution
 from hmp.trialdata import TrialData
+from hmp import preprocessing
+
+
 from test_io import init_data
 
 def data():
