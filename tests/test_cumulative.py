@@ -6,6 +6,10 @@ from hmp import simulations
 from hmp.models import CumulativeEstimationModel, FixedEventModel
 from hmp.models.base import EventProperties
 from hmp.trialdata import TrialData
+from hmp import preprocessing
+
+from test_fixed import init_data
+
 
 from test_io import init_data
 
