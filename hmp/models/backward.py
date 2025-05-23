@@ -142,13 +142,3 @@ class BackwardEstimationModel(BaseModel):
             self._check_fitted(property_list[attr])
             return self._concatted_attr(attr)
         return super().__getattribute__(attr)
-
-    def get_copy_fixed(self):
-        return self.submodels[self.n_events_optimal].get_fixed_copy()
-
-    def get_fixed_model(self, n_events, starting_points):
-        return FixedEventModel(
-            self.events, self.distribution, n_events=n_events,
-            starting_points=starting_points,
-            tolerance=self.tolerance,
-            max_iteration=self.max_iteration)

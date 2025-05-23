@@ -13,8 +13,8 @@ def loocv_calcs_new(model, trial_data, participant):
     # Extracting data with and without left out participant
     trialdata_without_pp, trialdata_with_pp = trial_data.split(participant)
 
-    model_without_pp = model.copy_fixed()
-    model_with_pp = model.copy_fixed()
+    model_without_pp = model.get_copy()
+    model_with_pp = model.get_copy()
 
 
     # fit the HMP using previously estimated parameters as initial parameters,

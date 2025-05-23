@@ -49,7 +49,7 @@ class FixedEventModel(BaseModel):
         self.mags_map = np.zeros((1,self.n_events))
         super().__init__(*args, **kwargs)
 
-    def get_copy_fixed(self) -> FixedEventModel:
+    def get_copy(self) -> FixedEventModel:
         return FixedEventModel(
             self.events, self.distribution, self.n_events,
             parameters_to_fix=self.parameters_to_fix,

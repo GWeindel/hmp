@@ -275,6 +275,3 @@ class CumulativeEstimationModel(BaseModel):
             self._check_fitted(property_list[attr])
             return getattr(self.fitted_model, attr)
         return super().__getattribute__(attr)
-
-    def get_copy_fixed(self) -> FixedEventModel:
-        return self.fitted_model.get_copy_fixed()
