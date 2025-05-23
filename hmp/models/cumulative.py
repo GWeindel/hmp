@@ -207,7 +207,12 @@ class CumulativeEstimationModel(BaseModel):
 
     def transform(self, *args, **kwargs):
         self._check_fitted("transform data")
-        self.fitted_model.transform(*args, **kwargs)
+        return self.fitted_model.transform(*args, **kwargs)
+
+    @property
+    def n_events(self) -> int:
+        self._check_fitted("get number of events")
+        return self.fitted_model.n_events
 
     def propose_fit_params(self, trial_data, n_events, by_sample, step, j, mags, pars, end):
         if (

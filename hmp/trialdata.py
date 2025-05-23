@@ -16,6 +16,8 @@ from pandas import MultiIndex
 from scipy.signal import correlate
 from scipy.stats import norm as norm_pval
 
+import hmp
+
 
 @dataclass
 class TrialData():
@@ -79,10 +81,22 @@ class TrialData():
     def durations(self):
         return self.ends - self.starts + 1
 
+    # @cached_property
+    # def mean_duration(self):
+    #     return self.named_durations.mean()
+
     @property
     def n_dims(self):
         return self.cross_corr.shape[1]
 
+    def split(self, participant):
+        participants_idx = participant.values
+        # Extracting data with and without left out participant
+        data_without_pp = hmp.utils.stack_data(
+            self.named_durations.sel(participant=participants_idx[participants_idx != participant], drop=False)
+        )
+        data_pp = hmp.utils.stack_data(self.named_durations.sel(participant=participant, drop=False))
+        return data_without_pp, data_pp
 
 def cross_correlation(data, n_trials, n_dims, starts, ends, template):
     """Set the correlation between the samples and the pattern.
