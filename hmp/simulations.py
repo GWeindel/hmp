@@ -55,7 +55,7 @@ def simulate(
     relations=None,
     data_type="eeg",
     n_subj=1,
-    path="./",
+    path=".",
     overwrite=False,
     verbose=False,
     noise=True,
@@ -115,6 +115,8 @@ def simulate(
         list of file names (file + number of subject)
     """
     os.environ["SUBJECTS_DIR"] = op.join(root,'simulation_parameters')
+    path = op.join(os.getcwd(), path)
+
     if not verbose:
         mne.set_log_level("warning")
     else:
@@ -202,7 +204,7 @@ def simulate(
         else:
             subj_file = file + f"_{subj}_raw.fif"
         if subj_file in os.listdir(path) and not overwrite:
-            subj_file = path + subj_file
+            subj_file = op.join(path, subj_file)
             warn(f"{subj_file} exists no new simulation performed", UserWarning)
             files_subj.append(subj_file)
             files_subj.append(subj_file.split(".fif")[0] + "_generating_events.npy")
@@ -381,7 +383,7 @@ def demo(cpus, n_events, seed=123):
 
     # Simulating and recover information on electrode location and true time of the simulated events
     files = simulate(
-        sources, n_trials, cpus, file, path='sample_data/', overwrite=False, seed=seed, noise=True, sfreq=sfreq
+        sources, n_trials, cpus, file, path='sample_data', overwrite=False, seed=seed, noise=True, sfreq=sfreq
     )
 
     generating_events = np.load(files[1])
