@@ -1,6 +1,9 @@
+from scipy.stats import gamma, lognorm, invgauss, weibull_min
+from scipy.special import gamma as gamma_func
+
+
 class GammaDistribution():
     def __init__(self, shape=2):
-        from scipy.stats import gamma  
         self.shape = shape
         self.pdf = gamma.pdf
     def scale_to_mean(self, scale):
@@ -11,7 +14,6 @@ class GammaDistribution():
 
 class LognormDistribution():
     def __init__(self, shape):
-        from scipy.stats import lognorm  
         self.shape = shape
         self.pdf = lognorm.pdf
     def scale_to_mean(self, scale):
@@ -21,7 +23,6 @@ class LognormDistribution():
 
 class WaldDistribution():
     def __init__(self, shape):
-        from scipy.stats import invgauss
         self.shape = shape
         self.pdf = invgauss.pdf
     def scale_to_mean(self, scale):
@@ -31,8 +32,6 @@ class WaldDistribution():
 
 class WeibullDistribution():  
     def __init__(self, shape):
-        from scipy.stats import weibull_min
-        from scipy.special import gamma as gamma_func
         self.shape = shape
         self.pdf = weibull_min.pdf
         self.gamma_func = gamma_func
