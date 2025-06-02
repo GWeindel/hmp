@@ -318,8 +318,10 @@ def example_fit_n_func(hmp_model, n_events, magnitudes=None, parameters=None, ve
 
     Example of simple function that can be used with loocv_func.
     This fits a model with n_events and potentially provided mags and params.
-    Can be called, for example, as :
-        loocv_func(hmp_model, hmp_data, example_fit_single_func, func_args=[2])
+
+    Examples
+    --------
+    >>>    loocv_func(hmp_model, hmp_data, example_fit_single_func, func_args=[2])
     """
     return hmp_model.fit_n(n_events, magnitudes=magnitudes, parameters=parameters, verbose=verbose)
 
@@ -334,15 +336,17 @@ def example_complex_fit_n_func(
     and follows this with a condition-based model of n_events, informed
     by the selected backward model and the provided maps. It returns
     both models, so for both the likelihood will be estimated.
-    Can be called, for example, as :
-        pars_map = np.array([[0, 0, 0, 0, 0, 0],
-                     [0, 0, 0, 0, 1, 0],
-                     [0, 0, 0, 0, 2, 0],
-                     [0, 0, 0, 0, 3, 0],
-                     [0, 0, 0, 0, 4, 0]])
-        conds = {'rep': np.arange(5)+1}
-        loocv_func(hmp_model, hmp_data, example_complex_fit_n_func,
-                   func_args=[7, 5, None, pars_map,conds])
+
+    Examples
+    --------
+    >>> pars_map = np.array([[0, 0, 0, 0, 0, 0],
+    >>>                      [0, 0, 0, 0, 1, 0],
+    >>>                      [0, 0, 0, 0, 2, 0],
+    >>>                      [0, 0, 0, 0, 3, 0],
+    >>>                      [0, 0, 0, 0, 4, 0]])
+    >>> conds = {'rep': np.arange(5)+1}
+    >>> loocv_func(hmp_model, hmp_data, example_complex_fit_n_func,
+    >>>            func_args=[7, 5, None, pars_map,conds])
     """
     # fit backward model up to max_events
     backward_model = hmp_model.backward_estimation(max_events)

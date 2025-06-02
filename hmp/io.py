@@ -38,20 +38,22 @@ def read_mne_data(
     - All times are expressed on the second scale.
     - If multiple files in pfiles the data of the group is read and seqentially processed.
     - For non epoched data: Reaction Times are only computed if response trigger is in the epoch
-    window (determined by tmin and tmax)
+      window (determined by tmin and tmax)
 
     Procedure:
     if data not already epoched:
-        0.1) the data is filtered with filters specified in low_pass and high_pass.
-        Parameters of the filter are determined by MNE's filter function.
-        0.2) if no events is provided, detect events in stimulus channel and keep events with id in
-        event_id and resp_id.
-        0.3) eventual downsampling is performed if sfreq is lower than the data's sampling
-        frequency. The event structure is passed at the resample() function of MNE to ensure that
-        events are approriately timed after downsampling.
-        0.4) epochs are created based on stimulus onsets (event_id) and tmin and tmax. Epoching
-        removes any epoch where a 'BAD' annotation is present and all epochs where an channel
-        exceeds reject_threshold. Epochs are baseline corrected from tmin to stim. onset (time 0).
+
+    0.1) the data is filtered with filters specified in low_pass and high_pass.
+    Parameters of the filter are determined by MNE's filter function.
+    0.2) if no events is provided, detect events in stimulus channel and keep events with id in
+    event_id and resp_id.
+    0.3) eventual downsampling is performed if sfreq is lower than the data's sampling
+    frequency. The event structure is passed at the resample() function of MNE to ensure that
+    events are approriately timed after downsampling.
+    0.4) epochs are created based on stimulus onsets (event_id) and tmin and tmax. Epoching
+    removes any epoch where a 'BAD' annotation is present and all epochs where an channel
+    exceeds reject_threshold. Epochs are baseline corrected from tmin to stim. onset (time 0).
+
     1) Reaction times (RT) are computed based on the sample difference between onset of stimulus and
     response triggers. If no response event happens after a stimulus or if RT > upper_limit_rt
     & < upper_limit_rt, RT is 0.
