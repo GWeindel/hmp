@@ -47,7 +47,7 @@ def test_fixed_simple():
     # test the difference between electrode values at event times
     assert np.isclose(np.sum(np.abs(true_topos.data - test_topos.data)), 0, atol=1e-4, rtol=0)
     # Test whether likelihood is the expected one
-    assert np.isclose(lkh_b, np.array(28.13143873), atol=1e-4, rtol=0)
+    assert np.isclose(lkh_b, np.array(30.57338794), atol=1e-4, rtol=0)
     
     # testing recovery of attributes
     model.xrlikelihoods

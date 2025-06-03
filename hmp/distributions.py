@@ -1,6 +1,6 @@
 from scipy.stats import gamma, lognorm, invgauss, weibull_min
 from scipy.special import gamma as gamma_func
-
+import numpy as np
 
 class GammaDistribution():
     """
