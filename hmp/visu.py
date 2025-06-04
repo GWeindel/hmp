@@ -119,16 +119,16 @@ def plot_topo_timecourse(
     sfreq = epoch_data.sfreq
     estimates = estimates.copy()
     # Stacking is necessary to retain the common indices, otherwise absent trials are just Nan'd out
-    if "trial_x_participant" not in epoch_data.dims:
-        epoch_data = epoch_data.rename({"epochs": "trials"}).stack(
-            trial_x_participant=["participant", "trials"]
+    if "trials" not in epoch_data.dims:
+        epoch_data = epoch_data.stack(
+            trials=["participant", "epoch"]
         )
     common_trials = np.intersect1d(
-        estimates["trial_x_participant"].values, epoch_data["trial_x_participant"].values
+        estimates["trials"].values, epoch_data["trials"].values
     )
-    estimates = estimates.sel(trial_x_participant=common_trials)
+    estimates = estimates.sel(trials=common_trials)
     epoch_data = (
-        epoch_data.sel(trial_x_participant=common_trials).unstack().rename({"trials": "epochs"})
+        epoch_data.sel(trials=common_trials).unstack()
     )
 
     if xlabel is None:
@@ -738,7 +738,7 @@ def erp_data(epoched_data, times, channel, n_samples=None, pad=1):
         epoched_data: xr.Dataset
             Epoched physiological data with dims 'participant'X 'epochs' X 'channels'X 'samples'
         times: xr.Dataset
-            Times between wich to extract or resample the data with dims 'trial_x_participant' X
+            Times between wich to extract or resample the data with dims 'trials' X
             'event'
         channel: str
             For which channel to extract the data
@@ -756,23 +756,23 @@ def erp_data(epoched_data, times, channel, n_samples=None, pad=1):
     epoched_data = epoched_data.sel(channels=channel)
     if n_samples is None:
         data = (
-            np.zeros((len(times.trial_x_participant), len(times.event), len(epoched_data.samples)))
+            np.zeros((len(times.trials), len(times.event), len(epoched_data.samples)))
             * np.nan
         )
     else:
-        data = np.zeros((len(times.trial_x_participant), len(times.event), n_samples)) * np.nan
+        data = np.zeros((len(times.trials), len(times.event), n_samples)) * np.nan
 
-    for i, trial in enumerate(times.trial_x_participant):
+    for i, trial in enumerate(times.trials):
         for j, event in enumerate(times.event):
             if event == 0:
                 sub_prevtime = 0
             else:
-                sub_prevtime = times.sel(trial_x_participant=trial, event=event - 1).data
-            sub_times = times.sel(trial_x_participant=trial, event=event).data - 1
+                sub_prevtime = times.sel(trials=trial, event=event - 1).data
+            sub_times = times.sel(trials=trial, event=event).data - 1
             time_diff = sub_times - sub_prevtime
             if time_diff > 1:  # rounds up to 0 otherwise
                 subset = epoched_data.sel(
-                    trial_x_participant=trial, samples=slice(sub_prevtime, sub_times)
+                    trials=trial, samples=slice(sub_prevtime, sub_times)
                 )
                 if n_samples is None:
                     limit = np.sum(~subset.data.isnull()).values
@@ -835,7 +835,7 @@ def plot_erp(
         ax.plot(x, mean_signal, color=color, label=label)
         if minmax_lines is not None:
             ax.vlines(
-                times.mean("trial_x_participant") * upsample,
+                times.mean("trials") * upsample,
                 minmax_lines[0],
                 minmax_lines[1],
                 color=color,
