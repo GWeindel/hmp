@@ -15,21 +15,21 @@ def available_sources():
     return labels
 
 
-def simulation_sfreq():
+def sfreq():
     """Recovering sampling frequency of the sample data."""
-    return simulation_info()["sfreq"]
+    return info()["sfreq"]
 
 
-def simulation_positions():
+def positions():
     """Recovering position of the simulated electrodes."""
-    info = simulation_info()
+    sim_info = info()
     positions = np.delete(
-        mne.channels.layout._find_topomap_coords(info, "eeg"), 52, axis=0
+        mne.channels.layout._find_topomap_coords(sim_info, "eeg"), 52, axis=0
     )  # inferring channel location using MNE
     return positions
 
 
-def simulation_info():
+def info():
     """Recovering MNE's info file for simulated data."""
     info = mne.io.read_info(op.join(root,'simulation_parameters','info.fif'))
     return info
@@ -489,9 +489,9 @@ def simulated_times_and_parameters(generating_events, init, trial_data, resampli
     -------
     random_source_times: np.array
         index of the true events found in the test estimation
-    true_parameters : list
+    true_time_pars : list
         list of true distribution parameters (2D stage * parameter).
-    true_magnitudes: ndarray
+    true_channel_pars: ndarray
         2D ndarray n_events * components, true electrode contribution to event
     true_activities: ndarray
         Actual values at simulated event times
@@ -513,9 +513,9 @@ def simulated_times_and_parameters(generating_events, init, trial_data, resampli
         x += 1
 
     ## Recover parameters
-    true_parameters = np.tile(init.distribution.shape, (n_stages, 2))
-    true_parameters[:, 1] = init.distribution.mean_to_scale(np.mean(random_source_times, axis=0))
-    true_parameters[true_parameters[:, 1] <= 0, 1] = 1e-3  # Can happen in corner cases
+    true_time_pars = np.tile(init.distribution.shape, (n_stages, 2))
+    true_time_pars[:, 1] = init.distribution.mean_to_scale(np.mean(random_source_times, axis=0))
+    true_time_pars[true_time_pars[:, 1] <= 0, 1] = 1e-3  # Can happen in corner cases
     random_source_times = random_source_times * (1000 / sfreq) / (1000 / resampling_freq)
     ## Recover magnitudes
     sample_times = np.zeros((trial_data.n_trials, n_events), dtype=int)
@@ -530,5 +530,5 @@ def simulated_times_and_parameters(generating_events, init, trial_data, resampli
         true_activities = trial_data.cross_corr[sample_times[:, :]]
     else:
         true_activities = data[sample_times[:, :]]
-    true_magnitudes = np.mean(true_activities, axis=0)
-    return random_source_times.astype(int), true_parameters, true_magnitudes, true_activities
+    true_channel_pars = np.mean(true_activities, axis=0)
+    return random_source_times.astype(int), true_time_pars, true_channel_pars, true_activities
