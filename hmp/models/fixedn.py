@@ -261,7 +261,7 @@ class FixedEventModel(BaseModel):
             self.traces = np.array(estimates[max_lkhs][3])
             self.time_pars_dev = np.array(estimates[max_lkhs][4])
             self.level_dict = level_dict
-            self.levels = levels
+            self.level = levels
             self.channel_map = channel_map
             self.time_map = time_map
 
@@ -489,7 +489,7 @@ class FixedEventModel(BaseModel):
                 )
             # scale cross-correlation with likelihood of the transition
             # sum by-trial these scaled activation for each transition events
-            # average across trials
+            # average across trial
 
         # Time parameters from Expectation Eq 10 from 2024 paper
         # calc averagepos here as mean_d can be level dependent, whereas scale_parameters() assumes
@@ -622,7 +622,7 @@ class FixedEventModel(BaseModel):
         for trial in np.arange(n_trials):
             # Following assigns gain per trial to variable probs
             probs[: durations[trial], trial, :] = gains[starts[trial] : ends[trial] + 1, :]
-            # Same but samples and events are reversed, this allows to compute
+            # Same but sample and events are reversed, this allows to compute
             # fwd and bwd in the same way in the following steps
             probs_b[: durations[trial], trial, :] = gains[starts[trial] : ends[trial] + 1, :][
                 ::-1, ::-1
@@ -742,22 +742,22 @@ class FixedEventModel(BaseModel):
 
         for i, cur_level in enumerate(data_levels):
             part = trial_data.coords["participant"].values[(levels == cur_level)]
-            trial = trial_data.coords["trials"].values[(levels == cur_level)]
+            trial = trial_data.coords["trial"].values[(levels == cur_level)]
             data_events =  channel_map[cur_level, :] >= 0
             trial_x_part = xr.Coordinates.from_pandas_multiindex(
                 MultiIndex.from_arrays([part, trial], names=("participant", "epoch")),
-                "trials",
+                "trial",
             )
-            xreventprobs = xr.DataArray(likes_events_level[i][1], dims=("trials", "samples", "event"),
+            xreventprobs = xr.DataArray(likes_events_level[i][1], dims=("trial", "sample", "event"),
                 coords={
                     "event": ("event", np.arange(self.n_events)[data_events]),
-                    "samples": ("samples", range(np.shape(likes_events_level[i][1])[1])),
+                    "sample": ("sample", range(np.shape(likes_events_level[i][1])[1])),
                 },
             )
             xreventprobs = xreventprobs.assign_coords(trial_x_part)
-            xreventprobs = xreventprobs.assign_coords(levels=("trials", levels[levels == cur_level],))
+            xreventprobs = xreventprobs.assign_coords(level=("trial", levels[levels == cur_level],))
             all_xreventprobs.append(xreventprobs)
-        all_xreventprobs = xr.concat(all_xreventprobs, dim="trials")
+        all_xreventprobs = xr.concat(all_xreventprobs, dim="trial")
         all_xreventprobs.attrs['sfreq'] = self.sfreq
         all_xreventprobs.attrs['event_width_samples'] = self.event_width_samples
         return [np.array(likelihood), all_xreventprobs]

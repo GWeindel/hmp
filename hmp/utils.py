@@ -13,7 +13,7 @@ filterwarnings(
     "ignore",
     "Degrees of freedom <= 0 for slice.",
 )  # weird warning, likely due to nan in xarray, not important but better fix it later
-filterwarnings("ignore", "Mean of empty slice")  # When trying to center all-nans trials
+filterwarnings("ignore", "Mean of empty slice")  # When trying to center all-nans trial
 
 
 
@@ -47,28 +47,28 @@ def zscore_xarray(data):
 def stack_data(data):
     """Stack the data.
 
-    Going from format [participant * epochs * samples * channels] to
-    [samples * channels] with sample indexes starts and ends to delimitate the epochs.
+    Going from format [participant * epochs * sample * channel] to
+    [sample * channel] with sample indexes starts and ends to delimitate the epochs.
 
 
     Parameters
     ----------
     data : xarray
         unstacked xarray data from transform_data() or anyother source yielding an xarray with
-        dimensions [participant * epochs * samples * channels]
+        dimensions [participant * epochs * sample * channel]
     subjects_variable : str
         name of the dimension for subjects ID
 
     Returns
     -------
     data : xarray.Dataset
-        xarray dataset [samples * channels]
+        xarray dataset [sample * channel]
     """
     if isinstance(data, (xr.DataArray, xr.Dataset)) and "component" not in data.dims:
-        data = data.rename_dims({"channels": "component"})
+        data = data.rename_dims({"channel": "component"})
     if "participant" not in data.dims:
         data = data.expand_dims("participant")
-    data = data.stack(all_samples=["participant", "epoch", "samples"]).dropna(dim="all_samples")
+    data = data.stack(all_samples=["participant", "epoch", "sample"]).dropna(dim="all_samples")
     return data
 
 
@@ -101,7 +101,7 @@ def _filtering(data, filter, sfreq):
         return data
 
 
-def _pca(pca_ready_data, n_comp, channels):
+def _pca(pca_ready_data, n_comp, channel):
     from sklearn.decomposition import PCA
 
     if n_comp is None:
@@ -133,8 +133,8 @@ def _pca(pca_ready_data, n_comp, channels):
     pca = PCA(n_components=n_comp, svd_solver="full")  # selecting Principale components (PC)
     pca.fit(pca_ready_data)
     # Rebuilding pca PCs as xarray to ease computation
-    coords = dict(channels=("channels", channels), component=("component", np.arange(n_comp)))
-    pca_weights = xr.DataArray(pca.components_.T, dims=("channels", "component"), coords=coords)
+    coords = dict(channel=("channel", channel), component=("component", np.arange(n_comp)))
+    pca_weights = xr.DataArray(pca.components_.T, dims=("channel", "component"), coords=coords)
     return pca_weights
 
 
@@ -160,8 +160,8 @@ def transform_data(
     First this code can apply standardization of individual variances (if apply_standard=True).
     Second, a spatial PCA on the average variance-covariance matrix is performed (if method='pca',
     more methods in development).
-    Third,stacks the data going from format [participant * epochs * samples * channels] to
-    [samples * channels].
+    Third,stacks the data going from format [participant * epochs * sample * channel] to
+    [sample * channel].
     Last, performs z-scoring on each epoch and for each principal component (PC), or for each
     participant and PC, or across all data for each PC.
 
@@ -169,7 +169,7 @@ def transform_data(
     ----------
     data : xarray
         unstacked xarray data from transform_data() or anyother source yielding an xarray with
-        dimensions [participant * epochs * samples * channels]
+        dimensions [participant * epochs * sample * channel]
     participants_variable : str
         name of the dimension for participants ID
     apply_standard : bool
@@ -226,7 +226,7 @@ def transform_data(
     assert (
         np.sum(
             np.isnan(
-                data.groupby("participant", squeeze=False).mean(["epoch", "samples"]).data.values
+                data.groupby("participant", squeeze=False).mean(["epoch", "sample"]).data.values
             )
         )
         == 0
@@ -254,12 +254,12 @@ def transform_data(
         data = _center(data)
     if apply_zscore is True:
         apply_zscore = "trial"  # defaults to trial
-    data = data.transpose("participant", "epoch", "channels", "samples")
+    data = data.transpose("participant", "epoch", "channel", "sample")
     if method == "pca":
         if pca_weights is None:
             if cov:
                 indiv_data = np.zeros(
-                    (data.sizes["participant"], data.sizes["channels"], data.sizes["channels"])
+                    (data.sizes["participant"], data.sizes["channel"], data.sizes["channel"])
                 )
                 for i in range(data.sizes["participant"]):
                     x_i = np.squeeze(data.data[i])
@@ -275,52 +275,52 @@ def transform_data(
             elif averaged:
                 erps = []
                 for part in data.participant:
-                    erps.append(data.sel(participant=part).groupby("samples").mean("epoch").T)
+                    erps.append(data.sel(participant=part).groupby("sample").mean("epoch").T)
                 pca_ready_data = np.nanmean(erps, axis=0)
             else:
                 pca_ready_data = data.stack(
-                    {"all": ["participant", "epoch", "samples"]}
+                    {"all": ["participant", "epoch", "sample"]}
                 ).dropna("all")
-                pca_ready_data = pca_ready_data.transpose("all", "channels")
+                pca_ready_data = pca_ready_data.transpose("all", "channel")
             # Performing spatial PCA on the average var-cov matrix
-            pca_weights = _pca(pca_ready_data, n_comp, data.coords["channels"].values)
+            pca_weights = _pca(pca_ready_data, n_comp, data.coords["channel"].values)
             data = data @ pca_weights
             data.attrs["pca_weights"] = pca_weights
     elif method == "mcca":
-        ori_coords = data.drop_vars("channels").coords
+        ori_coords = data.drop_vars("channel").coords
         if n_ppcas is None:
             n_ppcas = n_comp * 3
         mcca_m = mcca.MCCA(n_components_pca=n_ppcas, n_components_mcca=n_comp, r=mcca_reg)
         if cov:
-            fitted_data = data.transpose("participant", "epoch", "samples", "channels").data
+            fitted_data = data.transpose("participant", "epoch", "sample", "channel").data
             ccs = mcca_m.obtain_mcca_cov(fitted_data)
         else:
             if averaged:
                 fitted_data = (
-                    data.mean("epoch").transpose("participant", "samples", "channels").data
+                    data.mean("epoch").transpose("participant", "sample", "channel").data
                 )
             else:
                 fitted_data = (
-                    data.stack({"all": ["epoch", "samples"]})
-                    .transpose("participant", "all", "channels")
+                    data.stack({"all": ["epoch", "sample"]})
+                    .transpose("participant", "all", "channel")
                     .data
                 )
             ccs = mcca_m.obtain_mcca(fitted_data)
         trans_ccs = np.tile(
             np.nan,
-            (data.sizes["participant"], data.sizes["epoch"], data.sizes["samples"], ccs.shape[-1]),
+            (data.sizes["participant"], data.sizes["epoch"], data.sizes["sample"], ccs.shape[-1]),
         )
         for i, part in enumerate(data.participant):
-            trans_ccs[i] = mcca_m.transform_trials(
-                data.sel(participant=part).transpose("epoch", "samples", "channels").data.copy()
+            trans_ccs[i] = mcca_m.transform_trial(
+                data.sel(participant=part).transpose("epoch", "sample", "channel").data.copy()
             )
         data = xr.DataArray(
             trans_ccs,
-            dims=["participant", "epoch", "samples", "component"],
+            dims=["participant", "epoch", "sample", "component"],
             coords=dict(
                 participant=data.participant,
                 epoch=data.epoch,
-                samples=data.samples,
+                sample=data.sample,
                 component=np.arange(n_comp),
             ),  # n_comp
         )
@@ -328,7 +328,7 @@ def transform_data(
         data.attrs["mcca_weights"] = mcca_m.mcca_weights
         data.attrs["pca_weights"] = mcca_m.pca_weights
     elif method is None:
-        data = data.rename({"channels": "component"})
+        data = data.rename({"channel": "component"})
         data["component"] = np.arange(len(data.component))
         data.attrs["pca_weights"] = np.identity(len(data.component))
     else:
@@ -372,7 +372,7 @@ def transform_data(
                         .map(zscore_xarray)
                         .unstack()
                     )
-        data = data.transpose("participant", "epoch", "samples", "component")
+        data = data.transpose("participant", "epoch", "sample", "component")
         data = data.assign_coords(ori_coords)
 
     data.attrs["pca_weights"] = pca_weights
@@ -407,7 +407,7 @@ def event_times(
     add_rt : bool
         whether to append the last stage up to the RT
     as_time : bool
-        if true, return time (ms) instead of samples
+        if true, return time (ms) instead of sample
     errorbars : str
         calculate 95% confidence interval ('ci'), standard deviation ('std'),
         standard error ('se') on the times or durations, or None.
@@ -424,7 +424,7 @@ def event_times(
     Returns
     -------
     times : xr.DataArray
-        Transition event peak or stage duration with trials*event dimensions or
+        Transition event peak or stage duration with trial*event dimensions or
         only event dimension if mean = True contains nans for missing stages.
     """
     assert not (mean and errorbars is not None), "Only one of mean and errorbars can be set."
@@ -435,18 +435,18 @@ def event_times(
     event_shift = 0
     eventprobs = estimates.fillna(0).copy()
     if estimate_method == "max":
-        times = eventprobs.argmax("samples") - event_shift  # Most likely event location
+        times = eventprobs.argmax("sample") - event_shift  # Most likely event location
     else:
-        times = xr.dot(eventprobs, eventprobs.samples, dims="samples") - event_shift
+        times = xr.dot(eventprobs, eventprobs.sample, dims="sample") - event_shift
     times = times.astype("float32")  # needed for eventual addition of NANs
     times_level = (
-        times.groupby("levels").mean("trials").values
+        times.groupby("level").mean("trial").values
     )  # take average to make sure it's not just 0 on the trial-level
     for c, e in np.argwhere(times_level == -event_shift):
-        times[times["levels"] == c, e] = np.nan
+        times[times["level"] == c, e] = np.nan
     
     if add_rt:
-        rts = estimates.cumsum('samples').argmax('samples').max('event')+1
+        rts = estimates.cumsum('sample').argmax('sample').max('event')+1
         if remove_offset:
             rts = rts-estimates.offset
         rts = xr.DataArray(rts)
@@ -457,13 +457,13 @@ def event_times(
     times = times * tstep     
     if duration:  # taking into account missing events, hence the ugly code
         added = xr.DataArray(
-            np.repeat(0, len(times.trials))[np.newaxis, :],
-            coords={"event": [0], "trials": times.trials},
+            np.repeat(0, len(times.trial))[np.newaxis, :],
+            coords={"event": [0], "trial": times.trial},
         )
         times = times.assign_coords(event=times.event + 1)
         times = times.combine_first(added)
-        for c in np.unique(times["levels"].values):
-            tmp = times.isel(trials=estimates["levels"] == c).values
+        for c in np.unique(times["level"].values):
+            tmp = times.isel(trial=estimates["level"] == c).values
             # identify nan columns == missing events
             missing_evts = np.where(np.isnan(np.mean(tmp, axis=0)))[0]
             tmp = np.diff(
@@ -474,23 +474,23 @@ def event_times(
                 tmp = np.insert(tmp, missing - 1, np.nan, axis=1)
             # add extra column to match shape
             tmp = np.hstack((tmp, np.tile(np.nan, (tmp.shape[0], 1))))
-            times[estimates["levels"] == c, :] = tmp
+            times[estimates["level"] == c, :] = tmp
         times = times[:, :-1]  # remove extra column
     elif add_stim:
         added = xr.DataArray(
-            np.repeat(0, len(times.trials))[np.newaxis, :],
-            coords={"event": [0], "trials": times.trials},
+            np.repeat(0, len(times.trial))[np.newaxis, :],
+            coords={"event": [0], "trial": times.trial},
         )
         times = times.assign_coords(event=times.event + 1)
         times = times.combine_first(added)
 
     if mean:
-        times = times.groupby("levels").mean("trials")
+        times = times.groupby("level").mean("trial")
     elif errorbars:
-        errorbars_model = np.zeros((len(np.unique(times["levels"])), 2, times.shape[1]))
+        errorbars_model = np.zeros((len(np.unique(times["level"])), 2, times.shape[1]))
         if errorbars == "std":
-            std_errs = times.groupby("levels").reduce(np.std, dim="trials").values
-            for c in np.unique(times["levels"]):
+            std_errs = times.groupby("level").reduce(np.std, dim="trial").values
+            for c in np.unique(times["level"]):
                 errorbars_model[c, :, :] = np.tile(std_errs[c, :], (2, 1))
         else:
             raise ValueError(
@@ -526,7 +526,7 @@ def event_topo(
             'max' or 'mean', either take the max probability of each event on each trial, or the
             weighted average.
         template: int
-            Length of the pattern in samples (e.g. 5 for a pattern of 50 ms with a 100Hz sampling
+            Length of the pattern in sample (e.g. 5 for a pattern of 50 ms with a 100Hz sampling
             frequency)
 
     Returns
@@ -538,28 +538,28 @@ def event_topo(
     if estimate_method is None:
         estimate_method = "max"
     epoch_data = (
-        epoch_data.stack(trials=["participant", "epoch"])
+        epoch_data.stack(trial=["participant", "epoch"])
         .data
-        .drop_duplicates("trials")
+        .drop_duplicates("trial")
     )
 
     n_events = estimated.event.count().values
-    n_trials = estimated.trials.count().values
-    n_channels = epoch_data.channels.count().values
+    n_trial = estimated.trial.count().values
+    n_channel = epoch_data.channel.count().values
 
-    common_trials = np.intersect1d(
-        estimated["trials"].values, epoch_data["trials"].values
+    common_trial = np.intersect1d(
+        estimated["trial"].values, epoch_data["trial"].values
     )
-    epoch_data = epoch_data.sel(trials=common_trials)
-    estimated = estimated.sel(trials=common_trials)
+    epoch_data = epoch_data.sel(trial=common_trial)
+    estimated = estimated.sel(trial=common_trial)
     if not peak:
         normed_template = template / np.sum(template)
 
     times = event_times(estimated, mean=False, estimate_method=estimate_method,)
     
-    event_values = np.zeros((n_channels, n_trials, n_events))*np.nan
+    event_values = np.zeros((n_channel, n_trial, n_events))*np.nan
     for ev in range(n_events):
-        for tr in range(n_trials):
+        for tr in range(n_trial):
             # If time is nan, means that no event was estimated for that trial/level
             if np.isfinite(times.values[tr, ev]):
                 samp = int(times.values[tr, ev])
@@ -572,30 +572,30 @@ def event_topo(
     event_values = xr.DataArray(
         event_values,
         dims=[
-            "channels",
-            "trials",
+            "channel",
+            "trial",
             "event",
         ],
         coords={
-            "trials": estimated.trials,
+            "trial": estimated.trial,
             "event": estimated.event,
-            "channels": epoch_data.channels,
+            "channel": epoch_data.channel,
         },
     )
 
     event_values = event_values.assign_coords(
-        levels=("trials", times.levels.data)
+        level=("trial", times.level.data)
     )
 
     if mean:
-        event_values = event_values.groupby("levels").mean("trials")
+        event_values = event_values.groupby("level").mean("trial")
     return event_values
 
 
 def centered_activity(
     data,
     times,
-    channels,
+    channel,
     event,
     n_samples=None,
     center=True,
@@ -605,7 +605,7 @@ def centered_activity(
     event_width=0,
     impute=None,
 ):
-    """Parse the single trial signal of channels in a given number of samples around one event.
+    """Parse the single trial signal of channel in a given number of sample around one event.
 
     Parameters
     ----------
@@ -613,19 +613,19 @@ def centered_activity(
         HMP data (untransformed but with trial and participant stacked)
     times : xr.DataArray
         Onset times as computed using onset_times()
-    channels : list
-        channels to pick for the parsing of the signal, must be a list even if only one
+    channel : list
+        channel to pick for the parsing of the signal, must be a list even if only one
     event : int
         Which event is used to parse the signal
     n_samples : int
-        How many samples to record after the event (default = maximum duration between event and
+        How many sample to record after the event (default = maximum duration between event and
         the consecutive event)
     cut_after_event: int
-        Which event after ```event``` to cut samples off, if 1 (Default) cut at the next event
+        Which event after ```event``` to cut sample off, if 1 (Default) cut at the next event
     baseline: int
-        How much samples should be kept before the event
+        How much sample should be kept before the event
     cut_before_event: int
-        At which previous event to cut samples from, ```baseline``` if 0 (Default), no effect if
+        At which previous event to cut sample from, ```baseline``` if 0 (Default), no effect if
         baseline = 0
     event_width: int
         Duration of the fitted events, used when cut_before_event is True
@@ -634,9 +634,9 @@ def centered_activity(
     -------
     centered_data : xr.Dataset
         Xarray dataset with electrode value (data) and trial event time (time) and with
-        trials * samples dimension
+        trial * sample dimension
     """
-    if event == 0:  # no samples before stim onset
+    if event == 0:  # no sample before stim onset
         baseline = 0
     elif event == 1:  # no event at stim onset
         event_width = 0
@@ -656,17 +656,17 @@ def centered_activity(
     if center:
         centered_data = np.tile(
             impute,
-            (len(data.trials), len(channels), int(round(n_samples - baseline + 1))),
+            (len(data.trial), len(channel), int(round(n_samples - baseline + 1))),
         )
     else:
         centered_data = np.tile(
-            impute, (len(data.trials), len(channels), len(data.samples))
+            impute, (len(data.trial), len(channel), len(data.sample))
         )
 
     i = 0
-    trial_times = np.zeros(len(data.trials)) * np.nan
-    valid_indices = list(times.groupby("trials", squeeze=False).groups.keys())
-    for trial, trial_dat in data.groupby("trials", squeeze=False):
+    trial_times = np.zeros(len(data.trial)) * np.nan
+    valid_indices = list(times.groupby("trial", squeeze=False).groups.keys())
+    for trial, trial_dat in data.groupby("trial", squeeze=False):
         if trial in valid_indices:
             if cut_before_event > 0:
                 # Lower lim is baseline or the last sample of the previous event
@@ -674,9 +674,9 @@ def centered_activity(
                     [
                         -np.max(
                             [
-                                times.sel(event=event, trials=trial)
+                                times.sel(event=event, trial=trial)
                                 - times.sel(
-                                    event=event - cut_before_event, trials=trial
+                                    event=event - cut_before_event, trial=trial
                                 )
                                 - event_width // 2,
                                 0,
@@ -692,8 +692,8 @@ def centered_activity(
                     [
                         np.min(
                             [
-                                times.sel(event=event + cut_after_event, trials=trial)
-                                - times.sel(event=event, trials=trial)
+                                times.sel(event=event + cut_after_event, trial=trial)
+                                - times.sel(event=event, trial=trial)
                                 - event_width // 2,
                                 n_samples,
                             ]
@@ -704,13 +704,13 @@ def centered_activity(
             else:
                 upper_lim = n_samples
 
-            # Determine samples in the signal to store
-            start_idx = int(times.sel(event=event, trials=trial) + lower_lim)
-            end_idx = int(times.sel(event=event, trials=trial) + upper_lim)
+            # Determine sample in the signal to store
+            start_idx = int(times.sel(event=event, trial=trial) + lower_lim)
+            end_idx = int(times.sel(event=event, trial=trial) + upper_lim)
             trial_time = slice(start_idx, end_idx)
             trial_time_idx = slice(start_idx, end_idx + 1)
-            trial_elec = trial_dat.sel(channels=channels, samples=trial_time).squeeze(
-                "trials"
+            trial_elec = trial_dat.sel(channel=channel, sample=trial_time).squeeze(
+                "trial"
             )
             # If center, adjust to always center on the same sample if lower_lim < baseline
             baseline_adjusted_start = int(abs(baseline - lower_lim))
@@ -721,20 +721,20 @@ def centered_activity(
                 centered_data[i, :, trial_time_arr] = trial_elec
             else:
                 centered_data[i, :, trial_time_idx] = trial_elec
-            trial_times[i] = times.sel(event=event, trials=trial)
+            trial_times[i] = times.sel(event=event, trial=trial)
             i += 1
 
     part, trial = data.coords["participant"].values, data.coords["epoch"].values
     trial_x_part = xr.Coordinates.from_pandas_multiindex(
-        MultiIndex.from_arrays([part, trial], names=("participant", "trials")),
-        "trials",
+        MultiIndex.from_arrays([part, trial], names=("participant", "trial")),
+        "trial",
     )
     centered_data = xr.Dataset(
         {
-            "data": (("trials", "channels", "samples"), centered_data),
-            "times": (("trials"), trial_times),
+            "data": (("trial", "channel", "sample"), centered_data),
+            "times": (("trial"), trial_times),
         },
-        {"channels": channels, "samples": np.arange(centered_data.shape[-1]) + baseline},
+        {"channel": channel, "sample": np.arange(centered_data.shape[-1]) + baseline},
         attrs={"event": event},
     )
 
@@ -755,7 +755,7 @@ def condition_selection(hmp_data, condition_string, variable="event", method="eq
     variable : str
         variable present in hmp_data that is used for condition selection
     method : str
-        'equal' selects equal trials, 'contains' selects trial in which conditions_string
+        'equal' selects equal trial, 'contains' selects trial in which conditions_string
         appears in variable
 
     Returns
@@ -791,7 +791,7 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
     variable : str
         variable present in hmp_data that is used for condition selection
     method : str
-        'equal' selects equal trials, 'contains' selects trial in which conditions_string
+        'equal' selects equal trial, 'contains' selects trial in which conditions_string
         appears in variable
 
     Returns
@@ -800,8 +800,8 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
         Subset of hmp_data.
     """
     if len(epoch_data.dims) == 4:
-        stacked_epoch_data = epoch_data.stack(trials=("participant", "epoch")).dropna(
-            "trials", how="all"
+        stacked_epoch_data = epoch_data.stack(trial=("participant", "epoch")).dropna(
+            "trial", how="all"
         )
 
     if method == "equal":
