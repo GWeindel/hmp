@@ -417,19 +417,19 @@ def hmp_data_format(
     if n_subj < 2:
         data = xr.Dataset(
             {
-                "data": (["epochs", "channels", "samples"], data),
+                "data": (["epoch", "channels", "samples"], data),
             },
-            coords={"epochs": epochs, "channels": channels, "samples": np.arange(n_samples)},
+            coords={"epoch": epochs, "channels": channels, "samples": np.arange(n_samples)},
             attrs={"sfreq": sfreq, "offset": offset},
         )
     else:
         data = xr.Dataset(
             {
-                "data": (["participant", "epochs", "channels", "samples"], data),
+                "data": (["participant", "epoch", "channels", "samples"], data),
             },
             coords={
                 "participant": participants,
-                "epochs": epochs,
+                "epoch": epoch,
                 "channels": channels,
                 "samples": np.arange(n_samples),
             },
@@ -438,15 +438,15 @@ def hmp_data_format(
     if metadata is not None:
         metadata = metadata.loc[epochs]
         metadata = metadata.to_xarray()
-        metadata = metadata.rename_dims({"index": "epochs"})
-        metadata = metadata.rename_vars({"index": "epochs"})
+        metadata = metadata.rename_dims({"index": "epoch"})
+        metadata = metadata.rename_vars({"index": "epoch"})
         data = data.merge(metadata)
         data = data.set_coords(list(metadata.data_vars))
     if events is not None:
         data["events"] = xr.DataArray(
             events,
-            dims=("participant", "epochs"),
-            coords={"participant": participants, "epochs": epochs},
+            dims=("participant", "epoch"),
+            coords={"participant": participants, "epoch": epoch},
         )
         data = data.set_coords("events")
     return data
@@ -467,19 +467,19 @@ def load_eventprobs(filename):
     """Load fit or data."""
     with xr.open_dataset(filename) as data:
         data.load()
-    if "trials" in data:
-        data = data.stack(trial_x_participant=["participant", "trials"]).dropna(
-            dim="trial_x_participant", how="all"
+    if "epoch" in data:
+        data = data.stack(trials=["participant", "epoch"]).dropna(
+            dim="trials", how="all"
         )
 
     # Ensures correct order of dimensions for later index use
     if "iteration" in data:
         data = data.transpose(
-            "iteration", "trial_x_participant", "samples", "event"
+            "iteration", "trials", "samples", "event"
         )
     else:
         data = data.transpose(
-            "trial_x_participant", "samples", "event"
+            "trials", "samples", "event"
         )
     return data.to_dataarray().drop_vars('variable').squeeze()
 

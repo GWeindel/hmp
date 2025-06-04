@@ -789,19 +789,19 @@ class FixedEventModel(BaseModel):
             trial = trial_data.coords["trials"].values[(levels == cur_level)]
             data_events =  mags_map[cur_level, :] >= 0
             trial_x_part = xr.Coordinates.from_pandas_multiindex(
-                MultiIndex.from_arrays([part, trial], names=("participant", "trials")),
-                "trial_x_participant",
+                MultiIndex.from_arrays([part, trial], names=("participant", "epoch")),
+                "trials",
             )
-            xreventprobs = xr.DataArray(likes_events_level[i][1], dims=("trial_x_participant", "samples", "event"),
+            xreventprobs = xr.DataArray(likes_events_level[i][1], dims=("trials", "samples", "event"),
                 coords={
                     "event": ("event", np.arange(self.n_events)[data_events]),
                     "samples": ("samples", range(np.shape(likes_events_level[i][1])[1])),
                 },
             )
             xreventprobs = xreventprobs.assign_coords(trial_x_part)
-            xreventprobs = xreventprobs.assign_coords(levels=("trial_x_participant", levels[levels == cur_level],))
+            xreventprobs = xreventprobs.assign_coords(levels=("trials", levels[levels == cur_level],))
             all_xreventprobs.append(xreventprobs)
-        all_xreventprobs = xr.concat(all_xreventprobs,dim="trial_x_participant")
+        all_xreventprobs = xr.concat(all_xreventprobs, dim="trials")
         all_xreventprobs.attrs['sfreq'] = self.sfreq
         all_xreventprobs.attrs['event_width_samples'] = self.event_width_samples
         return [np.array(likelihood), all_xreventprobs]

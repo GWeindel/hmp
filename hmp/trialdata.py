@@ -37,24 +37,23 @@ class TrialData():
         durations = (
             data.unstack()
             .sel(component=0)
-            .rename({"epochs": "trials"})
-            .stack(trial_x_participant=["participant", "trials"])
-            .dropna(dim="trial_x_participant", how="all")
-            .groupby("trial_x_participant")
+            .stack(trials=["participant", "epoch"])
+            .dropna(dim="trials", how="all")
+            .groupby("trials")
             .count(dim="samples")
             .cumsum()
             .squeeze()
         )
 
-        if durations.trial_x_participant.count() > 1:
-            dur_dropped_na = durations.dropna("trial_x_participant")
+        if durations.trials.count() > 1:
+            dur_dropped_na = durations.dropna("trials")
             starts = np.roll(dur_dropped_na.data, 1)
             starts[0] = 0
             ends = dur_dropped_na.data - 1
-            named_durations = durations.dropna("trial_x_participant") - durations.dropna(
-                "trial_x_participant"
-            ).shift(trial_x_participant=1, fill_value=0)
-            coords = durations.reset_index("trial_x_participant").coords
+            named_durations = durations.dropna("trials") - durations.dropna(
+                "trials"
+            ).shift(trials=1, fill_value=0)
+            coords = durations.reset_index("trials").coords
         else:
             dur_dropped_na = durations
             starts = np.array([0])
@@ -62,15 +61,14 @@ class TrialData():
             named_durations = durations
             coords = durations.coords
 
-        n_trials = durations.trial_x_participant.count().values
+        n_trials = durations.trials.count().values
         n_samples, n_dims = np.shape(data.data.T)
         cross_corr = cross_correlation(data.data.T, n_trials, n_dims, starts, ends, pattern)  # Equation 1 in 2024 paper
         trial_coords = (
             data.unstack()
             .sel(component=0, samples=0)
-            .rename({"epochs": "trials"})
-            .stack(trial_x_participant=["participant", "trials"])
-            .dropna(dim="trial_x_participant", how="all")
+            .stack(trials=["participant", "epoch"])
+            .dropna(dim="trials", how="all")
             .coords
         )
         return cls(named_durations=named_durations, coords=coords, starts=starts, ends=ends,
