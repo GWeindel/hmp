@@ -21,7 +21,7 @@ def test_cumulative_simple():
     # Data b is without noise, recovery should be perfect
     data_b = hmp.utils.participant_selection(hmp_data, 'b')
     event_properties = HalfSine.create_expected(sfreq=data_b.sfreq)
-    trial_data_b = TrialData.from_standard_data(data=data_b, pattern=event_properties.template)
+    trial_data_b = TrialData.from_preprocessed_data(data=data_b, pattern=event_properties.template)
     time_distribution = GammaDistribution()
 
     true_model = FixedEventModel(event_properties, time_distribution, n_events=n_events)

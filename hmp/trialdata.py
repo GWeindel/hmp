@@ -31,7 +31,7 @@ class TrialData():
     trial_coords: Any
 
     @classmethod
-    def from_standard_data(cls, data, pattern):
+    def from_preprocessed_data(cls, data, pattern):
 
         # compute sequence durations based on number of samples
         durations = (
