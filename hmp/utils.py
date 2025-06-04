@@ -196,11 +196,12 @@ def transform_data(
     bandfilter: None | (lfreq, hfreq)
         If none, no filtering is appliedn. If tuple, data is filtered between lfreq-hfreq.
         NOTE: filtering at this step is suboptimal, filter before epoching if at all possible, see
-            also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
+        also https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
     mcca_reg: float
         regularization used for the mcca computation (see mcca.py)
     copy: bool
         Whether to copy the data before transforming
+
     Returns
     -------
     data : xarray.Dataset

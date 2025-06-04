@@ -72,13 +72,13 @@ def simulate(
     Parameters
     ----------
     sources : list
-        2D or 3D list with dimensions (n_subjects *) sources * source_parameters
+        2D or 3D list with dimensions (n_subjects * ) sources * source_parameters
         Source parameters should contain :
         - the name of the source (see the output of available_source())
         - the duration of the event (in frequency, usually 10Hz)
         - the amplitude or strength of the signal from the source, expressed in volt (e.g. 1e-8 V)
-        - the duration of the preceding stage as a scipy.stats
-            distribution (e.g. scipy.stats.gamma(a, scale))
+        - the duration of the preceding stage as a scipy.stats distribution
+        (e.g. scipy.stats.gamma(a, scale))
     n_trials: int
         Number of trials
     n_jobs: int
@@ -418,7 +418,7 @@ def demo(cpus, n_events, seed=123):
 def classification_true(true_topologies, test_topologies):
     """Classifies event as belonging to one of the true events.
 
-    Parameters,
+    Parameters
     ----------
     true_topologies : xarray.DataArray
         topologies for the true events simulated obtained from
@@ -472,7 +472,7 @@ def classification_true(true_topologies, test_topologies):
 def simulated_times_and_parameters(generating_events, init, trial_data, resampling_freq=None, data=None):
     """Recover the generating HMP parameters from the simulated EEG data.
 
-    Parameters,
+    Parameters
     ----------
     generating_events: ndarray
         Times of the simulated events created by the function simulate()
