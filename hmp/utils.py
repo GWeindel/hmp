@@ -731,10 +731,10 @@ def centered_activity(
     )
     centered_data = xr.Dataset(
         {
-            "data": (("trials", "channel", "samples"), centered_data),
+            "data": (("trials", "channels", "samples"), centered_data),
             "times": (("trials"), trial_times),
         },
-        {"channel": channels, "samples": np.arange(centered_data.shape[-1]) + baseline},
+        {"channels": channels, "samples": np.arange(centered_data.shape[-1]) + baseline},
         attrs={"event": event},
     )
 
