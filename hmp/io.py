@@ -135,7 +135,6 @@ def read_mne_data(
     else:
         metadata_i = None
     
-    offset_after_resp_samples = np.rint(offset_after_resp * sfreq).astype(int)
     ev_i = 0  # syncing up indexing between event and raw files
     for participant in pfiles:
         print(f"Processing participant {participant}'s {dict_datatype[epoched]} {pick_channels}")
@@ -296,6 +295,7 @@ def read_mne_data(
         elif rts is None:
             raise ValueError("Expected either a metadata Dataframe or an array of Reaction Times")
         rts_arr = np.array(rts)
+        offset_after_resp_samples = np.rint(offset_after_resp * sfreq).astype(int)
         if verbose:
             print(
                 f"Applying reaction time trim to keep RTs between {lower_limit_rt} and "

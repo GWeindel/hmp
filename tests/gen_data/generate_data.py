@@ -22,9 +22,9 @@ def create_data():
     for cur_name in names:
         sources.append([cur_name, 10., 2.5e-8, gamma(2, scale=1)])
     raw_a, event_a = simulations.simulate(sources, n_trials, cpus, 'dataset_a_raw', overwrite=True,
-        sfreq=sfreq, times=times_a, noise=True, seed=1, path='dataset_a/')
+        sfreq=sfreq, times=times_a, noise=True, seed=1, path='dataset_a')
     raw_b, event_b = simulations.simulate(sources, n_trials, cpus, 'dataset_b_raw', overwrite=True,
-        sfreq=sfreq, times=times_b, noise=False, seed=1, path='dataset_b/')
+        sfreq=sfreq, times=times_b, noise=False, seed=1, path='dataset_b')
 
 if __name__ == "__main__":
     create_data()

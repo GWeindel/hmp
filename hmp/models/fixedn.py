@@ -170,9 +170,9 @@ class FixedEventModel(BaseModel):
                 # by default starting point is to split the average duration in equal bins
                 parameters[cur_level, pars_level, :] = np.tile(
                     [
-                        self.shape,
-                        self.mean_to_scale(
-                            np.mean(trial_data.durations[levels == cur_level]) / (n_stage_level), self.shape
+                        self.distribution.shape,
+                        self.distribution.mean_to_scale(
+                            np.mean(trial_data.durations[levels == cur_level]) / (n_stage_level)
                         ),
                     ],
                     (n_stage_level, 1),
@@ -511,7 +511,7 @@ class FixedEventModel(BaseModel):
             # sum by-trial these scaled activation for each transition events
             # average across trials
 
-        # Gamma parameters from Expectation Eq 10 from 2024 paper
+        # Time parameters from Expectation Eq 10 from 2024 paper
         # calc averagepos here as mean_d can be level dependent, whereas scale_parameters() assumes
         # it's general
         event_times_mean = np.concatenate(
@@ -553,7 +553,7 @@ class FixedEventModel(BaseModel):
                 (0, rnd_events)
             )  # associated durations
         random_stages = np.array(
-            [[self.shape, self.mean_to_scale(x, self.shape)] for x in rnd_durations]
+            [[self.distribution.shape, self.distribution.mean_to_scale(x)] for x in rnd_durations]
         )
         return random_stages
 
@@ -582,9 +582,9 @@ class FixedEventModel(BaseModel):
             shape and scale for the gamma distributions
         """
         params = np.zeros((len(averagepos), 2), dtype=np.float64)
-        params[:, 0] = self.shape
+        params[:, 0] = self.distribution.shape
         params[:, 1] = np.diff(averagepos, prepend=0)
-        params[:, 1] = [self.mean_to_scale(x[1], x[0]) for x in params]
+        params[:, 1] = self.distribution.mean_to_scale(params[:, 1])
         return params
 
     def estim_probs(
@@ -668,7 +668,7 @@ class FixedEventModel(BaseModel):
             pmf[:, stage] = np.concatenate(
                 (
                     np.repeat(1e-15, locations[stage]),
-                    self.distribution_pmf(parameters[stage, 0], parameters[stage, 1], max_duration)[
+                    self.distribution_pdf(parameters[stage, 0], parameters[stage, 1], max_duration)[
                         locations[stage] :
                     ],
                 )
@@ -806,8 +806,8 @@ class FixedEventModel(BaseModel):
         all_xreventprobs.attrs['event_width_samples'] = self.event_width_samples
         return [np.array(likelihood), all_xreventprobs]
 
-    def distribution_pmf(self, shape, scale, max_duration):
-        """Return PMF for a provided scipy disttribution.
+    def distribution_pdf(self, shape, scale, max_duration):
+        """Return discretized PDF for a provided scipy disttribution.
 
         Uses the shape and scale, on a range from 0 to max_length.
 
@@ -823,7 +823,7 @@ class FixedEventModel(BaseModel):
         p : ndarray
             probabilty mass function for the distribution with given scale
         """
-        p = self.pdf(np.arange(max_duration), shape, scale=scale)
+        p = self.distribution.pdf(np.arange(max_duration), shape, scale=scale)
         p = p / np.sum(p)
         p[np.isnan(p)] = 0  # remove potential nans
         return p

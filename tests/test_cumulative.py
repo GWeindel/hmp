@@ -4,7 +4,8 @@ import xarray as xr
 import hmp
 from hmp import simulations
 from hmp.models import CumulativeEstimationModel, FixedEventModel
-from hmp.models.base import EventProperties
+from hmp.patterns import HalfSine
+from hmp.distributions import GammaDistribution
 from hmp.trialdata import TrialData
 from hmp import preprocessing
 
@@ -19,10 +20,11 @@ def test_cumulative_simple():
     hmp_data = hmp.utils.transform_data(epoch_data, n_comp=5, apply_zscore=False)
     # Data b is without noise, recovery should be perfect
     data_b = hmp.utils.participant_selection(hmp_data, 'b')
-    event_properties = EventProperties.create_expected(sfreq=data_b.sfreq)
-    trial_data_b = TrialData.from_standard_data(data=data_b, template=event_properties.template)
+    event_properties = HalfSine.create_expected(sfreq=data_b.sfreq)
+    trial_data_b = TrialData.from_standard_data(data=data_b, pattern=event_properties.template)
+    time_distribution = GammaDistribution()
 
-    true_model = FixedEventModel(event_properties, n_events=n_events)
+    true_model = FixedEventModel(event_properties, time_distribution, n_events=n_events)
     # Recover generating parameters
     sim_source_times, true_pars, true_magnitudes, _ = \
         simulations.simulated_times_and_parameters(event_b, true_model, trial_data_b)

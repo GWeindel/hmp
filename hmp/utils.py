@@ -6,8 +6,6 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from pandas import MultiIndex
-from scipy.special import gamma as gamma_func
-from scipy.stats import sem
 
 from hmp import mcca
 
@@ -17,37 +15,6 @@ filterwarnings(
 )  # weird warning, likely due to nan in xarray, not important but better fix it later
 filterwarnings("ignore", "Mean of empty slice")  # When trying to center all-nans trials
 
-
-def _gamma_scale_to_mean(scale, shape):
-    return scale * shape
-
-
-def _gamma_mean_to_scale(mean, shape):
-    return mean / shape
-
-
-def _logn_scale_to_mean(scale, shape):
-    return np.exp(scale + shape**2 / 2)
-
-
-def _logn_mean_to_scale(mean, shape):
-    return np.exp(np.log(mean) - (shape**2 / 2))
-
-
-def _wald_scale_to_mean(scale, shape):
-    return scale * shape
-
-
-def _wald_mean_to_scale(mean, shape):
-    return mean / shape
-
-
-def _weibull_scale_to_mean(scale, shape):
-    return scale * gamma_func(1 + 1 / shape)
-
-
-def _weibull_mean_to_scale(mean, shape):
-    return mean / gamma_func(1 + 1 / shape)
 
 
 def _standardize(x):
@@ -266,6 +233,7 @@ def transform_data(
     if method == "mcca" and data.sizes["participant"] == 1:
         raise ValueError("MCCA cannot be applied to only one participant")
     sfreq = data.sfreq
+    offset = data.offset
     if bandfilter:
         data = _filtering(data, bandfilter, sfreq)
     if apply_standard:
@@ -408,6 +376,7 @@ def transform_data(
 
     data.attrs["pca_weights"] = pca_weights
     data.attrs["sfreq"] = sfreq
+    data.attrs["offset"] = offset
     data = stack_data(data)
     return data
 
@@ -421,6 +390,7 @@ def event_times(
     errorbars=None,
     estimate_method="max",
     add_stim=False,
+    remove_offset=False,
 ):
     """Compute the likeliest peak times for each event.
 
@@ -447,6 +417,8 @@ def event_times(
     add_stim: bool
         Adding stimulus as the first event (True) or let the first estimated HMP event be the
         first one (False, default)
+    remove_offset: bool
+        Whether to remove the eventual offset added to the reaction time
 
     Returns
     -------
@@ -474,6 +446,8 @@ def event_times(
     
     if add_rt:
         rts = estimates.cumsum('samples').argmax('samples').max('event')+1
+        if remove_offset:
+            rts = rts-estimates.offset
         rts = xr.DataArray(rts)
         rts = rts.assign_coords(event=int(times.event.max().values + 1))
         rts = rts.expand_dims(dim="event")
