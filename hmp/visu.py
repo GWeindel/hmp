@@ -372,7 +372,7 @@ def plot_components_sensor(weights, positions, cmap="Spectral_r"):
     Parameters
     ----------
     hmp_data : xr.Dataset
-        Data returned from the function hmp.utils.transform_data()
+        Data returned from the class hmp.preprocessing.Preprocessing()
     positions : mne.info | ndarray
         List of x and y positions to plot channels on head model OR MNE info object
     """
