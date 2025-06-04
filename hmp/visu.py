@@ -9,7 +9,7 @@ import scipy.signal as ssignal
 import xarray as xr
 from scipy import stats
 
-from hmp.utils import event_times, event_topo
+from hmp.utils import event_times, event_channels
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold"]
 
@@ -144,7 +144,7 @@ def plot_topo_timecourse(
         event_color = event_lines
 
     # extract relevant info from estimates to pot 
-    channel_data = event_topo(
+    channel_data = event_channels(
         epoch_data, estimates,
         estimate_method=estimate_method
     ).data  # compute topographies

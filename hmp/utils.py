@@ -501,7 +501,7 @@ def event_times(
     return times
 
 
-def event_topo(
+def event_channels(
     epoch_data,
     estimated,
     mean=True,

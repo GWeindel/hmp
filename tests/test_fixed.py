@@ -35,12 +35,12 @@ def test_fixed_simple():
     model.channel_pars = np.array([true_magnitudes])
     # Ground truth
     true_loglikelihood, true_estimates = model.transform(trial_data_b)
-    true_topos = hmp.utils.event_topo(epoch_data, true_estimates, mean=True)
-    true_topos = hmp.utils.event_topo(epoch_data, true_estimates, mean=True)
+    true_topos = hmp.utils.event_channels(epoch_data, true_estimates, mean=True)
+    true_topos = hmp.utils.event_channels(epoch_data, true_estimates, mean=True)
     #Estimate
     lkh_b, estimates_b = model.fit_transform(trial_data_b, verbose=True)
-    test_topos = hmp.utils.event_topo(epoch_data, estimates_b, mean=True)
-    test_topos = hmp.utils.event_topo(epoch_data, estimates_b, mean=True)
+    test_topos = hmp.utils.event_channels(epoch_data, estimates_b, mean=True)
+    test_topos = hmp.utils.event_channels(epoch_data, estimates_b, mean=True)
     
     # Test if events found are classified as true
     assert (np.array(simulations.classification_true(true_topos.squeeze().T,test_topos.squeeze().T)) == np.array(([0,1,2],[0,1,2]))).all()
@@ -82,7 +82,7 @@ def test_fixed_multilevel():
     model.channel_pars = np.array([true_magnitudes])
     # Ground truth
     true_loglikelihood, true_estimates = model.transform(trial_data_a)
-    true_topos = hmp.utils.event_topo(epoch_data, true_estimates.squeeze(), mean=True)
+    true_topos = hmp.utils.event_channels(epoch_data, true_estimates.squeeze(), mean=True)
     
     # Perform a fit on a (should be too noisy)
     lkh_a, estimates_a = model.fit_transform(trial_data_a)
@@ -93,8 +93,8 @@ def test_fixed_multilevel():
     lkh_a_level, estimates_a_level = model.transform(trial_data_a)
 
     # a_level should be closer to ground truth 
-    test_topos_a = hmp.utils.event_topo(epoch_data, estimates_a, mean=True)
-    test_topos_a_level = hmp.utils.event_topo(epoch_data, estimates_a_level, mean=True)
+    test_topos_a = hmp.utils.event_channels(epoch_data, estimates_a, mean=True)
+    test_topos_a_level = hmp.utils.event_channels(epoch_data, estimates_a_level, mean=True)
     assert np.sum(np.abs(true_topos.data - test_topos_a.data)) > np.sum(np.abs(true_topos.data - test_topos_a_level.data))
 
     # Testing one event less in one condition
