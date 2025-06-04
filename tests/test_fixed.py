@@ -31,8 +31,8 @@ def test_fixed_simple():
     sim_source_times, true_pars, true_magnitudes, _ = \
         simulations.simulated_times_and_parameters(event_b, model, trial_data_b)
     # Fixing true parameter in model
-    model.parameters = np.array([true_pars])
-    model.magnitudes = np.array([true_magnitudes])
+    model.time_pars = np.array([true_pars])
+    model.channel_pars = np.array([true_magnitudes])
     # Ground truth
     true_loglikelihood, true_estimates = model.transform(trial_data_b)
     true_topos = hmp.utils.event_topo(epoch_data, true_estimates, mean=True)
@@ -51,18 +51,18 @@ def test_fixed_simple():
     
     # testing recovery of attributes
     model.xrlikelihoods
-    model.xrmags
-    model.xrparams
-    model.param_dev
+    model.xrchannel_pars
+    model.xrtime_pars
+    model.xrtime_pars_dev
     model.xrtraces
 
 def test_fixed_multilevel():
     _, event_a, epoch_data, hmp_data, positions, sfreq, n_events = data()
 
     # testing multilevel model
-    mags_map = np.array([[0, 0, 0],
+    channel_map = np.array([[0, 0, 0],
                          [0, 0, 0]])
-    pars_map = np.array([[0, 0, 0, 0],
+    time_map = np.array([[0, 0, 0, 0],
                          [0, 0, 1, 0],])
     level_dict = {'condition': ['a', 'b']}
     
@@ -78,8 +78,8 @@ def test_fixed_multilevel():
     sim_source_times, true_pars, true_magnitudes, _ = \
         simulations.simulated_times_and_parameters(event_a, model, trial_data_a)
     # Fixing true parameter in model
-    model.parameters = np.array([true_pars])
-    model.magnitudes = np.array([true_magnitudes])
+    model.time_pars = np.array([true_pars])
+    model.channel_pars = np.array([true_magnitudes])
     # Ground truth
     true_loglikelihood, true_estimates = model.transform(trial_data_a)
     true_topos = hmp.utils.event_topo(epoch_data, true_estimates.squeeze(), mean=True)
@@ -89,7 +89,7 @@ def test_fixed_multilevel():
 
     # Fit model on both conditions (noiseless b should help estimate a)
     trial_data = TrialData.from_standard_data(data=hmp_data, pattern=event_properties.template)
-    lkh_comb, estimates_comb = model.fit_transform(trial_data, pars_map=pars_map, mags_map=mags_map, level_dict=level_dict)
+    lkh_comb, estimates_comb = model.fit_transform(trial_data, time_map=time_map, channel_map=channel_map, level_dict=level_dict)
     lkh_a_level, estimates_a_level = model.transform(trial_data_a)
 
     # a_level should be closer to ground truth 
@@ -98,11 +98,11 @@ def test_fixed_multilevel():
     assert np.sum(np.abs(true_topos.data - test_topos_a.data)) > np.sum(np.abs(true_topos.data - test_topos_a_level.data))
 
     # Testing one event less in one condition
-    mags_map = np.array([[0, 0, 0],
+    channel_map = np.array([[0, 0, 0],
                          [0, 0, -1]])
-    pars_map = np.array([[0, 0, 0, 0],
+    time_map = np.array([[0, 0, 0, 0],
                          [0, 0, -1, 0],])
-    lkh_comb, estimates_comb = model.fit_transform(trial_data, pars_map=pars_map, mags_map=mags_map, level_dict=level_dict)
+    lkh_comb, estimates_comb = model.fit_transform(trial_data, time_map=time_map, channel_map=channel_map, level_dict=level_dict)
     
 def test_starting_points():
     _, _, epoch_data, hmp_data, positions, sfreq, n_events = data()

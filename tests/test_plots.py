@@ -15,9 +15,9 @@ def test_plot():
     _, _, epoch_data, positions, sfreq, n_events = init_data()
     hmp_data = preprocessing.Preprocessing(epoch_data, n_comp=2,)
     # Testing one event less in one condition
-    mags_map = np.array([[0, 0, -1],
+    channel_map = np.array([[0, 0, -1],
                          [0, 0, 0]])
-    pars_map = np.array([[0, 0, -1, 0],
+    time_map = np.array([[0, 0, -1, 0],
                          [0, 0, 0, 0],])
     level_dict = {'condition': ['a', 'b']}
     
@@ -34,7 +34,7 @@ def test_plot():
     # Fit model on both conditions (noiseless b should help estimate a)
 
     trial_data = TrialData.from_standard_data(data=hmp_data.data, pattern=event_properties.template)
-    lkh_comb, estimates_comb = model.fit_transform(trial_data, pars_map=pars_map, mags_map=mags_map, level_dict=level_dict)
+    lkh_comb, estimates_comb = model.fit_transform(trial_data, time_map=time_map, channel_map=channel_map, level_dict=level_dict)
     lkh_b_level, estimates_b_level = model.transform(trial_data_b)
 
     plot_topo_timecourse(epoch_data, estimates_comb, positions, as_time=True, colorbar=False, )

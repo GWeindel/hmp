@@ -85,16 +85,16 @@ class CumulativeEstimationModel(BaseModel):
 
         pbar = tqdm(total=int(np.rint(end)))  # progress bar
         n_events, j, time = 1, 1, 0  # j = sample after last placed event
-        # Init pars (need this for min_model)
-        pars = np.zeros((max_event_n + 1, 2))
-        pars[:, 0] = self.distribution.shape  # final gamma parameters during estimation, shape x scale
-        pars_prop = pars[: n_events + 1].copy()  # gamma params of current estimation
-        pars_prop[0, 1] = self.distribution.mean_to_scale(j * step)  # initialize gamma_parameters at 1 sample
+        # Init time_pars (need this for min_model)
+        time_pars = np.zeros((max_event_n + 1, 2))
+        time_pars[:, 0] = self.distribution.shape  # final time parameters during estimation, shape x scale
+        time_pars_props = time_pars[: n_events + 1].copy()  # gamma params of current estimation
+        time_pars_props[0, 1] = self.distribution.mean_to_scale(j * step)  # initialize time parameter at 1 sample
         last_stage = self.distribution.mean_to_scale(end - j * step)  # remainder of time
-        pars_prop[-1, 1] = last_stage
+        time_pars_props[-1, 1] = last_stage
 
-        # Init mags
-        mags = np.zeros((max_event_n, trial_data.n_dims))  # final mags during estimation
+        # Init channel_pars
+        channel_pars = np.zeros((max_event_n, trial_data.n_dims))  # final channel_pars during estimation
 
         fixed_n_model = FixedEventModel(self.pattern, self.distribution, tolerance=self.tolerance, n_events=n_events)
 
@@ -107,25 +107,25 @@ class CumulativeEstimationModel(BaseModel):
             prev_time = time
             fixed_n_model = FixedEventModel(self.pattern, self.distribution, tolerance=self.tolerance, n_events=n_events)
             # get new parameters
-            mags_props, pars_prop = self.propose_fit_params(
+            channel_pars_props, time_pars_props = self.propose_fit_params(
                 trial_data,
-                n_events, self.by_sample, step, j, mags, pars, end
+                n_events, self.by_sample, step, j, channel_pars, time_pars, end
             )
-            last_stage = pars_prop[n_events, 1]
-            pars_prop = np.array([pars_prop])
+            last_stage = time_pars_props[n_events, 1]
+            time_pars_props = np.array([time_pars_props])
 
             # Estimate model based on these propositions
             fixed_n_model.fit(
                 trial_data,
-                np.array([mags_props]),
-                np.array([pars_prop]),
+                np.array([channel_pars_props]),
+                np.array([time_pars_props]),
                 verbose=False,
                 cpus=cpus,
             )
             sol_sample_new_event = int(
                 np.round(
                     self.distribution.scale_to_mean(
-                        np.sum(fixed_n_model.parameters[0, :n_events, 1])
+                        np.sum(fixed_n_model.time_pars[0, :n_events, 1])
                     )
                 )
             )
@@ -134,9 +134,9 @@ class CumulativeEstimationModel(BaseModel):
             if likelihoods - lkh_prev > 0:  # accept solution if likelihood improved
                 lkh_prev = likelihoods
 
-                # update mags, params,
-                mags[:n_events] = fixed_n_model.magnitudes
-                pars[: n_events + 1] = fixed_n_model.parameters
+                # update channel_pars, params,
+                channel_pars[:n_events] = fixed_n_model.channel_pars
+                time_pars[: n_events + 1] = fixed_n_model.time_pars
 
                 # search for an additional event, starting again at sample 1 from prev event,
                 # or next sample if by_sample
@@ -157,7 +157,7 @@ class CumulativeEstimationModel(BaseModel):
 
             else:  # reject solution, search on
                 prev_sample = int(
-                    np.round(self.distribution.scale_to_mean(np.sum(pars[: n_events - 1, 1])))
+                    np.round(self.distribution.scale_to_mean(np.sum(time_pars[: n_events - 1, 1])))
                 )
                 # find furthest explored param. Note: this also work by_sample
                 # just a tiny bit faster this way
@@ -183,16 +183,16 @@ class CumulativeEstimationModel(BaseModel):
             print()
             print("All events found, refitting final combination.")
 
-        mags = mags[:n_events, :]
-        pars = pars[: n_events + 1, :]
+        channel_pars = channel_pars[:n_events, :]
+        time_pars = time_pars[: n_events + 1, :]
 
         self.fitted_model = FixedEventModel(
             self.pattern, self.distribution, tolerance=self.fitted_model_tolerance, n_events=n_events)
         if n_events > 0:
             self.fitted_model.fit(
                 trial_data,
-                parameters=np.array([[pars]]),
-                magnitudes=np.array([[mags]]),
+                channel_pars=np.array([[channel_pars]]),
+                time_pars=np.array([[time_pars]]),
                 verbose=verbose,
                 cpus=1,
             )
@@ -207,62 +207,62 @@ class CumulativeEstimationModel(BaseModel):
         self._check_fitted("transform data")
         self.fitted_model.transform(*args, **kwargs)
 
-    def propose_fit_params(self, trial_data, n_events, by_sample, step, j, mags, pars, end):
+    def propose_fit_params(self, trial_data, n_events, by_sample, step, j, channel_pars, time_pars, end):
         if (
             by_sample and n_events > 1
         ):  # go through the whole range sample-by-sample, j is sample since start
             scale_j = self.distribution.mean_to_scale(step * j)
 
             # New parameter proposition
-            pars_prop = pars[:n_events].copy()  # pars so far
-            n_event_j = np.argwhere(scale_j > np.cumsum(pars_prop[:, 1])) + 2  # counting from 1
+            time_pars_props = time_pars[:n_events].copy()  # time_pars so far
+            n_event_j = np.argwhere(scale_j > np.cumsum(time_pars_props[:, 1])) + 2  # counting from 1
             n_event_j = np.max(n_event_j) if len(n_event_j) > 0 else 1
             n_event_j = np.min([n_event_j, n_events])  # do not insert even after last stage
 
             # insert j at right spot, subtract prev scales
-            pars_prop = np.insert(
-                pars_prop,
+            time_pars_props = np.insert(
+                time_pars_props,
                 n_event_j - 1,
-                [self.distribution.shape, scale_j - np.sum(pars_prop[: n_event_j - 1, 1])],
+                [self.distribution.shape, scale_j - np.sum(time_pars_props[: n_event_j - 1, 1])],
                 axis=0,
             )
             # subtract inserted scale from next event
-            pars_prop[n_event_j, 1] = pars_prop[n_event_j, 1] - pars_prop[n_event_j - 1, 1]
-            last_stage = self.distribution.mean_to_scale(end) - np.sum(pars_prop[:-1, 1])
-            pars_prop[n_events, 1] = last_stage
-            mags_props = np.zeros((1, n_events, trial_data.n_dims))  # always 0?
-            mags_props[:, : n_events - 1, :] = np.tile(
-                mags[: n_events - 1, :], (len(mags_props), 1, 1)
+            time_pars_props[n_event_j, 1] = time_pars_props[n_event_j, 1] - time_pars_props[n_event_j - 1, 1]
+            last_stage = self.distribution.mean_to_scale(end) - np.sum(time_pars_props[:-1, 1])
+            time_pars_props[n_events, 1] = last_stage
+            channel_pars_props = np.zeros((1, n_events, trial_data.n_dims))  # always 0?
+            channel_pars_props[:, : n_events - 1, :] = np.tile(
+                channel_pars[: n_events - 1, :], (len(channel_pars_props), 1, 1)
             )
             # shift new event to correct position
-            mags_props = np.insert(
-                mags_props[:, :-1, :], n_event_j - 1, mags_props[:, -1, :], axis=1
+            channel_pars_props = np.insert(
+                channel_pars_props[:, :-1, :], n_event_j - 1, channel_pars_props[:, -1, :], axis=1
             )
 
         else:
             # New parameter proposition
-            pars_prop = pars[: n_events + 1].copy()
-            pars_prop[n_events - 1, 1] = self.distribution.mean_to_scale(step * j)
-            last_stage = self.distribution.mean_to_scale(end) - np.sum(pars_prop[:-1, 1])
-            pars_prop[n_events, 1] = last_stage
+            time_pars_props = time_pars[: n_events + 1].copy()
+            time_pars_props[n_events - 1, 1] = self.distribution.mean_to_scale(step * j)
+            last_stage = self.distribution.mean_to_scale(end) - np.sum(time_pars_props[:-1, 1])
+            time_pars_props[n_events, 1] = last_stage
 
-            mags_props = np.zeros((1, n_events, trial_data.n_dims))  # always 0?
-            mags_props[:, : n_events - 1, :] = np.tile(
-                mags[: n_events - 1, :], (len(mags_props), 1, 1)
+            channel_pars_props = np.zeros((1, n_events, trial_data.n_dims))  # always 0?
+            channel_pars_props[:, : n_events - 1, :] = np.tile(
+                channel_pars[: n_events - 1, :], (len(channel_pars_props), 1, 1)
             )
 
         # in edge cases scale can get negative, make sure that doesn't happen:
-        pars_prop[:, 1] = np.maximum(pars_prop[:, 1], self.distribution.mean_to_scale(1))
+        time_pars_props[:, 1] = np.maximum(time_pars_props[:, 1], self.distribution.mean_to_scale(1))
 
-        return mags_props, pars_prop
+        return channel_pars_props, time_pars_props
 
     def __getattribute__(self, attr):
         property_list = {
             "xrtraces": "get traces",
             "xrlikelihoods": "get likelihoods",
-            "xrparam_dev": "get dev params",
-            "xrmags": "get xrmags",
-            "xrparams": "get xrparams"
+            "xrtime_pars_dev": "get dev time time_pars",
+            "xrchannel_pars": "get xrchannel_pars",
+            "xrtime_pars": "get xrtime_pars"
         }
         if attr in property_list:
             self._check_fitted(property_list[attr])
