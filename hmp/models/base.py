@@ -2,7 +2,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 import numpy as np
-from hmp.distributions import GammaDistribution
+from hmp.distributions import Gamma
 
 
 class BaseModel(ABC):
