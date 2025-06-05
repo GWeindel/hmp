@@ -642,6 +642,8 @@ def centered_activity(
         event_width = 0
     if cut_before_event == 0:  # avoids searching before stim onset
         cut_before_event = event
+    if 'epoch' in data.dims:
+        data = data.stack({'trial':['participant','epoch']}).data
     if n_samples is None:
         if cut_after_event is None:
             raise ValueError(
@@ -726,7 +728,7 @@ def centered_activity(
 
     part, trial = data.coords["participant"].values, data.coords["epoch"].values
     trial_x_part = xr.Coordinates.from_pandas_multiindex(
-        MultiIndex.from_arrays([part, trial], names=("participant", "trial")),
+        MultiIndex.from_arrays([part, trial], names=("participant", "epoch")),
         "trial",
     )
     centered_data = xr.Dataset(
