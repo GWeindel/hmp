@@ -22,14 +22,14 @@ def sfreq():
 
 def positions():
     """Recovering position of the simulated electrodes."""
-    sim_info = info()
+    info = sim_info()
     positions = np.delete(
-        mne.channels.layout._find_topomap_coords(sim_info, "eeg"), 52, axis=0
+        mne.channels.layout._find_topomap_coords(info, "eeg"), 52, axis=0
     )  # inferring channel location using MNE
     return positions
 
 
-def info():
+def sim_info():
     """Recovering MNE's info file for simulated data."""
     info = mne.io.read_info(op.join(root,'simulation_parameters','info.fif'))
     return info
@@ -140,7 +140,7 @@ def simulate(
     # It loads the data, info structure and forward solution for one example subject,
     # Note that all 'subject' will use this forward solution
     # First, we get an info structure from the test subject.
-    info = simulation_info()
+    info = sim_info()
     # To simulate sources, we also need a source space. It can be obtained from the
     # forward solution of the sample subject.
     fwd = mne.read_forward_solution(op.join(root,'simulation_parameters','sample_fwd.fif'))
@@ -362,7 +362,7 @@ def demo(cpus, n_events, seed=123):
     shape = 2  # shape of the gamma distribution
 
     # Storing electrode position, specific to the simulations
-    positions = simulation_info()  # Electrode position
+    positions = sim_info()  # Electrode position
     sfreq = 100
     all_source_names = available_sources()  # all brain sources you can play with
     n_trials = 50  # Number of trials to simulate
