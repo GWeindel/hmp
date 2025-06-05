@@ -8,6 +8,7 @@ from functools import cached_property
 from itertools import cycle, product
 from typing import Any
 from warnings import resetwarnings, warn
+from hmp.preprocessing import Preprocessing
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -31,8 +32,13 @@ class TrialData():
     trial_coords: Any
 
     @classmethod
-    def from_preprocessed_data(cls, data, pattern):
-
+    def from_preprocessed_data(cls, preprocessed, pattern):
+        if isinstance(preprocessed, Preprocessing):
+            data = preprocessed.data
+        elif 'component' in preprocessed.dims:
+            data = preprocessed
+        else:
+            raise ValueError(f"preprocessed must be an hmp preprocessed object obtained using hmp.preprocessing")
         # compute sequence durations based on number of samples
         durations = (
             data.unstack()
