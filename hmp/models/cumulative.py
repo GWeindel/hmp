@@ -163,7 +163,7 @@ class CumulativeEstimationModel(BaseModel):
                 # just a tiny bit faster this way
                 if not self.by_sample:
                     max_scale = np.max(
-                        [np.sum(x[:n_events, 1]) for x in fixed_n_model.param_dev]
+                        [np.sum(x[:n_events, 1]) for x in fixed_n_model.time_pars_dev]
                     )
                     max_sample = int(np.round(self.distribution.scale_to_mean(max_scale)))
                     j = (
