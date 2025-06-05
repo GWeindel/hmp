@@ -451,7 +451,7 @@ def hmp_data_format(
         data = data.set_coords("events")
     return data
 
-def save_eventprobs(data, filename):
+def save_xr(data, filename):
     """Save fit."""
     data = data.copy()
     attributes = data.attrs.copy()
@@ -463,7 +463,7 @@ def save_eventprobs(data, filename):
     print(f"{filename} saved")
 
 
-def load_eventprobs(filename):
+def load_xr(filename):
     """Load fit or data."""
     with xr.open_dataset(filename) as data:
         data.load()
@@ -477,7 +477,7 @@ def load_eventprobs(filename):
         data = data.transpose(
             "iteration", "trial", "sample", "event"
         )
-    else:
+    elif "trial" in data:
         data = data.transpose(
             "trial", "sample", "event"
         )
