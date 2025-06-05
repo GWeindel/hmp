@@ -6,7 +6,7 @@ from hmp import io
 from hmp import simulations
 from hmp import utils
 from hmp.patterns import HalfSine
-from hmp.distributions import GammaDistribution
+from hmp.distributions import Gamma
 from hmp import preprocessing
 from hmp.trialdata import TrialData
 from hmp.models import FixedEventModel

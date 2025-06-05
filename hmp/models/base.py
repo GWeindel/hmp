@@ -40,7 +40,7 @@ class BaseModel(ABC):
     ):
         self.pattern = pattern
         if distribution is None:
-            distribution = GammaDistribution()
+            distribution = Gamma()
         self.distribution = distribution
         self._fitted = False
 

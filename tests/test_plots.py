@@ -2,7 +2,6 @@ import numpy as np
 import hmp
 from hmp.models import FixedEventModel
 from hmp.patterns import HalfSine
-from hmp.distributions import GammaDistribution
 from hmp.trialdata import TrialData
 from hmp.visu import plot_topo_timecourse
 from hmp import preprocessing

@@ -5,7 +5,7 @@ import hmp
 from hmp import simulations
 from hmp.models import CumulativeEstimationModel, FixedEventModel
 from hmp.patterns import HalfSine
-from hmp.distributions import GammaDistribution
+from hmp.distributions import Gamma
 from hmp.trialdata import TrialData
 from hmp import preprocessing
 
@@ -22,7 +22,7 @@ def test_cumulative_simple():
     data_b = hmp.utils.participant_selection(hmp_data, 'b')
     event_properties = HalfSine.create_expected(sfreq=data_b.sfreq)
     trial_data_b = TrialData.from_preprocessed_data(data=data_b, pattern=event_properties.template)
-    time_distribution = GammaDistribution()
+    time_distribution = Gamma()
 
     true_model = FixedEventModel(event_properties, time_distribution, n_events=n_events)
     # Recover generating parameters
