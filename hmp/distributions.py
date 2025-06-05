@@ -2,7 +2,7 @@ from scipy.stats import gamma, lognorm, invgauss, weibull_min
 from scipy.special import gamma as gamma_func
 import numpy as np
 
-class GammaDistribution():
+class Gamma():
     """
     Define a gamma distribution.
 
@@ -64,7 +64,7 @@ class GammaDistribution():
         return mean / self.shape
 
 
-class LognormDistribution():
+class Lognorm():
     """
     Define a Lognormal distribution.
 
@@ -123,7 +123,7 @@ class LognormDistribution():
         """     
         return np.exp(np.log(mean) - (self.shape**2 / 2))
 
-class WaldDistribution():
+class Wald():
     """
     Define a Wald distribution (aka inverse Gaussian).
 
@@ -182,7 +182,7 @@ class WaldDistribution():
         """
         return mean / self.shape
 
-class WeibullDistribution():  
+class Weibull():  
     """
     Define a Weibull distribution.
 
