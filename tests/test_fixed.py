@@ -24,7 +24,7 @@ def test_fixed_simple():
     # Data b is without noise, recovery should be perfect
     data_b = hmp.utils.participant_selection(hmp_data, 'b')
     event_properties = HalfSine.create_expected(sfreq=data_b.sfreq)
-    trial_data_b = TrialData.from_preprocessed_data(data=data_b, pattern=event_properties.template)
+    trial_data_b = TrialData.from_preprocessed_data(preprocessed=data_b, pattern=event_properties.template)
     time_distribution = Gamma()
     model = FixedEventModel(event_properties, time_distribution, n_events=n_events)
     # Recover generating parameters
@@ -69,9 +69,9 @@ def test_fixed_multilevel():
     hmp_data_a = hmp.utils.participant_selection(hmp_data, 'a')
     hmp_data_b = hmp.utils.participant_selection(hmp_data, 'b')
     event_properties = HalfSine.create_expected(sfreq=hmp_data_b.sfreq)
-    trial_data = TrialData.from_preprocessed_data(data=hmp_data, pattern=event_properties.template)
-    trial_data_a = TrialData.from_preprocessed_data(data=hmp_data_a, pattern=event_properties.template)
-    trial_data_b = TrialData.from_preprocessed_data(data=hmp_data_b, pattern=event_properties.template)
+    trial_data = TrialData.from_preprocessed_data(preprocessed=hmp_data, pattern=event_properties.template)
+    trial_data_a = TrialData.from_preprocessed_data(preprocessed=hmp_data_a, pattern=event_properties.template)
+    trial_data_b = TrialData.from_preprocessed_data(preprocessed=hmp_data_b, pattern=event_properties.template)
 
     model = FixedEventModel(event_properties, n_events=n_events)
     # Recover generating parameters
@@ -88,7 +88,7 @@ def test_fixed_multilevel():
     lkh_a, estimates_a = model.fit_transform(trial_data_a)
 
     # Fit model on both conditions (noiseless b should help estimate a)
-    trial_data = TrialData.from_preprocessed_data(data=hmp_data, pattern=event_properties.template)
+    trial_data = TrialData.from_preprocessed_data(preprocessed=hmp_data, pattern=event_properties.template)
     lkh_comb, estimates_comb = model.fit_transform(trial_data, time_map=time_map, channel_map=channel_map, level_dict=level_dict)
     lkh_a_level, estimates_a_level = model.transform(trial_data_a)
 
@@ -107,7 +107,7 @@ def test_fixed_multilevel():
 def test_starting_points():
     _, _, epoch_data, hmp_data, positions, sfreq, n_events = data()
     event_properties = HalfSine.create_expected(sfreq=hmp_data.sfreq)
-    trial_data = TrialData.from_preprocessed_data(data=hmp_data, pattern=event_properties.template)
+    trial_data = TrialData.from_preprocessed_data(preprocessed=hmp_data, pattern=event_properties.template)
     # Testing starting points
     model_sp = FixedEventModel(event_properties, n_events=n_events, starting_points=2, max_scale=21)
     model_sp.fit(trial_data, verbose=True)
