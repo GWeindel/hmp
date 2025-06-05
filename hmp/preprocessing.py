@@ -127,15 +127,15 @@ class Preprocessing:
             (if apply_standard=True).
         Second, a spatial PCA on the average variance-covariance matrix is performed
             (if method='pca', more methods in development).
-        Third, stacks the data going from format [participant * epochs * samples * channels] to
-            [samples * channels].
+        Third, stacks the data going from format [n_participants * n_epochs * n_samples * n_channels] to
+            [sample * channel].
         Last, performs z-scoring on each epoch and for each principal component (PC), or for each
             participant and PC, or across all data for each PC.
 
         Parameters
         ----------
         epoch_data : xarray
-            xarray with dimensions [participant * epochs * samples * channels]
+            xarray with dimensions [n_participants * n_epochs * n_samples * n_channels]
         participants_variable : str
             name of the dimension for participants ID
         apply_standard : bool
@@ -194,7 +194,7 @@ class Preprocessing:
 
         if np.sum(
             np.isnan(data.groupby("participant",
-                                  squeeze=False).mean(["epochs", "samples"]).data.values)) != 0:
+                                  squeeze=False).mean(["epoch", "sample"]).data.values)) != 0:
             raise ValueError("at least one participant has an empty channel")
 
         method = AnalysisMethod.parse(method)
@@ -226,12 +226,12 @@ class Preprocessing:
         if centering or method == Method.MCCA:
             data = self._center(data)
 
-        data = data.transpose("participant", "epochs", "channels", "samples")
+        data = data.transpose("participant", "epoch", "channel", "sample")
 
         if method == AnalysisMethod.PCA:
             if weights is None:
                 indiv_data = np.zeros(
-                    (data.sizes["participant"], data.sizes["channels"], data.sizes["channels"])
+                    (data.sizes["participant"], data.sizes["channel"], data.sizes["channel"])
                 )
                 for i in range(data.sizes["participant"]):
                     x_i = np.squeeze(data.data[i])
@@ -245,7 +245,7 @@ class Preprocessing:
                     )
                 pca_ready_data = np.mean(np.array(indiv_data), axis=0)
                 # Performing spatial PCA on the average var-cov matrix
-                weights, preprocessing_model = self._pca(pca_ready_data, n_comp, data.coords["channels"].values)
+                weights, preprocessing_model = self._pca(pca_ready_data, n_comp, data.coords["channel"].values)
                 data = data @ weights
                 weights = weights
             else:
@@ -253,44 +253,44 @@ class Preprocessing:
 
         elif method == AnalysisMethod.MCCA:
 
-            ori_coords = data.drop_vars("channels").coords
+            ori_coords = data.drop_vars("channel").coords
             if n_ppcas is None:
                 n_ppcas = n_comp * 3
             mcca_m = mcca.MCCA(n_components_pca=n_ppcas, n_components_mcca=n_comp, r=mcca_reg)
             if cov:
-                fitted_data = data.transpose("participant", "epochs", "samples", "channels").data
+                fitted_data = data.transpose("participant", "epoch", "sample", "channel").data
                 ccs = mcca_m.obtain_mcca_cov(fitted_data)
             else:
                 if averaged:
                     fitted_data = (
-                        data.mean("epochs").transpose("participant", "samples", "channels").data
+                        data.mean("epoch").transpose("participant", "sample", "channel").data
                     )
                 else:
                     fitted_data = (
-                        data.stack({"all": ["epochs", "samples"]})
-                        .transpose("participant", "all", "channels")
+                        data.stack({"all": ["epoch", "sample"]})
+                        .transpose("participant", "all", "channel")
                         .data
                     )
                 ccs = mcca_m.obtain_mcca(fitted_data)
             trans_ccs = np.tile(
                 np.nan,
                 (data.sizes["participant"],
-                 data.sizes["epochs"],
-                 data.sizes["samples"],
+                 data.sizes["epoch"],
+                 data.sizes["sample"],
                  ccs.shape[-1]),
             )
             for i, part in enumerate(data.participant):
                 trans_ccs[i] = mcca_m.transform_trials(
                     data.sel(participant=part).transpose(
-                        "epochs", "samples", "channels").data.copy()
+                        "epoch", "sample", "channel").data.copy()
                 )
             data = xr.DataArray(
                 trans_ccs,
-                dims=["participant", "epochs", "samples", "component"],
+                dims=["participant", "epoch", "sample", "component"],
                 coords=dict(
                     participant=data.participant,
-                    epochs=data.epochs,
-                    samples=data.samples,
+                    epoch=data.epoch,
+                    sample=data.sample,
                     component=np.arange(n_comp),
                 ),  # n_comp
             )
@@ -300,7 +300,7 @@ class Preprocessing:
 
         elif not method:
 
-            data = data.rename({"channels": "component"})
+            data = data.rename({"channel": "component"})
             data["component"] = np.arange(len(data.component))
             weights = np.identity(len(data.component))
             preprocessing_model = None
@@ -334,19 +334,19 @@ class Preprocessing:
                 case ApplyZScore.TRIAL:
                     if zscore_across_pcs:
                         data = (
-                            data.stack(trial=[participants_variable, "epochs"])
-                            .groupby("trial")
+                            data.stack(trials=[participants_variable, "epoch"])
+                            .groupby("trials")
                             .map(self.zscore_xarray)
                             .unstack()
                         )
                     else:
                         data = (
-                            data.stack(trial=[participants_variable, "epochs", "component"])
-                            .groupby("trial", squeeze=False)
+                            data.stack(trials=[participants_variable, "epoch", "component"])
+                            .groupby("trials", squeeze=False)
                             .map(self.zscore_xarray)
                             .unstack()
                         )
-            data = data.transpose("participant", "epochs", "samples", "component")
+            data = data.transpose("participant", "epoch", "sample", "component")
             data = data.assign_coords(ori_coords)
 
         data.attrs["sfreq"] = sfreq
@@ -365,14 +365,14 @@ class Preprocessing:
         return data
 
     @staticmethod
-    def _pca(pca_ready_data: xr.DataArray, n_comp: int, channels) -> xr.DataArray:
+    def _pca(pca_ready_data: xr.DataArray, n_comp: int, channel) -> xr.DataArray:
         # TODO: test seperate function
         n_comp = user_input_n_comp(data=pca_ready_data) if n_comp is None else n_comp
         pca = PCA(n_components=n_comp, svd_solver="full")  # selecting Principale components (PC)
         pca.fit(pca_ready_data)
         # Rebuilding pca PCs as xarray to ease computation
-        coords = dict(channels=("channels", channels), component=("component", np.arange(n_comp)))
-        pca_weights = xr.DataArray(pca.components_.T, dims=("channels", "component"), coords=coords)
+        coords = dict(channel=("channel", channel), component=("component", np.arange(n_comp)))
+        pca_weights = xr.DataArray(pca.components_.T, dims=("channel", "component"), coords=coords)
         return pca_weights, pca
 
     @staticmethod
@@ -391,28 +391,28 @@ class Preprocessing:
     def stack_data(data: xr.DataArray) -> xr.DataArray:
         """Stack the data.
 
-        Going from format [participant * epochs * samples * channels] to
-        [samples * channels] with sample indexes starts and ends to delimitate the epochs.
+        Going from format [n_participant * n_epochs *n_ n_samples * n_channels] to
+        [sample * channel] with sample indexes starts and ends to delimitate the epochs.
 
 
         Parameters
         ----------
         data : xarray
-            xarray with dimensions [participant * epochs * samples * channels]
+            xarray with dimensions [n_participant * n_epochs * n_samples * n_channels]
         subjects_variable : str
             name of the dimension for subjects ID
 
         Returns
         -------
         data : xarray.Dataset
-            xarray dataset [samples * channels]
+            xarray dataset [sample * channel]
         """
         if isinstance(data, (xr.DataArray, xr.Dataset)) and "component" not in data.dims:
-            data = data.rename_dims({"channels": "component"})
+            data = data.rename_dims({"channel": "component"})
         if "participant" not in data.dims:
             data = data.expand_dims("participant")
         data = data.stack(
-            all_samples=["participant", "epochs", "samples"]).dropna(dim="all_samples")
+            all_samples=["participant", "epoch", "sample"]).dropna(dim="all_samples")
         return data
 
     @staticmethod

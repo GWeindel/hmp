@@ -2,7 +2,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 import numpy as np
-from hmp.distributions import GammaDistribution
+from hmp.distributions import Gamma
 
 
 class BaseModel(ABC):
@@ -40,7 +40,7 @@ class BaseModel(ABC):
     ):
         self.pattern = pattern
         if distribution is None:
-            distribution = GammaDistribution()
+            distribution = Gamma()
         self.distribution = distribution
         self._fitted = False
 
