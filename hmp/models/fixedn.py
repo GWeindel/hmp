@@ -742,10 +742,10 @@ class FixedEventModel(BaseModel):
 
         for i, cur_level in enumerate(data_levels):
             part = trial_data.coords["participant"].values[(levels == cur_level)]
-            trial = trial_data.coords["trial"].values[(levels == cur_level)]
+            epoch = trial_data.coords["epoch"].values[(levels == cur_level)]
             data_events =  channel_map[cur_level, :] >= 0
             trial_x_part = xr.Coordinates.from_pandas_multiindex(
-                MultiIndex.from_arrays([part, trial], names=("participant", "epoch")),
+                MultiIndex.from_arrays([part, epoch], names=("participant", "epoch")),
                 "trial",
             )
             xreventprobs = xr.DataArray(likes_events_level[i][1], dims=("trial", "sample", "event"),
