@@ -79,15 +79,15 @@ class BackwardEstimationModel(BaseModel):
 
             print(f"Estimating all solutions for {n_events} events")
 
-            pars_prev = self.submodels[n_events+1].xrparams.dropna("stage").values
-            mags_prev = self.submodels[n_events+1].xrmags.dropna("event").values
+            time_pars_prev = self.submodels[n_events+1].xrtime_pars.dropna("stage").values
+            channel_pars_prev = self.submodels[n_events+1].xrchannel_pars.dropna("event").values
 
             events_temp, pars_temp = [], []
 
             for event in np.arange(n_events + 1):  # creating all possible starting points
-                events_temp.append(mags_prev[:, np.arange(n_events + 1) != event,])
+                events_temp.append(channel_pars_prev[:, np.arange(n_events + 1) != event,])
 
-                temp_pars = np.copy(pars_prev)
+                temp_pars = np.copy(time_pars_prev)
                 temp_pars[:, event, 1] = (
                     temp_pars[:, event, 1] + temp_pars[:, event + 1, 1]
                 )  # combine two stages into one
@@ -95,8 +95,8 @@ class BackwardEstimationModel(BaseModel):
                 pars_temp.append(temp_pars)
             fixed_n_model.fit(
                             trial_data,
-                            magnitudes=np.array(events_temp),
-                            parameters=np.array(pars_temp),
+                            channel_pars=np.array(events_temp),
+                            time_pars=np.array(pars_temp),
                             verbose=False,
                             cpus=cpus
                         )
@@ -125,9 +125,9 @@ class BackwardEstimationModel(BaseModel):
         property_list = {
             "xrtraces": "get traces",
             "xrlikelihoods": "get likelihoods",
-            "xrparam_dev": "get dev params",
-            "xrmags": "get xrmags",
-            "xrparams": "get xrparams"
+            "xrtime_pars_dev": "get dev time pars",
+            "xrchannel_pars": "get xrchannel_pars",
+            "xrtime_pars": "get xrtime_pars"
         }
         if attr in property_list:
             self._check_fitted(property_list[attr])
@@ -136,7 +136,7 @@ class BackwardEstimationModel(BaseModel):
 
     def get_fixed_model(self, n_events, starting_points):
         return FixedEventModel(
-            self.events, self.distribution, n_events=n_events,
+            self.pattern, self.distribution, n_events=n_events,
             starting_points=starting_points,
             tolerance=self.tolerance,
             max_iteration=self.max_iteration)

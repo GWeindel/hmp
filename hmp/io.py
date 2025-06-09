@@ -38,20 +38,22 @@ def read_mne_data(
     - All times are expressed on the second scale.
     - If multiple files in pfiles the data of the group is read and seqentially processed.
     - For non epoched data: Reaction Times are only computed if response trigger is in the epoch
-    window (determined by tmin and tmax)
+      window (determined by tmin and tmax)
 
     Procedure:
     if data not already epoched:
-        0.1) the data is filtered with filters specified in low_pass and high_pass.
-        Parameters of the filter are determined by MNE's filter function.
-        0.2) if no events is provided, detect events in stimulus channel and keep events with id in
-        event_id and resp_id.
-        0.3) eventual downsampling is performed if sfreq is lower than the data's sampling
-        frequency. The event structure is passed at the resample() function of MNE to ensure that
-        events are approriately timed after downsampling.
-        0.4) epochs are created based on stimulus onsets (event_id) and tmin and tmax. Epoching
-        removes any epoch where a 'BAD' annotation is present and all epochs where an channel
-        exceeds reject_threshold. Epochs are baseline corrected from tmin to stim. onset (time 0).
+
+    0.1) the data is filtered with filters specified in low_pass and high_pass.
+    Parameters of the filter are determined by MNE's filter function.
+    0.2) if no events is provided, detect events in stimulus channel and keep events with id in
+    event_id and resp_id.
+    0.3) eventual downsampling is performed if sfreq is lower than the data's sampling
+    frequency. The event structure is passed at the resample() function of MNE to ensure that
+    events are approriately timed after downsampling.
+    0.4) epochs are created based on stimulus onsets (event_id) and tmin and tmax. Epoching
+    removes any epoch where a 'BAD' annotation is present and all epochs where an channel
+    exceeds reject_threshold. Epochs are baseline corrected from tmin to stim. onset (time 0).
+
     1) Reaction times (RT) are computed based on the sample difference between onset of stimulus and
     response triggers. If no response event happens after a stimulus or if RT > upper_limit_rt
     & < upper_limit_rt, RT is 0.
@@ -74,7 +76,7 @@ def read_mne_data(
     subj_idx : list
         List of subject names
     events_provided : float
-        np.array with 3 columns -> [samples of the event, initial value of the channel, event code].
+        np.array with 3 columns -> [sample of the event, initial value of the channel, event code].
         To use if the automated event detection method of MNE is not appropriate
     verbose : bool
         Whether to display MNE's message
@@ -89,7 +91,7 @@ def read_mne_data(
     high_pass : float
         Value of the high pass filter
     pick_channels: list
-        'eeg' (default) to keep only EEG channels or  list of channel names to keep
+        'eeg' (default) to keep only EEG channel or  list of channel names to keep
     baseline : tuple
         Time values to compute the baseline and substract to epoch data (usually some time before
         stimulus onset)
@@ -110,8 +112,8 @@ def read_mne_data(
     Returns
     -------
     epoch_data : xarray
-        Returns an xarray Dataset with all the data, events, channels, participant.
-        All eventual participant/channels naming and epochs index are kept.
+        Returns an xarray Dataset with all the data, events, channel, participant.
+        All eventual participant/channel naming and epochs index are kept.
         The choosen sampling frequnecy is stored as attribute.
     """
     import mne
@@ -135,7 +137,6 @@ def read_mne_data(
     else:
         metadata_i = None
     
-    offset_after_resp_samples = np.rint(offset_after_resp * sfreq).astype(int)
     ev_i = 0  # syncing up indexing between event and raw files
     for participant in pfiles:
         print(f"Processing participant {participant}'s {dict_datatype[epoched]} {pick_channels}")
@@ -296,6 +297,7 @@ def read_mne_data(
         elif rts is None:
             raise ValueError("Expected either a metadata Dataframe or an array of Reaction Times")
         rts_arr = np.array(rts)
+        offset_after_resp_samples = np.rint(offset_after_resp * sfreq).astype(int)
         if verbose:
             print(
                 f"Applying reaction time trim to keep RTs between {lower_limit_rt} and "
@@ -342,7 +344,7 @@ def read_mne_data(
         while np.isnan(cropped_data_epoch[-1]).all():  # Remove excluded epochs based on rejection
             cropped_data_epoch = cropped_data_epoch[:-1]
         if ~np.isinf(reject_threshold):
-            print(f"{rej} trial rejected based on threshold of {reject_threshold}")
+            print(f"{rej} trials rejected based on threshold of {reject_threshold}")
         print(f"{len(cropped_data_epoch)} trials were retained for participant {participant}")
         if verbose:
             print(f"End sampling frequency is {sfreq} Hz")
@@ -354,7 +356,7 @@ def read_mne_data(
                 None,
                 offset_after_resp_samples,
                 epochs=[int(x) for x in epochs_idx],
-                channels=epochs.ch_names,
+                channel=epochs.ch_names,
                 metadata=metadata_i,
             )
         )
@@ -367,7 +369,7 @@ def read_mne_data(
     )
     n_trials = (
         (~np.isnan(epoch_data.data[:, :, :, 0].data)).sum(axis=1)[:, 0].sum()
-    )  # Compute number of trials based on trials where first sample is nan
+    )  # Compute number of trial based on trial where first sample is nan
     epoch_data = epoch_data.assign_attrs(
         lowpass=epochs.info["lowpass"],
         highpass=epochs.info["highpass"],
@@ -379,18 +381,18 @@ def read_mne_data(
     return epoch_data
 
 def hmp_data_format(
-    data, sfreq, events=None, offset=0, participants=[], epochs=None, channels=None, metadata=None
+    data, sfreq, events=None, offset=0, participants=[], epochs=None, channel=None, metadata=None
 ):
     """Convert to expected shape.
 
-    From 3D matrix with dimensions (participant) * trials * channels * sample into xarray Dataset
+    From 3D matrix with dimensions (participant) * trial * channel * sample into xarray Dataset
 
     Parameters
     ----------
     data : ndarray
-        4/3D matrix with dimensions (participant) * trials * channels * sample
+        4/3D matrix with dimensions (participant) * trial * channel * sample
     events : ndarray
-        np.array with 3 columns -> [samples of the event, initial value of the channel, event code].
+        np.array with 3 columns -> [sample of the event, initial value of the channel, event code].
         To use if the automated event detection method of MNE is not appropriate.
     sfreq : float
         Sampling frequency of the data
@@ -398,7 +400,7 @@ def hmp_data_format(
         List of participant index
     epochs : list
         List of epochs index
-    channels : list
+    channel : list
         List of channel index
     """
     if len(np.shape(data)) == 4:  # means group
@@ -408,48 +410,48 @@ def hmp_data_format(
         n_subj = 1
     else:
         raise ValueError(f"Unknown data format with dimensions {np.shape(data)}")
-    if channels is None:
-        channels = np.arange(n_channels)
+    if channel is None:
+        channel = np.arange(n_channels)
     if epochs is None:
         epochs = np.arange(n_epochs)
     if n_subj < 2:
         data = xr.Dataset(
             {
-                "data": (["epochs", "channels", "samples"], data),
+                "data": (["epoch", "channel", "sample"], data),
             },
-            coords={"epochs": epochs, "channels": channels, "samples": np.arange(n_samples)},
+            coords={"epoch": epochs, "channel": channel, "sample": np.arange(n_samples)},
             attrs={"sfreq": sfreq, "offset": offset},
         )
     else:
         data = xr.Dataset(
             {
-                "data": (["participant", "epochs", "channels", "samples"], data),
+                "data": (["participant", "epoch", "channel", "sample"], data),
             },
             coords={
                 "participant": participants,
-                "epochs": epochs,
-                "channels": channels,
-                "samples": np.arange(n_samples),
+                "epoch": epoch,
+                "channel": channel,
+                "sample": np.arange(n_samples),
             },
             attrs={"sfreq": sfreq, "offset": offset},
         )
     if metadata is not None:
         metadata = metadata.loc[epochs]
         metadata = metadata.to_xarray()
-        metadata = metadata.rename_dims({"index": "epochs"})
-        metadata = metadata.rename_vars({"index": "epochs"})
+        metadata = metadata.rename_dims({"index": "epoch"})
+        metadata = metadata.rename_vars({"index": "epoch"})
         data = data.merge(metadata)
         data = data.set_coords(list(metadata.data_vars))
     if events is not None:
         data["events"] = xr.DataArray(
             events,
-            dims=("participant", "epochs"),
-            coords={"participant": participants, "epochs": epochs},
+            dims=("participant", "epoch"),
+            coords={"participant": participants, "epoch": epoch},
         )
         data = data.set_coords("events")
     return data
 
-def save_eventprobs(data, filename):
+def save_xr(data, filename):
     """Save fit."""
     data = data.copy()
     attributes = data.attrs.copy()
@@ -461,23 +463,23 @@ def save_eventprobs(data, filename):
     print(f"{filename} saved")
 
 
-def load_eventprobs(filename):
+def load_xr(filename):
     """Load fit or data."""
     with xr.open_dataset(filename) as data:
         data.load()
-    if "trials" in data:
-        data = data.stack(trial_x_participant=["participant", "trials"]).dropna(
-            dim="trial_x_participant", how="all"
+    if "epoch" in data:
+        data = data.stack(trial=["participant", "epoch"]).dropna(
+            dim="trial", how="all"
         )
 
     # Ensures correct order of dimensions for later index use
     if "iteration" in data:
         data = data.transpose(
-            "iteration", "trial_x_participant", "samples", "event"
+            "iteration", "trial", "sample", "event"
         )
-    else:
+    elif "trial" in data:
         data = data.transpose(
-            "trial_x_participant", "samples", "event"
+            "trial", "sample", "event"
         )
     return data.to_dataarray().drop_vars('variable').squeeze()
 

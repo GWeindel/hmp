@@ -15,21 +15,21 @@ def available_sources():
     return labels
 
 
-def simulation_sfreq():
+def sfreq():
     """Recovering sampling frequency of the sample data."""
-    return simulation_info()["sfreq"]
+    return info()["sfreq"]
 
 
-def simulation_positions():
+def positions():
     """Recovering position of the simulated electrodes."""
-    info = simulation_info()
+    info = sim_info()
     positions = np.delete(
         mne.channels.layout._find_topomap_coords(info, "eeg"), 52, axis=0
     )  # inferring channel location using MNE
     return positions
 
 
-def simulation_info():
+def sim_info():
     """Recovering MNE's info file for simulated data."""
     info = mne.io.read_info(op.join(root,'simulation_parameters','info.fif'))
     return info
@@ -55,7 +55,7 @@ def simulate(
     relations=None,
     data_type="eeg",
     n_subj=1,
-    path="./",
+    path=".",
     overwrite=False,
     verbose=False,
     noise=True,
@@ -72,13 +72,13 @@ def simulate(
     Parameters
     ----------
     sources : list
-        2D or 3D list with dimensions (n_subjects *) sources * source_parameters
+        2D or 3D list with dimensions (n_subjects * ) sources * source_parameters
         Source parameters should contain :
         - the name of the source (see the output of available_source())
         - the duration of the event (in frequency, usually 10Hz)
         - the amplitude or strength of the signal from the source, expressed in volt (e.g. 1e-8 V)
-        - the duration of the preceding stage as a scipy.stats
-            distribution (e.g. scipy.stats.gamma(a, scale))
+        - the duration of the preceding stage as a scipy.stats distribution
+        (e.g. scipy.stats.gamma(a, scale))
     n_trials: int
         Number of trials
     n_jobs: int
@@ -115,6 +115,8 @@ def simulate(
         list of file names (file + number of subject)
     """
     os.environ["SUBJECTS_DIR"] = op.join(root,'simulation_parameters')
+    path = op.join(os.getcwd(), path)
+
     if not verbose:
         mne.set_log_level("warning")
     else:
@@ -138,7 +140,7 @@ def simulate(
     # It loads the data, info structure and forward solution for one example subject,
     # Note that all 'subject' will use this forward solution
     # First, we get an info structure from the test subject.
-    info = simulation_info()
+    info = sim_info()
     # To simulate sources, we also need a source space. It can be obtained from the
     # forward solution of the sample subject.
     fwd = mne.read_forward_solution(op.join(root,'simulation_parameters','sample_fwd.fif'))
@@ -164,29 +166,29 @@ def simulate(
     for subj in range(n_subj):
         sources_subj = sources[subj]
         # Pre-allocate the random times to avoid generating too long 'recordings'
-        rand_times = np.zeros((len(sources_subj), n_trials))
         random_indices_list = []
-        for s, source in enumerate(sources_subj):
-            # How many trials wil have the event, default is all
-            props_trial = int(np.round(n_trials * proportions[s]))
-            if proportions[s] < 1:
-                random_indices_list.append(
-                    random_state.choice(np.arange(n_trials), size=props_trial, replace=False)
-                )
-            else:
-                random_indices_list.append(np.arange(n_trials))
-            rand_times[s, random_indices_list[-1]] = source[-1].rvs(
-                size=len(random_indices_list[-1]), random_state=random_state
-            )
-        seq_index = np.diff(relations, prepend=0) > 0
         if times is None:
-            if seq_index.all():  # If all events are sequential
-                trial_time = np.sum(rand_times, axis=0)
-            else:
-                trial_time_seq = np.sum(rand_times[seq_index], axis=0)
-                trial_time_nonseq = np.sum(rand_times[~seq_index], axis=0)
-                
-                trial_time = np.maximum(trial_time_seq, trial_time_nonseq)
+            rand_times = np.zeros((len(sources_subj), n_trials))
+            for s, source in enumerate(sources_subj):
+                # How many trials wil have the event, default is all
+                props_trial = int(np.round(n_trials * proportions[s]))
+                if proportions[s] < 1:
+                    random_indices_list.append(
+                        random_state.choice(np.arange(n_trials), size=props_trial, replace=False)
+                    )
+                else:
+                    random_indices_list.append(np.arange(n_trials))
+                rand_times[s, random_indices_list[-1]] = source[-1].rvs(
+                    size=len(random_indices_list[-1]), random_state=random_state
+                )
+                seq_index = np.diff(relations, prepend=0) > 0
+                if seq_index.all():  # If all events are sequential
+                    trial_time = np.sum(rand_times, axis=0)
+                else:
+                    trial_time_seq = np.sum(rand_times[seq_index], axis=0)
+                    trial_time_nonseq = np.sum(rand_times[~seq_index], axis=0)
+                    
+                    trial_time = np.maximum(trial_time_seq, trial_time_nonseq)
         else:
             trial_time = np.sum(times, axis=1)
         trial_time /= 1000  # to seconds
@@ -202,7 +204,7 @@ def simulate(
         else:
             subj_file = file + f"_{subj}_raw.fif"
         if subj_file in os.listdir(path) and not overwrite:
-            subj_file = path + subj_file
+            subj_file = op.join(path, subj_file)
             warn(f"{subj_file} exists no new simulation performed", UserWarning)
             files_subj.append(subj_file)
             files_subj.append(subj_file.split(".fif")[0] + "_generating_events.npy")
@@ -264,12 +266,14 @@ def simulate(
                 # adding source event, take as previous time the event defined by relation (default
                 # is previous event)
                 events = generating_events[generating_events[:, -1] == relations[s]].copy()
-                random_indices = random_indices_list[s]
                 if times is None:
+                    random_indices = random_indices_list[s]
                     # Always at least one sample later
                     rand_i = np.maximum(1, rand_times[s] / (tstep * 1000))
                     rand_i = np.round(rand_i, decimals=0)
                 else:
+                    random_indices_list.append(np.arange(n_trials))
+                    random_indices = random_indices_list[s]
                     rand_i = times[:, s] / (tstep * 1000)
                 if len(rand_i[rand_i < 0]) > 0:
                     warn(
@@ -346,21 +350,20 @@ def demo(cpus, n_events, seed=123):
     """Create example data for the tutorials."""
     ## Imports and code specific to the simulation (see tutorial 3 and 4 for real data)
     from scipy.stats import gamma
-
-    from hmp.utils import read_mne_data
+    from hmp.io import read_mne_data
 
     random_gen = np.random.default_rng(seed=seed)
 
     ## Parameters for the simulations
     frequency, amplitude = (
         10.0,
-        0.3e-7,
-    )  # Frequency of the transition event and its amplitude in Volt
+        1e-7,
+    )  # Frequency of the transition event and its amplitude in nAm
     shape = 2  # shape of the gamma distribution
 
     # Storing electrode position, specific to the simulations
-    positions = simulation_info()  # Electrode position
-    sfreq = 250
+    positions = sim_info()  # Electrode position
+    sfreq = 100
     all_source_names = available_sources()  # all brain sources you can play with
     n_trials = 50  # Number of trials to simulate
 
@@ -376,11 +379,11 @@ def demo(cpus, n_events, seed=123):
             [name_sources[source], frequency, amplitude, gamma(shape, scale=times[source])]
         )  # gamma returns times in ms
 
-    file = "dataset_tutorial2"  # Name of the file to save
+    file = "demo_dataset"  # Name of the file to save
 
     # Simulating and recover information on electrode location and true time of the simulated events
     files = simulate(
-        sources, n_trials, cpus, file, overwrite=False, seed=seed, noise=True, sfreq=sfreq
+        sources, n_trials, cpus, file, path='sample_data', overwrite=False, seed=seed, noise=True, sfreq=sfreq
     )
 
     generating_events = np.load(files[1])
@@ -401,7 +404,8 @@ def demo(cpus, n_events, seed=123):
     ]  # only retain stimulus and response triggers
 
     # Reading the data
-    eeg_dat = read_mne_data(files[0], event_id, resp_id, events_provided=events, verbose=False)
+    eeg_dat = read_mne_data(files[0], event_id, resp_id, events_provided=events,
+                            verbose=False, offset_after_resp=0.025)
 
     all_other_chans = range(len(positions.ch_names[:-61]))  # non-eeg
     chan_list = list(np.arange(len(positions.ch_names)))
@@ -414,7 +418,7 @@ def demo(cpus, n_events, seed=123):
 def classification_true(true_topologies, test_topologies):
     """Classifies event as belonging to one of the true events.
 
-    Parameters,
+    Parameters
     ----------
     true_topologies : xarray.DataArray
         topologies for the true events simulated obtained from
@@ -468,7 +472,7 @@ def classification_true(true_topologies, test_topologies):
 def simulated_times_and_parameters(generating_events, init, trial_data, resampling_freq=None, data=None):
     """Recover the generating HMP parameters from the simulated EEG data.
 
-    Parameters,
+    Parameters
     ----------
     generating_events: ndarray
         Times of the simulated events created by the function simulate()
@@ -485,9 +489,9 @@ def simulated_times_and_parameters(generating_events, init, trial_data, resampli
     -------
     random_source_times: np.array
         index of the true events found in the test estimation
-    true_parameters : list
+    true_time_pars : list
         list of true distribution parameters (2D stage * parameter).
-    true_magnitudes: ndarray
+    true_channel_pars: ndarray
         2D ndarray n_events * components, true electrode contribution to event
     true_activities: ndarray
         Actual values at simulated event times
@@ -509,9 +513,9 @@ def simulated_times_and_parameters(generating_events, init, trial_data, resampli
         x += 1
 
     ## Recover parameters
-    true_parameters = np.tile(init.shape, (n_stages, 2))
-    true_parameters[:, 1] = init.mean_to_scale(np.mean(random_source_times, axis=0), init.shape)
-    true_parameters[true_parameters[:, 1] <= 0, 1] = 1e-3  # Can happen in corner cases
+    true_time_pars = np.tile(init.distribution.shape, (n_stages, 2))
+    true_time_pars[:, 1] = init.distribution.mean_to_scale(np.mean(random_source_times, axis=0))
+    true_time_pars[true_time_pars[:, 1] <= 0, 1] = 1e-3  # Can happen in corner cases
     random_source_times = random_source_times * (1000 / sfreq) / (1000 / resampling_freq)
     ## Recover magnitudes
     sample_times = np.zeros((trial_data.n_trials, n_events), dtype=int)
@@ -526,5 +530,5 @@ def simulated_times_and_parameters(generating_events, init, trial_data, resampli
         true_activities = trial_data.cross_corr[sample_times[:, :]]
     else:
         true_activities = data[sample_times[:, :]]
-    true_magnitudes = np.mean(true_activities, axis=0)
-    return random_source_times.astype(int), true_parameters, true_magnitudes, true_activities
+    true_channel_pars = np.mean(true_activities, axis=0)
+    return random_source_times.astype(int), true_time_pars, true_channel_pars, true_activities

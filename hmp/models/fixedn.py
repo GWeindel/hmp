@@ -20,7 +20,7 @@ except NameError:
 
 class FixedEventModel(BaseModel):
     def __init__(
-        self, *args, n_events, parameters_to_fix=None, magnitudes_to_fix=None,
+        self, *args, n_events, fixed_time_pars=None, fixed_channel_pars=None,
         tolerance=1e-4,
         max_iteration=1e3,
         min_iteration=1,
@@ -35,29 +35,29 @@ class FixedEventModel(BaseModel):
          )
         self.n_events = n_events
         self.n_dims = None
-        self.parameters_to_fix = parameters_to_fix
-        self.magnitudes_to_fix = magnitudes_to_fix
+        self.fixed_time_pars = fixed_time_pars
+        self.fixed_channel_pars = fixed_channel_pars
         self.tolerance = tolerance
         self.max_iteration = max_iteration
         self.min_iteration = min_iteration
         self.starting_points = starting_points
         self.max_scale = max_scale
         self.level_dict = {}
-        self.pars_map = np.zeros((1,self.n_events+1))
-        self.mags_map = np.zeros((1,self.n_events))
+        self.time_map = np.zeros((1,self.n_events+1))
+        self.channel_map = np.zeros((1,self.n_events))
         super().__init__(*args, **kwargs)
 
     def fit(
         self,
         trial_data,
-        magnitudes=None,
-        parameters=None,
-        parameters_to_fix=None,
-        magnitudes_to_fix=None,
+        channel_pars=None,
+        time_pars=None,
+        fixed_time_pars=None,
+        fixed_channel_pars=None,
         verbose=True,
         cpus=1,
-        mags_map=None,
-        pars_map=None,
+        channel_map=None,
+        time_map=None,
         level_dict=None,
     ):
         """Fit HMP for a single n_events model.
@@ -66,24 +66,16 @@ class FixedEventModel(BaseModel):
         ----------
         n_events : int
             how many events are estimated
-        magnitudes : ndarray
-            2D ndarray n_events * components (or 3D iteration * n_events * n_components),
-            initial conditions for events magnitudes. If magnitudes are estimated, the list provided
-            is used as starting point,
-            if magnitudes are fixed, magnitudes estimated will be the same as the one provided.
-            When providing a list, magnitudes need to be in the same order
-            _n_th magnitudes parameter is  used for the _n_th event
-        parameters : list
-            list of initial conditions for Gamma distribution parameters
-            (2D stage * parameter or 3D iteration * n_events * n_components).
-            If parameters are estimated, the list provided is used as starting point,
-            if parameters are fixed, parameters estimated will be the same as the one provided.
-            When providing a list, stage need to be in the same order
-            _n_th gamma parameter is  used for the _n_th stage
-        parameters_to_fix : bool
-            To fix (True) or to estimate (False, default) the parameters of the gammas
-        magnitudes_to_fix: bool
-            To fix (True) or to estimate (False, default) the magnitudes of the channel contribution
+        channel_pars : ndarray
+            2D ndarray n_events * channels (or 3D iteration * n_events * n_channels),
+            initial conditions for events channel contribution. 
+        time_pars : list
+            list of initial conditions for time distribution parameters
+            (2D stage * parameter or 3D iteration * n_events * n_channels).
+        fixed_time_pars : bool
+            To fix (True) or to estimate (False, default) the time distribution parameters
+        fixed_channel_pars: bool
+            To fix (True) or to estimate (False, default) the channel contribution
             to the events
         tolerance: float
             Tolerance applied to the expectation maximization in the EM() function
@@ -97,9 +89,9 @@ class FixedEventModel(BaseModel):
             True displays output useful for debugging, recommended for first use
         cpus: int
             number of cores to use in the multiprocessing functions
-        mags_map: 2D nd_array n_level * n_events indicating which magnitudes are shared
+        channel_map: 2D nd_array n_level * n_events indicating which channel contribution are shared
         between levels.
-        pars_map: 2D nd_array n_level * n_stages indicating which parameters are shared
+        time_map: 2D nd_array n_level * n_stages indicating which time parameters are shared
         between levels.
         levels: dict | list
             if one level, use a dict with the name in the metadata and a list of the levels
@@ -121,17 +113,17 @@ class FixedEventModel(BaseModel):
 
         if level_dict is None:
             level_dict = self.level_dict
-            mags_map = self.mags_map
-            pars_map = self.pars_map
+            channel_map = self.channel_map
+            time_map = self.time_map
         n_levels, levels, clabels = self.level_constructor(
-            trial_data, level_dict, mags_map, pars_map, verbose
+            trial_data, level_dict, channel_map, time_map, verbose
         )
-        infos_to_store["mags_map"] = mags_map
-        infos_to_store["pars_map"] = pars_map
+        infos_to_store["channel_map"] = channel_map
+        infos_to_store["time_map"] = time_map
         infos_to_store["clabels"] = clabels
         infos_to_store["level_dict"] = level_dict
         if verbose:
-            if parameters is None:
+            if time_pars is None:
                 print(
                     f"Estimating {self.n_events} events model with {self.starting_points} starting point(s)"
                 )
@@ -139,46 +131,46 @@ class FixedEventModel(BaseModel):
                 print(f"Estimating {self.n_events} events model")
 
         # Formatting parameters
-        if isinstance(parameters, (xr.DataArray, xr.Dataset)):
-            parameters = parameters.dropna(dim="stage").values
-        if isinstance(magnitudes, (xr.DataArray, xr.Dataset)):
-            magnitudes = magnitudes.dropna(dim="event").values
-        if isinstance(magnitudes, np.ndarray):
-            magnitudes = magnitudes.copy()
-        if isinstance(parameters, np.ndarray):
-            parameters = parameters.copy()
-        if self.parameters_to_fix is None:
-            parameters_to_fix = []
+        if isinstance(time_pars, (xr.DataArray, xr.Dataset)):
+            time_pars = time_pars.dropna(dim="stage").values
+        if isinstance(channel_pars, (xr.DataArray, xr.Dataset)):
+            channel_pars = channel_pars.dropna(dim="event").values
+        if isinstance(channel_pars, np.ndarray):
+            channel_pars = channel_pars.copy()
+        if isinstance(time_pars, np.ndarray):
+            time_pars = time_pars.copy()
+        if self.fixed_time_pars is None:
+            fixed_time_pars = []
         else:
-            parameters_to_fix = self.parameters_to_fix
-            infos_to_store["parameters_to_fix"] = parameters_to_fix
-        if self.magnitudes_to_fix is None:
-            magnitudes_to_fix = []
+            fixed_time_pars = self.fixed_time_pars
+            infos_to_store["fixed_time_pars"] = fixed_time_pars
+        if self.fixed_channel_pars is None:
+            fixed_channel_pars = []
         else:
-            magnitudes_to_fix = self.magnitudes_to_fix
-            infos_to_store["magnitudes_to_fix"] = magnitudes_to_fix
+            fixed_channel_pars = self.fixed_channel_pars
+            infos_to_store["fixed_channel_pars"] = fixed_channel_pars
 
-        if parameters is None:
-            # If no parameters starting points are provided generate standard ones
+        if time_pars is None:
+            # If no time parameters starting points are provided generate standard ones
             # Or random ones if starting_points > 1
-            parameters = (
+            time_pars = (
                 np.zeros((n_levels, self.n_events + 1, 2)) * np.nan
             )  # by default nan for missing stages
             for cur_level in range(n_levels):
-                pars_level = np.where(pars_map[cur_level, :] >= 0)[0]
-                n_stage_level = len(pars_level)
+                time_level = np.where(time_map[cur_level, :] >= 0)[0]
+                n_stage_level = len(time_level)
                 # by default starting point is to split the average duration in equal bins
-                parameters[cur_level, pars_level, :] = np.tile(
+                time_pars[cur_level, time_level, :] = np.tile(
                     [
-                        self.shape,
-                        self.mean_to_scale(
-                            np.mean(trial_data.durations[levels == cur_level]) / (n_stage_level), self.shape
+                        self.distribution.shape,
+                        self.distribution.mean_to_scale(
+                            np.mean(trial_data.durations[levels == cur_level]) / (n_stage_level)
                         ),
                     ],
                     (n_stage_level, 1),
                 )
-            initial_p = parameters
-            parameters = [initial_p]
+            initial_p = time_pars
+            time_pars = [initial_p]
             if self.starting_points > 1:
                 if self.max_scale is None:
                     raise ValueError(
@@ -191,62 +183,62 @@ class FixedEventModel(BaseModel):
                         np.zeros((n_levels, self.n_events + 1, 2)) * np.nan
                     )  # by default nan for missing stages
                     for cur_level in range(n_levels):
-                        pars_level = np.where(pars_map[cur_level, :] >= 0)[0]
-                        n_stage_level = len(pars_level)
-                        proposal_p[cur_level, pars_level, :] = self.gen_random_stages(n_stage_level - 1)
-                        proposal_p[cur_level, parameters_to_fix, :] = initial_p[0, parameters_to_fix]
-                    parameters.append(proposal_p)
-                parameters = np.array(parameters)
+                        time_level = np.where(time_map[cur_level, :] >= 0)[0]
+                        n_stage_level = len(time_level)
+                        proposal_p[cur_level, time_level, :] = self.gen_random_stages(n_stage_level - 1)
+                        proposal_p[cur_level, fixed_time_pars, :] = initial_p[0, fixed_time_pars]
+                    time_pars.append(proposal_p)
+                time_pars = np.array(time_pars)
         else:
-            infos_to_store["sp_parameters"] = parameters
+            infos_to_store["sp_time_pars"] = time_pars
 
-        if magnitudes is None:
-            # By defaults mags are initiated to 0
-            magnitudes = np.zeros((n_levels, self.n_events, self.n_dims), dtype=np.float64)
-            if (mags_map < 0).any():  # set missing mags to nan
+        if channel_pars is None:
+            # By defaults c_pars are initiated to 0
+            channel_pars = np.zeros((n_levels, self.n_events, self.n_dims), dtype=np.float64)
+            if (channel_map < 0).any():  # set missing c_pars to nan
                 for cur_level in range(n_levels):
-                    magnitudes[cur_level, np.where(mags_map[cur_level, :] < 0)[0], :] = np.nan
-            initial_m = magnitudes
-            magnitudes = np.tile(initial_m, (self.starting_points + 1, 1, 1, 1))
+                    channel_pars[cur_level, np.where(channel_map[cur_level, :] < 0)[0], :] = np.nan
+            initial_m = channel_pars
+            channel_pars = np.tile(initial_m, (self.starting_points + 1, 1, 1, 1))
         else:
-            infos_to_store["sp_magnitudes"] = magnitudes
+            infos_to_store["sp_channel_pars"] = channel_pars
 
         if cpus > 1:
             inputs = zip(
                 trial_data,
-                magnitudes,
-                parameters,
-                itertools.repeat(magnitudes_to_fix),
-                itertools.repeat(parameters_to_fix),
+                channel_pars,
+                time_pars,
+                itertools.repeat(fixed_channel_pars),
+                itertools.repeat(fixed_time_pars),
                 itertools.repeat(self.max_iteration),
                 itertools.repeat(self.tolerance),
                 itertools.repeat(self.min_iteration),
-                itertools.repeat(mags_map),
-                itertools.repeat(pars_map),
+                itertools.repeat(channel_map),
+                itertools.repeat(time_map),
                 itertools.repeat(levels),
                 itertools.repeat(1),
             )
             with mp.Pool(processes=cpus) as pool:
                 if self.starting_points > 1:
-                    estimates = list(tqdm(pool.imap(self._EM_star, inputs), total=len(magnitudes)))
+                    estimates = list(tqdm(pool.imap(self._EM_star, inputs), total=len(channel_pars)))
                 else:
                     estimates = pool.starmap(self.EM, inputs)
 
         else:  # avoids problems if called in an already parallel function
             estimates = []
-            for pars, mags in zip(parameters, magnitudes):
+            for t_pars, c_pars in zip(time_pars, channel_pars):
                 estimates.append(
                     self.EM(
                         trial_data,
-                        mags,
-                        pars,
-                        magnitudes_to_fix,
-                        parameters_to_fix,
+                        c_pars,
+                        t_pars,
+                        fixed_channel_pars,
+                        fixed_time_pars,
                         self.max_iteration,
                         self.tolerance,
                         self.min_iteration,
-                        mags_map,
-                        pars_map,
+                        channel_map,
+                        time_map,
                         levels,
                         1,
                     )
@@ -264,22 +256,22 @@ class FixedEventModel(BaseModel):
         else:
             self._fitted = True
             self.lkhs = lkhs[max_lkhs]
-            self.magnitudes =  np.array(estimates[max_lkhs][1])
-            self.parameters = np.array(estimates[max_lkhs][2])
+            self.channel_pars =  np.array(estimates[max_lkhs][1])
+            self.time_pars = np.array(estimates[max_lkhs][2])
             self.traces = np.array(estimates[max_lkhs][3])
-            self.param_dev = np.array(estimates[max_lkhs][4])
+            self.time_pars_dev = np.array(estimates[max_lkhs][4])
             self.level_dict = level_dict
-            self.levels = levels
-            self.mags_map = mags_map
-            self.pars_map = pars_map
+            self.level = levels
+            self.channel_map = channel_map
+            self.time_map = time_map
 
     def transform(self, trial_data):
         _, levels, clabels = self.level_constructor(
                 trial_data, self.level_dict
             )
         likelihoods, xreventprobs = self._distribute_levels(
-            trial_data, self.magnitudes, self.parameters,
-            self.mags_map, self.pars_map, levels, False
+            trial_data, self.channel_pars, self.time_pars,
+            self.channel_map, self.time_map, levels, False
         )
         return likelihoods, xreventprobs
 
@@ -304,45 +296,45 @@ class FixedEventModel(BaseModel):
         return xr.DataArray(self.lkhs, name="loglikelihood")
 
     @property
-    def xrparam_dev(self):
-        self._check_fitted("get dev params")
+    def xrtime_pars_dev(self):
+        self._check_fitted("get dev time pars")
         return xr.DataArray(
-                self.param_dev,
-                dims=("em_iteration", "level", "stage", "parameter"),
-                name="param_dev",
+                self.time_pars_dev,
+                dims=("em_iteration", "level", "stage", "time_pars"),
+                name="time_pars_dev",
                 coords=[
-                    range(self.param_dev.shape[0]),
-                    range(self.param_dev.shape[1]),
+                    range(self.time_pars_dev.shape[0]),
+                    range(self.time_pars_dev.shape[1]),
                     range(self.n_events + 1),
                     ["shape", "scale"],
                 ],
         )
 
     @property
-    def xrparams(self):
-        self._check_fitted("get xrparams")
+    def xrtime_pars(self):
+        self._check_fitted("get xrtime_pars")
         return xr.DataArray(
-                self.parameters,
+                self.time_pars,
                 dims=("level", "stage", "parameter"),
-                name="parameters",
+                name="time_pars",
                 coords={
-                    "level": range(self.parameters.shape[0]),
+                    "level": range(self.time_pars.shape[0]),
                     "stage": range(self.n_events + 1),
                     "parameter": ["shape", "scale"],
                 },
         )
 
     @property
-    def xrmags(self):
-        self._check_fitted("get xrmags")
+    def xrchannel_pars(self):
+        self._check_fitted("get xrchannel_pars")
         return xr.DataArray(
-                self.magnitudes,
-                dims=("level", "event", "component"),
-                name="magnitudes",
+                self.channel_pars,
+                dims=("level", "event", "channel"),
+                name="channel_pars",
                 coords={
-                    "level": range(self.magnitudes.shape[0]),
+                    "level": range(self.channel_pars.shape[0]),
                     "event": range(self.n_events),
-                    "component": range(self.n_dims),
+                    "channel": range(self.n_dims),
                 },
             )
 
@@ -355,15 +347,15 @@ class FixedEventModel(BaseModel):
     def EM(  #noqa
         self,
         trial_data,
-        magnitudes,
-        parameters,
-        magnitudes_to_fix=None,
-        parameters_to_fix=None,
+        initial_channel_pars,
+        initial_time_pars,
+        fixed_channel_pars=None,
+        fixed_time_pars=None,
         max_iteration=1e3,
         tolerance=1e-4,
         min_iteration=1,
-        mags_map=None,
-        pars_map=None,
+        channel_map=None,
+        time_map=None,
         levels=None,
         cpus=1,
     ):
@@ -373,25 +365,16 @@ class FixedEventModel(BaseModel):
         ----------
         n_events : int
             how many events are estimated
-        magnitudes : ndarray
-            2D ndarray n_events * components (or 3D iteration * n_events * n_components),
-            initial levelitions for events magnitudes. If magnitudes are estimated,
-            the list provided is used as starting point,
-            if magnitudes are fixed, magnitudes estimated will be the same as the one provided.
-            When providing a list, magnitudes need to be in the same order
-            _n_th magnitudes parameter is  used for the _n_th event
-        parameters : list
-            list of initial conditions for Gamma distribution parameters parameter
-            (2D stage * parameter or 3D iteration * n_events * n_components).
-            If parameters are estimated, the list provided is used as starting point,
-            if parameters are fixed, parameters estimated will be the same as the one provided.
-            When providing a list, stage need to be in the same order
-            _n_th gamma parameter is  used for the _n_th stage
-        magnitudes_to_fix: bool
-            To fix (True) or to estimate (False, default) the magnitudes of the channel contribution
-            to the events
-        parameters_to_fix : bool
-            To fix (True) or to estimate (False, default) the parameters of the gammas
+        initial_channel_pars : ndarray
+            2D ndarray n_events * channels (or 3D iteration * n_events * n_channels),
+            initial conditions for events channel_pars.
+        initial_time_pars : list
+            list of initial conditions for time distribution parameters parameter
+            (2D stage * parameter or 3D iteration * n_events * n_channels).
+        fixed_channel_pars: list
+            Which parameters of the channel contribution to the events to estimate
+        fixed_time_pars : list
+            Which parameters of the time distributions to estimate
         max_iteration: int
             Maximum number of iteration for the expectation maximization
         tolerance: float
@@ -403,33 +386,31 @@ class FixedEventModel(BaseModel):
         -------
         lkh : float
             Summed log probabilities
-        magnitudes : ndarray
-            Magnitudes of the channel contribution to each event
-        parameters: ndarray
-            parameters for the gammas of each stage
+        channel_pars : ndarray
+            Estimated channel contribution to each event
+        time_pars: ndarray
+            Estimated distribution time parameters of each stage
         eventprobs: ndarray
             Probabilities with shape max_samples*n_trials*n_events
         traces: ndarray
             Values of the log-likelihood for each EM iteration
-        param_dev : ndarray
+        time_pars_dev : ndarray
             paramters for each iteration of EM
         """
-        assert mags_map.shape[0] == pars_map.shape[0], (
+        assert channel_map.shape[0] == time_map.shape[0], (
             "Both maps need to indicate the same number of levels."
         )
 
         lkh, eventprobs = self._distribute_levels(
-            trial_data, magnitudes, parameters, mags_map, pars_map, levels, cpus=cpus
+            trial_data, initial_channel_pars, initial_time_pars, 
+            channel_map, time_map, levels, cpus=cpus
         )
         data_levels = np.unique(levels)
-        initial_magnitudes = magnitudes.copy()  # Reverse this
-        initial_parameters = parameters.copy()
+        channel_pars = initial_channel_pars.copy() 
+        time_pars = initial_time_pars.copy()
         traces = [lkh]
-        param_dev = [parameters.copy()]  # ... and parameters
+        time_pars_dev = [time_pars.copy()] 
         i = 0
-
-        lkh_prev = lkh
-        parameters_prev = parameters.copy()
 
         while i < max_iteration:  # Expectation-Maximization algorithm
             if i >= min_iteration and (
@@ -440,50 +421,49 @@ class FixedEventModel(BaseModel):
 
             # As long as new run gives better likelihood, go on
             lkh_prev = lkh.copy()
-            parameters_prev = parameters.copy()
 
-            for cur_level in data_levels:  # get params/mags
-                mags_map_level = np.where(mags_map[cur_level, :] >= 0)[0]
-                pars_map_level = np.where(pars_map[cur_level, :] >= 0)[0]
+            for cur_level in data_levels:  # get params/c_pars
+                channel_map_level = np.where(channel_map[cur_level, :] >= 0)[0]
+                time_map_level = np.where(time_map[cur_level, :] >= 0)[0]
                 epochs_level = np.where(levels == cur_level)[0]
-                # get mags/pars by level
-                magnitudes[cur_level, mags_map_level, :], parameters[cur_level, pars_map_level, :] = (
-                    self.get_magnitudes_parameters_expectation(
+                # get c_pars/t_pars by level
+                channel_pars[cur_level, channel_map_level, :], time_pars[cur_level, time_map_level, :] = (
+                    self.get_channel_time_parameters_expectation(
                         trial_data,
-                        eventprobs.values[:, :np.max(trial_data.durations[epochs_level]), mags_map_level],
+                        eventprobs.values[:, :np.max(trial_data.durations[epochs_level]), channel_map_level],
                         subset_epochs=epochs_level,
                     )
                 )
 
-                magnitudes[cur_level, magnitudes_to_fix, :] = initial_magnitudes[
-                    cur_level, magnitudes_to_fix, :
+                channel_pars[cur_level, fixed_channel_pars, :] = initial_channel_pars[
+                    cur_level, fixed_channel_pars, :
                 ].copy()
-                parameters[cur_level, parameters_to_fix, :] = initial_parameters[
-                    cur_level, parameters_to_fix, :
+                time_pars[cur_level, fixed_time_pars, :] = initial_time_pars[
+                    cur_level, fixed_time_pars, :
                 ].copy()
 
-            # set mags to mean if requested in map
+            # set c_pars to mean if requested in map
             for m in range(self.n_events):
-                for m_set in np.unique(mags_map[:, m]):
+                for m_set in np.unique(channel_map[:, m]):
                     if m_set >= 0:
-                        magnitudes[mags_map[:, m] == m_set, m, :] = np.mean(
-                            magnitudes[mags_map[:, m] == m_set, m, :], axis=0
+                        channel_pars[channel_map[:, m] == m_set, m, :] = np.mean(
+                            channel_pars[channel_map[:, m] == m_set, m, :], axis=0
                         )
 
             # set param to mean if requested in map
             for p in range(self.n_events + 1):
-                for p_set in np.unique(pars_map[:, p]):
+                for p_set in np.unique(time_map[:, p]):
                     if p_set >= 0:
-                        parameters[pars_map[:, p] == p_set, p, :] = np.mean(
-                            parameters[pars_map[:, p] == p_set, p, :], axis=0
+                        time_pars[time_map[:, p] == p_set, p, :] = np.mean(
+                            time_pars[time_map[:, p] == p_set, p, :], axis=0
                         )
 
             
             lkh, eventprobs = self._distribute_levels(
-                trial_data, magnitudes, parameters, mags_map, pars_map, levels, cpus=cpus
+                trial_data, channel_pars, time_pars, channel_map, time_map, levels, cpus=cpus
             )
             traces.append(lkh)
-            param_dev.append(parameters.copy())
+            time_pars_dev.append(time_pars.copy())
             i += 1
 
         if i == max_iteration:
@@ -492,11 +472,11 @@ class FixedEventModel(BaseModel):
                 f"({int(max_iteration)})",
                 RuntimeWarning,
             )
-        return lkh, magnitudes, parameters, np.array(traces), np.array(param_dev)
+        return lkh, channel_pars, time_pars, np.array(traces), np.array(time_pars_dev)
 
-    def get_magnitudes_parameters_expectation(self, trial_data, eventprobs, subset_epochs=None):
-        magnitudes = np.zeros((eventprobs.shape[2], self.n_dims))
-        # Magnitudes from Expectation, Eq 11 from 2024 paper
+    def get_channel_time_parameters_expectation(self, trial_data, eventprobs, subset_epochs=None):
+        channel_pars = np.zeros((eventprobs.shape[2], self.n_dims))
+        # Channel contribution from Expectation, Eq 11 from 2024 paper
         for event in range(eventprobs.shape[2]):
             for comp in range(self.n_dims):
                 event_data = np.zeros((len(subset_epochs), np.max(trial_data.durations[subset_epochs])))
@@ -504,14 +484,14 @@ class FixedEventModel(BaseModel):
                     start, end = trial_data.starts[trial], trial_data.ends[trial]
                     duration = end - start + 1
                     event_data[trial_idx, :duration] = trial_data.cross_corr[start : end + 1, comp]
-                magnitudes[event, comp] = np.mean(
+                channel_pars[event, comp] = np.mean(
                     np.sum(eventprobs[subset_epochs, :, event] * event_data, axis=1)
                 )
             # scale cross-correlation with likelihood of the transition
             # sum by-trial these scaled activation for each transition events
-            # average across trials
+            # average across trial
 
-        # Gamma parameters from Expectation Eq 10 from 2024 paper
+        # Time parameters from Expectation Eq 10 from 2024 paper
         # calc averagepos here as mean_d can be level dependent, whereas scale_parameters() assumes
         # it's general
         event_times_mean = np.concatenate(
@@ -520,8 +500,8 @@ class FixedEventModel(BaseModel):
                 [np.mean(trial_data.durations[subset_epochs]) - 1],
             ]
         )
-        parameters = self.scale_parameters(averagepos=event_times_mean)
-        return [magnitudes, parameters]
+        time_pars = self.scale_parameters(averagepos=event_times_mean)
+        return [channel_pars, time_pars]
 
     def gen_random_stages(self, n_events):
         """Compute random stage duration.
@@ -553,13 +533,13 @@ class FixedEventModel(BaseModel):
                 (0, rnd_events)
             )  # associated durations
         random_stages = np.array(
-            [[self.shape, self.mean_to_scale(x, self.shape)] for x in rnd_durations]
+            [[self.distribution.shape, self.distribution.mean_to_scale(x)] for x in rnd_durations]
         )
         return random_stages
 
 
     def scale_parameters(self, averagepos):
-        """Scale the parameters for the distribution.
+        """Scale parameters from average position of event.
 
         Used for the re-estimation in the EM procdure. The likeliest location of
         the event is computed from eventprobs. The scale parameter are then taken as the average
@@ -567,31 +547,24 @@ class FixedEventModel(BaseModel):
 
         Parameters
         ----------
-        eventprobs : ndarray
-            [samples(max_d)*n_trials*n_events] = [max_d*trials*nTransition events]
-        durations : ndarray
-            1D array of trial length
-        mags : ndarray
-            2D ndarray components * nTransition events, initial conditions for events magnitudes
-        shape : float
-            shape parameter for the gamma, defaults to 2
+
 
         Returns
         -------
         params : ndarray
-            shape and scale for the gamma distributions
+            shape and scale for the distributions
         """
         params = np.zeros((len(averagepos), 2), dtype=np.float64)
-        params[:, 0] = self.shape
+        params[:, 0] = self.distribution.shape
         params[:, 1] = np.diff(averagepos, prepend=0)
-        params[:, 1] = [self.mean_to_scale(x[1], x[0]) for x in params]
+        params[:, 1] = self.distribution.mean_to_scale(params[:, 1])
         return params
 
     def estim_probs(
         self,
         trial_data : TrialData,
-        magnitudes,
-        parameters,
+        channel_pars,
+        time_pars,
         location=True,
         subset_epochs=None,
         by_trial_lkh=False,
@@ -600,20 +573,12 @@ class FixedEventModel(BaseModel):
 
         Parameters
         ----------
-        magnitudes : ndarray
-            2D ndarray n_events * components (or 3D iteration * n_events * n_components),
-            initial conditions for events magnitudes. If magnitudes are estimated,
-            the list provided is used as starting point,
-            if magnitudes are fixed, magnitudes estimated will be the same as the one provided.
-            When providing a list, magnitudes need to be in the same order
-            _n_th magnitudes parameter is  used for the _n_th event
-        parameters : list
-            list of initial conditions for Gamma distribution parameters parameter
-            (2D stage * parameter or 3D iteration * n_events * n_components).
-            If parameters are estimated, the list provided is used as starting point,
-            if parameters are fixed, parameters estimated will be the same as the one provided.
-            When providing a list, stage need to be in the same order
-            _n_th gamma parameter is  used for the _n_th stage
+        channel_pars : ndarray
+            2D ndarray n_events * channels (or 3D iteration * n_events * n_channels),
+            initial conditions for channel contributio to event.
+        time_pars : list
+            list of initial conditions for the distribution parameters
+            (2D stage * parameter or 3D iteration * n_events * n_channels).
         locations : ndarray
             1D ndarray of int with size n_events+1, locations for events
 
@@ -627,7 +592,7 @@ class FixedEventModel(BaseModel):
         eventprobs : ndarray
             Probabilities with shape max_samples*n_trials*n_events
         """
-        n_events = magnitudes.shape[0]
+        n_events = channel_pars.shape[0]
         n_stages = n_events + 1
         locations = np.zeros(n_stages, dtype=int)
         if location:
@@ -646,8 +611,8 @@ class FixedEventModel(BaseModel):
             # and the data given the magnitudes of the sensors
             gains = (
                 gains
-                + trial_data.cross_corr[:, i][np.newaxis].T * magnitudes[:, i]
-                - magnitudes[:, i] ** 2 / 2
+                + trial_data.cross_corr[:, i][np.newaxis].T * channel_pars[:, i]
+                - channel_pars[:, i] ** 2 / 2
             )
         gains = np.exp(gains)
         probs = np.zeros([max_duration, n_trials, n_events], dtype=np.float64)  # prob per trial
@@ -657,7 +622,7 @@ class FixedEventModel(BaseModel):
         for trial in np.arange(n_trials):
             # Following assigns gain per trial to variable probs
             probs[: durations[trial], trial, :] = gains[starts[trial] : ends[trial] + 1, :]
-            # Same but samples and events are reversed, this allows to compute
+            # Same but sample and events are reversed, this allows to compute
             # fwd and bwd in the same way in the following steps
             probs_b[: durations[trial], trial, :] = gains[starts[trial] : ends[trial] + 1, :][
                 ::-1, ::-1
@@ -668,7 +633,7 @@ class FixedEventModel(BaseModel):
             pmf[:, stage] = np.concatenate(
                 (
                     np.repeat(1e-15, locations[stage]),
-                    self.distribution_pmf(parameters[stage, 0], parameters[stage, 1], max_duration)[
+                    self.distribution_pdf(time_pars[stage, 0], time_pars[stage, 1], max_duration)[
                         locations[stage] :
                     ],
                 )
@@ -717,27 +682,18 @@ class FixedEventModel(BaseModel):
             return [likelihood, eventprobs]
 
     def _distribute_levels(
-        self, trial_data, magnitudes, parameters, mags_map, pars_map, levels, 
+        self, trial_data, channel_pars, time_pars, channel_map, time_map, levels, 
         location=True, cpus=1
     ):
         """Estimate probability levels.
 
         Parameters
         ----------
-        magnitudes : ndarray
-            2D ndarray n_events * components (or 3D iteration * n_events * n_components),
-            initial conditions for events magnitudes. If magnitudes are estimated,
-            the list provided is used as starting point,
-            if magnitudes are fixed, magnitudes estimated will be the same as the one provided.
-            When providing a list, magnitudes need to be in the same order
-            _n_th magnitudes parameter is  used for the _n_th event
-        parameters : list
-            list of initial conditions for Gamma distribution parameters parameter
-            (2D stage * parameter or 3D iteration * n_events * n_components).
-            If parameters are estimated, the list provided is used as starting point,
-            if parameters are fixed, parameters estimated will be the same as the one provided.
-            When providing a list, stage need to be in the same order
-            _n_th gamma parameter is  used for the _n_th stage
+        channel_pars : ndarray
+            2D ndarray n_events * channels (or 3D iteration * n_events * n_channels),
+            initial conditions for events channel contribution. 
+        time_pars : list
+            list of initial conditions for time distribution parameters
         location : bool
             Whether to add a minumum distance between events, useful to avoid event collapse during EM
         n_events : int
@@ -759,8 +715,8 @@ class FixedEventModel(BaseModel):
                     self.estim_probs,
                     zip(
                         itertools.repeat(trial_data),
-                        [magnitudes[cur_level, mags_map[cur_level, :] >= 0, :] for cur_level in data_levels],
-                        [parameters[cur_level, pars_map[cur_level, :] >= 0, :] for cur_level in data_levels],
+                        [channel_pars[cur_level, channel_map[cur_level, :] >= 0, :] for cur_level in data_levels],
+                        [time_pars[cur_level, time_map[cur_level, :] >= 0, :] for cur_level in data_levels],
                         itertools.repeat(location),
                         [levels == cur_level for cur_level in data_levels],
                         itertools.repeat(False),
@@ -768,15 +724,15 @@ class FixedEventModel(BaseModel):
                 )
         else:
             for cur_level in data_levels:
-                magnitudes_level = magnitudes[
-                    cur_level, mags_map[cur_level, :] >= 0, :
+                channel_pars_level = channel_pars[
+                    cur_level, channel_map[cur_level, :] >= 0, :
                 ]  # select existing magnitudes
-                parameters_level = parameters[cur_level, pars_map[cur_level, :] >= 0, :]  # select existing params
+                time_pars_level = time_pars[cur_level, time_map[cur_level, :] >= 0, :]  # select existing params
                 likes_events_level.append(
                     self.estim_probs(
                         trial_data,
-                        magnitudes_level,
-                        parameters_level,
+                        channel_pars_level,
+                        time_pars_level,
                         location,
                         subset_epochs=(levels == cur_level),
                     )
@@ -786,28 +742,28 @@ class FixedEventModel(BaseModel):
 
         for i, cur_level in enumerate(data_levels):
             part = trial_data.coords["participant"].values[(levels == cur_level)]
-            trial = trial_data.coords["trials"].values[(levels == cur_level)]
-            data_events =  mags_map[cur_level, :] >= 0
+            epoch = trial_data.coords["epoch"].values[(levels == cur_level)]
+            data_events =  channel_map[cur_level, :] >= 0
             trial_x_part = xr.Coordinates.from_pandas_multiindex(
-                MultiIndex.from_arrays([part, trial], names=("participant", "trials")),
-                "trial_x_participant",
+                MultiIndex.from_arrays([part, epoch], names=("participant", "epoch")),
+                "trial",
             )
-            xreventprobs = xr.DataArray(likes_events_level[i][1], dims=("trial_x_participant", "samples", "event"),
+            xreventprobs = xr.DataArray(likes_events_level[i][1], dims=("trial", "sample", "event"),
                 coords={
                     "event": ("event", np.arange(self.n_events)[data_events]),
-                    "samples": ("samples", range(np.shape(likes_events_level[i][1])[1])),
+                    "sample": ("sample", range(np.shape(likes_events_level[i][1])[1])),
                 },
             )
             xreventprobs = xreventprobs.assign_coords(trial_x_part)
-            xreventprobs = xreventprobs.assign_coords(levels=("trial_x_participant", levels[levels == cur_level],))
+            xreventprobs = xreventprobs.assign_coords(level=("trial", levels[levels == cur_level],))
             all_xreventprobs.append(xreventprobs)
-        all_xreventprobs = xr.concat(all_xreventprobs,dim="trial_x_participant")
+        all_xreventprobs = xr.concat(all_xreventprobs, dim="trial")
         all_xreventprobs.attrs['sfreq'] = self.sfreq
         all_xreventprobs.attrs['event_width_samples'] = self.event_width_samples
         return [np.array(likelihood), all_xreventprobs]
 
-    def distribution_pmf(self, shape, scale, max_duration):
-        """Return PMF for a provided scipy disttribution.
+    def distribution_pdf(self, shape, scale, max_duration):
+        """Return discretized PDF for a provided scipy disttribution.
 
         Uses the shape and scale, on a range from 0 to max_length.
 
@@ -823,12 +779,12 @@ class FixedEventModel(BaseModel):
         p : ndarray
             probabilty mass function for the distribution with given scale
         """
-        p = self.pdf(np.arange(max_duration), shape, scale=scale)
+        p = self.distribution.pdf(np.arange(max_duration), shape, scale=scale)
         p = p / np.sum(p)
         p[np.isnan(p)] = 0  # remove potential nans
         return p
 
-    def level_constructor(self, trial_data, level_dict, mags_map=None, pars_map=None, verbose=False):
+    def level_constructor(self, trial_data, level_dict, channel_map=None, time_map=None, verbose=False):
         """Adapt model to levels.
         """
         ## levels
@@ -869,49 +825,49 @@ class FixedEventModel(BaseModel):
         clabels = {"level " + str(level_names): level_mods}
 
         # check maps if provided
-        if mags_map is not None and pars_map is not None:
-            n_levels_mags = 0 if mags_map is None else mags_map.shape[0]
-            n_levels_pars = 0 if pars_map is None else pars_map.shape[0]
+        if channel_map is not None and time_map is not None:
+            n_levels_mags = 0 if channel_map is None else channel_map.shape[0]
+            n_levels_pars = 0 if time_map is None else time_map.shape[0]
             if (
                 n_levels_mags > 0 and n_levels_pars > 0
             ):  # either both maps should have the same number of levels, or 0
                 assert n_levels_mags == n_levels_pars, (
-                    "magnitude and parameters maps have to indicate the same number of levels"
+                    "Channel and time parameter maps have to indicate the same number of levels"
                 )
                 # make sure nr of events correspond per row
                 for cur_level in range(n_levels):
-                    assert sum(mags_map[cur_level, :] >= 0) + 1 == sum(pars_map[cur_level, :] >= 0), (
-                        "nr of events in magnitudes map and parameters map do not correspond on row "
+                    assert sum(channel_map[cur_level, :] >= 0) + 1 == sum(time_map[cur_level, :] >= 0), (
+                        "nr of events in channel map and time map do not correspond on row "
                         + str(cur_level)
                     )
             elif n_levels_mags == 0:
-                assert not (pars_map < 0).any(), (
-                    "If negative parameters are provided, magnitude map is required."
+                assert not (time_map < 0).any(), (
+                    "If negative time parameter are provided, channel map is required."
                 )
-                mags_map = np.zeros((n_levels, pars_map.shape[1] - 1), dtype=int)
+                channel_map = np.zeros((n_levels, time_map.shape[1] - 1), dtype=int)
             else:
-                pars_map = np.zeros((n_levels, mags_map.shape[1] + 1), dtype=int)
-                if (mags_map < 0).any():
+                time_map = np.zeros((n_levels, channel_map.shape[1] + 1), dtype=int)
+                if (channel_map < 0).any():
                     for cur_level in range(n_levels):
-                        pars_map[cur_level, np.where(mags_map[cur_level, :] < 0)[0]] = -1
-                        pars_map[cur_level, np.where(mags_map[cur_level, :] < 0)[0] + 1] = 1
+                        time_map[cur_level, np.where(channel_map[cur_level, :] < 0)[0]] = -1
+                        time_map[cur_level, np.where(channel_map[cur_level, :] < 0)[0] + 1] = 1
     
             # at this point, all should indicate the same number of levels
-            assert n_levels == mags_map.shape[0] == pars_map.shape[0], (
+            assert n_levels == channel_map.shape[0] == time_map.shape[0], (
                 "number of unique levels should correspond to number of rows in map(s)"
             )
     
             if verbose:
-                print("\nMagnitudes map:")
+                print("\nChannel map:")
                 for cnt in range(n_levels):
-                    print(str(cnt) + ": ", mags_map[cnt, :])
+                    print(str(cnt) + ": ", channel_map[cnt, :])
     
-                print("\nParameters map:")
+                print("\nTime map:")
                 for cnt in range(n_levels):
-                    print(str(cnt) + ": ", pars_map[cnt, :])
+                    print(str(cnt) + ": ", time_map[cnt, :])
 
             # at this point, all should indicate the same number of levels
-            assert n_levels == mags_map.shape[0] == pars_map.shape[0], (
+            assert n_levels == channel_map.shape[0] == time_map.shape[0], (
                 "number of unique levels should correspond to number of rows in map(s)"
             )
 

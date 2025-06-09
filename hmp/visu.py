@@ -9,7 +9,7 @@ import scipy.signal as ssignal
 import xarray as xr
 from scipy import stats
 
-from hmp.utils import event_times, event_topo
+from hmp.utils import event_times, event_channels
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold"]
 
@@ -67,7 +67,7 @@ def plot_topo_timecourse(
     cmap : str
         Colormap of matplotlib
     xlabel : str
-        label of x-axis, default = None, which give "Time (samples)"
+        label of x-axis, default = None, which give "Time (sample)"
         or "Time (ms)" in case as_time = True
     ylabels : dict
         dictonary with {label_name : label_values}. E.g. {'Condition': ['Speed','Accuracy']}
@@ -100,12 +100,12 @@ def plot_topo_timecourse(
         size of topographies depends on total plotted time interval, if False it is
         only dependent on magnify.
     as_time : bool
-        if true, plot time (ms) instead of samples. Ignored if times are provided as array.
+        if true, plot time (ms) instead of sample. Ignored if times are provided as array.
     estimate_method : string
         'max' or 'mean', either take the max probability of each event on each trial,
         or the weighted average.
     combined: bool
-        Whether to combine levels by averaging across them (True) or plot each level (False, default)
+        Whether to combine level by averaging across them (True) or plot each level (False, default)
 
     Returns
     -------
@@ -118,24 +118,24 @@ def plot_topo_timecourse(
     assert "event" in estimates.dims
     sfreq = epoch_data.sfreq
     estimates = estimates.copy()
-    # Stacking is necessary to retain the common indices, otherwise absent trials are just Nan'd out
-    if "trial_x_participant" not in epoch_data.dims:
-        epoch_data = epoch_data.rename({"epochs": "trials"}).stack(
-            trial_x_participant=["participant", "trials"]
+    # Stacking is necessary to retain the common indices, otherwise absent trial are just Nan'd out
+    if "trial" not in epoch_data.dims:
+        epoch_data = epoch_data.stack(
+            trial=["participant", "epoch"]
         )
-    common_trials = np.intersect1d(
-        estimates["trial_x_participant"].values, epoch_data["trial_x_participant"].values
+    common_trial = np.intersect1d(
+        estimates["trial"].values, epoch_data["trial"].values
     )
-    estimates = estimates.sel(trial_x_participant=common_trials)
+    estimates = estimates.sel(trial=common_trial)
     epoch_data = (
-        epoch_data.sel(trial_x_participant=common_trials).unstack().rename({"trials": "epochs"})
+        epoch_data.sel(trial=common_trial).unstack()
     )
 
     if xlabel is None:
         if as_time:
             xlabel = "Time (ms)"
         else:
-            xlabel = "Time (in samples)"
+            xlabel = "Time (in sample)"
 
     # set color of event_lines
     if event_lines:
@@ -144,7 +144,7 @@ def plot_topo_timecourse(
         event_color = event_lines
 
     # extract relevant info from estimates to pot 
-    channel_data = event_topo(
+    channel_data = event_channels(
         epoch_data, estimates,
         estimate_method=estimate_method
     ).data  # compute topographies
@@ -157,16 +157,16 @@ def plot_topo_timecourse(
     ).data  # compute corresponding times
     if combined:
         times = np.array([np.mean(times, axis=0)])
-        levels = [0]
+        level = [0]
     else:
-        levels = np.unique(estimates.levels)
-    n_level = len(np.unique(levels))
+        level = np.unique(estimates.level)
+    n_level = len(np.unique(level))
 
     # reverse order, to make correspond to level maps
     channel_data = np.flip(channel_data, axis=1)
     times =  np.flip(times, axis=0)
     
-    # Time/samples
+    # Time/sample
     if as_time:
         time_step = 1000 / sfreq  # time_step still needed below
     else:
@@ -213,7 +213,7 @@ def plot_topo_timecourse(
     # plot row by row
     rowheight = 1 / n_level
     n_event = estimates.event.max()+1
-    for i, level in enumerate(levels):
+    for i, level in enumerate(level):
         times_level = times[i]
         missing_evts = np.where(np.isnan(times_level))[0]
         times_level = np.delete(times_level, missing_evts)
@@ -372,7 +372,7 @@ def plot_components_sensor(weights, positions, cmap="Spectral_r"):
     Parameters
     ----------
     hmp_data : xr.Dataset
-        Data returned from the function hmp.utils.transform_data()
+        Data returned from the class hmp.preprocessing.Preprocessing()
     positions : mne.info | ndarray
         List of x and y positions to plot channels on head model OR MNE info object
     """
@@ -570,7 +570,7 @@ def plot_latencies(
     kind : str
         bar or point
     as_time : bool
-        if true, plot time (ms) instead of samples.
+        if true, plot time (ms) instead of sample.
     """
     if as_time and init is not None:
         time_step = 1000 / init.sfreq  # time_step still needed below
@@ -585,8 +585,8 @@ def plot_latencies(
             "n_events" in estimates.dims and estimates.n_events.count() > 1
         ):  # and there are multiple different fits (eg backward estimation)
             ydim = "n_events"
-        elif "levels" in estimates:
-            ydim = "levels"
+        elif "level" in estimates:
+            ydim = "level"
         avg_durations = event_times(
             estimates, mean=True, duration=True, add_rt=True, as_time=as_time
         ).data
@@ -612,7 +612,7 @@ def plot_latencies(
         if errs is not None:
             errorbars = errorbars * time_step
 
-        if ydim == "levels":  # reverse order, to make correspond to level maps
+        if ydim == "level":  # reverse order, to make correspond to level maps
             avg_durations = np.flipud(avg_durations)
             avg_times = np.flipud(avg_times)
             if errs is not None:
@@ -623,7 +623,7 @@ def plot_latencies(
         raise ValueError("Expected an hmp fitted object")
 
     if labels == []:
-        if ydim == "levels":
+        if ydim == "level":
             labels = [str(x) for x in reversed(list(estimates.clabels.values())[0])]
         else:
             labels = np.arange(n_model)
@@ -699,7 +699,7 @@ def plot_latencies(
         if as_time:
             plt.xlabel("Cumulative stage durations from stimulus onset (ms)")
         else:
-            plt.xlabel("Cumulative stage durations from stimulus onset (samples)")
+            plt.xlabel("Cumulative stage durations from stimulus onset (sample)")
     elif kind == "point":
         plt.xlim(1 - 0.5, n_stages + 0.5)
 
@@ -711,7 +711,7 @@ def plot_latencies(
         if as_time:
             plt.ylabel("Stage durations (ms)")
         else:
-            plt.ylabel("Stage durations (samples)")
+            plt.ylabel("Stage durations (sample)")
         plt.xlabel("Stage")
 
     plt.tight_layout()
@@ -736,14 +736,14 @@ def erp_data(epoched_data, times, channel, n_samples=None, pad=1):
     Parameters
     ----------
         epoched_data: xr.Dataset
-            Epoched physiological data with dims 'participant'X 'epochs' X 'channels'X 'samples'
+            Epoched physiological data with dims 'participant'X 'epochs' X 'channels'X 'sample'
         times: xr.Dataset
-            Times between wich to extract or resample the data with dims 'trial_x_participant' X
+            Times between wich to extract or resample the data with dims 'trial' X
             'event'
         channel: str
             For which channel to extract the data
         n_samples: int
-            How many samples to resample on if any
+            How many sample to resample on if any
         pad: int
             padding added to the beginning and the end of the signal
 
@@ -751,28 +751,28 @@ def erp_data(epoched_data, times, channel, n_samples=None, pad=1):
     -------
     data : nd.array
         array containing the extracted times for each epoch and stage with format epochs X events X
-        samples.
+        sample.
     """
-    epoched_data = epoched_data.sel(channels=channel)
+    epoched_data = epoched_data.sel(channel=channel)
     if n_samples is None:
         data = (
-            np.zeros((len(times.trial_x_participant), len(times.event), len(epoched_data.samples)))
+            np.zeros((len(times.trial), len(times.event), len(epoched_data.sample)))
             * np.nan
         )
     else:
-        data = np.zeros((len(times.trial_x_participant), len(times.event), n_samples)) * np.nan
+        data = np.zeros((len(times.trial), len(times.event), n_samples)) * np.nan
 
-    for i, trial in enumerate(times.trial_x_participant):
+    for i, trial in enumerate(times.trial):
         for j, event in enumerate(times.event):
             if event == 0:
                 sub_prevtime = 0
             else:
-                sub_prevtime = times.sel(trial_x_participant=trial, event=event - 1).data
-            sub_times = times.sel(trial_x_participant=trial, event=event).data - 1
+                sub_prevtime = times.sel(trial=trial, event=event - 1).data
+            sub_times = times.sel(trial=trial, event=event).data - 1
             time_diff = sub_times - sub_prevtime
             if time_diff > 1:  # rounds up to 0 otherwise
                 subset = epoched_data.sel(
-                    trial_x_participant=trial, samples=slice(sub_prevtime, sub_times)
+                    trial=trial, sample=slice(sub_prevtime, sub_times)
                 )
                 if n_samples is None:
                     limit = np.sum(~subset.data.isnull()).values
@@ -835,7 +835,7 @@ def plot_erp(
         ax.plot(x, mean_signal, color=color, label=label)
         if minmax_lines is not None:
             ax.vlines(
-                times.mean("trial_x_participant") * upsample,
+                times.mean("trial") * upsample,
                 minmax_lines[0],
                 minmax_lines[1],
                 color=color,
