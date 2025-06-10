@@ -56,7 +56,7 @@ class CumulativeEstimationModel(BaseModel):
         self.by_sample = by_sample
         self.tolerance = tolerance
         self.fitted_model_tolerance = tolerance if fitted_model_tolerance is None else fitted_model_tolerance
-
+        self.submodels = {}
         self.fitted_model = None
         super().__init__(*args, **kwargs)
 
@@ -96,8 +96,6 @@ class CumulativeEstimationModel(BaseModel):
         # Init channel_pars
         channel_pars = np.zeros((max_event_n, trial_data.n_dims))  # final channel_pars during estimation
 
-        fixed_n_model = FixedEventModel(self.pattern, self.distribution, tolerance=self.tolerance, n_events=n_events)
-
         lkh_prev = -np.inf
 
         # Iterative fit
@@ -122,6 +120,7 @@ class CumulativeEstimationModel(BaseModel):
                 verbose=False,
                 cpus=cpus,
             )
+            self.submodels[n_events] = fixed_n_model
             sol_sample_new_event = int(
                 np.round(
                     self.distribution.scale_to_mean(
