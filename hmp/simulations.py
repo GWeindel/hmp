@@ -5,6 +5,7 @@ import os.path as op
 from copy import deepcopy
 from warnings import warn
 from hmp.trialdata import TrialData
+from hmp.models.fixedn import FixedEventModel
 import xarray as xr
 
 

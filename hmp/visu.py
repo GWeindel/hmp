@@ -8,7 +8,7 @@ import numpy as np
 import scipy.signal as ssignal
 import xarray as xr
 from scipy import stats
-
+from mne import Info
 from hmp.utils import event_times, event_channels
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold"]
@@ -363,7 +363,7 @@ def plot_topo_timecourse(
 
 def plot_components_sensor(
     weights: xr.DataArray, 
-    positions: np.ndarray | "mne.Info", 
+    positions: np.ndarray | Info, 
     cmap: str = "Spectral_r"
 ) -> None:
     """
