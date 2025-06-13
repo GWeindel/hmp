@@ -1,8 +1,103 @@
+""" 
+This module defines the `FixedEventModel` class, which is the base model for estimating 
+hidden multivariate pattern events. The class extends the 
+`BaseModel` and provides methods for fitting, transforming, and analyzing trial data.
+
+Classes
+-------
+FixedEventModel(BaseModel)
+    A model for estimating fixed transition events in hierarchical models of processes.
+
+    Methods
+    -------
+    __init__(self, *args, n_events, fixed_time_pars=None, fixed_channel_pars=None, 
+             tolerance=1e-4, max_iteration=1e3, min_iteration=1, starting_points=1, 
+             max_scale=None, **kwargs)
+        Initializes the FixedEventModel with the specified parameters.
+
+    fit(self, trial_data, channel_pars=None, time_pars=None, fixed_time_pars=None, 
+        fixed_channel_pars=None, verbose=True, cpus=1, channel_map=None, time_map=None, 
+        level_dict=None)
+        Fits the model to the provided trial data using expectation maximization.
+
+    transform(self, trial_data)
+        Transforms the trial data using the fitted model to compute likelihoods and event probabilities.
+
+    Properties
+    ----------
+    xrtraces
+        Returns the traces of the log-likelihood for each EM iteration as an xarray DataArray.
+
+    xrlikelihoods
+        Returns the log-likelihoods as an xarray DataArray.
+
+    xrtime_pars_dev
+        Returns the time parameter deviations for each EM iteration as an xarray DataArray.
+
+    xrtime_pars
+        Returns the time parameters as an xarray DataArray.
+
+    xrchannel_pars
+        Returns the channel parameters as an xarray DataArray.
+
+    Internal Methods
+    ----------------
+    _EM_star(self, args)
+        Helper method for parallelizing the EM algorithm.
+
+    EM(self, trial_data, initial_channel_pars, initial_time_pars, fixed_channel_pars=None, 
+       fixed_time_pars=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1, 
+       channel_map=None, time_map=None, levels=None, cpus=1)
+        Performs the expectation maximization algorithm to estimate parameters.
+
+    get_channel_time_parameters_expectation(self, trial_data, eventprobs, subset_epochs=None)
+        Computes the channel and time parameters using the expectation step.
+
+    gen_random_stages(self, n_events)
+        Generates random stage durations for initializing time parameters.
+
+    scale_parameters(self, averagepos)
+        Scales parameters based on the average position of events.
+
+    estim_probs(self, trial_data, channel_pars, time_pars, location=True, subset_epochs=None, 
+                by_trial_lkh=False)
+        Estimates probabilities for events and computes the log-likelihood.
+
+    _distribute_levels(self, trial_data, channel_pars, time_pars, channel_map, time_map, 
+                       levels, location=True, cpus=1)
+        Distributes levels and computes probabilities for each level.
+
+    distribution_pdf(self, shape, scale, max_duration)
+        Returns a discretized probability density function for a given distribution.
+
+    level_constructor(self, trial_data, level_dict, channel_map=None, time_map=None, verbose=False)
+        Constructs levels and validates the provided level maps.
+
+Dependencies
+------------
+itertools : module
+    Standard library module for creating iterators for efficient looping.
+multiprocessing : module
+    Standard library module for parallel processing.
+numpy : module
+    Fundamental package for numerical computations in Python.
+xarray : module
+    N-D labeled arrays and datasets for advanced analytics.
+pandas : module
+    Data analysis and manipulation library.
+tqdm : module
+    Progress bar library for Python.
+hmp.models.base.BaseModel : class
+    Base class for hierarchical models of processes.
+hmp.trialdata.TrialData : class
+    Class for handling trial data in hierarchical models.
+"""
+
+
 import itertools
 import multiprocessing as mp
 from itertools import product
 from warnings import resetwarnings, warn
-
 import numpy as np
 import xarray as xr
 from pandas import MultiIndex
@@ -19,20 +114,71 @@ except NameError:
 
 
 class FixedEventModel(BaseModel):
+    """
+    A model for estimating HMP events.
+
+    Parameters
+    ----------
+    n_events : int
+        The number of HMP events to estimate.
+    fixed_time_pars : list, optional
+        List of time parameters to fix during estimation. If None, all time parameters are estimated.
+    fixed_channel_pars : list, optional
+        List of channel parameters to fix during estimation. If None, all channel parameters are estimated.
+    tolerance : float, optional
+        Convergence tolerance for the expectation maximization algorithm. Default is 1e-4.
+    max_iteration : int, optional
+        Maximum number of iterations for the expectation maximization algorithm. Default is 1e3.
+    min_iteration : int, optional
+        Minimum number of iterations for the expectation maximization algorithm. Default is 1.
+    starting_points : int, optional
+        Number of random starting points to use for initialization. Default is 1.
+    max_scale : float, optional
+        Maximum mean distance between events, used when generating random starting points. Default is None.
+
+    Attributes
+    ----------
+    n_events : int
+        The number of HMP events to estimate.
+    n_dims : int or None
+        The number of components or channels in the trial data. Set during fitting.
+    fixed_time_pars : list or None
+        List of fixed time parameters.
+    fixed_channel_pars : list or None
+        List of fixed channel parameters.
+    tolerance : float
+        Convergence tolerance for the expectation maximization algorithm.
+    max_iteration : int
+        Maximum number of iterations for the expectation maximization algorithm.
+    min_iteration : int
+        Minimum number of iterations for the expectation maximization algorithm.
+    starting_points : int
+        Number of random starting points to use for initialization.
+    max_scale : float or None
+        Maximum mean distance between events.
+    level_dict : dict
+        Dictionary defining levels for multilevel modeling.
+    time_map : ndarray
+        2D array mapping time parameters to levels.
+    channel_map : ndarray
+        2D array mapping channel parameters to levels.
+    """
+
     def __init__(
-        self, *args, n_events, fixed_time_pars=None, fixed_channel_pars=None,
-        tolerance=1e-4,
-        max_iteration=1e3,
-        min_iteration=1,
-        starting_points=1,
-        max_scale=None,
+        self, *args, n_events: int, fixed_time_pars: list = None, fixed_channel_pars: list = None,
+        tolerance: float = 1e-4,
+        max_iteration: int = 1e3,
+        min_iteration: int = 1,
+        starting_points: int = 1,
+        max_scale: float = None,
         **kwargs
     ):
         assert np.issubdtype(type(n_events), np.integer), \
          (
              f"An integer for the number of expected transition events"
-             f" is expected, got {n_events} instead"
+             f" is expected, got {type(n_events).__name__} instead"
          )
+
         self.n_events = n_events
         self.n_dims = None
         self.fixed_time_pars = fixed_time_pars
@@ -43,66 +189,66 @@ class FixedEventModel(BaseModel):
         self.starting_points = starting_points
         self.max_scale = max_scale
         self.level_dict = {}
-        self.time_map = np.zeros((1,self.n_events+1))
-        self.channel_map = np.zeros((1,self.n_events))
+        self.time_map = np.zeros((1, self.n_events + 1))
+        self.channel_map = np.zeros((1, self.n_events))
         super().__init__(*args, **kwargs)
 
     def fit(
         self,
-        trial_data,
-        channel_pars=None,
-        time_pars=None,
-        fixed_time_pars=None,
-        fixed_channel_pars=None,
-        verbose=True,
-        cpus=1,
-        channel_map=None,
-        time_map=None,
-        level_dict=None,
+        trial_data: TrialData,
+        channel_pars: np.ndarray = None,
+        time_pars: np.ndarray = None,
+        fixed_time_pars: list = None,
+        fixed_channel_pars: list = None,
+        verbose: bool = True,
+        cpus: int = 1,
+        channel_map: np.ndarray = None,
+        time_map: np.ndarray = None,
+        level_dict: dict = None,
     ):
-        """Fit HMP for a single n_events model.
+
+        """
+        Fit HMP for a single n_events model.
 
         Parameters
         ----------
-        n_events : int
-            how many events are estimated
-        channel_pars : ndarray
-            2D ndarray n_events * channels (or 3D iteration * n_events * n_channels),
-            initial conditions for events channel contribution. 
-        time_pars : list
-            list of initial conditions for time distribution parameters
-            (2D stage * parameter or 3D iteration * n_events * n_channels).
-        fixed_time_pars : bool
-            To fix (True) or to estimate (False, default) the time distribution parameters
-        fixed_channel_pars: bool
-            To fix (True) or to estimate (False, default) the channel contribution
-            to the events
-        tolerance: float
-            Tolerance applied to the expectation maximization in the EM() function
-        max_iteration: int
-            Maximum number of iteration for the expectation maximization in the EM() function
-        min_iteration: int
-            Minimum number of iteration for the expectation maximization in the EM() function
-        starting_points: int
-            How many starting points to use for the EM() function
-        verbose: bool
-            True displays output useful for debugging, recommended for first use
-        cpus: int
-            number of cores to use in the multiprocessing functions
-        channel_map: 2D nd_array n_level * n_events indicating which channel contribution are shared
-        between levels.
-        time_map: 2D nd_array n_level * n_stages indicating which time parameters are shared
-        between levels.
-        levels: dict | list
-            if one level, use a dict with the name in the metadata and a list of the levels
-            in the same order as the rows of the map(s). E.g., {'cue': ['SP', 'AC']}
-            if multiple levels need to be crossed, use a list of dictionaries per level. E.g.,
-            [{'cue': ['SP', 'AC',]}, {'resp': ['left', 'right']}]. These are crossed by repeating
-            the first level as many times as there are levels in the selevel level. E.g., SP-left,
-            SP-right, AC-left, AC-right.
-        max_scale: int
-            expected maximum mean distance between events, only used when generating random starting points
+        trial_data : TrialData
+            The trial data to fit the model to.
+        channel_pars : ndarray, optional
+            2D ndarray (n_levels * n_events * n_channels) or 4D (starting_points * n_levels * n_levels * n_events * n_channels),
+            initial conditions for event channel contributions. Default is None.
+        time_pars : ndarray, optional
+            3D ndarray (n_levels * n_stages * 2) or 4D (starting_points * n_levels * n_stages * 2),
+            initial conditions for time distribution parameters. Default is None.
+        fixed_time_pars : list, optional
+            Indices of time parameters to fix during estimation. Default is None.
+        fixed_channel_pars : list, optional
+            Indices of channel parameters to fix during estimation. Default is None.
+        tolerance : float, optional
+            Convergence tolerance for the expectation maximization algorithm. Default is 1e-4.
+        max_iteration : int, optional
+            Maximum number of iterations for the expectation maximization algorithm. Default is 1e3.
+        min_iteration : int, optional
+            Minimum number of iterations for the expectation maximization algorithm. Default is 1.
+        verbose : bool, optional
+            If True, displays output useful for debugging. Default is True.
+        cpus : int, optional
+            Number of cores to use in multiprocessing functions. Default is 1.
+        channel_map : ndarray, optional
+            2D ndarray (n_levels * n_events) indicating which channel contributions are shared between levels.
+            Default is None.
+        time_map : ndarray, optional
+            2D ndarray (n_levels * n_stages) indicating which time parameters are shared between levels.
+            Default is None.
+        level_dict : dict, optional
+            Dictionary defining levels for multilevel modeling. Keys are level names, and values are lists of levels.
+            Default is None.
+
+        Returns
+        -------
+        None
         """
+
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
         infos_to_store["sfreq"] = self.sfreq
@@ -265,7 +411,22 @@ class FixedEventModel(BaseModel):
             self.channel_map = channel_map
             self.time_map = time_map
 
-    def transform(self, trial_data):
+    def transform(self, trial_data: TrialData) -> tuple[np.ndarray, xr.DataArray]:
+        """
+        Transform the trial data using the fitted model.
+
+        Parameters
+        ----------
+        trial_data : TrialData
+            The trial data to transform.
+
+        Returns
+        -------
+        tuple[np.ndarray, xr.DataArray]
+            A tuple containing:
+            - likelihoods: An array of log-likelihoods for each trial.
+            - xreventprobs: An xarray DataArray of event probabilities.
+        """
         _, levels, clabels = self.level_constructor(
                 trial_data, self.level_dict
             )
@@ -279,10 +440,18 @@ class FixedEventModel(BaseModel):
 
     @property
     def xrtraces(self):
+        """
+        Returns the traces of the log-likelihood for each EM iteration as an xarray DataArray.
+
+        Returns
+        -------
+        xr.DataArray
+            An xarray DataArray with dimensions ("em_iteration", "level") containing the log-likelihood traces.
+        """
         self._check_fitted("get traces")
         return xr.DataArray(
             self.traces,
-            dims=("em_iteration","level"),
+            dims=("em_iteration", "level"),
             name="traces",
             coords={
                 "em_iteration": range(self.traces.shape[0]),
@@ -292,111 +461,147 @@ class FixedEventModel(BaseModel):
 
     @property
     def xrlikelihoods(self):
+        """
+        Returns the log-likelihoods as an xarray DataArray.
+
+        Returns
+        -------
+        xr.DataArray
+            An xarray DataArray containing the log-likelihood values.
+        """
         self._check_fitted("get likelihoods")
         return xr.DataArray(self.lkhs, name="loglikelihood")
 
     @property
     def xrtime_pars_dev(self):
+        """
+        Returns the time parameter for each EM iteration as an xarray DataArray.
+
+        Returns
+        -------
+        xr.DataArray
+            An xarray DataArray with dimensions ("em_iteration", "level", "stage", "time_pars") containing
+            the time parameter deviations.
+        """
         self._check_fitted("get dev time pars")
         return xr.DataArray(
-                self.time_pars_dev,
-                dims=("em_iteration", "level", "stage", "time_pars"),
-                name="time_pars_dev",
-                coords=[
-                    range(self.time_pars_dev.shape[0]),
-                    range(self.time_pars_dev.shape[1]),
-                    range(self.n_events + 1),
-                    ["shape", "scale"],
-                ],
+            self.time_pars_dev,
+            dims=("em_iteration", "level", "stage", "time_pars"),
+            name="time_pars_dev",
+            coords=[
+                range(self.time_pars_dev.shape[0]),
+                range(self.time_pars_dev.shape[1]),
+                range(self.n_events + 1),
+                ["shape", "scale"],
+            ],
         )
 
     @property
     def xrtime_pars(self):
+        """
+        Returns the time parameters as an xarray DataArray.
+
+        Returns
+        -------
+        xr.DataArray
+            An xarray DataArray with dimensions ("level", "stage", "parameter") containing the time parameters.
+        """
         self._check_fitted("get xrtime_pars")
         return xr.DataArray(
-                self.time_pars,
-                dims=("level", "stage", "parameter"),
-                name="time_pars",
-                coords={
-                    "level": range(self.time_pars.shape[0]),
-                    "stage": range(self.n_events + 1),
-                    "parameter": ["shape", "scale"],
-                },
+            self.time_pars,
+            dims=("level", "stage", "parameter"),
+            name="time_pars",
+            coords={
+                "level": range(self.time_pars.shape[0]),
+                "stage": range(self.n_events + 1),
+                "parameter": ["shape", "scale"],
+            },
         )
 
     @property
     def xrchannel_pars(self):
-        self._check_fitted("get xrchannel_pars")
-        return xr.DataArray(
-                self.channel_pars,
-                dims=("level", "event", "channel"),
-                name="channel_pars",
-                coords={
-                    "level": range(self.channel_pars.shape[0]),
-                    "event": range(self.n_events),
-                    "channel": range(self.n_dims),
-                },
-            )
-
-
-
-
-    def _EM_star(self, args):  # for tqdm usage  #noqa
-        return self.EM(*args)
-
-    def EM(  #noqa
-        self,
-        trial_data,
-        initial_channel_pars,
-        initial_time_pars,
-        fixed_channel_pars=None,
-        fixed_time_pars=None,
-        max_iteration=1e3,
-        tolerance=1e-4,
-        min_iteration=1,
-        channel_map=None,
-        time_map=None,
-        levels=None,
-        cpus=1,
-    ):
-        """Fit using expectation maximization.
-
-        Parameters
-        ----------
-        n_events : int
-            how many events are estimated
-        initial_channel_pars : ndarray
-            2D ndarray n_events * channels (or 3D iteration * n_events * n_channels),
-            initial conditions for events channel_pars.
-        initial_time_pars : list
-            list of initial conditions for time distribution parameters parameter
-            (2D stage * parameter or 3D iteration * n_events * n_channels).
-        fixed_channel_pars: list
-            Which parameters of the channel contribution to the events to estimate
-        fixed_time_pars : list
-            Which parameters of the time distributions to estimate
-        max_iteration: int
-            Maximum number of iteration for the expectation maximization
-        tolerance: float
-            Tolerance applied to the expectation maximization
-        min_iteration: int
-            Minimum number of iteration for the expectation maximization in the EM() function
+        """
+        Returns the channel parameters as an xarray DataArray.
 
         Returns
         -------
-        lkh : float
-            Summed log probabilities
-        channel_pars : ndarray
-            Estimated channel contribution to each event
-        time_pars: ndarray
-            Estimated distribution time parameters of each stage
-        eventprobs: ndarray
-            Probabilities with shape max_samples*n_trials*n_events
-        traces: ndarray
-            Values of the log-likelihood for each EM iteration
-        time_pars_dev : ndarray
-            paramters for each iteration of EM
+        xr.DataArray
+            An xarray DataArray with dimensions ("level", "event", "channel") containing the channel parameters.
         """
+        self._check_fitted("get xrchannel_pars")
+        return xr.DataArray(
+            self.channel_pars,
+            dims=("level", "event", "channel"),
+            name="channel_pars",
+            coords={
+                "level": range(self.channel_pars.shape[0]),
+                "event": range(self.n_events),
+                "channel": range(self.n_dims),
+            },
+        )
+
+    def _EM_star(self, args):  # for tqdm usage  #noqa
+        return self.EM(*args)
+        
+    def EM(  # noqa
+        self,
+        trial_data: TrialData,
+        initial_channel_pars: np.ndarray,
+        initial_time_pars: np.ndarray,
+        fixed_channel_pars: list[int] = None,
+        fixed_time_pars: list[int] = None,
+        max_iteration: int = 1000,
+        tolerance: float = 1e-4,
+        min_iteration: int = 1,
+        channel_map: np.ndarray = None,
+        time_map: np.ndarray = None,
+        levels: np.ndarray = None,
+        cpus: int = 1,
+    ) -> tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Fit using expectation maximization.
+
+        Parameters
+        ----------
+        trial_data : TrialData
+            The trial data to fit the model to.
+        initial_channel_pars : np.ndarray
+            2D ndarray (n_events * n_channels) or 3D (iteration * n_events * n_channels),
+            initial conditions for event channel contributions.
+        initial_time_pars : np.ndarray
+            2D ndarray (n_stages * n_parameters) or 3D (iteration * n_stages * n_parameters),
+            initial conditions for time distribution parameters.
+        fixed_channel_pars : list[int], optional
+            Indices of channel parameters to fix during estimation.
+        fixed_time_pars : list[int], optional
+            Indices of time parameters to fix during estimation.
+        max_iteration : int, optional
+            Maximum number of iterations for the expectation maximization algorithm. Default is 1000.
+        tolerance : float, optional
+            Convergence tolerance for the expectation maximization algorithm. Default is 1e-4.
+        min_iteration : int, optional
+            Minimum number of iterations for the expectation maximization algorithm. Default is 1.
+        channel_map : np.ndarray, optional
+            2D array mapping channel parameters to levels. Default is None.
+        time_map : np.ndarray, optional
+            2D array mapping time parameters to levels. Default is None.
+        levels : np.ndarray, optional
+            Array indicating the levels for multilevel modeling. Default is None.
+        cpus : int, optional
+            Number of cores to use in multiprocessing functions. Default is 1.
+
+        Returns
+        -------
+        tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+            A tuple containing:
+            - lkh: Summed log probabilities.
+            - channel_pars: Estimated channel contributions for each event.
+            - time_pars: Estimated time distribution parameters for each stage.
+            - traces: Log-likelihood values for each EM iteration.
+            - time_pars_dev: Time parameters for each iteration of the EM algorithm.
+        """
+
+
         assert channel_map.shape[0] == time_map.shape[0], (
             "Both maps need to indicate the same number of levels."
         )
@@ -474,7 +679,31 @@ class FixedEventModel(BaseModel):
             )
         return lkh, channel_pars, time_pars, np.array(traces), np.array(time_pars_dev)
 
-    def get_channel_time_parameters_expectation(self, trial_data, eventprobs, subset_epochs=None):
+    def get_channel_time_parameters_expectation(
+        self, 
+        trial_data: TrialData, 
+        eventprobs: np.ndarray, 
+        subset_epochs: list[int] = None
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Compute the channel and time parameters using the expectation step.
+
+        Parameters
+        ----------
+        trial_data : TrialData
+            The trial data containing cross-correlation and event information.
+        eventprobs : np.ndarray
+            A 3D array of shape (n_trials, max_duration, n_events) containing the event probabilities.
+        subset_epochs : list[int], optional
+            A list of trial indices to consider for the computation. If None, all trials are used.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            A tuple containing:
+            - channel_pars: A 2D array of shape (n_events, n_dims) with the estimated channel parameters.
+            - time_pars: A 2D array of shape (n_stages, 2) with the estimated time parameters (shape and scale).
+        """
         channel_pars = np.zeros((eventprobs.shape[2], self.n_dims))
         # Channel contribution from Expectation, Eq 11 from 2024 paper
         for event in range(eventprobs.shape[2]):
@@ -501,26 +730,27 @@ class FixedEventModel(BaseModel):
             ]
         )
         time_pars = self.scale_parameters(averagepos=event_times_mean)
-        return [channel_pars, time_pars]
+        return channel_pars, time_pars
 
-    def gen_random_stages(self, n_events):
-        """Compute random stage duration.
+    def gen_random_stages(self, n_events: int) -> np.ndarray:
+        """
+        Compute random stage durations.
 
-        Returns random stage duration between 0 and mean RT by iteratively drawind sample from a
-        uniform distribution between the last stage duration (equal to 0 for first iteration) and 1.
-        Last stage is equal to 1-previous stage duration.
-        The stages are then scaled to the mean RT
+        Generates random stage durations between 0 and the mean reaction time (RT) by iteratively 
+        drawing samples from a uniform distribution. The last stage duration is computed as 
+        1 minus the cumulative duration of previous stages. The stages are then scaled to the mean RT.
 
         Parameters
         ----------
         n_events : int
-            how many events
+            The number of events to generate random durations for.
 
         Returns
         -------
-        random_stages : ndarray
-            random partition between 0 and mean_d
+        np.ndarray
+            A 2D array where each row contains the shape and scale parameters for a stage.
         """
+
         rnd_durations = np.zeros(n_events + 1)
         assert self.event_width_samples*(n_events + 1) < self.max_scale, \
             f"Max_scale too short, need to be more than {self.event_width_samples*(n_events+1)}"
@@ -538,22 +768,26 @@ class FixedEventModel(BaseModel):
         return random_stages
 
 
-    def scale_parameters(self, averagepos):
-        """Scale parameters from average position of event.
+    def scale_parameters(self, averagepos: np.ndarray) -> np.ndarray:
+        """
+        Scale parameters from the average position of events.
 
-        Used for the re-estimation in the EM procdure. The likeliest location of
-        the event is computed from eventprobs. The scale parameter are then taken as the average
-        distance between the events
+        This method is used during the re-estimation step in the EM procedure. 
+        It computes the likeliest location of events from `eventprobs` and calculates 
+        the scale parameters as the average distance between consecutive events.
 
         Parameters
         ----------
-
+        averagepos : np.ndarray
+            A 1D array containing the average positions of events.
 
         Returns
         -------
-        params : ndarray
-            shape and scale for the distributions
+        np.ndarray
+            A 2D array where each row contains the shape and scale parameters 
+            for the corresponding event distribution.
         """
+
         params = np.zeros((len(averagepos), 2), dtype=np.float64)
         params[:, 0] = self.distribution.shape
         params[:, 1] = np.diff(averagepos, prepend=0)
@@ -562,35 +796,41 @@ class FixedEventModel(BaseModel):
 
     def estim_probs(
         self,
-        trial_data : TrialData,
-        channel_pars,
-        time_pars,
-        location=True,
-        subset_epochs=None,
-        by_trial_lkh=False,
-    ):
-        """Estimate probabilities.
+        trial_data: TrialData,
+        channel_pars: np.ndarray,
+        time_pars: np.ndarray,
+        location: bool = True,
+        subset_epochs: list[int] | None = None,
+    ) -> tuple[float, np.ndarray]:
+        """
+        Estimate probabilities for events and compute the log-likelihood.
 
         Parameters
         ----------
-        channel_pars : ndarray
-            2D ndarray n_events * channels (or 3D iteration * n_events * n_channels),
-            initial conditions for channel contributio to event.
-        time_pars : list
-            list of initial conditions for the distribution parameters
-            (2D stage * parameter or 3D iteration * n_events * n_channels).
-        locations : ndarray
-            1D ndarray of int with size n_events+1, locations for events
-
-        subset_epochs : list
-            boolean array indicating which epoch should be taken into account for level-based calcs
+        trial_data : TrialData
+            The trial data containing cross-correlation and event information.
+        channel_pars : np.ndarray
+            A 2D array of shape (n_events, n_channels) or a 3D array of shape 
+            (iteration, n_events, n_channels) containing initial conditions for 
+            channel contributions to events.
+        time_pars : np.ndarray
+            A 2D array of shape (n_stages, n_parameters) or a 3D array of shape 
+            (iteration, n_stages, n_parameters) containing initial conditions for 
+            the distribution parameters.
+        location : bool, optional
+            Whether to add a minimum distance between events to avoid event collapse 
+            during the expectation-maximization algorithm. Default is True.
+        subset_epochs : list[int] or None, optional
+            A list of trial indices to consider for the computation. If None, all trials 
+            are used. Default is None.
 
         Returns
         -------
-        loglikelihood : float
-            Summed log probabilities
-        eventprobs : ndarray
-            Probabilities with shape max_samples*n_trials*n_events
+        tuple[float, np.ndarray]
+            A tuple containing:
+            - loglikelihood: A float representing the summed log probabilities.
+            - eventprobs: A 3D array of shape (n_trials, max_samples, n_events) containing 
+              the probabilities for each event.
         """
         n_events = channel_pars.shape[0]
         n_stages = n_events + 1
@@ -676,35 +916,56 @@ class FixedEventModel(BaseModel):
         )  # sum over max_samples to avoid 0s in log
         eventprobs = eventprobs / eventprobs.sum(axis=0)
         eventprobs = eventprobs.transpose((1,0,2))
-        if by_trial_lkh:
-            return forward * backward
-        else:
-            return [likelihood, eventprobs]
+        return [likelihood, eventprobs]
 
     def _distribute_levels(
-        self, trial_data, channel_pars, time_pars, channel_map, time_map, levels, 
-        location=True, cpus=1
-    ):
-        """Estimate probability levels.
+        self,
+        trial_data: TrialData,
+        channel_pars: np.ndarray,
+        time_pars: np.ndarray,
+        channel_map: np.ndarray,
+        time_map: np.ndarray,
+        levels: np.ndarray,
+        location: bool = True,
+        cpus: int = 1,
+    ) -> tuple[np.ndarray, xr.DataArray]:
+        """
+        Estimate probability levels for multilevel models.
+
+        This method computes the log-likelihood and event probabilities for each level
+        in the multilevel model, using the provided channel and time parameters.
 
         Parameters
         ----------
-        channel_pars : ndarray
-            2D ndarray n_events * channels (or 3D iteration * n_events * n_channels),
-            initial conditions for events channel contribution. 
-        time_pars : list
-            list of initial conditions for time distribution parameters
-        location : bool
-            Whether to add a minumum distance between events, useful to avoid event collapse during EM
-        n_events : int
-            how many events are estimated
-            
+        trial_data : TrialData
+            The trial data containing cross-correlation and event information.
+        channel_pars : np.ndarray
+            A 2D array of shape (n_events, n_channels) or a 3D array of shape 
+            (iteration, n_events, n_channels) containing initial conditions for 
+            channel contributions to events.
+        time_pars : np.ndarray
+            A 2D array of shape (n_stages, n_parameters) or a 3D array of shape 
+            (iteration, n_stages, n_parameters) containing initial conditions for 
+            the distribution parameters.
+        channel_map : np.ndarray
+            A 2D array mapping channel parameters to levels.
+        time_map : np.ndarray
+            A 2D array mapping time parameters to levels.
+        levels : np.ndarray
+            An array indicating the levels for multilevel modeling.
+        location : bool, optional
+            Whether to add a minimum distance between events to avoid event collapse 
+            during the expectation-maximization algorithm. Default is True.
+        cpus : int, optional
+            Number of cores to use in multiprocessing functions. Default is 1.
+
         Returns
         -------
-        loglikelihood : float
-            Summed log probabilities
-        eventprobs : ndarray
-            Probabilities with shape max_samples*n_trials*n_events
+        tuple[np.ndarray, xr.DataArray]
+            A tuple containing:
+            - loglikelihood: A 1D array of log-likelihood values for each level.
+            - all_xreventprobs: An xarray DataArray containing event probabilities 
+              with dimensions ("trial", "sample", "event").
         """
         data_levels = np.unique(levels)
         likes_events_level = []
@@ -762,30 +1023,64 @@ class FixedEventModel(BaseModel):
         all_xreventprobs.attrs['event_width_samples'] = self.event_width_samples
         return [np.array(likelihood), all_xreventprobs]
 
-    def distribution_pdf(self, shape, scale, max_duration):
-        """Return discretized PDF for a provided scipy disttribution.
+    def distribution_pdf(self, shape: float, scale: float, max_duration: int) -> np.ndarray:
+        """
+        Return a discretized probability density function (PDF) for a provided scipy distribution.
 
-        Uses the shape and scale, on a range from 0 to max_length.
+        This method computes the PDF using the given shape and scale parameters over a range 
+        from 0 to `max_duration`, and normalizes it to ensure the probabilities sum to 1.
 
         Parameters
         ----------
         shape : float
-            shape parameter
+            The shape parameter of the distribution.
         scale : float
-            scale parameter
+            The scale parameter of the distribution.
+        max_duration : int
+            The maximum duration (range) for which the PDF is computed.
 
         Returns
         -------
-        p : ndarray
-            probabilty mass function for the distribution with given scale
+        np.ndarray
+            A 1D array representing the probability mass function for the distribution 
+            with the given shape and scale parameters, normalized to sum to 1.
         """
         p = self.distribution.pdf(np.arange(max_duration), shape, scale=scale)
         p = p / np.sum(p)
         p[np.isnan(p)] = 0  # remove potential nans
         return p
 
-    def level_constructor(self, trial_data, level_dict, channel_map=None, time_map=None, verbose=False):
-        """Adapt model to levels.
+    def level_constructor(
+        self, 
+        trial_data: TrialData, 
+        level_dict: dict, 
+        channel_map: np.ndarray = None, 
+        time_map: np.ndarray = None, 
+        verbose: bool = False
+    ) -> tuple[int, np.ndarray, dict]:
+        """
+        Adapt the model to levels by constructing level mappings and validating provided maps.
+
+        Parameters
+        ----------
+        trial_data : TrialData
+            The trial data containing trial-level information.
+        level_dict : dict
+            A dictionary defining levels for multilevel modeling. Keys are level names, and values are lists of levels.
+        channel_map : np.ndarray, optional
+            A 2D array mapping channel parameters to levels. Default is None.
+        time_map : np.ndarray, optional
+            A 2D array mapping time parameters to levels. Default is None.
+        verbose : bool, optional
+            If True, prints detailed information about the level construction process. Default is False.
+
+        Returns
+        -------
+        tuple[int, np.ndarray, dict]
+            A tuple containing:
+            - n_levels: The number of unique levels.
+            - levels: An array indicating the level assignment for each trial.
+            - clabels: A dictionary containing level names and their corresponding modalities.
         """
         ## levels
         assert isinstance(level_dict, dict), "levels have to be specified as a dictionary"
