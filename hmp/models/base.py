@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 import numpy as np
 from hmp.distributions import Gamma
+from hmp.trialdata import TrialData
 
 
 class BaseModel(ABC):
@@ -45,7 +46,7 @@ class BaseModel(ABC):
         self._fitted = False
 
 
-    def compute_max_events(self, trial_data):
+    def compute_max_events(self, trial_data: TrialData):
         """Compute the maximum possible number of events given event width minimum reaction time."""
         return int(np.rint(np.percentile(trial_data.durations, 10) // (self.location)))
 
@@ -66,11 +67,11 @@ class BaseModel(ABC):
 
 
     @abstractmethod
-    def fit(self, trial_data):
+    def fit(self, trial_data: TrialData):
         ...
 
     @abstractmethod
-    def transform(self, trial_data):
+    def transform(self, trial_data: TrialData):
         ...
 
     def fit_transform(self, data, *args, **kwargs):

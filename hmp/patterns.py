@@ -3,17 +3,46 @@ from typing import Any
 from dataclasses import dataclass
 
 @dataclass
-class HalfSine():
+class HalfSine:
+    """
+    Represents a half-sine wave template.
+
+    Attributes
+    ----------
+    sfreq : float
+        Sampling frequency in Hz.
+    width_samples : int
+        Number of samples in the half-sine wave.
+    location : int
+        How much samples should be censored in the EM() step of model fitting.
+    template : np.ndarray
+        The half-sine wave template.
+    """
     sfreq: float
     width_samples: int
     location: int
-    template: Any
+    template: np.ndarray
 
     @classmethod
-    def create_expected(cls, sfreq, width=50,  location=None):
+    def create_expected(cls, sfreq: float, width: float = 50, location: float | None = None) -> "HalfSine":
+        """
+        Create a HalfSine instance with the expected parameters.
 
+        Parameters
+        ----------
+        sfreq : float
+            Sampling frequency in Hz.
+        width : float, optional
+            Width of the half-sine wave in milliseconds, by default 50.
+        location : float, optional
+            How much samples should be censored in the EM() step of model fitting.
+
+        Returns
+        -------
+        HalfSine
+            An instance of the HalfSine class.
+        """
         steps = 1000 / sfreq
-
         width_samples = int(np.round(width / steps))
         if location is None:
             location = int(width / steps)
@@ -22,37 +51,73 @@ class HalfSine():
         template = cls._create_template(width_samples, steps, width)
         return cls(sfreq, width_samples, location, template)
 
-
     @staticmethod
-    def _create_template(width_samples, steps, width):
-        """Compute the event shape.
+    def _create_template(width_samples: int, steps: float, width: float) -> np.ndarray:
+        """
+        Compute the event shape as a half-sine wave.
 
-        Computes the template of a half-sine (event) with given frequency f and sampling frequency.
+        Parameters
+        ----------
+        width_samples : int
+            Number of samples in the half-sine wave.
+        steps : float
+            Time step in milliseconds between samples.
+        width : float
+            Width of the half-sine wave in milliseconds.
 
-        Equations in section 2.4 in the 2024 paper
+        Returns
+        -------
+        np.ndarray
+            The normalized half-sine wave template.
         """
         event_idx = np.arange(width_samples) * steps + steps / 2
-        # gives event frequency given that events are defined as half-sines
-        event_frequency = 1000 / (width * 2)
-
-        # event morph based on a half sine with given event width and sampling frequency
+        event_frequency = 1000 / (width * 2)  # Event frequency for half-sine
         template = np.sin(2 * np.pi * event_idx / 1000 * event_frequency)
         template = template / np.sum(template**2)  # Weight normalized
         return template
 
 @dataclass
-class Arbitrary():
+class Arbitrary:
+    """
+    Represents an arbitrary template.
+
+    Attributes
+    ----------
+    sfreq : float
+        Sampling frequency in Hz.
+    width_samples : int
+        Number of samples in the template.
+    location : int
+        How much samples should be censored in the EM() step of model fitting.
+    template : np.ndarray
+        The arbitrary template.
+    """
     sfreq: float
     width_samples: int
     location: int
-    template: Any
+    template: np.ndarray
 
     @classmethod
-    def create_expected(cls, sfreq, template, width=50,  location=None):
+    def create_expected(cls, sfreq: float, template: np.ndarray, location: float | None = None) -> "Arbitrary":
+        """
+        Create an Arbitrary instance with the expected parameters.
 
+        Parameters
+        ----------
+        sfreq : float
+            Sampling frequency in Hz.
+        template : np.ndarray
+            The arbitrary waveform template.
+        location : float, optional
+            How much samples should be censored in the EM() step of model fitting.
+
+        Returns
+        -------
+        Arbitrary
+            An instance of the Arbitrary class.
+        """
         steps = 1000 / sfreq
         width_samples = len(template)
-
         if location is None:
             location = width_samples
         else:
