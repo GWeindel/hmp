@@ -1,4 +1,4 @@
-"""This module defines the ``FixedEventModel`` class, which is the base model for estimating
+"""This module defines the ``EventModel`` class, which is the base model for estimating
 hidden multivariate pattern models. 
 """
 
@@ -22,7 +22,7 @@ except NameError:
 
 
 
-class FixedEventModel(BaseModel):
+class EventModel(BaseModel):
     """
     A model for estimating HMP events.
 

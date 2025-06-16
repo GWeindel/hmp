@@ -1,6 +1,6 @@
 import numpy as np
 import hmp
-from hmp.models import FixedEventModel
+from hmp.models import EventModel
 from hmp.patterns import HalfSine
 from hmp.trialdata import TrialData
 from hmp.visu import plot_topo_timecourse
@@ -25,7 +25,7 @@ def test_plot():
     trial_data = TrialData.from_preprocessed_data(preprocessed=hmp_data.data, pattern=event_properties.template)
     trial_data_b = TrialData.from_preprocessed_data(preprocessed=hmp_data_b, pattern=event_properties.template)
 
-    model = FixedEventModel(event_properties, n_events=n_events)
+    model = EventModel(event_properties, n_events=n_events)
     
     # Perform a fit on a (should be too noisy)
     lkh_b, estimates_b = model.fit_transform(trial_data_b)

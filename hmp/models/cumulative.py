@@ -6,7 +6,7 @@ import numpy as np
 from scipy.stats import norm as norm_pval
 
 from hmp.models.base import BaseModel
-from hmp.models.fixedn import FixedEventModel
+from hmp.models.event import EventModel
 from hmp.trialdata import TrialData
 
 try:
@@ -18,9 +18,9 @@ except NameError:
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
 
-class CumulativeEstimationModel(BaseModel):
+class CumulativeMethod(BaseModel):
     """
-    Initialize the CumulativeEstimationModel.
+    Initialize the CumulativeMethod.
 
     This method initializes the model and sets up parameters for fitting a cumulative event model.
     The fitting process starts with a 1-event model and iteratively adds events based on the 
@@ -117,7 +117,7 @@ class CumulativeEstimationModel(BaseModel):
             self.distribution.scale_to_mean(last_stage) >= self.location and n_events <= max_event_n
         ):
             prev_time = time
-            fixed_n_model = FixedEventModel(self.pattern, self.distribution, tolerance=self.tolerance, n_events=n_events)
+            fixed_n_model = EventModel(self.pattern, self.distribution, tolerance=self.tolerance, n_events=n_events)
             # get new parameters
             channel_pars_props, time_pars_props = self._propose_fit_params(
                 trial_data,
@@ -199,7 +199,7 @@ class CumulativeEstimationModel(BaseModel):
         channel_pars = channel_pars[:n_events, :]
         time_pars = time_pars[: n_events + 1, :]
 
-        self.fitted_model = FixedEventModel(
+        self.fitted_model = EventModel(
             self.pattern, self.distribution, tolerance=self.fitted_model_tolerance, n_events=n_events)
         if n_events > 0:
             self.fitted_model.fit(

@@ -147,7 +147,7 @@ Finally we:
     event_properties = hmp.patterns.HalfSine.create_expected(sfreq=epoch_data.sfreq)
     trial_data = hmp.trialdata.TrialData.from_preprocessed_data(preprocessed=preprocessed, pattern=event_properties.template)
     
-    model = hmp.models.FixedEventModel(event_properties, n_events=3)
+    model = hmp.models.EventModel(event_properties, n_events=3)
     likelihood, estimate = model.fit_transform(trial_data)
 
 

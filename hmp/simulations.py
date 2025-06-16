@@ -5,7 +5,7 @@ import os.path as op
 from copy import deepcopy
 from warnings import warn
 from hmp.trialdata import TrialData
-from hmp.models.fixedn import FixedEventModel
+from hmp.models.event import EventModel
 import xarray as xr
 
 
@@ -358,7 +358,7 @@ def simulate(
     return files
 
 
-def demo(cpus, n_events, seed=123):
+def demo(cpus, n_events, seed=123, overwrite=False):
     """Create example data for the tutorials."""
     ## Imports and code specific to the simulation (see tutorial 3 and 4 for real data)
     from scipy.stats import gamma
@@ -369,7 +369,7 @@ def demo(cpus, n_events, seed=123):
     ## Parameters for the simulations
     frequency, amplitude = (
         10.0,
-        1e-7,
+        .0025e-7,
     )  # Frequency of the transition event and its amplitude in nAm
     shape = 2  # shape of the gamma distribution
 
@@ -395,7 +395,7 @@ def demo(cpus, n_events, seed=123):
 
     # Simulating and recover information on electrode location and true time of the simulated events
     files = simulate(
-        sources, n_trials, cpus, file, path='sample_data', overwrite=False, seed=seed, noise=True, sfreq=sfreq
+        sources, n_trials, cpus, file, path='sample_data', overwrite=overwrite, seed=seed, noise=True, sfreq=sfreq
     )
 
     generating_events = np.load(files[1])
@@ -485,7 +485,7 @@ def classification_true(
 
 def simulated_times_and_parameters(
     generating_events: np.ndarray,
-    model: FixedEventModel,
+    model: EventModel,
     trial_data: TrialData,
     resampling_freq: float = None,
     data: np.ndarray = None,
@@ -498,7 +498,7 @@ def simulated_times_and_parameters(
     generating_events : np.ndarray
         Times of the simulated events created by the function simulate().
     model : hmp
-        Initialized FixedEventModel.
+        Initialized EventModel.
     trial_data : TrialData
         Object containing trial-specific data such as starts, ends, and cross-correlation.
     resampling_freq : float, optional

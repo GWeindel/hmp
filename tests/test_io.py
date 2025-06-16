@@ -9,7 +9,7 @@ from hmp.patterns import HalfSine
 from hmp.distributions import Gamma
 from hmp import preprocessing
 from hmp.trialdata import TrialData
-from hmp.models import FixedEventModel
+from hmp.models import EventModel
 
 
 DATA_DIR = Path("tests", "gen_data")
@@ -44,7 +44,7 @@ def test_save_dat():
     data_b = utils.participant_selection(hmp_data.data, 'b')
     event_properties = HalfSine.create_expected(sfreq=epoch_data.sfreq)
     trial_data_b = TrialData.from_preprocessed_data(preprocessed=data_b, pattern=event_properties.template)
-    model = FixedEventModel(event_properties, n_events=n_events)
+    model = EventModel(event_properties, n_events=n_events)
     _, estimates = model.fit_transform(trial_data_b)
 
     test = io.save_xr(estimates, 'test')

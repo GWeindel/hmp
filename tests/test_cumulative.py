@@ -3,7 +3,7 @@ import xarray as xr
 
 import hmp
 from hmp import simulations
-from hmp.models import CumulativeEstimationModel, FixedEventModel
+from hmp.models import CumulativeMethod, EventModel
 from hmp.patterns import HalfSine
 from hmp.distributions import Gamma
 from hmp.trialdata import TrialData
@@ -24,7 +24,7 @@ def test_cumulative_simple():
     trial_data_b = TrialData.from_preprocessed_data(preprocessed=data_b, pattern=event_properties.template)
     time_distribution = Gamma()
 
-    true_model = FixedEventModel(event_properties, time_distribution, n_events=n_events)
+    true_model = EventModel(event_properties, time_distribution, n_events=n_events)
     # Recover generating parameters
     sim_source_times, true_pars, true_magnitudes, _ = \
         simulations.simulated_times_and_parameters(event_b, true_model, trial_data_b)
@@ -35,7 +35,7 @@ def test_cumulative_simple():
     true_loglikelihood, true_estimates = true_model.transform(trial_data_b)
 
     # Cumulative estimation
-    model = CumulativeEstimationModel(event_properties, step=25)
+    model = CumulativeMethod(event_properties, step=25)
     model.fit(trial_data_b)
     estimates = model.transform(trial_data_b)
 

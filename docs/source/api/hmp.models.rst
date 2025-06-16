@@ -1,7 +1,7 @@
  Basic event model
 ------------------------
 
-.. automodule:: hmp.models.fixedn
+.. automodule:: hmp.models.event
    :members:
    :show-inheritance:
    :undoc-members:

@@ -4,7 +4,7 @@ import numpy as np
 
 import hmp
 from hmp import simulations
-from hmp.models import FixedEventModel
+from hmp.models import EventModel
 from hmp.patterns import HalfSine
 from hmp.distributions import Gamma
 from hmp.trialdata import TrialData
@@ -26,7 +26,7 @@ def test_fixed_simple():
     event_properties = HalfSine.create_expected(sfreq=data_b.sfreq)
     trial_data_b = TrialData.from_preprocessed_data(preprocessed=data_b, pattern=event_properties.template)
     time_distribution = Gamma()
-    model = FixedEventModel(event_properties, time_distribution, n_events=n_events)
+    model = EventModel(event_properties, time_distribution, n_events=n_events)
     # Recover generating parameters
     sim_source_times, true_pars, true_magnitudes, _ = \
         simulations.simulated_times_and_parameters(event_b, model, trial_data_b)
@@ -73,7 +73,7 @@ def test_fixed_multilevel():
     trial_data_a = TrialData.from_preprocessed_data(preprocessed=hmp_data_a, pattern=event_properties.template)
     trial_data_b = TrialData.from_preprocessed_data(preprocessed=hmp_data_b, pattern=event_properties.template)
 
-    model = FixedEventModel(event_properties, n_events=n_events)
+    model = EventModel(event_properties, n_events=n_events)
     # Recover generating parameters
     sim_source_times, true_pars, true_magnitudes, _ = \
         simulations.simulated_times_and_parameters(event_a, model, trial_data_a)
@@ -109,7 +109,7 @@ def test_starting_points():
     event_properties = HalfSine.create_expected(sfreq=hmp_data.sfreq)
     trial_data = TrialData.from_preprocessed_data(preprocessed=hmp_data, pattern=event_properties.template)
     # Testing starting points
-    model_sp = FixedEventModel(event_properties, n_events=n_events, starting_points=2, max_scale=21)
+    model_sp = EventModel(event_properties, n_events=n_events, starting_points=2, max_scale=21)
     model_sp.fit(trial_data, verbose=True)
 
 
