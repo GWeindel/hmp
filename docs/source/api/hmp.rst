@@ -3,7 +3,7 @@ hmp package
 
 Welcome to the HMP API documentation!
 
-Subpackages
+Models
 -----------
 
 .. toctree::
@@ -11,10 +11,8 @@ Subpackages
 
    hmp.models
 
-Submodules
-----------
 
-hmp.io module
+Input/output module
 -------------
 
 .. automodule:: hmp.io
@@ -22,23 +20,24 @@ hmp.io module
    :show-inheritance:
    :undoc-members:
 
-hmp.loocv module
-----------------
 
-.. automodule:: hmp.loocv
+Distributions module
+-------------
+
+.. automodule:: hmp.distributions
    :members:
    :show-inheritance:
    :undoc-members:
 
-hmp.mcca module
----------------
+Patterns module
+-------------
 
-.. automodule:: hmp.mcca
+.. automodule:: hmp.patterns
    :members:
    :show-inheritance:
    :undoc-members:
 
-hmp.preprocessing module
+Preprocessing module
 ------------------------
 
 .. automodule:: hmp.preprocessing
@@ -46,15 +45,7 @@ hmp.preprocessing module
    :show-inheritance:
    :undoc-members:
 
-hmp.simulations module
-----------------------
-
-.. automodule:: hmp.simulations
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-hmp.trialdata module
+TrialData module
 --------------------
 
 .. automodule:: hmp.trialdata
@@ -62,15 +53,7 @@ hmp.trialdata module
    :show-inheritance:
    :undoc-members:
 
-hmp.utils module
-----------------
-
-.. automodule:: hmp.utils
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-hmp.visu module
+Visualization module
 ---------------
 
 .. automodule:: hmp.visu
@@ -78,10 +61,36 @@ hmp.visu module
    :show-inheritance:
    :undoc-members:
 
-Module contents
+Utils module
+----------------
+
+.. automodule:: hmp.utils
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+
+Simulations module
+----------------------
+
+.. automodule:: hmp.simulations
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+
+LOOCV module
+----------------
+
+.. automodule:: hmp.loocv
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+MCCA module
 ---------------
 
-.. automodule:: hmp
+.. automodule:: hmp.mcca
    :members:
    :show-inheritance:
    :undoc-members:

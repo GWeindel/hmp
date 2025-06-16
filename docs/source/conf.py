@@ -20,12 +20,12 @@ sys.path.insert(0, os.path.abspath(".."))
 # -- Project information -----------------------------------------------------
 
 project = "hmp"
-copyright = "2025, Utrecht University"
-author = "Gabriel Weindel, Maarten Schermer, Raoul Schram"
+copyright = "2025, Gabriel Weindel, Maarten Schermer, Raoul Schram, Leendert van Maanen, Jelmer Borst"
+author = "Gabriel Weindel, Maarten Schermer, Raoul Schram, Leendert van Maanen, Jelmer Borst"
 
 
 # The full version, including alpha/beta/rc tags
-release = '0.0.1'
+release = '1.0.0-b.1'
 
 # -- General configuration ---------------------------------------------------
 
@@ -57,7 +57,7 @@ exclude_patterns = []
 # a list of builtin themes.
 #
 html_theme = "sphinx_rtd_theme"
-html_logo = "images/logos/image.png"
+html_logo = "images/logos/logo.png"
 html_theme_options = {
     "logo_only": True,
     "navigation_depth": -1,
@@ -69,4 +69,5 @@ html_theme_options = {
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 # html_static_path = ['_static']
-napoleon_use_param = True
+napoleon_use_param = Truehtml_logo = "images/logos/logo.pne"
+

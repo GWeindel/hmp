@@ -1,34 +1,4 @@
-hmp.models package
-==================
-
-Submodules
-----------
-
-hmp.models.backward module
---------------------------
-
-.. automodule:: hmp.models.backward
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-hmp.models.base module
-----------------------
-
-.. automodule:: hmp.models.base
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-hmp.models.cumulative module
-----------------------------
-
-.. automodule:: hmp.models.cumulative
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-hmp.models.fixedn module
+ Basic event model
 ------------------------
 
 .. automodule:: hmp.models.fixedn
@@ -36,10 +6,19 @@ hmp.models.fixedn module
    :show-inheritance:
    :undoc-members:
 
-Module contents
----------------
 
-.. automodule:: hmp.models
+Eliminative estimation method
+--------------------------
+
+.. automodule:: hmp.models.backward
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Cumulative estimation method
+----------------------------
+
+.. automodule:: hmp.models.cumulative
    :members:
    :show-inheritance:
    :undoc-members:
