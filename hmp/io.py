@@ -1,3 +1,11 @@
+"""EEG/MEG Data Processing Utilities.
+
+This module provides functions for reading, processing, and saving EEG/MEG data using MNE, xarray, and pandas.
+It supports reading raw or epoched data, event/response detection, reaction time trimming, epoch cropping,
+metadata handling, and conversion to xarray Datasets for fitting hmp models. Additional utilities are provided
+for saving/loading data and models, and exporting event probabilities.
+"""
+
 import numpy as np
 import xarray as xr
 from pandas import DataFrame
@@ -35,43 +43,46 @@ def read_mne_data(
     Notes
     -----
     - Only EEG or MEG data are selected (other channel types are discarded).
-    - All times are expressed on the second scale.
-    - If multiple files in `pfiles`, the data of the group is read and sequentially processed.
-    - For non-epoched data: Reaction Times are only computed if the response trigger is in the epoch
-      window (determined by `tmin` and `tmax`).
+    - All times are expressed in seconds.
+    - If multiple files are provided in ``pfiles``, each participant's data is read and processed sequentially.
+    - For non-epoched data: Reaction Times are only computed if the response trigger is in the epoching
+      window (determined by ``tmin`` and ``tmax``).
 
-    Procedure:
+    ## Procedure:
+    
     If data is not already epoched:
-    0.1) The data is filtered with filters specified in `low_pass` and `high_pass`.
-         Parameters of the filter are determined by MNE's filter function.
-    0.2) If no events are provided, detect events in the stimulus channel and keep events with IDs
-         in `event_id` and `resp_id`.
-    0.3) Eventual downsampling is performed if `sfreq` is lower than the data's sampling frequency.
-         The event structure is passed to the `resample()` function of MNE to ensure that events
-         are appropriately timed after downsampling.
-    0.4) Epochs are created based on stimulus onsets (`event_id`) and `tmin` and `tmax`. Epoching
-         removes any epoch where a 'BAD' annotation is present. Epochs are baseline corrected from
-        `tmin` to stimulus onset (time 0).
 
-    1) Reaction times (RT) are computed based on the sample difference between the onset of the
-       stimulus and response triggers. If no response event happens after a stimulus in the epochs window
-        or if RT > `upper_limit_rt` or RT < `lower_limit_rt`, RT is set to 0.
-    2) All the non-rejected epochs with positive RTs are cropped to stimulus onset to
-       stimulus_onset + RT.    Parameters
+        - The data is filtered using the specified ``low_pass`` and ``high_pass`` parameters.
+        - If no events are provided, events are detected in the stimulus channel and only those with IDs
+          in ``event_id`` and ``resp_id`` are kept.
+        - Downsampling is performed if ``sfreq`` is lower than the data's sampling frequency.
+        - Epochs are created based on stimulus onsets (``event_id``) and the ``tmin``/``tmax`` window.
+          Epochs with 'BAD' annotations are removed. Baseline correction is applied from
+          ``tmin`` to stimulus onset (time 0).
+
+    Then (or if data is already epoched):
+
+        1. Reaction times (RT) are computed as the time difference between stimulus and response triggers.
+           If no response event occurs after a stimulus in the epoch window, or if
+           ``RT > upper_limit_rt`` or ``RT < lower_limit_rt``, RT is set to 0.
+        2. All non-rejected epochs with positive RTs are cropped from stimulus onset to
+           ``stimulus_onset + RT``.
+
+    Parameters
     ----------
-    pfiles : str or list
-        List of EEG files to read. Can be a single file path or a list of file paths.
+    pfiles : str or list of str
+        Path(s) to EEG files to read. Can be a single file path or a list of file paths.
     event_id : dict, optional
-        Dictionary mapping condition names [keys] to event codes [values].
+        Dictionary mapping condition names (keys) to event codes (values).
     resp_id : dict, optional
-        Dictionary mapping response names [keys] to event codes [values].
+        Dictionary mapping response names (keys) to event codes (values).
     epoched : bool, default=False
         Whether the data is already epoched.
     sfreq : float, optional
         Desired sampling frequency for downsampling.
-    subj_idx : list, optional
+    subj_idx : list of str, optional
         List of subject identifiers. If not provided, defaults to "S0", "S1", etc.
-    metadata : list, optional
+    metadata : list of pandas.DataFrame, optional
         List of metadata DataFrames corresponding to each participant.
     events_provided : np.ndarray, optional
         Array with 3 columns: [sample of the event, initial value of the channel, event code].
@@ -101,7 +112,7 @@ def read_mne_data(
     lower_limit_rt : float, default=0
         Lower limit for reaction times. Shorter RTs are discarded.
     reject_threshold : float, optional
-        Threshold for rejecting epochs based on signal amplitude within the interval stimulus response
+        Threshold for rejecting epochs based on signal amplitude within the stimulus-response interval.
     scale : float, default=1
         Scaling factor for reaction times (e.g., 1000 for milliseconds).
     reference : str, optional
@@ -115,7 +126,6 @@ def read_mne_data(
         An xarray Dataset containing the processed EEG/MEG data, events, channels, and participants.
         Metadata and epoch indices are preserved. The chosen sampling frequency is stored as an attribute.
     """
-
     import mne
     dict_datatype = {False: "continuous", True: "epoched"}
     epoch_data = []
@@ -502,16 +512,41 @@ def load_xr(filename):
     return data.to_dataarray().drop_vars('variable').squeeze()
 
 def save_model(model, filename):
+    """Save an hmp model to a pickle file.
+
+    Parameters
+    ----------
+    model : object
+        The Python object to save.
+    filename : str
+        The name of the file where the object will be saved.
+    """
     with open(filename, 'wb') as output:
         pickle.dump(model, output)
 
 def load_model(filename):
+    """Load an hmp model from a pickle file.
+    
+    Parameters
+    ----------
+    filename : str
+        The name of the file where the object will be saved.
+    """
     with open(filename, 'rb') as pkl_file:
         model = pickle.load(pkl_file)
     return model
 
 def save_eventprobs_csv(estimates, filename):
-    """Save eventprobs to filename csv file."""
+    """
+    Save event probability estimates to a CSV file.
+
+    Parameters
+    ----------
+    estimates : xarray.DataArray or xarray.Dataset
+        The event probability estimates to save.
+    filename : str
+        The path to the CSV file where the estimates will be saved.
+    """
     estimates = estimates.unstack()
     estimates.to_dataframe('eventprobs').to_csv(filename)
     print(f"Saved at {filename}")

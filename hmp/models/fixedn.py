@@ -1,96 +1,5 @@
-""" 
-This module defines the `FixedEventModel` class, which is the base model for estimating 
-hidden multivariate pattern events. The class extends the 
-`BaseModel` and provides methods for fitting, transforming, and analyzing trial data.
-
-Classes
--------
-FixedEventModel(BaseModel)
-    A model for estimating fixed transition events in hierarchical models of processes.
-
-    Methods
-    -------
-    __init__(self, *args, n_events, fixed_time_pars=None, fixed_channel_pars=None, 
-             tolerance=1e-4, max_iteration=1e3, min_iteration=1, starting_points=1, 
-             max_scale=None, **kwargs)
-        Initializes the FixedEventModel with the specified parameters.
-
-    fit(self, trial_data, channel_pars=None, time_pars=None, fixed_time_pars=None, 
-        fixed_channel_pars=None, verbose=True, cpus=1, channel_map=None, time_map=None, 
-        level_dict=None)
-        Fits the model to the provided trial data using expectation maximization.
-
-    transform(self, trial_data)
-        Transforms the trial data using the fitted model to compute likelihoods and event probabilities.
-
-    Properties
-    ----------
-    xrtraces
-        Returns the traces of the log-likelihood for each EM iteration as an xarray DataArray.
-
-    xrlikelihoods
-        Returns the log-likelihoods as an xarray DataArray.
-
-    xrtime_pars_dev
-        Returns the time parameter deviations for each EM iteration as an xarray DataArray.
-
-    xrtime_pars
-        Returns the time parameters as an xarray DataArray.
-
-    xrchannel_pars
-        Returns the channel parameters as an xarray DataArray.
-
-    Internal Methods
-    ----------------
-    _EM_star(self, args)
-        Helper method for parallelizing the EM algorithm.
-
-    EM(self, trial_data, initial_channel_pars, initial_time_pars, fixed_channel_pars=None, 
-       fixed_time_pars=None, max_iteration=1e3, tolerance=1e-4, min_iteration=1, 
-       channel_map=None, time_map=None, levels=None, cpus=1)
-        Performs the expectation maximization algorithm to estimate parameters.
-
-    get_channel_time_parameters_expectation(self, trial_data, eventprobs, subset_epochs=None)
-        Computes the channel and time parameters using the expectation step.
-
-    gen_random_stages(self, n_events)
-        Generates random stage durations for initializing time parameters.
-
-    scale_parameters(self, averagepos)
-        Scales parameters based on the average position of events.
-
-    estim_probs(self, trial_data, channel_pars, time_pars, location=True, subset_epochs=None, 
-                by_trial_lkh=False)
-        Estimates probabilities for events and computes the log-likelihood.
-
-    _distribute_levels(self, trial_data, channel_pars, time_pars, channel_map, time_map, 
-                       levels, location=True, cpus=1)
-        Distributes levels and computes probabilities for each level.
-
-    distribution_pdf(self, shape, scale, max_duration)
-        Returns a discretized probability density function for a given distribution.
-
-    level_constructor(self, trial_data, level_dict, channel_map=None, time_map=None, verbose=False)
-        Constructs levels and validates the provided level maps.
-
-Dependencies
-------------
-itertools : module
-    Standard library module for creating iterators for efficient looping.
-multiprocessing : module
-    Standard library module for parallel processing.
-numpy : module
-    Fundamental package for numerical computations in Python.
-xarray : module
-    N-D labeled arrays and datasets for advanced analytics.
-pandas : module
-    Data analysis and manipulation library.
-tqdm : module
-    Progress bar library for Python.
-hmp.models.base.BaseModel : class
-    Base class for hierarchical models of processes.
-hmp.trialdata.TrialData : class
-    Class for handling trial data in hierarchical models.
+"""This module defines the ``FixedEventModel`` class, which is the base model for estimating
+hidden multivariate pattern models. 
 """
 
 
@@ -135,33 +44,6 @@ class FixedEventModel(BaseModel):
         Number of random starting points to use for initialization. Default is 1.
     max_scale : float, optional
         Maximum mean distance between events, used when generating random starting points. Default is None.
-
-    Attributes
-    ----------
-    n_events : int
-        The number of HMP events to estimate.
-    n_dims : int or None
-        The number of components or channels in the trial data. Set during fitting.
-    fixed_time_pars : list or None
-        List of fixed time parameters.
-    fixed_channel_pars : list or None
-        List of fixed channel parameters.
-    tolerance : float
-        Convergence tolerance for the expectation maximization algorithm.
-    max_iteration : int
-        Maximum number of iterations for the expectation maximization algorithm.
-    min_iteration : int
-        Minimum number of iterations for the expectation maximization algorithm.
-    starting_points : int
-        Number of random starting points to use for initialization.
-    max_scale : float or None
-        Maximum mean distance between events.
-    level_dict : dict
-        Dictionary defining levels for multilevel modeling.
-    time_map : ndarray
-        2D array mapping time parameters to levels.
-    channel_map : ndarray
-        2D array mapping channel parameters to levels.
     """
 
     def __init__(
@@ -351,7 +233,7 @@ class FixedEventModel(BaseModel):
 
         if cpus > 1:
             inputs = zip(
-                trial_data,
+                itertools.repeat(trial_data),
                 channel_pars,
                 time_pars,
                 itertools.repeat(fixed_channel_pars),
@@ -422,10 +304,10 @@ class FixedEventModel(BaseModel):
 
         Returns
         -------
-        tuple[np.ndarray, xr.DataArray]
-            A tuple containing:
-            - likelihoods: An array of log-likelihoods for each trial.
-            - xreventprobs: An xarray DataArray of event probabilities.
+        likelihoods : list
+            List of log-likelihoods for each submodel (number of events).
+        xr_eventprobs : xr.DataArray
+            Concatenated event probability arrays for all submodels, indexed by number of events.
         """
         _, levels, clabels = self.level_constructor(
                 trial_data, self.level_dict
@@ -589,17 +471,19 @@ class FixedEventModel(BaseModel):
             Array indicating the levels for multilevel modeling. Default is None.
         cpus : int, optional
             Number of cores to use in multiprocessing functions. Default is 1.
-
-        Returns
-        -------
-        tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
-            A tuple containing:
-            - lkh: Summed log probabilities.
-            - channel_pars: Estimated channel contributions for each event.
-            - time_pars: Estimated time distribution parameters for each stage.
-            - traces: Log-likelihood values for each EM iteration.
-            - time_pars_dev: Time parameters for each iteration of the EM algorithm.
-        """
+    Returns
+    -------
+    lkh : float
+        Summed log probabilities.
+    channel_pars : np.ndarray
+        Estimated channel contributions for each event.
+    time_pars : np.ndarray
+        Estimated time distribution parameters for each stage.
+    traces : np.ndarray
+        Log-likelihood values for each EM iteration.
+    time_pars_dev : np.ndarray
+        Time parameters for each iteration of the EM algorithm.
+    """
 
 
         assert channel_map.shape[0] == time_map.shape[0], (
@@ -699,10 +583,10 @@ class FixedEventModel(BaseModel):
 
         Returns
         -------
-        tuple[np.ndarray, np.ndarray]
-            A tuple containing:
-            - channel_pars: A 2D array of shape (n_events, n_dims) with the estimated channel parameters.
-            - time_pars: A 2D array of shape (n_stages, 2) with the estimated time parameters (shape and scale).
+        channel_pars : np.ndarray
+            A 2D array of shape (n_events, n_dims) with the estimated channel parameters.
+        time_pars : np.ndarray
+            A 2D array of shape (n_stages, 2) with the estimated time parameters (shape and scale).
         """
         channel_pars = np.zeros((eventprobs.shape[2], self.n_dims))
         # Channel contribution from Expectation, Eq 11 from 2024 paper
@@ -826,11 +710,10 @@ class FixedEventModel(BaseModel):
 
         Returns
         -------
-        tuple[float, np.ndarray]
-            A tuple containing:
-            - loglikelihood: A float representing the summed log probabilities.
-            - eventprobs: A 3D array of shape (n_trials, max_samples, n_events) containing 
-              the probabilities for each event.
+        loglikelihood : float
+            The summed log probabilities.
+        eventprobs : np.ndarray
+            A 3D array of shape (n_trials, max_samples, n_events) containing the probabilities for each event.
         """
         n_events = channel_pars.shape[0]
         n_stages = n_events + 1
@@ -958,14 +841,12 @@ class FixedEventModel(BaseModel):
             during the expectation-maximization algorithm. Default is True.
         cpus : int, optional
             Number of cores to use in multiprocessing functions. Default is 1.
-
         Returns
         -------
-        tuple[np.ndarray, xr.DataArray]
-            A tuple containing:
-            - loglikelihood: A 1D array of log-likelihood values for each level.
-            - all_xreventprobs: An xarray DataArray containing event probabilities 
-              with dimensions ("trial", "sample", "event").
+        loglikelihood : np.ndarray
+            A 1D array of log-likelihood values for each level.
+        all_xreventprobs : xr.DataArray
+            An xarray DataArray containing event probabilities with dimensions ("trial", "sample", "event").
         """
         data_levels = np.unique(levels)
         likes_events_level = []
@@ -1076,11 +957,12 @@ class FixedEventModel(BaseModel):
 
         Returns
         -------
-        tuple[int, np.ndarray, dict]
-            A tuple containing:
-            - n_levels: The number of unique levels.
-            - levels: An array indicating the level assignment for each trial.
-            - clabels: A dictionary containing level names and their corresponding modalities.
+        n_levels : int
+            The number of unique levels.
+        levels : np.ndarray
+            An array indicating the level assignment for each trial.
+        clabels : dict
+            A dictionary containing level names and their corresponding modalities.
         """
         ## levels
         assert isinstance(level_dict, dict), "levels have to be specified as a dictionary"

@@ -1,4 +1,4 @@
-"""Models to estimate all possible number events starting from the maximum possible number."""
+"""Method to estimate all possible number events starting from the maximum possible number."""
 
 import gc
 
@@ -21,6 +21,23 @@ default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgree
 
 
 class BackwardEstimationModel(BaseModel):
+    """Initialize the BackwardEstimationModel.
+
+    Parameters
+    ----------
+    max_events : int, optional
+        Maximum number of events to estimate. Defaults to None, this number is then inferred from the data.
+    min_events : int, optional
+        Minimum number of events to estimate. Defaults to 1.
+    max_starting_points : int, optional
+        Number of starting points for the estimation of the model with the maximum number of events.
+        Defaults to 1.
+    tolerance : float, optional
+        Tolerance for the expectation maximization algorithm. Defaults to 1e-4.
+    max_iteration : int, optional
+        Maximum number of iterations for the expectation maximization algorithm. Defaults to 1000.
+    """
+    
     def __init__(
         self,
         *args,
@@ -31,23 +48,6 @@ class BackwardEstimationModel(BaseModel):
         max_iteration: int = 1000,
         **kwargs,
     ):
-        """
-        Initialize the BackwardEstimationModel.
-
-        Parameters
-        ----------
-        max_events : int, optional
-            Maximum number of events to estimate. Defaults to None, this number is then inferred from the data.
-        min_events : int, optional
-            Minimum number of events to estimate. Defaults to 1.
-        max_starting_points : int, optional
-            Number of starting points for the estimation of the model with the maximum number of events.
-            Defaults to 1.
-        tolerance : float, optional
-            Tolerance for the expectation maximization algorithm. Defaults to 1e-4.
-        max_iteration : int, optional
-            Maximum number of iterations for the expectation maximization algorithm. Defaults to 1000.
-        """
         self.max_events: int | None = max_events
         self.min_events: int = min_events
         self.max_starting_points: int = max_starting_points
@@ -59,13 +59,12 @@ class BackwardEstimationModel(BaseModel):
     def fit(
         self,
         trial_data: TrialData,
-        max_events: int | None = None,
-        min_events: int = 0,
+        max_events: int | None = None, #TODO remove, take attribute
+        min_events: int = 0, #TODO remove, take attribute
         base_fit: tuple[np.ndarray, xr.Dataset] | None = None,
         cpus: int = 1,
     ) -> None:
-        """
-        Perform the backward estimation.
+        """Perform the backward estimation.
 
         First, read or estimate the max_event solution, then estimate the max_event - 1 solution 
         by iteratively removing one of the events and picking the one with the highest log-likelihood.
@@ -76,7 +75,7 @@ class BackwardEstimationModel(BaseModel):
             The dataset containing the crosscorrelated data and infos on durations and trials.
         max_events : int, optional
             Maximum number of events to be estimated. By default, it is inferred using 
-            `compute_max_events()` if not provided.
+            `compute_max_events()` if not provided. 
         min_events : int, optional
             The minimum number of events to be estimated. Defaults to 1.
         base_fit : FixedEventModel, optional
@@ -136,6 +135,21 @@ class BackwardEstimationModel(BaseModel):
         self._fitted = True
 
     def transform(self, trial_data):
+        """
+        Apply all fitted submodels to the provided trial data.
+
+        Parameters
+        ----------
+        trial_data : TrialData
+            The dataset containing the crosscorrelated data and information on durations and trials.
+
+        Returns
+        -------
+        likelihoods : list
+            List of log-likelihoods for each submodel (number of events).
+        xr_eventprobs : xarray.DataArray
+            Concatenated event probability arrays for all submodels, indexed by number of events.
+        """
         if len(self.submodels) == 0:
             raise ValueError("Model has not been (succesfully) fitted yet, no fixed models.")
         likelihoods = []

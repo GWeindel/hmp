@@ -59,6 +59,21 @@ class TrialData:
 
     @classmethod
     def from_preprocessed_data(cls, preprocessed, pattern):
+        """
+        Create a TrialData instance from preprocessed data and a given pattern.
+
+        Parameters
+        ----------
+        preprocessed : Preprocessing or xr.DataArray
+            The preprocessed data object or xarray DataArray containing the trial data.
+        pattern : np.ndarray
+            The pattern to use for cross-correlation computation.
+
+        Returns
+        -------
+        TrialData
+            An instance of TrialData with computed durations, cross-correlation, and metadata.
+        """
         if isinstance(preprocessed, Preprocessing):
             data = preprocessed.data
         elif 'component' in preprocessed.dims:

@@ -19,6 +19,32 @@ default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgree
 
 
 class CumulativeEstimationModel(BaseModel):
+    """
+    Initialize the CumulativeEstimationModel.
+
+    This method initializes the model and sets up parameters for fitting a cumulative event model.
+    The fitting process starts with a 1-event model and iteratively adds events based on the 
+    convergence of the expectation maximization algorithm.
+
+    Parameters
+    ----------
+    args : tuple
+        Extra arguments to be passed to the BaseModel, including at least events and distribution objects.
+    step : float, optional
+        The size of the step from 0 to the mean RT. Defaults to the width of the expected event.
+    end : int, optional
+        The maximum number of samples to explore within each trial. Defaults to None.
+    by_sample : bool, optional
+        If True, tries every sample as the starting point, even if a later event has already been identified.
+        This is useful in cases where the method might jump over a local maximum in an earlier estimation.
+        Defaults to False.
+    tolerance : float, optional
+        The tolerance used for convergence in the EM() function for the cumulative step. Defaults to 1e-4.
+    fitted_model_tolerance : float, optional
+        The tolerance used for the final model. Defaults to 1e-4.
+    kwargs : dict
+        Additional keyword arguments to be passed to the BaseModel.
+    """
     def __init__(
         self,
         *args,
@@ -29,32 +55,6 @@ class CumulativeEstimationModel(BaseModel):
         fitted_model_tolerance: float = 1e-4,
         **kwargs,
     ):
-        """
-        Initialize the CumulativeEstimationModel.
-
-        This method initializes the model and sets up parameters for fitting a cumulative event model.
-        The fitting process starts with a 1-event model and iteratively adds events based on the 
-        convergence of the expectation maximization algorithm.
-
-        Parameters
-        ----------
-        args : tuple
-            Extra arguments to be passed to the BaseModel, including at least events and distribution objects.
-        step : float, optional
-            The size of the step from 0 to the mean RT. Defaults to the width of the expected event.
-        end : int, optional
-            The maximum number of samples to explore within each trial. Defaults to None.
-        by_sample : bool, optional
-            If True, tries every sample as the starting point, even if a later event has already been identified.
-            This is useful in cases where the method might jump over a local maximum in an earlier estimation.
-            Defaults to False.
-        tolerance : float, optional
-            The tolerance used for convergence in the EM() function for the cumulative step. Defaults to 1e-4.
-        fitted_model_tolerance : float, optional
-            The tolerance used for the final model. Defaults to 1e-4.
-        kwargs : dict
-            Additional keyword arguments to be passed to the BaseModel.
-        """
         self.step = step
         self.end = end
         self.by_sample = by_sample
@@ -217,8 +217,21 @@ class CumulativeEstimationModel(BaseModel):
         pbar.update(int(np.rint(end) - int(np.rint(time))))
 
     def transform(self, *args, **kwargs):
+        """
+        Transform the input data using the fitted cumulative event model.
+
+        This method applies the transformation defined by the final model to the provided data.
+
+        Returns
+        -------
+        Transformed data as returned by the final model's transform method.
+
+        """
         self._check_fitted("transform data")
-        self.fitted_model.transform(*args, **kwargs)
+        if self.fitted_model is not None:
+            return self.fitted_model.transform(*args, **kwargs)
+        else:
+            raise RuntimeError("No fitted model available to transform data.")
 
     def _propose_fit_params(self, trial_data, n_events, by_sample, step, j, channel_pars, time_pars, end):
         if (

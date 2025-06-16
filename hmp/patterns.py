@@ -1,3 +1,17 @@
+"""
+This module provides classes for generating and representing templates for HMP event detection,
+including a half-sine wave template (`HalfSine`) and an arbitrary waveform template (`Arbitrary`).
+
+Classes
+-------
+HalfSine
+    Generates a normalized half-sine wave template for use in signal processing or event detection.
+Arbitrary
+    Allows the use of any arbitrary pattern as a template.
+
+Both classes provide methods to create expected templates based on sampling frequency and other parameters,
+and store relevant metadata such as template width and censoring location for model fitting procedures.
+"""
 import numpy as np
 from typing import Any
 from dataclasses import dataclass
