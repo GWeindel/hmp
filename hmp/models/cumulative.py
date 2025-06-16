@@ -40,7 +40,7 @@ class CumulativeMethod(BaseModel):
         Defaults to False.
     tolerance : float, optional
         The tolerance used for convergence in the EM() function for the cumulative step. Defaults to 1e-4.
-    fitted_model_tolerance : float, optional
+    final_model_tolerance : float, optional
         The tolerance used for the final model. Defaults to 1e-4.
     kwargs : dict
         Additional keyword arguments to be passed to the BaseModel.
@@ -52,16 +52,16 @@ class CumulativeMethod(BaseModel):
         end: int = None,
         by_sample: bool = False,
         tolerance: float = 1e-4,
-        fitted_model_tolerance: float = 1e-4,
+        final_model_tolerance: float = 1e-4,
         **kwargs,
     ):
         self.step = step
         self.end = end
         self.by_sample = by_sample
         self.tolerance = tolerance
-        self.fitted_model_tolerance = tolerance if fitted_model_tolerance is None else fitted_model_tolerance
+        self.final_model_tolerance = tolerance if final_model_tolerance is None else final_model_tolerance
         self.submodels = {}
-        self.fitted_model = None
+        self.final_model = None
         super().__init__(*args, **kwargs)
 
     def fit(
@@ -199,10 +199,10 @@ class CumulativeMethod(BaseModel):
         channel_pars = channel_pars[:n_events, :]
         time_pars = time_pars[: n_events + 1, :]
 
-        self.fitted_model = EventModel(
-            self.pattern, self.distribution, tolerance=self.fitted_model_tolerance, n_events=n_events)
+        self.final_model = EventModel(
+            self.pattern, self.distribution, tolerance=self.final_model_tolerance, n_events=n_events)
         if n_events > 0:
-            self.fitted_model.fit(
+            self.final_model.fit(
                 trial_data,
                 channel_pars=np.array([[channel_pars]]),
                 time_pars=np.array([[time_pars]]),
@@ -228,8 +228,8 @@ class CumulativeMethod(BaseModel):
 
         """
         self._check_fitted("transform data")
-        if self.fitted_model is not None:
-            return self.fitted_model.transform(*args, **kwargs)
+        if self.final_model is not None:
+            return self.final_model.transform(*args, **kwargs)
         else:
             raise RuntimeError("No fitted model available to transform data.")
 
@@ -292,5 +292,5 @@ class CumulativeMethod(BaseModel):
         }
         if attr in property_list:
             self._check_fitted(property_list[attr])
-            return getattr(self.fitted_model, attr)
+            return getattr(self.final_model, attr)
         return super().__getattribute__(attr)
