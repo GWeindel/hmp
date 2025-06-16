@@ -1,4 +1,4 @@
-"""Models to estimatecumulative event models."""
+"""Models to estimate cumulative event models."""
 
 from warnings import warn
 
