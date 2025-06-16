@@ -25,7 +25,7 @@ class BackwardEstimationModel(BaseModel):
         self,
         *args,
         max_events: int | None = None,
-        min_events: int = 1,
+        min_events: int = 0,
         max_starting_points: int = 1,
         tolerance: float = 1e-4,
         max_iteration: int = 1000,
@@ -60,7 +60,7 @@ class BackwardEstimationModel(BaseModel):
         self,
         trial_data: TrialData,
         max_events: int | None = None,
-        min_events: int = 1,
+        min_events: int = 0,
         base_fit: tuple[np.ndarray, xr.Dataset] | None = None,
         cpus: int = 1,
     ) -> None:
