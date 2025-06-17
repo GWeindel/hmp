@@ -58,14 +58,14 @@ class TrialData:
     trial_coords: dict
 
     @classmethod
-    def from_preprocessed_data(cls, preprocessed, pattern):
+    def from_preprocessed(cls, preprocessed, pattern):
         """
         Create a TrialData instance from preprocessed data and a given pattern.
 
         Parameters
         ----------
         preprocessed : Preprocessing or xr.DataArray
-            The preprocessed data object or xarray DataArray containing the trial data.
+            The preprocessed object or xarray DataArray containing the preprocessed data.
         pattern : np.ndarray
             The pattern to use for cross-correlation computation.
 
