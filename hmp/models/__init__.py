@@ -1,5 +1,5 @@
-from hmp.models.backward import BackwardEstimationModel
-from hmp.models.cumulative import CumulativeEstimationModel
-from hmp.models.fixedn import FixedEventModel
+from hmp.models.eliminative import EliminativeMethod
+from hmp.models.cumulative import CumulativeMethod
+from hmp.models.event import EventModel
 
-__all__ = ["BackwardEstimationModel", "FixedEventModel", "CumulativeEstimationModel"]
+__all__ = ["EliminativeMethod", "EventModel", "CumulativeMethod"]

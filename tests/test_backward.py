@@ -3,7 +3,7 @@ import xarray as xr
 
 import hmp
 from hmp import simulations
-from hmp.models import BackwardEstimationModel, FixedEventModel
+from hmp.models import EliminativeMethod, EventModel
 from hmp.patterns import HalfSine
 from hmp.distributions import Gamma
 from hmp.trialdata import TrialData
@@ -19,9 +19,9 @@ def test_backward_simple():
     # Data b is without noise, recovery should be perfect
     data_b = hmp.utils.participant_selection(hmp_data, 'b')
     event_properties = HalfSine.create_expected(sfreq=data_b.sfreq)
-    trial_data_b = TrialData.from_preprocessed_data(preprocessed=data_b, pattern=event_properties.template)
+    trial_data_b = TrialData.from_preprocessed(preprocessed=data_b, pattern=event_properties.template)
     time_distribution = Gamma()
-    true_model = FixedEventModel(event_properties, time_distribution, n_events=n_events)
+    true_model = EventModel(event_properties, time_distribution, n_events=n_events)
     # Recover generating parameters
     sim_source_times, true_pars, true_magnitudes, _ = \
         simulations.simulated_times_and_parameters(event_b, true_model, trial_data_b)
@@ -32,7 +32,7 @@ def test_backward_simple():
     true_loglikelihood, true_estimates = true_model.transform(trial_data_b)
 
     # Backward estimation
-    model = BackwardEstimationModel(event_properties, time_distribution)
+    model = EliminativeMethod(event_properties, time_distribution)
     # fit the model
     model.fit(trial_data_b)
     # Transform the data

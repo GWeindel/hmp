@@ -6,7 +6,7 @@ import numpy as np
 from scipy.stats import norm as norm_pval
 
 from hmp.models.base import BaseModel
-from hmp.models.fixedn import FixedEventModel
+from hmp.models.event import EventModel
 from hmp.trialdata import TrialData
 
 try:
@@ -18,9 +18,9 @@ except NameError:
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
 
-class CumulativeEstimationModel(BaseModel):
+class CumulativeMethod(BaseModel):
     """
-    Initialize the CumulativeEstimationModel.
+    Initialize the CumulativeMethod.
 
     This method initializes the model and sets up parameters for fitting a cumulative event model.
     The fitting process starts with a 1-event model and iteratively adds events based on the 
@@ -40,7 +40,7 @@ class CumulativeEstimationModel(BaseModel):
         Defaults to False.
     tolerance : float, optional
         The tolerance used for convergence in the EM() function for the cumulative step. Defaults to 1e-4.
-    fitted_model_tolerance : float, optional
+    final_model_tolerance : float, optional
         The tolerance used for the final model. Defaults to 1e-4.
     kwargs : dict
         Additional keyword arguments to be passed to the BaseModel.
@@ -52,16 +52,16 @@ class CumulativeEstimationModel(BaseModel):
         end: int = None,
         by_sample: bool = False,
         tolerance: float = 1e-4,
-        fitted_model_tolerance: float = 1e-4,
+        final_model_tolerance: float = 1e-4,
         **kwargs,
     ):
         self.step = step
         self.end = end
         self.by_sample = by_sample
         self.tolerance = tolerance
-        self.fitted_model_tolerance = tolerance if fitted_model_tolerance is None else fitted_model_tolerance
+        self.final_model_tolerance = tolerance if final_model_tolerance is None else final_model_tolerance
         self.submodels = {}
-        self.fitted_model = None
+        self.final_model = None
         super().__init__(*args, **kwargs)
 
     def fit(
@@ -117,7 +117,7 @@ class CumulativeEstimationModel(BaseModel):
             self.distribution.scale_to_mean(last_stage) >= self.location and n_events <= max_event_n
         ):
             prev_time = time
-            fixed_n_model = FixedEventModel(self.pattern, self.distribution, tolerance=self.tolerance, n_events=n_events)
+            fixed_n_model = EventModel(self.pattern, self.distribution, tolerance=self.tolerance, n_events=n_events)
             # get new parameters
             channel_pars_props, time_pars_props = self._propose_fit_params(
                 trial_data,
@@ -199,10 +199,10 @@ class CumulativeEstimationModel(BaseModel):
         channel_pars = channel_pars[:n_events, :]
         time_pars = time_pars[: n_events + 1, :]
 
-        self.fitted_model = FixedEventModel(
-            self.pattern, self.distribution, tolerance=self.fitted_model_tolerance, n_events=n_events)
+        self.final_model = EventModel(
+            self.pattern, self.distribution, tolerance=self.final_model_tolerance, n_events=n_events)
         if n_events > 0:
-            self.fitted_model.fit(
+            self.final_model.fit(
                 trial_data,
                 channel_pars=np.array([[channel_pars]]),
                 time_pars=np.array([[time_pars]]),
@@ -228,8 +228,8 @@ class CumulativeEstimationModel(BaseModel):
 
         """
         self._check_fitted("transform data")
-        if self.fitted_model is not None:
-            return self.fitted_model.transform(*args, **kwargs)
+        if self.final_model is not None:
+            return self.final_model.transform(*args, **kwargs)
         else:
             raise RuntimeError("No fitted model available to transform data.")
 
@@ -292,5 +292,5 @@ class CumulativeEstimationModel(BaseModel):
         }
         if attr in property_list:
             self._check_fitted(property_list[attr])
-            return getattr(self.fitted_model, attr)
+            return getattr(self.final_model, attr)
         return super().__getattribute__(attr)

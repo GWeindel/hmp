@@ -7,7 +7,7 @@ import pandas as pd
 import xarray as xr
 
 from hmp.models.base import BaseModel
-from hmp.models.fixedn import FixedEventModel
+from hmp.models.event import EventModel
 from hmp.trialdata import TrialData
 
 
@@ -20,8 +20,8 @@ except NameError:
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
 
-class BackwardEstimationModel(BaseModel):
-    """Initialize the BackwardEstimationModel.
+class EliminativeMethod(BaseModel):
+    """Initialize the EliminativeMethod.
 
     Parameters
     ----------
@@ -53,7 +53,7 @@ class BackwardEstimationModel(BaseModel):
         self.max_starting_points: int = max_starting_points
         self.tolerance: float = tolerance
         self.max_iteration: int = max_iteration
-        self.submodels: dict[int, FixedEventModel] = {}
+        self.submodels: dict[int, EventModel] = {}
         super().__init__(*args, **kwargs)
 
     def fit(
@@ -64,7 +64,7 @@ class BackwardEstimationModel(BaseModel):
         base_fit: tuple[np.ndarray, xr.Dataset] | None = None,
         cpus: int = 1,
     ) -> None:
-        """Perform the backward estimation.
+        """Perform the eliminative estimation.
 
         First, read or estimate the max_event solution, then estimate the max_event - 1 solution 
         by iteratively removing one of the events and picking the one with the highest log-likelihood.
@@ -78,9 +78,9 @@ class BackwardEstimationModel(BaseModel):
             `compute_max_events()` if not provided. 
         min_events : int, optional
             The minimum number of events to be estimated. Defaults to 1.
-        base_fit : FixedEventModel, optional
+        base_fit : EventModel, optional
             To avoid re-estimating the model with the maximum number of events, this argument can 
-            be provided with a fitted FixedEventModel. Defaults to None.
+            be provided with a fitted EventModel. Defaults to None.
         cpus : int, optional
             Number of CPUs to use for parallel processing. Defaults to 1.
 
@@ -179,7 +179,7 @@ class BackwardEstimationModel(BaseModel):
         return super().__getattribute__(attr)
 
     def get_fixed_model(self, n_events, starting_points):
-        return FixedEventModel(
+        return EventModel(
             self.pattern, self.distribution, n_events=n_events,
             starting_points=starting_points,
             tolerance=self.tolerance,
