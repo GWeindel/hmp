@@ -1,6 +1,6 @@
 import numpy as np
 import hmp
-from hmp.models import FixedEventModel
+from hmp.models import EventModel
 from hmp.patterns import HalfSine
 from hmp.trialdata import TrialData
 from hmp.visu import plot_topo_timecourse
@@ -22,17 +22,17 @@ def test_plot():
     
     event_properties = HalfSine.create_expected(sfreq=epoch_data.sfreq)
     hmp_data_b = hmp.utils.participant_selection(hmp_data.data, 'a')
-    trial_data = TrialData.from_preprocessed_data(preprocessed=hmp_data.data, pattern=event_properties.template)
-    trial_data_b = TrialData.from_preprocessed_data(preprocessed=hmp_data_b, pattern=event_properties.template)
+    trial_data = TrialData.from_preprocessed(preprocessed=hmp_data.data, pattern=event_properties.template)
+    trial_data_b = TrialData.from_preprocessed(preprocessed=hmp_data_b, pattern=event_properties.template)
 
-    model = FixedEventModel(event_properties, n_events=n_events)
+    model = EventModel(event_properties, n_events=n_events)
     
     # Perform a fit on a (should be too noisy)
     lkh_b, estimates_b = model.fit_transform(trial_data_b)
 
     # Fit model on both conditions (noiseless b should help estimate a)
 
-    trial_data = TrialData.from_preprocessed_data(preprocessed=hmp_data.data, pattern=event_properties.template)
+    trial_data = TrialData.from_preprocessed(preprocessed=hmp_data.data, pattern=event_properties.template)
     lkh_comb, estimates_comb = model.fit_transform(trial_data, time_map=time_map, channel_map=channel_map, level_dict=level_dict)
     lkh_b_level, estimates_b_level = model.transform(trial_data_b)
 

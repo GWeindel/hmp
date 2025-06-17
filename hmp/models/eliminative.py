@@ -1,4 +1,4 @@
-"""Method to estimate all possible number events starting from the maximum possible number."""
+"""Method to estimate all possible number events starting from a base model or the maximum possible."""
 
 import gc
 
@@ -7,7 +7,7 @@ import pandas as pd
 import xarray as xr
 
 from hmp.models.base import BaseModel
-from hmp.models.fixedn import FixedEventModel
+from hmp.models.event import EventModel
 from hmp.trialdata import TrialData
 
 
@@ -20,8 +20,8 @@ except NameError:
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
 
-class BackwardEstimationModel(BaseModel):
-    """Initialize the BackwardEstimationModel.
+class EliminativeMethod(BaseModel):
+    """Initialize the EliminativeMethod.
 
     Parameters
     ----------
@@ -53,7 +53,7 @@ class BackwardEstimationModel(BaseModel):
         self.max_starting_points: int = max_starting_points
         self.tolerance: float = tolerance
         self.max_iteration: int = max_iteration
-        self.submodels: dict[int, FixedEventModel] = {}
+        self.submodels: dict[int, EventModel] = {}
         super().__init__(*args, **kwargs)
 
     def fit(
@@ -64,7 +64,7 @@ class BackwardEstimationModel(BaseModel):
         base_fit: tuple[np.ndarray, xr.Dataset] | None = None,
         cpus: int = 1,
     ) -> None:
-        """Perform the backward estimation.
+        """Perform the eliminative estimation.
 
         First, read or estimate the max_event solution, then estimate the max_event - 1 solution 
         by iteratively removing one of the events and picking the one with the highest log-likelihood.
@@ -78,9 +78,9 @@ class BackwardEstimationModel(BaseModel):
             `compute_max_events()` if not provided. 
         min_events : int, optional
             The minimum number of events to be estimated. Defaults to 1.
-        base_fit : FixedEventModel, optional
+        base_fit : EventModel, optional
             To avoid re-estimating the model with the maximum number of events, this argument can 
-            be provided with a fitted FixedEventModel. Defaults to None.
+            be provided with a fitted EventModel. Defaults to None.
         cpus : int, optional
             Number of CPUs to use for parallel processing. Defaults to 1.
 
@@ -95,16 +95,16 @@ class BackwardEstimationModel(BaseModel):
             print(
                 f"Estimating all solutions for maximal number of events ({max_events})"
             )
-            fixed_n_model = self.get_fixed_model(n_events=max_events, starting_points=1)
-            loglikelihood, eventprobs = fixed_n_model.fit_transform(trial_data, verbose=False,
+            event_model = self.get_fixed_model(n_events=max_events, starting_points=1)
+            loglikelihood, eventprobs = event_model.fit_transform(trial_data, verbose=False,
                                                                     cpus=cpus)
         else:
             loglikelihood, eventprobs = base_fit
         max_events = eventprobs.event.max().values + 1
-        self.submodels[max_events] = fixed_n_model
+        self.submodels[max_events] = event_model
 
         for n_events in np.arange(max_events - 1, min_events, -1):
-            fixed_n_model = self.get_fixed_model(n_events, starting_points=n_events+1)
+            event_model = self.get_fixed_model(n_events, starting_points=n_events+1)
 
             print(f"Estimating all solutions for {n_events} events")
 
@@ -122,7 +122,7 @@ class BackwardEstimationModel(BaseModel):
                 )  # combine two stages into one
                 temp_pars = np.delete(temp_pars, event + 1, axis=1)
                 pars_temp.append(temp_pars)
-            fixed_n_model.fit(
+            event_model.fit(
                             trial_data,
                             channel_pars=np.array(events_temp),
                             time_pars=np.array(pars_temp),
@@ -131,7 +131,7 @@ class BackwardEstimationModel(BaseModel):
                         )
 
             gc.collect()
-            self.submodels[n_events] = fixed_n_model
+            self.submodels[n_events] = event_model
         self._fitted = True
 
     def transform(self, trial_data):
@@ -154,8 +154,8 @@ class BackwardEstimationModel(BaseModel):
             raise ValueError("Model has not been (succesfully) fitted yet, no fixed models.")
         likelihoods = []
         event_probs = []
-        for n_events, fixed_n_model in self.submodels.items():
-            lkh, prob = fixed_n_model.transform(trial_data)
+        for n_events, event_model in self.submodels.items():
+            lkh, prob = event_model.transform(trial_data)
             likelihoods.append(lkh)
             event_probs.append(prob)
         xr_eventprobs = xr.concat(event_probs, dim=pd.Index(list(self.submodels), name="n_events"))
@@ -179,7 +179,7 @@ class BackwardEstimationModel(BaseModel):
         return super().__getattribute__(attr)
 
     def get_fixed_model(self, n_events, starting_points):
-        return FixedEventModel(
+        return EventModel(
             self.pattern, self.distribution, n_events=n_events,
             starting_points=starting_points,
             tolerance=self.tolerance,
