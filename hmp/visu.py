@@ -8,110 +8,106 @@ import numpy as np
 import scipy.signal as ssignal
 import xarray as xr
 from scipy import stats
-
+from mne import Info
 from hmp.utils import event_times, event_channels
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold"]
 
-
 def plot_topo_timecourse(
-    epoch_data,
-    estimates,
-    channel_position,
-    figsize=None,
-    dpi=100,
-    magnify=1,
-    times_to_display='all',
-    cmap="Spectral_r",
-    ylabels=[],
-    xlabel=None,
-    max_time=None,
-    vmin=None,
-    vmax=None,
-    title=False,
-    ax=None,
-    sensors=False,
-    contours=6,
-    event_lines="tab:orange",
-    colorbar=True,
-    topo_size_scaling=False,
-    as_time=False,
-    linecolors="black",
-    estimate_method=None,
-    combined=False
-):
+    epoch_data: xr.DataArray,
+    estimates: xr.DataArray,
+    channel_position: np.ndarray,
+    figsize: tuple | list | np.ndarray = None,
+    dpi: int = 100,
+    magnify: float = 1,
+    times_to_display: str | np.ndarray = 'all',
+    cmap: str = "Spectral_r",
+    ylabels: dict | list = [],
+    xlabel: str = None,
+    max_time: float = None,
+    vmin: float = None,
+    vmax: float = None,
+    title: str | bool = False,
+    ax: plt.Axes = None,
+    sensors: bool = False,
+    contours: int | np.ndarray = 6,
+    event_lines: str | bool = "tab:orange",
+    colorbar: bool = True,
+    topo_size_scaling: bool = False,
+    as_time: bool = False,
+    linecolors: str = "black",
+    estimate_method: str = None,
+    combined: bool = False
+) -> plt.Axes:
     """
     Plot the event topographies at the average time of the onset of the next stage.
 
     Parameters
     ----------
     epoch_data : xr.DataArray
-        The original EEG data in HMP format
-    estimates : hmp object
-        the result from a fitted hmp
-    channel_position : ndarray
-        Either a 2D array with dimension channel and [x,y] storing channel
-        location in meters or an info object from the mne package containing
-        digit points for channel location
-    figsize : list | tuple | ndarray
-        Length and heigth of the matplotlib plot
-    dpi : float
-        DPI of the  matplotlib plot
-    magnify : float
-        How much should the events be enlarged, useful to zoom on topographies,
-        providing any other value than 1 will however change the displayed size
-        of the event
-    times_to_display : ndarray
-        Times to display (e.g. Reaction time or any other relevant time)
-        in the time unit of the fitted data, if 'all' plots the times of all events
-    cmap : str
-        Colormap of matplotlib
-    xlabel : str
-        label of x-axis, default = None, which give "Time (sample)"
-        or "Time (ms)" in case as_time = True
-    ylabels : dict
-        dictonary with {label_name : label_values}. E.g. {'Condition': ['Speed','Accuracy']}
-    max_time : float
-        limit of the x (time) axe
-    vmin : float
-        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html).
-        If not explicitly set, uses min across all topos while keeping colormap symmetric.
-    vmax : float
-        Colormap limits to use (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html).
-        If not explicitly set, uses max across all topos while keeping colormap symmetric.
-    title : str
-        title of the plot
-    ax : matplotlib.pyplot.ax
-        Matplotlib object on which to draw the plot, can be useful if you want
-        to control specific aspects of the plots outside of this function
-    sensors : bool
-        Whether to plot the sensors on the topographies
-    skip_channel_contribution: bool
-        if True assumes that the provided channel argument is already topographies for each channel
-    contours : int / array_like
-        The number of contour lines to draw (see https://mne.tools/dev/generated/mne.viz.plot_topomap.html)
-    event_lines : bool / color
+        The original EEG data in HMP format.
+    estimates : xr.DataArray
+        The result from a fitted HMP model.
+    channel_position : np.ndarray
+        Either a 2D array with dimensions (channel, [x, y]) storing channel
+        locations in meters or an MNE info object containing digit points for channel locations.
+    figsize : tuple | list | np.ndarray, optional
+        Length and height of the matplotlib plot.
+    dpi : int, optional
+        DPI of the matplotlib plot.
+    magnify : float, optional
+        How much the events should be enlarged. Useful to zoom on topographies.
+        Providing any value other than 1 will change the displayed size of the event.
+    times_to_display : str | np.ndarray, optional
+        Times to display (e.g., reaction time or any other relevant time)
+        in the time unit of the fitted data. If 'all', plots the times of all events.
+    cmap : str, optional
+        Colormap of matplotlib, used to change the colors on topographies
+    ylabels : dict | list, optional
+        Dictionary with {label_name: label_values}, e.g., {'Condition': ['Speed', 'Accuracy']}.
+    xlabel : str, optional
+        Label of the x-axis. Default is None, which gives "Time (sample)"
+        or "Time (ms)" if `as_time` is True.
+    max_time : float, optional
+        Limit of the x (time) axis.
+    vmin : float, optional
+        Minimum value for the colormap. If not explicitly set, uses the minimum across all topographies.
+    vmax : float, optional
+        Maximum value for the colormap. If not explicitly set, uses the maximum across all topographies.
+    title : str | bool, optional
+        Title of the plot. If False, no title is displayed.
+    ax : plt.Axes, optional
+        Matplotlib Axes object on which to draw the plot. Useful for controlling specific aspects
+        of the plots outside of this function.
+    sensors : bool, optional
+        Whether to plot the sensors on the topographies.
+    contours : int | np.ndarray, optional
+        The number of contour lines to draw.
+    event_lines : str | bool, optional
         Whether to plot lines and shading to indicate the moment of the event.
-        If True uses tab:orange, if set as color, uses the color
-    colorbar : bool
+        If True, uses "tab:orange". If set as a color, uses the specified color.
+    colorbar : bool, optional
         Whether a colorbar is plotted.
-    topo_size_scaling : bool
+    topo_size_scaling : bool, optional
         Whether to scale the size of the topographies with the event size. If True,
-        size of topographies depends on total plotted time interval, if False it is
-        only dependent on magnify.
-    as_time : bool
-        if true, plot time (ms) instead of sample. Ignored if times are provided as array.
-    estimate_method : string
-        'max' or 'mean', either take the max probability of each event on each trial,
+        the size of topographies depends on the total plotted time interval. If False,
+        it is only dependent on `magnify`.
+    as_time : bool, optional
+        If True, plot time in milliseconds instead of samples. Ignored if times are provided as an array.
+    linecolors : str, optional
+        Color of the lines in the plot.
+    estimate_method : str, optional
+        'max' or 'mean'. Either take the max probability of each event on each trial,
         or the weighted average.
-    combined: bool
-        Whether to combine level by averaging across them (True) or plot each level (False, default)
+    combined : bool, optional
+        Whether to combine levels by averaging across them (True) or plot each level (False, default).
 
     Returns
     -------
-    ax : matplotlib.pyplot.ax
-        if ax was specified otherwise returns the plot
+    plt.Axes
+        The matplotlib Axes object containing the plot.
     """
+
     from mne import Info
     from mne.viz import plot_brain_colorbar, plot_topomap
     # if estimates is an fitted HMP instance, calculate topos and times
@@ -365,17 +361,26 @@ def plot_topo_timecourse(
         return ax
 
 
-def plot_components_sensor(weights, positions, cmap="Spectral_r"):
+def plot_components_sensor(
+    weights: xr.DataArray, 
+    positions: np.ndarray | Info, 
+    cmap: str = "Spectral_r"
+) -> None:
     """
     Visualize the topomap of the HMP principal components.
 
     Parameters
     ----------
-    hmp_data : xr.Dataset
-        Data returned from the class hmp.preprocessing.Preprocessing()
-    positions : mne.info | ndarray
-        List of x and y positions to plot channels on head model OR MNE info object
+    weights : xr.DataArray
+        DataArray containing the weights of the principal components.
+        Should have a 'component' dimension.
+    positions : np.ndarray | mne.Info
+        Array of x and y positions to plot channels on a head model, or an MNE Info object
+        containing channel location information.
+    cmap : str, optional
+        Colormap to use for the topomap, by default "Spectral_r".
     """
+
     from mne.viz import plot_topomap
 
     fig, ax = plt.subplots(1, len(weights.component))

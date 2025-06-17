@@ -743,19 +743,19 @@ def centered_activity(
     return centered_data.assign_coords(trial_x_part)
 
 
-def condition_selection(hmp_data, condition_string, variable="event", method="equal"):
-    """Select a subset from hmp_data.
+def condition_selection(preprocessed_data, condition_string, variable="event", method="equal"):
+    """Select a subset from preprocessed_data.
 
     The function selects epochs for which 'condition_string' is in 'variable' based on 'method'.
 
     Parameters
     ----------
-    hmp_data : xr.Dataset
+    preprocessed_data : xr.Dataset
         transformed EEG data for hmp, from utils.transform_data
     condition_string : str | num
         condition indicator for selection
     variable : str
-        variable present in hmp_data that is used for condition selection
+        variable present in preprocessed_data that is used for condition selection
     method : str
         'equal' selects equal trial, 'contains' selects trial in which conditions_string
         appears in variable
@@ -763,9 +763,9 @@ def condition_selection(hmp_data, condition_string, variable="event", method="eq
     Returns
     -------
     data : xr.Dataset
-        Subset of hmp_data.
+        Subset of preprocessed_data.
     """
-    unstacked = hmp_data.unstack()
+    unstacked = preprocessed_data.unstack()
     unstacked[variable] = unstacked[variable].fillna("")
     if method == "equal":
         unstacked = unstacked.where(unstacked[variable] == condition_string, drop=True)
@@ -775,7 +775,7 @@ def condition_selection(hmp_data, condition_string, variable="event", method="eq
         stacked = stack_data(unstacked)
     else:
         warn("unknown method, returning original data")
-        stacked = hmp_data
+        stacked = preprocessed_data
     return stacked
 
 
@@ -791,7 +791,7 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
     condition_string : str | num
         condition indicator for selection
     variable : str
-        variable present in hmp_data that is used for condition selection
+        variable present in preprocessed_data that is used for condition selection
     method : str
         'equal' selects equal trial, 'contains' selects trial in which conditions_string
         appears in variable
@@ -799,7 +799,7 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
     Returns
     -------
     data : xr.Dataset
-        Subset of hmp_data.
+        Subset of preprocessed_data.
     """
     if len(epoch_data.dims) == 4:
         stacked_epoch_data = epoch_data.stack(trial=("participant", "epoch")).dropna(
@@ -817,12 +817,12 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
     return stacked_epoch_data.unstack()
 
 
-def participant_selection(hmp_data, participant):
-    """Select a participant from hmp_data.
+def participant_selection(preprocessed_data, participant):
+    """Select a participant from preprocessed_data.
 
     Parameters
     ----------
-    hmp_data : xr.Dataset
+    preprocessed_data : xr.Dataset
         transformed EEG data for hmp, from utils.transform_data
     participant : str | num
         Name of the participant
@@ -830,8 +830,8 @@ def participant_selection(hmp_data, participant):
     Returns
     -------
     data : xr.Dataset
-        Subset of hmp_data.
+        Subset of preprocessed_data.
     """
-    unstacked = hmp_data.unstack().sel(participant=participant)
+    unstacked = preprocessed_data.unstack().sel(participant=participant)
     stacked = stack_data(unstacked)
     return stacked

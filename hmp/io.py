@@ -1,3 +1,11 @@
+"""EEG/MEG Data Processing Utilities.
+
+This module provides functions for reading, processing, and saving EEG/MEG data using MNE, xarray, and pandas.
+It supports reading raw or epoched data, event/response detection, reaction time trimming, epoch cropping,
+metadata handling, and conversion to xarray Datasets for fitting hmp models. Additional utilities are provided
+for saving/loading data and models, and exporting event probabilities.
+"""
+
 import numpy as np
 import xarray as xr
 from pandas import DataFrame
@@ -5,116 +13,118 @@ from pathlib import Path
 import pickle
 
 def read_mne_data(
-    pfiles,
-    event_id=None,
-    resp_id=None,
-    epoched=False,
-    sfreq=None,
-    subj_idx=None,
-    metadata=None,
-    events_provided=None,
-    rt_col="rt",
-    rts=None,
-    verbose=True,
-    tmin=-0.2,
-    tmax=5,
-    offset_after_resp=0,
-    high_pass=None,
-    low_pass=None,
-    pick_channels="eeg",
-    baseline=(None, 0),
-    upper_limit_rt=np.inf,
-    lower_limit_rt=0,
-    reject_threshold=None,
-    scale=1,
-    reference=None,
-    ignore_rt=False,
-):
+    pfiles: str | list,
+    event_id: dict | None = None,
+    resp_id: dict | None = None,
+    epoched: bool = False,
+    sfreq: float | None = None,
+    subj_idx: list | None = None,
+    metadata: list | None = None,
+    events_provided: np.ndarray | None = None,
+    rt_col: str = "rt",
+    rts: np.ndarray | None = None,
+    verbose: bool = True,
+    tmin: float = -0.2,
+    tmax: float = 5,
+    offset_after_resp: float = 0,
+    high_pass: float | None = None,
+    low_pass: float | None = None,
+    pick_channels: str | list = "eeg",
+    baseline: tuple = (None, 0),
+    upper_limit_rt: float = np.inf,
+    lower_limit_rt: float = 0,
+    reject_threshold: float | None = None,
+    scale: float = 1,
+    reference: str | None = None,
+    ignore_rt: bool = False,
+) -> xr.Dataset:
     """Read EEG/MEG data format (.fif or .bdf) using MNE's integrated function.
 
     Notes
     -----
-    - Only EEG or MEG data are selected (other channel types are discarded)
-    - All times are expressed on the second scale.
-    - If multiple files in pfiles the data of the group is read and seqentially processed.
-    - For non epoched data: Reaction Times are only computed if response trigger is in the epoch
-      window (determined by tmin and tmax)
+    - Only EEG or MEG data are selected (other channel types are discarded).
+    - All times are expressed in seconds.
+    - If multiple files are provided in ``pfiles``, each participant's data is read and processed sequentially.
+    - For non-epoched data: Reaction Times are only computed if the response trigger is in the epoching
+      window (determined by ``tmin`` and ``tmax``).
 
-    Procedure:
-    if data not already epoched:
+    ## Procedure:
+    
+    If data is not already epoched:
 
-    0.1) the data is filtered with filters specified in low_pass and high_pass.
-    Parameters of the filter are determined by MNE's filter function.
-    0.2) if no events is provided, detect events in stimulus channel and keep events with id in
-    event_id and resp_id.
-    0.3) eventual downsampling is performed if sfreq is lower than the data's sampling
-    frequency. The event structure is passed at the resample() function of MNE to ensure that
-    events are approriately timed after downsampling.
-    0.4) epochs are created based on stimulus onsets (event_id) and tmin and tmax. Epoching
-    removes any epoch where a 'BAD' annotation is present and all epochs where an channel
-    exceeds reject_threshold. Epochs are baseline corrected from tmin to stim. onset (time 0).
+        - The data is filtered using the specified ``low_pass`` and ``high_pass`` parameters.
+        - If no events are provided, events are detected in the stimulus channel and only those with IDs
+          in ``event_id`` and ``resp_id`` are kept.
+        - Downsampling is performed if ``sfreq`` is lower than the data's sampling frequency.
+        - Epochs are created based on stimulus onsets (``event_id``) and the ``tmin``/``tmax`` window.
+          Epochs with 'BAD' annotations are removed. Baseline correction is applied from
+          ``tmin`` to stimulus onset (time 0).
 
-    1) Reaction times (RT) are computed based on the sample difference between onset of stimulus and
-    response triggers. If no response event happens after a stimulus or if RT > upper_limit_rt
-    & < upper_limit_rt, RT is 0.
-    2) all the non-rejected epochs with positive RTs are cropped to stimulus onset to
-    stimulus_onset + RT.
+    Then (or if data is already epoched):
+
+        1. Reaction times (RT) are computed as the time difference between stimulus and response triggers.
+           If no response event occurs after a stimulus in the epoch window, or if
+           ``RT > upper_limit_rt`` or ``RT < lower_limit_rt``, RT is set to 0.
+        2. All non-rejected epochs with positive RTs are cropped from stimulus onset to
+           ``stimulus_onset + RT``.
 
     Parameters
     ----------
-    pfiles : str or list
-        list of EEG files to read,
-    event_id : dict
-        Dictionary containing the correspondance of named condition [keys] and event code [values]
-    resp_id : dict
-        Dictionary containing the correspondance of named response [keys] and event code [values]
-    sfreq : float
-        Desired sampling frequency
-    to_merge_id: dict
-        Dictionary containing the correspondance of named condition [keys] and event code [values]
-        that needs to be merged with the stimuli event in event_id
-    subj_idx : list
-        List of subject names
-    events_provided : float
-        np.array with 3 columns -> [sample of the event, initial value of the channel, event code].
-        To use if the automated event detection method of MNE is not appropriate
-    verbose : bool
-        Whether to display MNE's message
-    tmin : float
-        Time taken before stimulus onset to compute baseline
-    tmax : float
-        Time taken after stimulus onset
-    offset_after_resp : float
-        Time taken after onset of the response in seconds
-    low_pass : float
-        Value of the low pass filter
-    high_pass : float
-        Value of the high pass filter
-    pick_channels: list
-        'eeg' (default) to keep only EEG channel or  list of channel names to keep
-    baseline : tuple
-        Time values to compute the baseline and substract to epoch data (usually some time before
-        stimulus onset)
-    upper_limit_rt : float
-        Upper limit for RTs. Longer RTs are discarded
-    lower_limit_rt : float
-        Lower limit for RTs. Shorter RTs are discarded
-    reject_threshold : float
-        Rejection threshold to apply after cropping the epoch to the end of the sequence (e.g. RT),
-        expressed in the unit of the data
-    scale: float
-        Scale to apply to the RT data (e.g. 1000 if ms)
-    reference:
-        What reference to use (see MNE documentation), if None, keep the existing one
-    ignore_rt: bool
-        Use RT to parse the epochs (False, Default) or ignore RT and parse up to epoch tmax (True)
+    pfiles : str or list of str
+        Path(s) to EEG files to read. Can be a single file path or a list of file paths.
+    event_id : dict, optional
+        Dictionary mapping condition names (keys) to event codes (values).
+    resp_id : dict, optional
+        Dictionary mapping response names (keys) to event codes (values).
+    epoched : bool, default=False
+        Whether the data is already epoched.
+    sfreq : float, optional
+        Desired sampling frequency for downsampling.
+    subj_idx : list of str, optional
+        List of subject identifiers. If not provided, defaults to "S0", "S1", etc.
+    metadata : list of pandas.DataFrame, optional
+        List of metadata DataFrames corresponding to each participant.
+    events_provided : np.ndarray, optional
+        Array with 3 columns: [sample of the event, initial value of the channel, event code].
+        Used if automated event detection is not suitable.
+    rt_col : str, default="rt"
+        Column name in metadata containing reaction times.
+    rts : np.ndarray, optional
+        Array of reaction times. Used if metadata is not provided.
+    verbose : bool, default=True
+        Whether to display MNE's messages.
+    tmin : float, default=-0.2
+        Start time (in seconds) relative to stimulus onset for epoching.
+    tmax : float, default=5
+        End time (in seconds) relative to stimulus onset for epoching.
+    offset_after_resp : float, default=0
+        Additional time (in seconds) to include after the response onset.
+    high_pass : float, optional
+        High-pass filter cutoff frequency.
+    low_pass : float, optional
+        Low-pass filter cutoff frequency.
+    pick_channels : str or list, default="eeg"
+        Channels to retain. Use "eeg"/"meg" to keep only EEG/MEG channels or provide a list of channel names.
+    baseline : tuple, default=(None, 0)
+        Time range for baseline correction (start, end) in seconds.
+    upper_limit_rt : float, default=np.inf
+        Upper limit for reaction times. Longer RTs are discarded.
+    lower_limit_rt : float, default=0
+        Lower limit for reaction times. Shorter RTs are discarded.
+    reject_threshold : float, optional
+        Threshold for rejecting epochs based on signal amplitude within the stimulus-response interval.
+    scale : float, default=1
+        Scaling factor for reaction times (e.g., 1000 for milliseconds).
+    reference : str, optional
+        Reference to use for EEG data. If None, the existing reference is kept.
+    ignore_rt : bool, default=False
+        Whether to ignore reaction times and parse epochs up to `tmax`.
 
     Returns
     -------
-    epoch_data : xarray
-        Returns an xarray Dataset with all the data, events, channel, participant.
-        All eventual participant/channel naming and epochs index are kept.
-        The choosen sampling frequnecy is stored as attribute.
+    epoch_data : xarray.Dataset
+        An xarray Dataset containing the processed EEG/MEG data, events, channels, and participants.
+        Metadata and epoch indices are preserved. The chosen sampling frequency is stored as an attribute.
     """
     import mne
     dict_datatype = {False: "continuous", True: "epoched"}
@@ -381,28 +391,46 @@ def read_mne_data(
     return epoch_data
 
 def hmp_data_format(
-    data, sfreq, events=None, offset=0, participants=[], epochs=None, channel=None, metadata=None
-):
-    """Convert to expected shape.
+    data: np.ndarray,
+    sfreq: float,
+    events: np.ndarray | None = None,
+    offset: float = 0,
+    participants: list | None = None,
+    epochs: list | None = None,
+    channel: list | None = None,
+    metadata: DataFrame | None = None,
+) -> xr.Dataset:
+    """
+    Convert data to the expected xarray Dataset format.
 
-    From 3D matrix with dimensions (participant) * trial * channel * sample into xarray Dataset
+    This function reshapes a 3D or 4D matrix with dimensions 
+    (participant) * trial * channel * sample into an xarray Dataset.
 
     Parameters
     ----------
-    data : ndarray
-        4/3D matrix with dimensions (participant) * trial * channel * sample
-    events : ndarray
-        np.array with 3 columns -> [sample of the event, initial value of the channel, event code].
-        To use if the automated event detection method of MNE is not appropriate.
+    data : np.ndarray
+        4D or 3D matrix with dimensions (participant) * trial * channel * sample.
     sfreq : float
-        Sampling frequency of the data
-    participants : list
-        List of participant index
-    epochs : list
-        List of epochs index
-    channel : list
-        List of channel index
+        Sampling frequency of the data.
+    events : np.ndarray, optional
+        Description for each epoch and participant that need to be stored (e.g. condition)
+    offset : float, default=0
+        Offset in seconds to apply to the data.
+    participants : list, optional
+        List of participant indices.
+    epochs : list, optional
+        List of epoch indices.
+    channel : list, optional
+        List of channel indices.
+    metadata : DataFrame, optional
+        Metadata associated with the epochs. Should be a pandas DataFrame.
+
+    Returns
+    -------
+    xr.Dataset
+        An xarray Dataset containing the reshaped data, with appropriate dimensions and attributes.
     """
+
     if len(np.shape(data)) == 4:  # means group
         n_subj, n_epochs, n_channels, n_samples = np.shape(data)
     elif len(np.shape(data)) == 3:
@@ -484,16 +512,41 @@ def load_xr(filename):
     return data.to_dataarray().drop_vars('variable').squeeze()
 
 def save_model(model, filename):
+    """Save an hmp model to a pickle file.
+
+    Parameters
+    ----------
+    model : object
+        The Python object to save.
+    filename : str
+        The name of the file where the object will be saved.
+    """
     with open(filename, 'wb') as output:
         pickle.dump(model, output)
 
 def load_model(filename):
+    """Load an hmp model from a pickle file.
+    
+    Parameters
+    ----------
+    filename : str
+        The name of the file where the object will be saved.
+    """
     with open(filename, 'rb') as pkl_file:
         model = pickle.load(pkl_file)
     return model
 
 def save_eventprobs_csv(estimates, filename):
-    """Save eventprobs to filename csv file."""
+    """
+    Save event probability estimates to a CSV file.
+
+    Parameters
+    ----------
+    estimates : xarray.DataArray or xarray.Dataset
+        The event probability estimates to save.
+    filename : str
+        The path to the CSV file where the estimates will be saved.
+    """
     estimates = estimates.unstack()
     estimates.to_dataframe('eventprobs').to_csv(filename)
     print(f"Saved at {filename}")

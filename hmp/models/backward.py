@@ -1,4 +1,4 @@
-"""Models to estimate event probabilities."""
+"""Method to estimate all possible number events starting from the maximum possible number."""
 
 import gc
 
@@ -8,6 +8,8 @@ import xarray as xr
 
 from hmp.models.base import BaseModel
 from hmp.models.fixedn import FixedEventModel
+from hmp.trialdata import TrialData
+
 
 try:
     __IPYTHON__
@@ -19,47 +21,74 @@ default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgree
 
 
 class BackwardEstimationModel(BaseModel):
-    def __init__(self, *args, max_events=None, min_events=0, max_starting_points=1,
-                 tolerance=1e-4, max_iteration=1e3, **kwargs):
-        self.max_events = max_events
-        self.min_events = min_events
-        self.max_starting_points = max_starting_points
-        self.tolerance = tolerance
-        self.max_iteration = max_iteration
-        self.submodels = {}
+    """Initialize the BackwardEstimationModel.
+
+    Parameters
+    ----------
+    max_events : int, optional
+        Maximum number of events to estimate. Defaults to None, this number is then inferred from the data.
+    min_events : int, optional
+        Minimum number of events to estimate. Defaults to 1.
+    max_starting_points : int, optional
+        Number of starting points for the estimation of the model with the maximum number of events.
+        Defaults to 1.
+    tolerance : float, optional
+        Tolerance for the expectation maximization algorithm. Defaults to 1e-4.
+    max_iteration : int, optional
+        Maximum number of iterations for the expectation maximization algorithm. Defaults to 1000.
+    """
+    
+    def __init__(
+        self,
+        *args,
+        max_events: int | None = None,
+        min_events: int = 0,
+        max_starting_points: int = 1,
+        tolerance: float = 1e-4,
+        max_iteration: int = 1000,
+        **kwargs,
+    ):
+        self.max_events: int | None = max_events
+        self.min_events: int = min_events
+        self.max_starting_points: int = max_starting_points
+        self.tolerance: float = tolerance
+        self.max_iteration: int = max_iteration
+        self.submodels: dict[int, FixedEventModel] = {}
         super().__init__(*args, **kwargs)
 
     def fit(
         self,
-        trial_data,
-        max_events=None,
-        min_events=0,
-        base_fit=None,
-        cpus=1,
-    ):
+        trial_data: TrialData,
+        max_events: int | None = None, #TODO remove, take attribute
+        min_events: int = 0, #TODO remove, take attribute
+        base_fit: tuple[np.ndarray, xr.Dataset] | None = None,
+        cpus: int = 1,
+    ) -> None:
         """Perform the backward estimation.
 
-        First read or estimate max_event solution then estimate max_event - 1 solution by
-        iteratively removing one of the event and pick the one with the highest
-        loglikelihood
+        First, read or estimate the max_event solution, then estimate the max_event - 1 solution 
+        by iteratively removing one of the events and picking the one with the highest log-likelihood.
 
         Parameters
         ----------
-        max_events : int
-            Maximum number of events to be estimated, by default the output of
-            hmp.models.hmp.compute_max_events()
-        min_events : int
-            The minimum number of events to be estimated
-        base_fit : xarray
-            To avoid re-estimating the model with maximum number of events it can be provided
-            with this arguments, defaults to None
-        tolerance: float
-            Tolerance applied to the expectation maximization in the EM() function
-        maximization: bool
-            If True (Default) perform the maximization phase in EM() otherwhise skip
-        max_iteration: int
-            Maximum number of iteration for the expectation maximization in the EM() function
+        trial_data : TrialData
+            The dataset containing the crosscorrelated data and infos on durations and trials.
+        max_events : int, optional
+            Maximum number of events to be estimated. By default, it is inferred using 
+            `compute_max_events()` if not provided. 
+        min_events : int, optional
+            The minimum number of events to be estimated. Defaults to 1.
+        base_fit : FixedEventModel, optional
+            To avoid re-estimating the model with the maximum number of events, this argument can 
+            be provided with a fitted FixedEventModel. Defaults to None.
+        cpus : int, optional
+            Number of CPUs to use for parallel processing. Defaults to 1.
+
+        Returns
+        -------
+        None
         """
+
         if max_events is None and base_fit is None:
             max_events = self.compute_max_events(trial_data)
         if not base_fit:
@@ -106,6 +135,21 @@ class BackwardEstimationModel(BaseModel):
         self._fitted = True
 
     def transform(self, trial_data):
+        """
+        Apply all fitted submodels to the provided trial data.
+
+        Parameters
+        ----------
+        trial_data : TrialData
+            The dataset containing the crosscorrelated data and information on durations and trials.
+
+        Returns
+        -------
+        likelihoods : list
+            List of log-likelihoods for each submodel (number of events).
+        xr_eventprobs : xarray.DataArray
+            Concatenated event probability arrays for all submodels, indexed by number of events.
+        """
         if len(self.submodels) == 0:
             raise ValueError("Model has not been (succesfully) fitted yet, no fixed models.")
         likelihoods = []
