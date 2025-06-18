@@ -40,7 +40,7 @@ def init_data():
 
 def test_save_dat():
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
-    hmp_data = preprocessing.Preprocessing(epoch_data, n_comp=2,)
+    hmp_data = preprocessing.Standard(epoch_data, n_comp=2,)
     data_b = utils.participant_selection(hmp_data.data, 'b')
     event_properties = HalfSine.create_expected(sfreq=epoch_data.sfreq)
     trial_data_b = TrialData.from_preprocessed(preprocessed=data_b, pattern=event_properties.template)
