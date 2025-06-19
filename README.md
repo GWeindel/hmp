@@ -143,8 +143,6 @@ raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events, block=True
     
 
 
-![png](README_files/README_7_1.png)
-
 ### Recovering number of events as well as actual by-trial variation
 
 To see how well HMP does at recovering by-trial events, first we get the ground truth from our simulation. Unfortunately, with an actual dataset you don’t have access to this, of course. 
@@ -213,7 +211,7 @@ epoch_data.sel(channel=['EEG 001','EEG 002','EEG 003'], sample=range(400))\
 
 
     
-![png](README_files/README_12_1.png)
+![png](README_files/README_11_1.png)
     
 
 
@@ -292,7 +290,7 @@ hmp.visu.plot_topo_timecourse(epoch_data, estimates, #Data and estimations
 
 
     
-![png](README_files/README_20_0.png)
+![png](README_files/README_19_0.png)
     
 
 
@@ -310,13 +308,13 @@ plt.legend()
 
 
 
-    <matplotlib.legend.Legend at 0x7fc083d9bb60>
+    <matplotlib.legend.Legend at 0x7d79e28347d0>
 
 
 
 
     
-![png](README_files/README_22_1.png)
+![png](README_files/README_21_1.png)
     
 
 
@@ -352,7 +350,7 @@ plt.tight_layout();
 
 
     
-![png](README_files/README_24_0.png)
+![png](README_files/README_23_0.png)
     
 
 
@@ -387,7 +385,7 @@ for channel in channels:
 
 
     
-![png](README_files/README_28_0.png)
+![png](README_files/README_27_0.png)
     
 
 
@@ -416,7 +414,7 @@ ax[-1].legend(bbox_to_anchor=(1,1));
 
 
     
-![png](README_files/README_30_0.png)
+![png](README_files/README_29_0.png)
     
 
 
