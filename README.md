@@ -88,12 +88,10 @@ import hmp
 
 In the following code block we simulate 200 trials with four HMP events defined as the activation of four neural sources (in the source space of MNE's sample participant). This is not code you would need for your own analysis except if you'd want to simulate and test properties of HMP models. All four sources are defined by a location in sensor space, an activation amplitude and a distribution in time (here a gamma with shape and scale parameters) for the onsets of the events on each trial. The simulation functions are based on this [MNE tutorial ](https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html).
 
-[!IMPORTANT] It can take a while to simulate data, you can also just download the corresponding simulation files (`dataset_README_raw_generating_events.npy` and `dataset_README_raw.fif`) and place it in the same folder from where you are running this notebook
+> [!NOTE] It can take a while to simulate this data, for faster rendering you can 1) decrease `sfreq` and reduce the number of trials in `n_trials`
 
 
 ```python
-cpus = 1 # For multiprocessing, usually a good idea to use multiple CPUs as long as you have enough RAM
-
 n_trials = 200 #Number of trials to simulate, we use 200 to get nice ERPs but you can reduce for speed
 
 ##### Here we define the sources of the brain activity (event) for each trial
@@ -110,7 +108,7 @@ for source in zip(names, scales):#One source = one frequency/event width, one am
     sources.append([source[0], frequency, amplitude, gamma(shape, scale=source[1])])
 
 # Function used to generate the data
-file = simulations.simulate(sources, n_trials, cpus, 'dataset_README',  overwrite=False, sfreq=sfreq, seed=1)
+file = simulations.simulate(sources, n_trials, 1, 'dataset_README',  overwrite=False, sfreq=sfreq, seed=1)
 #load electrode position, specific to the simulations
 positions = simulations.positions()
 ```
@@ -312,7 +310,7 @@ plt.legend()
 
 
 
-    <matplotlib.legend.Legend at 0x7dcb16563f50>
+    <matplotlib.legend.Legend at 0x7fc083d9bb60>
 
 
 
