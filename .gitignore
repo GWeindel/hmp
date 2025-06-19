@@ -1,9 +1,8 @@
 __pycache__/
 /__pycache__
 hmp/_version.py
-/docs/source/ntotebooks/sample_data/*
+docs/source/notebooks/sample_data/*
 
-*.ipynb
 *.py[cod]
 *.nc
 .ipynb_checkpoints

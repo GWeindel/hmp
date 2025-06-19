@@ -173,7 +173,7 @@ epoch_data = hmp.io.read_mne_data(file[0], event_id=event_id, resp_id=resp_id, s
 
 ```
 
-    Processing participant /home/gabriel/ownCloud/projects/RUGUU/hmp/./dataset_README_raw.fif's continuous eeg
+    Processing participant /home/gabriel/ownCloud/projects/RUGUU/hmp/./dataset_README_raw.fif's raw eeg
 
 
     200 trials were retained for participant /home/gabriel/ownCloud/projects/RUGUU/hmp/./dataset_README_raw.fif
@@ -209,8 +209,8 @@ epoch_data.sel(channel=['EEG 001','EEG 002','EEG 003'], sample=range(400))\
         lowpass:           40.0
         highpass:          0.10000000149011612
         lower_limit_rt:    0
-        upper_limit_rt:    5.002
-        reject_threshold:  inf
+        upper_limit_rt:    inf
+        reject_threshold:  None
         n_trials:          200
 
 
@@ -239,12 +239,12 @@ Once the data is in the expected format, we can initialize an HMP object; note t
 # Create the expected 50ms halfsine template
 expected_pattern = hmp.patterns.HalfSine.create_expected(sfreq=epoch_data.sfreq, width=50)
 # Correlate this pattern with the data
-trial_data = hmp.trialdata.TrialData.from_preprocessed_data(preprocessed=preprocessed.data, pattern=expected_pattern.template)
+trial_data = hmp.trialdata.TrialData.from_preprocessed(preprocessed=preprocessed.data, pattern=expected_pattern.template)
 # Create a standard one-parameter distribution that separate event peaks
 time_distribution = hmp.distributions.Gamma()
 
 #Build all this in a model
-model = hmp.models.CumulativeEstimationModel(expected_pattern, time_distribution)
+model = hmp.models.CumulativeMethod(expected_pattern, time_distribution)
 ```
 
 ## Estimating an HMP model
@@ -253,10 +253,8 @@ We can directly fit an HMP model without giving any info on the number of events
 
 
 ```python
-# Estimate model parameters
-model.fit(trial_data)
-# Transform the data into event probability space
-_, estimates = model.fitted_model.transform(trial_data)
+# Estimate model parameters and transform the data into event probability space
+loglikelihood, estimates = model.fit_transform(trial_data)
 ```
 
 
@@ -315,7 +313,7 @@ plt.legend()
 
 
 
-    <matplotlib.legend.Legend at 0x751a2835a030>
+    <matplotlib.legend.Legend at 0x742f259146b0>
 
 
 

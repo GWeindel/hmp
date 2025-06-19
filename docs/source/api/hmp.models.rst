@@ -10,7 +10,7 @@
 Eliminative estimation method
 --------------------------
 
-.. automodule:: hmp.models.backward
+.. automodule:: hmp.models.eliminative
    :members:
    :show-inheritance:
    :undoc-members:
