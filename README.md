@@ -57,9 +57,8 @@ To get started with the code:
 - Check the demo below 
 - Inspect the tutorials:
     - [General aspects on HMP (tutorial 1)](docs/source/notebooks/1-How_HMP_works.ipynb)
-    - [Estimating a model (tutorial 2)](docs/source/notebooks/2-The_different_model_classes.ipynb)
-    - [Test for the best number of events (tutorial 3)](docs/source/notebooks/3-Applying_HMP_to_real_data.ipynb)
-    - [Looking at condition differences (tutorial 4)](docs/source/notebooks/4-advanced-multilevel_models.ipynb)
+    - [The different estimation methods (tutorial 2)](docs/source/notebooks/2-The_different_model_classes.ipynb)
+    - [Applying HMP to real data (tutorial 3)](docs/source/notebooks/3-Applying_HMP_to_real_data.ipynb)
     - [Load your won EEG data ](docs/source/notebooks/Data_loading.ipynb)
 
 
@@ -313,7 +312,7 @@ plt.legend()
 
 
 
-    <matplotlib.legend.Legend at 0x7b1180159f70>
+    <matplotlib.legend.Legend at 0x7dcb16563f50>
 
 
 
@@ -434,9 +433,7 @@ Now HMP is not merely a method to look at ERPs or by-trial times. A lot can be d
 ### Follow-up
 
 For examples on how to use the package on real data, or to compare event time onset across conditions see the tutorial notebooks:
-    - [General aspects on HMP (tutorial 1)](docs/source/notebooks/1-How_HMP_works.ipynb)
-    - [Estimating a model (tutorial 2)](docs/source/notebooks/2-The_different_model_classes.ipynb)
-    - [Test for the best number of events (tutorial 3)](docs/source/notebooks/3-Applying_HMP_to_real_data.ipynb)
-    - [Looking at condition differences (tutorial 4)](docs/source/notebooks/4-advanced-multilevel_models.ipynb)
-    - [Load your won EEG data ](docs/source/notebooks/Data_loading.ipynb)
-
+- [General aspects on HMP (tutorial 1)](docs/source/notebooks/1-How_HMP_works.ipynb)
+- [The different estimation methods (tutorial 2)](docs/source/notebooks/2-The_different_model_classes.ipynb)
+- [Applying HMP to real data (tutorial 3)](docs/source/notebooks/3-Applying_HMP_to_real_data.ipynb)
+- [Load your won EEG data ](docs/source/notebooks/Data_loading.ipynb)
