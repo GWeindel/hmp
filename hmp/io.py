@@ -11,14 +11,17 @@ import xarray as xr
 from pandas import DataFrame
 from pathlib import Path
 import pickle
+import os 
+import mne
+import json
 
 def read_mne_data(
     pfiles: str | list,
     event_id: dict | None = None,
     resp_id: dict | None = None,
-    epoched: bool = False,
+    data_format: str = 'raw',
     sfreq: float | None = None,
-    subj_idx: list | None = None,
+    subj_name: list | None = None,
     metadata: list | None = None,
     events_provided: np.ndarray | None = None,
     rt_col: str = "rt",
@@ -37,6 +40,7 @@ def read_mne_data(
     scale: float = 1,
     reference: str | None = None,
     ignore_rt: bool = False,
+    bids_parameters: dict = {}
 ) -> xr.Dataset:
     """Read EEG/MEG data format (.fif or .bdf) using MNE's integrated function.
 
@@ -76,11 +80,11 @@ def read_mne_data(
         Dictionary mapping condition names (keys) to event codes (values).
     resp_id : dict, optional
         Dictionary mapping response names (keys) to event codes (values).
-    epoched : bool, default=False
-        Whether the data is already epoched.
+    data_format : str, default=epochs
+        What MNE compatible data type, can be 'epochs', 'raw' or 'bids'.
     sfreq : float, optional
         Desired sampling frequency for downsampling.
-    subj_idx : list of str, optional
+    subj_name : list of str, optional
         List of subject identifiers. If not provided, defaults to "S0", "S1", etc.
     metadata : list of pandas.DataFrame, optional
         List of metadata DataFrames corresponding to each participant.
@@ -126,18 +130,15 @@ def read_mne_data(
         An xarray Dataset containing the processed EEG/MEG data, events, channels, and participants.
         Metadata and epoch indices are preserved. The chosen sampling frequency is stored as an attribute.
     """
-    import mne
-    dict_datatype = {False: "continuous", True: "epoched"}
+
     epoch_data = []
     if isinstance(pfiles, (str, Path)):  # only one participant
         pfiles = [pfiles]
-    if not subj_idx:
-        subj_idx = ["S" + str(x) for x in np.arange(len(pfiles))]
-    if isinstance(subj_idx, str):
-        subj_idx = [subj_idx]
-    if upper_limit_rt < 0 or lower_limit_rt < 0:
-        raise ValueError("Limit to RTs cannot be negative")
-    y = 0
+    if not subj_name:
+        subj_name = ["S" + str(x) for x in np.arange(len(pfiles))]
+    if isinstance(subj_name, str):
+        subj_name = [subj_name]
+    subj_idx = 0
     if metadata is not None:
         if len(pfiles) > 1 and len(metadata) != len(pfiles):
             raise ValueError(
@@ -147,234 +148,74 @@ def read_mne_data(
     else:
         metadata_i = None
     
+    if data_format == 'bids':
+        subj_name = pfiles = [d for d in os.listdir(bids_parameters['bids_root']) if d.startswith("sub-") and os.path.isdir(os.path.join(bids_parameters['bids_root'], d))]
+        # try:
+        event_id, resp_id = _bids_extract_trig(
+            bids_parameters['bids_root'],
+            bids_parameters['task'],
+            bids_parameters['datatype']
+        )
+        # except:
+        #     raise ValueError(f"Wrong BIDS specification {bids_parameters['bids_root']}")
+    
     ev_i = 0  # syncing up indexing between event and raw files
     for participant in pfiles:
-        print(f"Processing participant {participant}'s {dict_datatype[epoched]} {pick_channels}")
+        print(f"Processing participant {participant}'s {data_format} {pick_channels}")
+        if data_format == 'epochs':
+            epochs = _read_mne_epochs(participant,
+                    sfreq,
+                    metadata,
+                    high_pass,
+                    low_pass,
+                    pick_channels,
+                    verbose)
 
-        # loading data
-        if epoched is False:  # performs epoching on raw data
-            if Path(participant).suffix == ".fif":
-                data = mne.io.read_raw_fif(participant, preload=True, verbose=verbose)
-            elif Path(participant).suffix == ".bdf":
-                data = mne.io.read_raw_bdf(participant, preload=True, verbose=verbose)
-            else:
-                raise ValueError(f"Unknown EEG file format for participant {participant}")
-            if sfreq is None:
-                sfreq = data.info["sfreq"]
-
-            if "response" not in list(resp_id.keys())[0]:
-                resp_id = {f"response/{k}": v for k, v in resp_id.items()}
-            if events_provided is None:
-                try:
-                    events = mne.find_events(
-                        data, verbose=verbose, min_duration=1 / data.info["sfreq"]
-                    )
-                except:
-                    events = mne.events_from_annotations(data, verbose=verbose)[0]
-                if (
-                    events[0, 1] > 0
-                ):  # bug from some stim channel, should be 0 otherwise indicates offset in triggers
-                    print(
-                        f"Correcting event values as trigger channel has offset "
-                        f"{np.unique(events[:, 1])}"
-                    )
-                    events[:, 2] = events[:, 2] - events[:, 1]  # correction on event value
-                events_values = np.concatenate(
-                    [
-                        np.array([x for x in event_id.values()]),
-                        np.array([x for x in resp_id.values()]),
-                    ]
-                )
-                events = np.array(
-                    [list(x) for x in events if x[2] in events_values]
-                )  # only keeps events with stim or response
-            elif len(events_provided[0]) == 3:
-                events_provided = events_provided[np.newaxis]
-                events = events_provided[y]
-            else:  # assumes stacked event files
-                events = events_provided[ev_i]
-                ev_i += 1
-            if reference is not None:
-                data = data.set_eeg_reference(reference)
-            data = data.pick(pick_channels) 
-            data.load_data()
-
-            if sfreq < data.info["sfreq"]:  # Downsampling
-                print(f"Downsampling to {sfreq} Hz")
-                decim = np.round(data.info["sfreq"] / sfreq).astype(int)
-                obtained_sfreq = data.info["sfreq"] / decim
-                low_pass = obtained_sfreq / 3.1
-            else:
-                decim = 1
-                if sfreq > data.info["sfreq"] + 1:
-                    warn(
-                        f"Requested higher frequency {sfreq} than found in the EEG data, no "
-                        f"resampling is performed"
-                    )
-            if high_pass is not None or low_pass is not None:
-                data.filter(high_pass, low_pass, fir_design="firwin", verbose=verbose)
-            combined = {**event_id, **resp_id}  # event_id | resp_id
-            stim = list(event_id.keys())
-
-            if verbose:
-                print(f"Creating epochs based on following event ID :{np.unique(events[:, 2])}")
-
-            if metadata is None:
-                metadata_i, meta_events, event_id = mne.epochs.make_metadata(
-                    events=events,
-                    event_id=combined,
-                    tmin=tmin,
-                    tmax=tmax,
-                    sfreq=data.info["sfreq"],
-                    row_events=stim,
-                    keep_first=["response"],
-                )
-                metadata_i = metadata_i[["event_name", "response"]]  # only keep event_names and rts
-            else:
-                metadata_i = metadata[y]
-            epochs = mne.Epochs(
-                data,
-                meta_events,
-                event_id,
-                tmin,
-                tmax,
-                proj=False,
-                baseline=baseline,
-                preload=True,
-                picks=pick_channels,
-                decim=decim,
-                verbose=verbose,
-                detrend=None,
-                on_missing="warn",
-                event_repeated="drop",
-                metadata=metadata_i,
-                reject_by_annotation=True,
-            )
-            epochs.metadata.rename({"response": "rt"}, axis=1, inplace=True)
-            metadata_i = epochs.metadata
+        elif data_format == 'raw' or data_format == 'bids':
+            epochs = read_raw_and_epoch(participant,
+                            pfiles,
+                            subj_idx,
+                            event_id,
+                            resp_id,
+                            sfreq,
+                            metadata,
+                            events_provided,
+                            verbose,
+                            tmin,
+                            tmax,
+                            high_pass,
+                            low_pass,
+                            baseline,
+                            pick_channels,
+                            bids_parameters)
         else:
-            if Path(participant).suffix == ".fif":
-                epochs = mne.read_epochs(participant, preload=True, verbose=verbose)
-                if high_pass is not None or low_pass is not None:
-                    epochs.filter(high_pass, low_pass, fir_design="firwin", verbose=verbose)
-                if sfreq is None:
-                    sfreq = epochs.info["sfreq"]
-                elif sfreq < epochs.info["sfreq"]:
-                    if verbose:
-                        print(f"Resampling data at {sfreq}")
-                    epochs = epochs.resample(sfreq)
-            else:
-                raise ValueError("Incorrect file format")
-            if reference is not None:
-                epochs = epochs.set_eeg_reference(reference)
-            epochs = epochs.pick(pick_channels) 
-
-            if metadata is None:
-                try:
-                    metadata_i = epochs.metadata  # accounts for dropped epochs
-                except:
-                    raise ValueError("Missing metadata in the epoched data")
-            elif isinstance(metadata, DataFrame):
-                if len(pfiles) > 1:
-                    metadata_i = metadata[
-                        y
-                    ].copy()  # TODO, better account for participant's wide provided metadata
-                else:
-                    metadata_i = metadata.copy()
-            else:
-                raise ValueError(
-                    "Metadata should be a pandas data-frame as generated by mne or be contained "
-                    "in the passed epoch data"
-                )
-        if upper_limit_rt == np.inf:
-            upper_limit_rt = epochs.tmax - offset_after_resp + 1 * (1 / sfreq)
-        if ignore_rt:
-            metadata_i[rt_col] = epochs.tmax
-        valid_epoch_index = [x for x, y in enumerate(epochs.drop_log) if len(y) == 0]
-        data_epoch = epochs.get_data(copy=False)  # preserves index
-        rts = metadata_i[rt_col]
-        if isinstance(metadata_i, DataFrame):
-            if len(metadata_i) > len(data_epoch):  # assumes metadata contains rejected epochs
-                metadata_i = metadata_i.loc[valid_epoch_index]
-                rts = metadata_i[rt_col]
-            try:
-                rts = rts / scale
-            except:
-                raise ValueError(
-                    f"Expected column named {rt_col} in the provided metadata file, alternative "
-                    f"names can be passed through the rt_col parameter"
-                )
-        elif rts is None:
-            raise ValueError("Expected either a metadata Dataframe or an array of Reaction Times")
-        rts_arr = np.array(rts)
-        offset_after_resp_samples = np.rint(offset_after_resp * sfreq).astype(int)
-        if verbose:
-            print(
-                f"Applying reaction time trim to keep RTs between {lower_limit_rt} and "
-                f"{upper_limit_rt} seconds"
-            )
-        rts_arr[rts_arr > upper_limit_rt] = 0  # removes RT above x sec
-        rts_arr[rts_arr < lower_limit_rt] = 0  # removes RT below x sec, determines max events
-        rts_arr[np.isnan(rts_arr)] = 0  # too long trial
-        rts_arr = np.rint(rts_arr * sfreq).astype(int)
-        if verbose:
-            print(f"{len(rts_arr[rts_arr > 0])} RTs kept of {len(rts_arr)} clean epochs")
-        triggers = metadata_i.iloc[:, 0].values  # assumes first col is trigger
-        cropped_data_epoch = np.empty(
-            [
-                len(rts_arr[rts_arr > 0]),
-                len(epochs.ch_names),
-                max(rts_arr) + offset_after_resp_samples,
-            ]
-        )
-        cropped_data_epoch[:] = np.nan
-        cropped_trigger = []
-        epochs_idx = []
-        j = 0
-        if reject_threshold is None:
-            reject_threshold = np.inf
-        rej = 0
-        time0 = epochs.time_as_index(0)[0]
-        for i in range(len(data_epoch)):
-            if rts_arr[i] > 0:
-                # Crops the epochs to time 0 (stim onset) up to RT
-                if (
-                    np.abs(data_epoch[i, :, time0 : time0 + rts_arr[i] + offset_after_resp_samples])
-                    < reject_threshold
-                ).all():
-                    cropped_data_epoch[j, :, : rts_arr[i] + offset_after_resp_samples] = data_epoch[
-                        i, :, time0 : time0 + rts_arr[i] + offset_after_resp_samples
-                    ]
-                    epochs_idx.append(valid_epoch_index[i])  # Keeps trial number
-                    cropped_trigger.append(triggers[i])
-                    j += 1
-                else:
-                    rej += 1
-                    rts_arr[i] = 0
-        while np.isnan(cropped_data_epoch[-1]).all():  # Remove excluded epochs based on rejection
-            cropped_data_epoch = cropped_data_epoch[:-1]
-        if ~np.isinf(reject_threshold):
-            print(f"{rej} trials rejected based on threshold of {reject_threshold}")
-        print(f"{len(cropped_data_epoch)} trials were retained for participant {participant}")
-        if verbose:
-            print(f"End sampling frequency is {sfreq} Hz")
-
-        epoch_data.append(
-            hmp_data_format(
-                cropped_data_epoch,
-                epochs.info["sfreq"],
-                None,
-                offset_after_resp_samples,
-                epochs=[int(x) for x in epochs_idx],
-                channel=epochs.ch_names,
-                metadata=metadata_i,
-            )
-        )
-
-        y += 1
+            raise ValueError(f"Unknown data type {data_format}, should be 'epochs', 'raw' or 'bids'")
+        
+        if reference is not None:
+            epochs = epochs.set_eeg_reference(reference)
+        
+        epoch_data.append(_epoch_selection(
+            epochs,
+            metadata,
+            pfiles,
+            participant,
+            subj_idx,
+            rt_col,
+            scale,
+            offset_after_resp,
+            sfreq,
+            lower_limit_rt,
+            upper_limit_rt,
+            reject_threshold,
+            ignore_rt,
+            verbose
+        ))
+        
+        subj_idx += 1
+    
     epoch_data = xr.concat(
         epoch_data,
-        dim=xr.DataArray(subj_idx, dims="participant"),
+        dim=xr.DataArray(subj_name, dims="participant"),
         fill_value={"event": "", "data": np.nan},
     )
     n_trials = (
@@ -389,6 +230,360 @@ def read_mne_data(
         n_trials=n_trials,
     )
     return epoch_data
+
+def _bids_extract_trig(bids_root, task, datatype):
+
+    # Recover the general information on task triggers
+    # Path to the events.json file
+    events_json_path = os.path.join(bids_root, f"task-{task}_events.json")
+
+    with open(events_json_path, "r") as f:
+        events_json = json.load(f)
+
+    # Build stim_id dictionary: {'stimulus/description': event_code}
+    stim_id, resp_id = {}, {}
+    
+    # Extract stimulus_id and resp_id
+    event_code_levels = events_json['value']['Levels']
+    for code, desc in event_code_levels.items():
+        if 'Stimulus' in desc:
+            stim_id[f'stimulus/{desc[11:]}'] = int(code)
+        if 'Response' in desc:
+            resp_id[f'response/{desc[11:]}'] = int(code)
+    return stim_id, resp_id
+
+def _bids_extract_events(raw, stim_id, resp_id, verbose):
+    # Extract events from annotations
+    events, event_id = mne.events_from_annotations(raw, verbose=verbose)
+    
+    # Replace event codes in events array with the integer at the end of each key in *_id
+    for key in event_id:
+        try:
+            code = int(key.split('/')[-1])
+            events[:, 2][events[:, 2] == event_id[key]] = code
+        except Exception as e:
+            print(f"Could not process key {key}: {e}")
+    
+    return events 
+
+def _read_mne_epochs(
+    participant,
+    sfreq,
+    metadata,
+    high_pass,
+    low_pass,
+    pick_channels,
+    verbose
+):
+
+    if Path(participant).suffix == ".fif": 
+        epochs = mne.read_epochs(participant, preload=True, verbose=verbose)
+    else:
+        raise ValueError("Incorrect file format")
+    
+    if high_pass is not None or low_pass is not None:
+        epochs.filter(high_pass, low_pass, fir_design="firwin", verbose=verbose)
+       
+    if sfreq is None:
+        sfreq = epochs.info["sfreq"]
+    elif sfreq < epochs.info["sfreq"]:
+        if verbose:
+            print(f"Resampling data at {sfreq}")
+        epochs = epochs.resample(sfreq)
+
+    
+    if metadata is None:
+        try:
+            metadata_i = epochs.metadata  # accounts for dropped epochs
+        except:
+            raise ValueError("Missing metadata in the epoched data")
+    elif isinstance(metadata, DataFrame):
+        if len(pfiles) > 1:
+            metadata_i = metadata[
+                y
+            ].copy()
+        else:
+            metadata_i = metadata.copy()
+    else:
+        raise ValueError(
+            "Metadata should be a pandas data-frame as generated by mne or be contained "
+            "in the passed epoch data"
+        )
+    epochs = epochs.pick(pick_channels) 
+    return epochs
+
+
+def read_raw_and_epoch(
+    participant,
+    pfiles,
+    subj_idx,
+    event_id,
+    resp_id,
+    sfreq,
+    metadata,
+    events_provided,
+    verbose,
+    tmin,
+    tmax,
+    high_pass,
+    low_pass,
+    baseline,
+    pick_channels,
+    bids_parameters
+):
+    if Path(participant).suffix == ".fif":
+        data = mne.io.read_raw_fif(participant, preload=True, verbose=verbose)
+    elif Path(participant).suffix == ".bdf":
+        data = mne.io.read_raw_bdf(participant, preload=True, verbose=verbose)
+    elif isinstance(bids_parameters, dict) and len(bids_parameters) > 0:
+        import mne_bids
+        bids_path = mne_bids.BIDSPath(subject=participant.replace("sub-", ""), task=bids_parameters['task'],
+                                      root=bids_parameters['bids_root'],
+                                      session = bids_parameters['session'],
+                                      datatype=bids_parameters['datatype'])
+
+        data = mne_bids.read_raw_bids(
+            bids_path = bids_path,
+            verbose=False
+        )
+        events_provided = _bids_extract_events(data, event_id, resp_id, verbose)
+    else:
+        raise ValueError(f"Unknown EEG file format for participant {participant}, only '.bdf' and '.fif' or BIDS are accepted")
+    if sfreq is None:
+        sfreq = data.info["sfreq"]
+
+    if "response" not in list(resp_id.keys())[0]:
+        resp_id = {f"response/{k}": v for k, v in resp_id.items()}
+    if events_provided is None:
+        try:
+            events = mne.find_events(
+                data, verbose=verbose, min_duration=1 / data.info["sfreq"]
+            )
+        except:
+            events = mne.events_from_annotations(data, verbose=verbose)[0]
+        if (
+            events[0, 1] > 0
+        ):  # bug from some stim channel, should be 0 otherwise indicates offset in triggers
+            print(
+                f"Correcting event values as trigger channel has offset "
+                f"{np.unique(events[:, 1])}"
+            )
+            events[:, 2] = events[:, 2] - events[:, 1]  # correction on event value
+        events_values = np.concatenate(
+            [
+                np.array([x for x in event_id.values()]),
+                np.array([x for x in resp_id.values()]),
+            ]
+        )
+        events = np.array(
+            [list(x) for x in events if x[2] in events_values]
+        )  # only keeps events with stim or response
+        
+    if len(np.shape(events_provided))>2:  # assumes stacked event files
+        events = events_provided[subj_idx]
+    else:
+        events = events_provided
+    data = data.pick(pick_channels) 
+    data.load_data()
+
+    if sfreq < data.info["sfreq"]:  # Downsampling
+        print(f"Downsampling to {sfreq} Hz")
+        decim = np.round(data.info["sfreq"] / sfreq).astype(int)
+        obtained_sfreq = data.info["sfreq"] / decim
+        low_pass = obtained_sfreq / 3.1
+    else:
+        decim = 1
+        if sfreq > data.info["sfreq"] + 1:
+            warn(
+                f"Requested higher frequency {sfreq} than found in the EEG data, no "
+                f"resampling is performed"
+            )
+    if high_pass is not None or low_pass is not None:
+        data.filter(high_pass, low_pass, fir_design="firwin", verbose=verbose)
+    combined = {**event_id, **resp_id}  # event_id | resp_id
+    stim = list(event_id.keys())
+
+    if verbose:
+        print(f"Creating epochs based on following event ID :{np.unique(events[:, 2])}")
+
+    if metadata is None:
+        metadata_i, meta_events, event_id = mne.epochs.make_metadata(
+            events=events,
+            event_id=combined,
+            tmin=tmin,
+            tmax=tmax,
+            sfreq=data.info["sfreq"],
+            row_events=stim,
+            keep_first=["response"],
+        )
+        metadata_i = metadata_i[["event_name", "response"]]  # only keep event_names and rts
+    else:
+        metadata_i = metadata[subj_idx]
+    epochs = mne.Epochs(
+        data,
+        meta_events,
+        event_id,
+        tmin,
+        tmax,
+        proj=False,
+        baseline=baseline,
+        preload=True,
+        picks=pick_channels,
+        decim=decim,
+        verbose=verbose,
+        detrend=None,
+        on_missing="warn",
+        event_repeated="drop",
+        metadata=metadata_i,
+        reject_by_annotation=True,
+    )
+    epochs.metadata.rename({"response": "rt"}, axis=1, inplace=True)
+    return epochs
+
+def _epoch_selection(epochs,
+                    metadata,
+                    pfiles,
+                    participant,
+                    subj,
+                    rt_col,
+                    scale,
+                    offset_after_resp,
+                    sfreq,
+                    lower_limit_rt,
+                    upper_limit_rt,
+                    reject_threshold,
+                    ignore_rt,
+                    verbose
+    ):
+    if metadata is None:
+        try:
+            metadata_i = epochs.metadata  # accounts for dropped epochs
+        except:
+            raise ValueError("Missing metadata in the epoched data")
+    elif isinstance(metadata, DataFrame):
+        if len(pfiles) > 1:
+            metadata_i = metadata[
+                subj
+            ].copy()  # TODO, better account for participant's wide provided metadata
+        else:
+            metadata_i = metadata.copy()
+    else:
+        raise ValueError(
+            "Metadata should be a pandas data-frame as generated by mne or be contained "
+            "in the passed epoch data"
+        )
+    sfreq = epochs.info["sfreq"] if sfreq is None else sfreq
+    valid_epoch_index = [x for x, y in enumerate(epochs.drop_log) if len(y) == 0]
+    data_epoch = epochs.get_data(copy=False)  # preserves index
+    rts = metadata_i[rt_col]
+    if isinstance(metadata_i, DataFrame):
+        if len(metadata_i) > len(data_epoch):  # assumes metadata contains rejected epochs
+            metadata_i = metadata_i.loc[valid_epoch_index]
+            rts = metadata_i[rt_col]
+        try:
+            rts = rts / scale
+        except:
+            raise ValueError(
+                f"Expected column named {rt_col} in the provided metadata file, alternative "
+                f"names can be passed through the rt_col parameter"
+            )
+    elif rts is None:
+        raise ValueError("Expected either a metadata Dataframe or an array of Reaction Times")
+    rts_arr = np.array(rts)
+    triggers = metadata_i.iloc[:, 0].values  # assumes first col is trigger
+    offset_after_resp_samples = np.rint(offset_after_resp * sfreq).astype(int)
+    
+    if not ignore_rt:
+        cropped_data_epoch, epochs_idx = _cut_at_rt(
+            data_epoch,
+            rts_arr,
+            triggers,
+            offset_after_resp_samples,
+            sfreq,
+            lower_limit_rt,
+            upper_limit_rt,
+            epochs,
+            reject_threshold,
+            valid_epoch_index,
+            verbose
+        )
+    else:
+        cropped_data_epoch = data_epoch
+        epochs_idx = valid_epoch_index
+    print(f"{len(cropped_data_epoch)} trials were retained for participant {participant}")
+    if verbose:
+        print(f"End sampling frequency is {sfreq} Hz")
+
+    epoch_data = hmp_data_format(
+            cropped_data_epoch,
+            epochs.info["sfreq"],
+            None,
+            offset_after_resp_samples,
+            epochs=[int(x) for x in epochs_idx],
+            channel=epochs.ch_names,
+            metadata=metadata_i,
+        )
+    return epoch_data
+
+def _cut_at_rt(data_epoch, rts, triggers, offset_after_resp_samples, sfreq, lower_limit_rt, upper_limit_rt, epochs, reject_threshold, valid_epoch_index, verbose):
+    """
+    """
+    if upper_limit_rt == np.inf:
+        upper_limit_rt = epochs.tmax - (offset_after_resp_samples + 1) / sfreq
+    
+    if upper_limit_rt < 0 or lower_limit_rt < 0:
+        raise ValueError("Limit to RTs cannot be negative")
+    rts_arr = np.array(rts)
+    if verbose:
+        print(
+            f"Applying reaction time trim to keep RTs between {lower_limit_rt} and "
+            f"{upper_limit_rt} seconds"
+        )
+    rts_arr[rts_arr > upper_limit_rt] = 0  # removes RT above x sec
+    rts_arr[rts_arr < lower_limit_rt] = 0  # removes RT below x sec, determines max events
+    rts_arr[np.isnan(rts_arr)] = 0  # too long trial
+    rts_arr = np.rint(rts_arr * sfreq).astype(int)
+    if verbose:
+        print(f"{len(rts_arr[rts_arr > 0])} RTs kept of {len(rts_arr)} clean epochs")
+    cropped_data_epoch = np.empty(
+        [
+            len(rts_arr[rts_arr > 0]),
+            len(epochs.ch_names),
+            max(rts_arr) + offset_after_resp_samples,
+        ]
+    )
+    cropped_data_epoch[:] = np.nan
+    cropped_trigger = []
+    epochs_idx = []
+    j = 0
+    if reject_threshold is None:
+        reject_threshold = np.inf
+    rej = 0
+    time0 = epochs.time_as_index(0)[0]
+    for i in range(len(data_epoch)):
+        if rts_arr[i] > 0:
+            # Crops the epochs to time 0 (stim onset) up to RT
+            if (
+                np.abs(data_epoch[i, :, time0 : time0 + rts_arr[i] + offset_after_resp_samples])
+                < reject_threshold
+            ).all():
+                cropped_data_epoch[j, :, : rts_arr[i] + offset_after_resp_samples] = data_epoch[
+                    i, :, time0 : time0 + rts_arr[i] + offset_after_resp_samples
+                ]
+                epochs_idx.append(valid_epoch_index[i])  # Keeps trial number
+                cropped_trigger.append(triggers[i])
+                j += 1
+            else:
+                rej += 1
+                rts_arr[i] = 0
+    while np.isnan(cropped_data_epoch[-1]).all():  # Remove excluded epochs based on rejection
+        cropped_data_epoch = cropped_data_epoch[:-1]
+
+    if ~np.isinf(reject_threshold):
+        print(f"{rej} trials rejected based on threshold of {reject_threshold}")
+        
+    return cropped_data_epoch, epochs_idx
+
 
 def hmp_data_format(
     data: np.ndarray,
@@ -511,30 +706,6 @@ def load_xr(filename):
         )
     return data.to_dataarray().drop_vars('variable').squeeze()
 
-def save_model(model, filename):
-    """Save an hmp model to a pickle file.
-
-    Parameters
-    ----------
-    model : object
-        The Python object to save.
-    filename : str
-        The name of the file where the object will be saved.
-    """
-    with open(filename, 'wb') as output:
-        pickle.dump(model, output)
-
-def load_model(filename):
-    """Load an hmp model from a pickle file.
-    
-    Parameters
-    ----------
-    filename : str
-        The name of the file where the object will be saved.
-    """
-    with open(filename, 'rb') as pkl_file:
-        model = pickle.load(pkl_file)
-    return model
 
 def save_eventprobs_csv(estimates, filename):
     """
