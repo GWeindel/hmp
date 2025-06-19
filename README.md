@@ -24,7 +24,7 @@ The package is available through *pip*.
 A way of using the package is to use a conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
 
 > [!WARNING]
-> We are currently moving to 1.0.0 with important changes to the API. New users can either use the latest stable release (0.5.0, install from `pip` as below and see previous version of the (docs)[] ) but whose structure will be deprecated or use the upcoming beta for the v1.0.0 but accept the risk of name changes and bugs up to the final verison of 1.0.0
+> We are currently moving to 1.0.0 with important changes to the API. New users can either use the latest stable release (0.5.0, install from `pip` as below and see previous version of the [docs](https://github.com/GWeindel/hmp/tree/b26ab6939e8221475af19914da8dddc02df55ca0)) but whose structure will be deprecated or use the upcoming beta for the v1.0.0-b.1 but accept the risk of name changes and bugs up to the final verison of 1.0.0
 
 
 ```bash
@@ -313,7 +313,7 @@ plt.legend()
 
 
 
-    <matplotlib.legend.Legend at 0x7c33bc48d8e0>
+    <matplotlib.legend.Legend at 0x7381f7b0f1d0>
 
 
 
@@ -434,9 +434,9 @@ Now HMP is not merely a method to look at ERPs or by-trial times. A lot can be d
 ### Follow-up
 
 For examples on how to use the package on real data, or to compare event time onset across conditions see the tutorial notebooks:
-- [Load EEG data ](tutorials/Data_loading.ipynb)
-- [General aspects on HMP (tutorial 1)](tutorials/1-Background_on_HMP.ipynb)
-- [Estimating a model (tutorial 2)](tutorials/2-Estimating_a_model.ipynb)
-- [Test for the best number of events (tutorial 3)](tutorials/3-Testing_the_number_of_events.ipynb)
-- [Looking at condition differences (tutorial 4)](tutorials/4-Analyzing_condition_differences.ipynb)
+    - [General aspects on HMP (tutorial 1)](docs/source/notebooks/1-How_HMP_works.ipynb)
+    - [Estimating a model (tutorial 2)](docs/source/notebooks/2-The_different_model_classes.ipynb)
+    - [Test for the best number of events (tutorial 3)](docs/source/notebooks/3-Applying_HMP_to_real_data.ipynb)
+    - [Looking at condition differences (tutorial 4)](docs/source/notebooks/4-advanced-multilevel_models.ipynb)
+    - [Load your won EEG data ](docs/source/notebooks/Data_loading.ipynb)
 
