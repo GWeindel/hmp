@@ -2,6 +2,7 @@ __pycache__/
 /__pycache__
 hmp/_version.py
 docs/source/notebooks/sample_data/*
+docs/build
 
 *.py[cod]
 *.nc
@@ -13,7 +14,6 @@ docs/source/notebooks/sample_data/*
 *.kate-swp
 *.zip
 
-
 /dist
 *egg*
 *.DS_Store
@@ -22,4 +22,3 @@ docs/source/notebooks/sample_data/*
 .coverage
 
 .jupyter
-dataset_README_*
