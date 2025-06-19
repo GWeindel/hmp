@@ -1,0 +1,648 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Eliminative estimation method &mdash; hmp 1.0.0-b.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/tabs.css?v=4c969af8" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=12f248e0"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/tabs.js?v=3ee01567"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="hmp package" href="hmp.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation Guide</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="hmp.html">hmp package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="hmp.html#models">Models</a><ul class="current">
+<li class="toctree-l3 current"><a class="current reference internal" href="#"><code class="docutils literal notranslate"><span class="pre">EventModel</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.event.EventModel.EM"><code class="docutils literal notranslate"><span class="pre">EventModel.EM()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.event.EventModel.distribution_pdf"><code class="docutils literal notranslate"><span class="pre">EventModel.distribution_pdf()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.event.EventModel.estim_probs"><code class="docutils literal notranslate"><span class="pre">EventModel.estim_probs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.event.EventModel.fit"><code class="docutils literal notranslate"><span class="pre">EventModel.fit()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.event.EventModel.gen_random_stages"><code class="docutils literal notranslate"><span class="pre">EventModel.gen_random_stages()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.event.EventModel.get_channel_time_parameters_expectation"><code class="docutils literal notranslate"><span class="pre">EventModel.get_channel_time_parameters_expectation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.event.EventModel.level_constructor"><code class="docutils literal notranslate"><span class="pre">EventModel.level_constructor()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.event.EventModel.scale_parameters"><code class="docutils literal notranslate"><span class="pre">EventModel.scale_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.event.EventModel.transform"><code class="docutils literal notranslate"><span class="pre">EventModel.transform()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.event.EventModel.xrchannel_pars"><code class="docutils literal notranslate"><span class="pre">EventModel.xrchannel_pars</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.event.EventModel.xrlikelihoods"><code class="docutils literal notranslate"><span class="pre">EventModel.xrlikelihoods</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.event.EventModel.xrtime_pars"><code class="docutils literal notranslate"><span class="pre">EventModel.xrtime_pars</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.event.EventModel.xrtime_pars_dev"><code class="docutils literal notranslate"><span class="pre">EventModel.xrtime_pars_dev</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.event.EventModel.xrtraces"><code class="docutils literal notranslate"><span class="pre">EventModel.xrtraces</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#eliminative-estimation-method">Eliminative estimation method</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.eliminative.EliminativeMethod"><code class="docutils literal notranslate"><span class="pre">EliminativeMethod</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="#hmp.models.eliminative.EliminativeMethod.fit"><code class="docutils literal notranslate"><span class="pre">EliminativeMethod.fit()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="#hmp.models.eliminative.EliminativeMethod.get_fixed_model"><code class="docutils literal notranslate"><span class="pre">EliminativeMethod.get_fixed_model()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="#hmp.models.eliminative.EliminativeMethod.transform"><code class="docutils literal notranslate"><span class="pre">EliminativeMethod.transform()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-hmp.models.cumulative">Cumulative estimation method</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#hmp.models.cumulative.CumulativeMethod"><code class="docutils literal notranslate"><span class="pre">CumulativeMethod</span></code></a><ul>
+<li class="toctree-l5"><a class="reference internal" href="#hmp.models.cumulative.CumulativeMethod.fit"><code class="docutils literal notranslate"><span class="pre">CumulativeMethod.fit()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="#hmp.models.cumulative.CumulativeMethod.transform"><code class="docutils literal notranslate"><span class="pre">CumulativeMethod.transform()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="hmp.html#input-output-module">Input/output module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hmp.html#distributions-module">Distributions module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hmp.html#patterns-module">Patterns module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hmp.html#module-hmp.preprocessing">Preprocessing module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hmp.html#module-hmp.trialdata">TrialData module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hmp.html#visualization-module">Visualization module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hmp.html#module-hmp.utils">Utils module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hmp.html#module-hmp.simulations">Simulations module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hmp.html#module-hmp.loocv">LOOCV module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hmp.html#module-hmp.mcca">MCCA module</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">hmp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content style-external-links">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="hmp.html">hmp package</a></li>
+      <li class="breadcrumb-item active">Eliminative estimation method</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/hmp.models.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <blockquote>
+<div><p>Basic event model</p>
+</div></blockquote>
+<hr class="docutils" />
+<p id="module-hmp.models.event">This module defines the <code class="docutils literal notranslate"><span class="pre">EventModel</span></code> class, which is the base model for estimating
+hidden multivariate pattern models.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">hmp.models.event.</span></span><span class="sig-name descname"><span class="pre">EventModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_events</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fixed_time_pars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fixed_channel_pars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_iteration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_iteration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">starting_points</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.event.EventModel" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<p>A model for estimating HMP events.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_events</strong> (<em>int</em>) – The number of HMP events to estimate.</p></li>
+<li><p><strong>fixed_time_pars</strong> (<em>list</em><em>, </em><em>optional</em>) – List of time parameters to fix during estimation. If None, all time parameters are estimated.</p></li>
+<li><p><strong>fixed_channel_pars</strong> (<em>list</em><em>, </em><em>optional</em>) – List of channel parameters to fix during estimation. If None, all channel parameters are estimated.</p></li>
+<li><p><strong>tolerance</strong> (<em>float</em><em>, </em><em>optional</em>) – Convergence tolerance for the expectation maximization algorithm. Default is 1e-4.</p></li>
+<li><p><strong>max_iteration</strong> (<em>int</em><em>, </em><em>optional</em>) – Maximum number of iterations for the expectation maximization algorithm. Default is 1e3.</p></li>
+<li><p><strong>min_iteration</strong> (<em>int</em><em>, </em><em>optional</em>) – Minimum number of iterations for the expectation maximization algorithm. Default is 1.</p></li>
+<li><p><strong>starting_points</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of random starting points to use for initialization. Default is 1.</p></li>
+<li><p><strong>max_scale</strong> (<em>float</em><em>, </em><em>optional</em>) – Maximum mean distance between events, used when generating random starting points. Default is None.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel.EM">
+<span class="sig-name descname"><span class="pre">EM</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trial_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_channel_pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_time_pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fixed_channel_pars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fixed_time_pars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_iteration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_iteration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channel_map</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_map</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">levels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cpus</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.event.EventModel.EM" title="Link to this definition"></a></dt>
+<dd><blockquote>
+<div><p>Fit using expectation maximization.</p>
+<dl class="simple">
+<dt>trial_data<span class="classifier">TrialData</span></dt><dd><p>The trial data to fit the model to.</p>
+</dd>
+<dt>initial_channel_pars<span class="classifier">np.ndarray</span></dt><dd><p>2D ndarray (n_events * n_channels) or 3D (iteration * n_events * n_channels),
+initial conditions for event channel contributions.</p>
+</dd>
+<dt>initial_time_pars<span class="classifier">np.ndarray</span></dt><dd><p>2D ndarray (n_stages * n_parameters) or 3D (iteration * n_stages * n_parameters),
+initial conditions for time distribution parameters.</p>
+</dd>
+<dt>fixed_channel_pars<span class="classifier">list[int], optional</span></dt><dd><p>Indices of channel parameters to fix during estimation.</p>
+</dd>
+<dt>fixed_time_pars<span class="classifier">list[int], optional</span></dt><dd><p>Indices of time parameters to fix during estimation.</p>
+</dd>
+<dt>max_iteration<span class="classifier">int, optional</span></dt><dd><p>Maximum number of iterations for the expectation maximization algorithm. Default is 1000.</p>
+</dd>
+<dt>tolerance<span class="classifier">float, optional</span></dt><dd><p>Convergence tolerance for the expectation maximization algorithm. Default is 1e-4.</p>
+</dd>
+<dt>min_iteration<span class="classifier">int, optional</span></dt><dd><p>Minimum number of iterations for the expectation maximization algorithm. Default is 1.</p>
+</dd>
+<dt>channel_map<span class="classifier">np.ndarray, optional</span></dt><dd><p>2D array mapping channel parameters to levels. Default is None.</p>
+</dd>
+<dt>time_map<span class="classifier">np.ndarray, optional</span></dt><dd><p>2D array mapping time parameters to levels. Default is None.</p>
+</dd>
+<dt>levels<span class="classifier">np.ndarray, optional</span></dt><dd><p>Array indicating the levels for multilevel modeling. Default is None.</p>
+</dd>
+<dt>cpus<span class="classifier">int, optional</span></dt><dd><p>Number of cores to use in multiprocessing functions. Default is 1.</p>
+</dd>
+</dl>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code>]</span></p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>lkh</strong> (<em>float</em>) – Summed log probabilities.</p></li>
+<li><p><strong>channel_pars</strong> (<em>np.ndarray</em>) – Estimated channel contributions for each event.</p></li>
+<li><p><strong>time_pars</strong> (<em>np.ndarray</em>) – Estimated time distribution parameters for each stage.</p></li>
+<li><p><strong>traces</strong> (<em>np.ndarray</em>) – Log-likelihood values for each EM iteration.</p></li>
+<li><p><strong>time_pars_dev</strong> (<em>np.ndarray</em>) – Time parameters for each iteration of the EM algorithm.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel.distribution_pdf">
+<span class="sig-name descname"><span class="pre">distribution_pdf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_duration</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.event.EventModel.distribution_pdf" title="Link to this definition"></a></dt>
+<dd><p>Return a discretized probability density function (PDF) for a provided scipy distribution.</p>
+<p>This method computes the PDF using the given shape and scale parameters over a range
+from 0 to <cite>max_duration</cite>, and normalizes it to ensure the probabilities sum to 1.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>shape</strong> (<em>float</em>) – The shape parameter of the distribution.</p></li>
+<li><p><strong>scale</strong> (<em>float</em>) – The scale parameter of the distribution.</p></li>
+<li><p><strong>max_duration</strong> (<em>int</em>) – The maximum duration (range) for which the PDF is computed.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A 1D array representing the probability mass function for the distribution
+with the given shape and scale parameters, normalized to sum to 1.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel.estim_probs">
+<span class="sig-name descname"><span class="pre">estim_probs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trial_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channel_pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">location</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subset_epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.event.EventModel.estim_probs" title="Link to this definition"></a></dt>
+<dd><p>Estimate probabilities for events and compute the log-likelihood.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>trial_data</strong> (<a class="reference internal" href="hmp.html#hmp.trialdata.TrialData" title="hmp.trialdata.TrialData"><em>TrialData</em></a>) – The trial data containing cross-correlation and event information.</p></li>
+<li><p><strong>channel_pars</strong> (<em>np.ndarray</em>) – A 2D array of shape (n_events, n_channels) or a 3D array of shape
+(iteration, n_events, n_channels) containing initial conditions for
+channel contributions to events.</p></li>
+<li><p><strong>time_pars</strong> (<em>np.ndarray</em>) – A 2D array of shape (n_stages, n_parameters) or a 3D array of shape
+(iteration, n_stages, n_parameters) containing initial conditions for
+the distribution parameters.</p></li>
+<li><p><strong>location</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to add a minimum distance between events to avoid event collapse
+during the expectation-maximization algorithm. Default is True.</p></li>
+<li><p><strong>subset_epochs</strong> (<em>list</em><em>[</em><em>int</em><em>] or </em><em>None</em><em>, </em><em>optional</em>) – A list of trial indices to consider for the computation. If None, all trials
+are used. Default is None.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p><strong>loglikelihood</strong> (<em>float</em>) – The summed log probabilities.</p></li>
+<li><p><strong>eventprobs</strong> (<em>np.ndarray</em>) – A 3D array of shape (n_trials, max_samples, n_events) containing the probabilities for each event.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trial_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channel_pars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_pars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fixed_time_pars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fixed_channel_pars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cpus</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channel_map</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_map</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level_dict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.event.EventModel.fit" title="Link to this definition"></a></dt>
+<dd><p>Fit HMP for a single n_events model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>trial_data</strong> (<a class="reference internal" href="hmp.html#hmp.trialdata.TrialData" title="hmp.trialdata.TrialData"><em>TrialData</em></a>) – The trial data to fit the model to.</p></li>
+<li><p><strong>channel_pars</strong> (<em>ndarray</em><em>, </em><em>optional</em>) – 2D ndarray (n_levels * n_events * n_channels) or 4D (starting_points * n_levels * n_levels * n_events * n_channels),
+initial conditions for event channel contributions. Default is None.</p></li>
+<li><p><strong>time_pars</strong> (<em>ndarray</em><em>, </em><em>optional</em>) – 3D ndarray (n_levels * n_stages * 2) or 4D (starting_points * n_levels * n_stages * 2),
+initial conditions for time distribution parameters. Default is None.</p></li>
+<li><p><strong>fixed_time_pars</strong> (<em>list</em><em>, </em><em>optional</em>) – Indices of time parameters to fix during estimation. Default is None.</p></li>
+<li><p><strong>fixed_channel_pars</strong> (<em>list</em><em>, </em><em>optional</em>) – Indices of channel parameters to fix during estimation. Default is None.</p></li>
+<li><p><strong>tolerance</strong> (<em>float</em><em>, </em><em>optional</em>) – Convergence tolerance for the expectation maximization algorithm. Default is 1e-4.</p></li>
+<li><p><strong>max_iteration</strong> (<em>int</em><em>, </em><em>optional</em>) – Maximum number of iterations for the expectation maximization algorithm. Default is 1e3.</p></li>
+<li><p><strong>min_iteration</strong> (<em>int</em><em>, </em><em>optional</em>) – Minimum number of iterations for the expectation maximization algorithm. Default is 1.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, displays output useful for debugging. Default is True.</p></li>
+<li><p><strong>cpus</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of cores to use in multiprocessing functions. Default is 1.</p></li>
+<li><p><strong>channel_map</strong> (<em>ndarray</em><em>, </em><em>optional</em>) – 2D ndarray (n_levels * n_events) indicating which channel contributions are shared between levels.
+Default is None.</p></li>
+<li><p><strong>time_map</strong> (<em>ndarray</em><em>, </em><em>optional</em>) – 2D ndarray (n_levels * n_stages) indicating which time parameters are shared between levels.
+Default is None.</p></li>
+<li><p><strong>level_dict</strong> (<em>dict</em><em>, </em><em>optional</em>) – Dictionary defining levels for multilevel modeling. Keys are level names, and values are lists of levels.
+Default is None.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel.gen_random_stages">
+<span class="sig-name descname"><span class="pre">gen_random_stages</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_events</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.event.EventModel.gen_random_stages" title="Link to this definition"></a></dt>
+<dd><p>Compute random stage durations.</p>
+<p>Generates random stage durations between 0 and the mean reaction time (RT) by iteratively
+drawing samples from a uniform distribution. The last stage duration is computed as
+1 minus the cumulative duration of previous stages. The stages are then scaled to the mean RT.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>n_events</strong> (<em>int</em>) – The number of events to generate random durations for.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A 2D array where each row contains the shape and scale parameters for a stage.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel.get_channel_time_parameters_expectation">
+<span class="sig-name descname"><span class="pre">get_channel_time_parameters_expectation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trial_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eventprobs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subset_epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.event.EventModel.get_channel_time_parameters_expectation" title="Link to this definition"></a></dt>
+<dd><p>Compute the channel and time parameters using the expectation step.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>trial_data</strong> (<a class="reference internal" href="hmp.html#hmp.trialdata.TrialData" title="hmp.trialdata.TrialData"><em>TrialData</em></a>) – The trial data containing cross-correlation and event information.</p></li>
+<li><p><strong>eventprobs</strong> (<em>np.ndarray</em>) – A 3D array of shape (n_trials, max_duration, n_events) containing the event probabilities.</p></li>
+<li><p><strong>subset_epochs</strong> (<em>list</em><em>[</em><em>int</em><em>]</em><em>, </em><em>optional</em>) – A list of trial indices to consider for the computation. If None, all trials are used.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p><strong>channel_pars</strong> (<em>np.ndarray</em>) – A 2D array of shape (n_events, n_dims) with the estimated channel parameters.</p></li>
+<li><p><strong>time_pars</strong> (<em>np.ndarray</em>) – A 2D array of shape (n_stages, 2) with the estimated time parameters (shape and scale).</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel.level_constructor">
+<span class="sig-name descname"><span class="pre">level_constructor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trial_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channel_map</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_map</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.event.EventModel.level_constructor" title="Link to this definition"></a></dt>
+<dd><p>Adapt the model to levels by constructing level mappings and validating provided maps.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>trial_data</strong> (<a class="reference internal" href="hmp.html#hmp.trialdata.TrialData" title="hmp.trialdata.TrialData"><em>TrialData</em></a>) – The trial data containing trial-level information.</p></li>
+<li><p><strong>level_dict</strong> (<em>dict</em>) – A dictionary defining levels for multilevel modeling. Keys are level names, and values are lists of levels.</p></li>
+<li><p><strong>channel_map</strong> (<em>np.ndarray</em><em>, </em><em>optional</em>) – A 2D array mapping channel parameters to levels. Default is None.</p></li>
+<li><p><strong>time_map</strong> (<em>np.ndarray</em><em>, </em><em>optional</em>) – A 2D array mapping time parameters to levels. Default is None.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, prints detailed information about the level construction process. Default is False.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p><strong>n_levels</strong> (<em>int</em>) – The number of unique levels.</p></li>
+<li><p><strong>levels</strong> (<em>np.ndarray</em>) – An array indicating the level assignment for each trial.</p></li>
+<li><p><strong>clabels</strong> (<em>dict</em>) – A dictionary containing level names and their corresponding modalities.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel.scale_parameters">
+<span class="sig-name descname"><span class="pre">scale_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">averagepos</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.event.EventModel.scale_parameters" title="Link to this definition"></a></dt>
+<dd><p>Scale parameters from the average position of events.</p>
+<p>This method is used during the re-estimation step in the EM procedure.
+It computes the likeliest location of events from <cite>eventprobs</cite> and calculates
+the scale parameters as the average distance between consecutive events.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>averagepos</strong> (<em>np.ndarray</em>) – A 1D array containing the average positions of events.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A 2D array where each row contains the shape and scale parameters
+for the corresponding event distribution.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel.transform">
+<span class="sig-name descname"><span class="pre">transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trial_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.event.EventModel.transform" title="Link to this definition"></a></dt>
+<dd><p>Transform the trial data using the fitted model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>trial_data</strong> (<a class="reference internal" href="hmp.html#hmp.trialdata.TrialData" title="hmp.trialdata.TrialData"><em>TrialData</em></a>) – The trial data to transform.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">DataArray</span></code>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p><strong>likelihoods</strong> (<em>list</em>) – List of log-likelihoods for each submodel (number of events).</p></li>
+<li><p><strong>xr_eventprobs</strong> (<em>xr.DataArray</em>) – Concatenated event probability arrays for all submodels, indexed by number of events.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel.xrchannel_pars">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">xrchannel_pars</span></span><a class="headerlink" href="#hmp.models.event.EventModel.xrchannel_pars" title="Link to this definition"></a></dt>
+<dd><p>Returns the channel parameters as an xarray DataArray.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>An xarray DataArray with dimensions (“level”, “event”, “channel”) containing the channel parameters.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>xr.DataArray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel.xrlikelihoods">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">xrlikelihoods</span></span><a class="headerlink" href="#hmp.models.event.EventModel.xrlikelihoods" title="Link to this definition"></a></dt>
+<dd><p>Returns the log-likelihoods as an xarray DataArray.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>An xarray DataArray containing the log-likelihood values.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>xr.DataArray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel.xrtime_pars">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">xrtime_pars</span></span><a class="headerlink" href="#hmp.models.event.EventModel.xrtime_pars" title="Link to this definition"></a></dt>
+<dd><p>Returns the time parameters as an xarray DataArray.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>An xarray DataArray with dimensions (“level”, “stage”, “parameter”) containing the time parameters.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>xr.DataArray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel.xrtime_pars_dev">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">xrtime_pars_dev</span></span><a class="headerlink" href="#hmp.models.event.EventModel.xrtime_pars_dev" title="Link to this definition"></a></dt>
+<dd><p>Returns the time parameter for each EM iteration as an xarray DataArray.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>An xarray DataArray with dimensions (“em_iteration”, “level”, “stage”, “time_pars”) containing
+the time parameter deviations.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>xr.DataArray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="hmp.models.event.EventModel.xrtraces">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">xrtraces</span></span><a class="headerlink" href="#hmp.models.event.EventModel.xrtraces" title="Link to this definition"></a></dt>
+<dd><p>Returns the traces of the log-likelihood for each EM iteration as an xarray DataArray.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>An xarray DataArray with dimensions (“em_iteration”, “level”) containing the log-likelihood traces.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>xr.DataArray</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<section id="eliminative-estimation-method">
+<h1>Eliminative estimation method<a class="headerlink" href="#eliminative-estimation-method" title="Link to this heading"></a></h1>
+<p id="module-hmp.models.eliminative">Method to estimate all possible number events starting from a base model or the maximum possible.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="hmp.models.eliminative.EliminativeMethod">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">hmp.models.eliminative.</span></span><span class="sig-name descname"><span class="pre">EliminativeMethod</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_events</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_events</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_starting_points</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_iteration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.eliminative.EliminativeMethod" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<p>Initialize the EliminativeMethod.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>max_events</strong> (<em>int</em><em>, </em><em>optional</em>) – Maximum number of events to estimate. Defaults to None, this number is then inferred from the data.</p></li>
+<li><p><strong>min_events</strong> (<em>int</em><em>, </em><em>optional</em>) – Minimum number of events to estimate. Defaults to 1.</p></li>
+<li><p><strong>max_starting_points</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of starting points for the estimation of the model with the maximum number of events.
+Defaults to 1.</p></li>
+<li><p><strong>tolerance</strong> (<em>float</em><em>, </em><em>optional</em>) – Tolerance for the expectation maximization algorithm. Defaults to 1e-4.</p></li>
+<li><p><strong>max_iteration</strong> (<em>int</em><em>, </em><em>optional</em>) – Maximum number of iterations for the expectation maximization algorithm. Defaults to 1000.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="hmp.models.eliminative.EliminativeMethod.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trial_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_events</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_events</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_fit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cpus</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.eliminative.EliminativeMethod.fit" title="Link to this definition"></a></dt>
+<dd><p>Perform the eliminative estimation.</p>
+<p>First, read or estimate the max_event solution, then estimate the max_event - 1 solution
+by iteratively removing one of the events and picking the one with the highest log-likelihood.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>trial_data</strong> (<a class="reference internal" href="hmp.html#hmp.trialdata.TrialData" title="hmp.trialdata.TrialData"><em>TrialData</em></a>) – The dataset containing the crosscorrelated data and infos on durations and trials.</p></li>
+<li><p><strong>max_events</strong> (<em>int</em><em>, </em><em>optional</em>) – Maximum number of events to be estimated. By default, it is inferred using
+<cite>compute_max_events()</cite> if not provided.</p></li>
+<li><p><strong>min_events</strong> (<em>int</em><em>, </em><em>optional</em>) – The minimum number of events to be estimated. Defaults to 1.</p></li>
+<li><p><strong>base_fit</strong> (<a class="reference internal" href="#hmp.models.event.EventModel" title="hmp.models.event.EventModel"><em>EventModel</em></a><em>, </em><em>optional</em>) – To avoid re-estimating the model with the maximum number of events, this argument can
+be provided with a fitted EventModel. Defaults to None.</p></li>
+<li><p><strong>cpus</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of CPUs to use for parallel processing. Defaults to 1.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="hmp.models.eliminative.EliminativeMethod.get_fixed_model">
+<span class="sig-name descname"><span class="pre">get_fixed_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_events</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">starting_points</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.eliminative.EliminativeMethod.get_fixed_model" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="hmp.models.eliminative.EliminativeMethod.transform">
+<span class="sig-name descname"><span class="pre">transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trial_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.eliminative.EliminativeMethod.transform" title="Link to this definition"></a></dt>
+<dd><p>Apply all fitted submodels to the provided trial data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>trial_data</strong> (<a class="reference internal" href="hmp.html#hmp.trialdata.TrialData" title="hmp.trialdata.TrialData"><em>TrialData</em></a>) – The dataset containing the crosscorrelated data and information on durations and trials.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>likelihoods</strong> (<em>list</em>) – List of log-likelihoods for each submodel (number of events).</p></li>
+<li><p><strong>xr_eventprobs</strong> (<em>xarray.DataArray</em>) – Concatenated event probability arrays for all submodels, indexed by number of events.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-hmp.models.cumulative">
+<span id="cumulative-estimation-method"></span><h1>Cumulative estimation method<a class="headerlink" href="#module-hmp.models.cumulative" title="Link to this heading"></a></h1>
+<p>Models to estimate cumulative event models.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="hmp.models.cumulative.CumulativeMethod">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">hmp.models.cumulative.</span></span><span class="sig-name descname"><span class="pre">CumulativeMethod</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">by_sample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">final_model_tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.cumulative.CumulativeMethod" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<p>Initialize the CumulativeMethod.</p>
+<p>This method initializes the model and sets up parameters for fitting a cumulative event model.
+The fitting process starts with a 1-event model and iteratively adds events based on the
+convergence of the expectation maximization algorithm.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>args</strong> (<em>tuple</em>) – Extra arguments to be passed to the BaseModel, including at least events and distribution objects.</p></li>
+<li><p><strong>step</strong> (<em>float</em><em>, </em><em>optional</em>) – The size of the step from 0 to the mean RT. Defaults to the width of the expected event.</p></li>
+<li><p><strong>end</strong> (<em>int</em><em>, </em><em>optional</em>) – The maximum number of samples to explore within each trial. Defaults to None.</p></li>
+<li><p><strong>by_sample</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, tries every sample as the starting point, even if a later event has already been identified.
+This is useful in cases where the method might jump over a local maximum in an earlier estimation.
+Defaults to False.</p></li>
+<li><p><strong>tolerance</strong> (<em>float</em><em>, </em><em>optional</em>) – The tolerance used for convergence in the EM() function for the cumulative step. Defaults to 1e-4.</p></li>
+<li><p><strong>final_model_tolerance</strong> (<em>float</em><em>, </em><em>optional</em>) – The tolerance used for the final model. Defaults to 1e-4.</p></li>
+<li><p><strong>kwargs</strong> (<em>dict</em>) – Additional keyword arguments to be passed to the BaseModel.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="hmp.models.cumulative.CumulativeMethod.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trial_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cpus</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.cumulative.CumulativeMethod.fit" title="Link to this definition"></a></dt>
+<dd><p>Fit the model starting with a 1-event model and iteratively add events.</p>
+<p>This method fits the cumulative event model to the provided trial data. It begins with a
+single-event model and incrementally adds events based on the convergence of the expectation
+maximization algorithm. The process continues until the maximum number of events (given the
+minimum duration) is reached or the likelihood no longer improves.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>trial_data</strong> (<a class="reference internal" href="hmp.html#hmp.trialdata.TrialData" title="hmp.trialdata.TrialData"><em>TrialData</em></a>) – The trial data to fit the model on.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, provides detailed output about the fitting process. Defaults to True.</p></li>
+<li><p><strong>cpus</strong> (<em>int</em><em>, </em><em>optional</em>) – The number of CPU cores to use for computation. Defaults to 1.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="hmp.models.cumulative.CumulativeMethod.transform">
+<span class="sig-name descname"><span class="pre">transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hmp.models.cumulative.CumulativeMethod.transform" title="Link to this definition"></a></dt>
+<dd><p>Transform the input data using the fitted cumulative event model.</p>
+<p>This method applies the transformation defined by the final model to the provided data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Transformed data as returned by the final model’s transform method.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="hmp.html" class="btn btn-neutral float-left" title="hmp package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Gabriel Weindel, Maarten Schermer, Raoul Schram, Leendert van Maanen, Jelmer Borst.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
