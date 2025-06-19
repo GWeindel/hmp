@@ -1,0 +1,1550 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reading your own data &mdash; hmp 1.0.0-b.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/tabs.css?v=4c969af8" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=12f248e0"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/tabs.js?v=3ee01567"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="5. Performing model selection" href="5-advanced--model_selection.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/hmp.html">hmp package</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Notebooks</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="1-How_HMP_works.html">1 How HMP works: practical, methodological and theoretical grounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="2-The_different_model_classes.html">2. The different model classes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="3-Applying_HMP_to_real_data.html">3. Applying HMP to real data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="4-advanced-multilevel_models.html">4. Advanced multilevel models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="5-advanced--model_selection.html">5. Performing model selection</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Reading your own data</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#1.-Epoched-data-with-MNE-(recommended)">1. Epoched data with MNE (recommended)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#1.1-Example-with-metadata">1.1 Example with metadata</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#1.1.1-Reading-the-data">1.1.1 Reading the data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#1.1.2-Working-with-sensor-location">1.1.2 Working with sensor location</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#1.2-Example-without-metadata">1.2 Example without metadata</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#2.-Reading-raw-data">2. Reading raw data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#2.1-Reading-the-data">2.1 Reading the data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#2.2-Working-with-sensor-location">2.2 Working with sensor location</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#3.-Data-already-epoched-from-stimulus-to-response">3. Data already epoched from stimulus to response</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#4.-Reading-BIDS-data">4. Reading BIDS data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#4.-Reading-alternative-data-formats">4. Reading alternative data formats</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">hmp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content style-external-links">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Reading your own data</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/notebooks/Data_loading.ipynb.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="Reading-your-own-data">
+<h1>Reading your own data<a class="headerlink" href="#Reading-your-own-data" title="Link to this heading"></a></h1>
+<section id="1.-Epoched-data-with-MNE-(recommended)">
+<h2>1. Epoched data with MNE (recommended)<a class="headerlink" href="#1.-Epoched-data-with-MNE-(recommended)" title="Link to this heading"></a></h2>
+<p>Starting from epoched data is the recommended method as the internal functions in hmp to epoch data (see next section) might not be suitable for your specific experiment. Note that this method assumes that your epoch contain both the starting (stimulus) and ending (response) event of your trials!</p>
+<p>An HMP model works on a single trial basis. A trial is defined as the onset of a stimulus and the time at which the response was provided (reaction time, RT). Now, to restrict the analyzed data to this duration we need to pass the information of the trial RT along the time-series we are using (e.g. EEG/MEG channels). The easiest way of doing this is to rely on triggers that were co-registered with the data and that signal useful events such as which stimulus was presented and which answer was
+given. In MNE this is done either by using events or by using so-called metadata (see MNE’s <a class="reference external" href="https://mne.tools/dev/auto_tutorials/epochs/30_epochs_metadata.htmlhttps://mne.tools/dev/auto_tutorials/epochs/30_epochs_metadata.html">tutorial</a>). In section 1.1 we explain how to prepare the data if you have metadata available, section 1.2 explains what to do if metadata is not integrated in your epoched dataset.</p>
+<p><strong>NOTE</strong> if you want to run these examples you need to first download the data:</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mne.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read_info</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+<span class="c1"># Declaring path where the EEG data will be stored</span>
+<span class="n">epoch_data_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;sample_data&#39;</span><span class="p">,</span> <span class="s1">&#39;eeg&#39;</span><span class="p">)</span>
+<span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">epoch_data_path</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># URLs of the first 5 participants in the SAT experiment, navigate the osf folder and adapt those if you want to do this tutorial on other data (e.g. P3, N2pc)</span>
+<span class="n">file_urls</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;https://osf.io/download/67cffa85f67af67e7a92f0a6/&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;https://osf.io/download/67cffa85f67af67e7a92f0a8/&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;https://osf.io/download/67cffa85f67af67e7a92f0aa/&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;https://osf.io/download/67cffa85f67af67e7a92f0ac/&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;https://osf.io/download/67cffa85f67af67e7a92f0ae/&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="c1"># Download and save each file if not already in folder</span>
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">url</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">file_urls</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+    <span class="n">file_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">epoch_data_path</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;participant</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">_epo.fif&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">file_path</span><span class="p">):</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<section id="1.1-Example-with-metadata">
+<h3>1.1 Example with metadata<a class="headerlink" href="#1.1-Example-with-metadata" title="Link to this heading"></a></h3>
+<p>For this section we will rely on data we will use the data from application 2 of this <a class="reference external" href="https://link.springer.com/article/10.1007/s42113-021-00105-2">this</a> paper. For the purpose of this tutorial we will only use the first 5 participants of the data (see the <a class="reference external" href="(https://direct.mit.edu/imag/article/doi/10.1162/imag_a_00400/125469)">HMP</a> paper for the method and <a class="reference external" href="https://osf.io/29tgr/">https://osf.io/29tgr/</a> for the whole (preprocessed) data).</p>
+<p><strong>Important note</strong> Given that we are using the RT as a cutting point selecting appropriate trimming is very important. For example a typical perceptual decision making is unlikely to be made with RT shorter than 200 ms nor RT longer than 2 seconds. Therefore the next function uses <code class="docutils literal notranslate"><span class="pre">lower_limit_RT=0.2</span></code> and <code class="docutils literal notranslate"><span class="pre">upper_limit_RT=2</span></code> to apply these criteria.</p>
+</section>
+<section id="1.1.1-Reading-the-data">
+<h3>1.1.1 Reading the data<a class="headerlink" href="#1.1.1-Reading-the-data" title="Link to this heading"></a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">hmp</span>
+<span class="n">sfreq</span> <span class="o">=</span> <span class="mi">100</span> <span class="c1">#at what sampling rate we want the data, downsampling to 100Hz is computationally less intensive for hmp instances</span>
+
+<span class="c1"># Recovering individual files and participant names</span>
+<span class="n">subj_files</span> <span class="o">=</span> <span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">epoch_data_path</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">epoch_data_path</span><span class="p">)</span> <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;.fif&#39;</span><span class="p">)]</span>  <span class="c1"># Create a list of files with full paths</span>
+<span class="n">subj_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">f</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">epoch_data_path</span><span class="p">)</span> <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;.fif&#39;</span><span class="p">)]</span>  <span class="c1"># Extract subject names based on file names</span>
+
+<span class="c1"># Then we read the data (see more in Tutorial 1)</span>
+<span class="n">epoch_data</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read_mne_data</span><span class="p">(</span><span class="n">subj_files</span><span class="p">,</span> <span class="n">sfreq</span><span class="o">=</span><span class="n">sfreq</span><span class="p">,</span> <span class="n">data_format</span><span class="o">=</span><span class="s1">&#39;epochs&#39;</span><span class="p">,</span>
+                            <span class="n">lower_limit_rt</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">upper_limit_rt</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                            <span class="n">rt_col</span> <span class="o">=</span> <span class="s1">&#39;RT&#39;</span><span class="p">,</span> <span class="n">scale</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span> <span class="c1">#In this case the rts are contained in the dataframe column &quot;RT&quot; and is in milliseconds, thus we adapt</span>
+                            <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">subj_name</span><span class="o">=</span><span class="n">subj_names</span><span class="p">)</span><span class="c1">#Turning verbose off for the documentation but it is recommended to leave it on as some output from MNE might be useful</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Processing participant sample_data/eeg/participant3_epo.fif&#39;s epochs eeg
+177 trials were retained for participant sample_data/eeg/participant3_epo.fif
+Processing participant sample_data/eeg/participant4_epo.fif&#39;s epochs eeg
+159 trials were retained for participant sample_data/eeg/participant4_epo.fif
+Processing participant sample_data/eeg/participant5_epo.fif&#39;s epochs eeg
+183 trials were retained for participant sample_data/eeg/participant5_epo.fif
+Processing participant sample_data/eeg/participant1_epo.fif&#39;s epochs eeg
+187 trials were retained for participant sample_data/eeg/participant1_epo.fif
+Processing participant sample_data/eeg/participant2_epo.fif&#39;s epochs eeg
+193 trials were retained for participant sample_data/eeg/participant2_epo.fif
+</pre></div></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">hmp.io.read_mne_data</span></code> automatically reads the epoched data and converts it to an xarray dataset. Any metadata that has been saved along zith the epoched data is also kept (hence avoid too large metadata and only keep the important metadata).</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+&lt;xarray.Dataset&gt; Size: 47MB
+Dimensions:      (participant: 5, epoch: 200, channel: 30, sample: 194)
+Coordinates:
+  * epoch        (epoch) int64 2kB 0 1 2 3 4 5 6 ... 193 194 195 196 197 198 199
+  * channel      (channel) &lt;U3 360B &#39;Fp1&#39; &#39;Fp2&#39; &#39;AFz&#39; &#39;F7&#39; ... &#39;CPz&#39; &#39;CP2&#39; &#39;CP6&#39;
+  * sample       (sample) int64 2kB 0 1 2 3 4 5 6 ... 188 189 190 191 192 193
+    stim         (participant, epoch) float64 8kB 1.0 nan 1.0 ... 2.0 1.0 2.0
+    resp         (participant, epoch) object 8kB &#39;resp_left&#39; ... &#39;resp_right&#39;
+    RT           (participant, epoch) float64 8kB 907.0 nan ... 468.0 350.0
+    cue          (participant, epoch) object 8kB &#39;AC&#39; nan &#39;AC&#39; ... &#39;SP&#39; &#39;AC&#39;
+    movement     (participant, epoch) object 8kB &#39;stim_left&#39; ... &#39;stim_right&#39;
+    trigger      (participant, epoch) object 8kB &#39;AC/stim_left/resp_left&#39; ......
+  * participant  (participant) &lt;U16 320B &#39;participant3_epo&#39; ... &#39;participant2...
+Data variables:
+    data         (participant, epoch, channel, sample) float64 47MB -7.935 .....
+Attributes:
+    sfreq:             100.0
+    offset:            0
+    lowpass:           35.0
+    highpass:          1.0
+    lower_limit_rt:    0.2
+    upper_limit_rt:    2
+    reject_threshold:  None
+    n_trials:          899
+</pre></div></div>
+</div>
+</section>
+<section id="1.1.2-Working-with-sensor-location">
+<h3>1.1.2 Working with sensor location<a class="headerlink" href="#1.1.2-Working-with-sensor-location" title="Link to this heading"></a></h3>
+<p>To be able to graphically represent how each transition event translates in the scalp topology we need to pass the info of the channel locations on the head.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># The following code is just to illustrate channel positions</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">mne</span>
+
+<span class="n">epoch</span> <span class="o">=</span> <span class="n">mne</span><span class="o">.</span><span class="n">read_epochs</span><span class="p">(</span><span class="n">subj_files</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">epoch</span><span class="o">.</span><span class="n">plot_sensors</span><span class="p">(</span><span class="n">show_names</span><span class="o">=</span><span class="kc">True</span><span class="p">);</span>
+<br/></pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Reading /home/gabriel/ownCloud/projects/RUGUU/hmp/docs/source/notebooks/sample_data/eeg/participant3_epo.fif ...
+    Found the data of interest:
+        t =    -250.00 ...    2998.00 ms
+        0 CTF compensation matrices available
+Adding metadata with 6 columns
+186 matching events found
+No baseline correction applied
+0 projection items activated
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_Data_loading_10_1.png" src="../_images/notebooks_Data_loading_10_1.png" />
+</div>
+</div>
+<p>When we have access to the mne data format and if the channel positions have been stored during the preprocessing step, the position of the electrode is contained in the <code class="docutils literal notranslate"><span class="pre">info</span></code> object from the file we read using <code class="docutils literal notranslate"><span class="pre">mne</span></code>. Hence we can first read any of the participants data (assuming the electrode position is the same) and directly pass that object to the <code class="docutils literal notranslate"><span class="pre">plot_topo_timecourse</span></code> . We first fit an HMP model (see tutorial 2) to illustrate the use of channel position</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># See the two next tutorials for more details on how to fit an HMP model and how to visualize the results.</span>
+<span class="n">preprocessed</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">preprocessing</span><span class="o">.</span><span class="n">Preprocessing</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">,</span> <span class="n">n_comp</span><span class="o">=</span><span class="mi">6</span><span class="p">)</span>
+<span class="n">pattern</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">patterns</span><span class="o">.</span><span class="n">HalfSine</span><span class="o">.</span><span class="n">create_expected</span><span class="p">(</span><span class="n">sfreq</span><span class="o">=</span><span class="n">epoch_data</span><span class="o">.</span><span class="n">sfreq</span><span class="p">)</span>
+<span class="n">trial_data</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">trialdata</span><span class="o">.</span><span class="n">TrialData</span><span class="o">.</span><span class="n">from_preprocessed</span><span class="p">(</span><span class="n">preprocessed</span><span class="o">=</span><span class="n">preprocessed</span><span class="p">,</span> <span class="n">pattern</span><span class="o">=</span><span class="n">pattern</span><span class="o">.</span><span class="n">template</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">EventModel</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">n_events</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<span class="n">_</span><span class="p">,</span> <span class="n">estimates</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">trial_data</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/preprocessing.py:196: UserWarning: Data will be modified inplace, re-read the data or use copy=True if multiplecalls to this function
+  warn(
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Estimating 4 events model with 1 starting point(s)
+</pre></div></div>
+</div>
+<p>We then have the illustration of channel activities for each event:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">mne.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read_info</span>
+<span class="n">info</span> <span class="o">=</span> <span class="n">read_info</span><span class="p">(</span><span class="n">subj_files</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">hmp</span><span class="o">.</span><span class="n">visu</span><span class="o">.</span><span class="n">plot_topo_timecourse</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">,</span> <span class="n">estimates</span><span class="p">,</span> <span class="n">info</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_Data_loading_14_0.png" src="../_images/notebooks_Data_loading_14_0.png" />
+</div>
+</div>
+</section>
+<section id="1.2-Example-without-metadata">
+<h3>1.2 Example without metadata<a class="headerlink" href="#1.2-Example-without-metadata" title="Link to this heading"></a></h3>
+<p>If you haven’t stored the metadata along with the epoched data you can always provide a list of RTs and condition to parse the data, However you need to be sure that the order of the trials from which you take the info is the same as the EEG data. Here an example with the same data as previously:</p>
+<p>For example we can extract the actual metadata from the epoched object. This is dataframe as you could have while reading behavioral data co-registered with the EEG.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">epoch</span> <span class="o">=</span> <span class="n">mne</span><span class="o">.</span><span class="n">read_epochs</span><span class="p">(</span><span class="n">subj_files</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">epoch</span><span class="o">.</span><span class="n">metadata</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Reading /home/gabriel/ownCloud/projects/RUGUU/hmp/docs/source/notebooks/sample_data/eeg/participant3_epo.fif ...
+    Found the data of interest:
+        t =    -250.00 ...    2998.00 ms
+        0 CTF compensation matrices available
+Adding metadata with 6 columns
+186 matching events found
+No baseline correction applied
+0 projection items activated
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>stim</th>
+      <th>resp</th>
+      <th>RT</th>
+      <th>cue</th>
+      <th>movement</th>
+      <th>trigger</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1</td>
+      <td>resp_left</td>
+      <td>907</td>
+      <td>AC</td>
+      <td>stim_left</td>
+      <td>AC/stim_left/resp_left</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>1</td>
+      <td>resp_right</td>
+      <td>1095</td>
+      <td>AC</td>
+      <td>stim_left</td>
+      <td>AC/stim_left/resp_right</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>2</td>
+      <td>resp_left</td>
+      <td>1370</td>
+      <td>AC</td>
+      <td>stim_right</td>
+      <td>AC/stim_right/resp_left</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>2</td>
+      <td>resp_right</td>
+      <td>907</td>
+      <td>AC</td>
+      <td>stim_right</td>
+      <td>AC/stim_right/resp_right</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>2</td>
+      <td>resp_right</td>
+      <td>891</td>
+      <td>AC</td>
+      <td>stim_right</td>
+      <td>AC/stim_right/resp_right</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>195</th>
+      <td>1</td>
+      <td>resp_right</td>
+      <td>1763</td>
+      <td>AC</td>
+      <td>stim_left</td>
+      <td>AC/stim_left/resp_right</td>
+    </tr>
+    <tr>
+      <th>196</th>
+      <td>1</td>
+      <td>resp_left</td>
+      <td>676</td>
+      <td>AC</td>
+      <td>stim_left</td>
+      <td>AC/stim_left/resp_left</td>
+    </tr>
+    <tr>
+      <th>197</th>
+      <td>2</td>
+      <td>resp_left</td>
+      <td>0</td>
+      <td>SP</td>
+      <td>stim_right</td>
+      <td>SP/stim_right/resp_left</td>
+    </tr>
+    <tr>
+      <th>198</th>
+      <td>2</td>
+      <td>resp_right</td>
+      <td>649</td>
+      <td>AC</td>
+      <td>stim_right</td>
+      <td>AC/stim_right/resp_right</td>
+    </tr>
+    <tr>
+      <th>199</th>
+      <td>2</td>
+      <td>resp_right</td>
+      <td>862</td>
+      <td>AC</td>
+      <td>stim_right</td>
+      <td>AC/stim_right/resp_right</td>
+    </tr>
+  </tbody>
+</table>
+<p>186 rows × 6 columns</p>
+</div></div>
+</div>
+<p>In this case you can read the MNE epoched data, add the metadata for each participant, and save the data then re-read using the previous section</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">mne</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+<span class="c1"># Example: assume &#39;behavior&#39; is a DataFrame with columns [&#39;RT&#39;, &#39;condition&#39;, ...] for each participant</span>
+<span class="c1"># Here, we just extract the metadata from the EEG data as a placeholder</span>
+<span class="n">epochs_list</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">eeg_file</span> <span class="ow">in</span> <span class="n">subj_files</span><span class="p">:</span>
+    <span class="n">epochs</span> <span class="o">=</span> <span class="n">mne</span><span class="o">.</span><span class="n">read_epochs</span><span class="p">(</span><span class="n">eeg_file</span><span class="p">,</span> <span class="n">preload</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1"># Extract metadata or load your own behavioral data here</span>
+    <span class="c1"># For demonstration, we use the metadata from the epochs object if available</span>
+    <span class="k">if</span> <span class="n">epochs</span><span class="o">.</span><span class="n">metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="n">epochs</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># If no metadata, create a dummy DataFrame (replace with your actual behavioral data)</span>
+        <span class="n">n_trials</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">epochs</span><span class="p">)</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;RT&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">]</span><span class="o">*</span><span class="n">n_trials</span><span class="p">,</span> <span class="s1">&#39;condition&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;dummy&#39;</span><span class="p">]</span><span class="o">*</span><span class="n">n_trials</span><span class="p">})</span>
+    <span class="n">epochs</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="n">metadata</span>
+    <span class="n">epochs</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">eeg_file</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Reading /home/gabriel/ownCloud/projects/RUGUU/hmp/docs/source/notebooks/sample_data/eeg/participant3_epo.fif ...
+    Found the data of interest:
+        t =    -250.00 ...    2998.00 ms
+        0 CTF compensation matrices available
+Adding metadata with 6 columns
+186 matching events found
+No baseline correction applied
+0 projection items activated
+Replacing existing metadata with 6 columns
+Overwriting existing file.
+Overwriting existing file.
+Reading /home/gabriel/ownCloud/projects/RUGUU/hmp/docs/source/notebooks/sample_data/eeg/participant4_epo.fif ...
+    Found the data of interest:
+        t =    -250.00 ...    2998.00 ms
+        0 CTF compensation matrices available
+Adding metadata with 6 columns
+159 matching events found
+No baseline correction applied
+0 projection items activated
+Replacing existing metadata with 6 columns
+Overwriting existing file.
+Overwriting existing file.
+Reading /home/gabriel/ownCloud/projects/RUGUU/hmp/docs/source/notebooks/sample_data/eeg/participant5_epo.fif ...
+    Found the data of interest:
+        t =    -250.00 ...    2998.00 ms
+        0 CTF compensation matrices available
+Adding metadata with 6 columns
+193 matching events found
+No baseline correction applied
+0 projection items activated
+Replacing existing metadata with 6 columns
+Overwriting existing file.
+Overwriting existing file.
+Reading /home/gabriel/ownCloud/projects/RUGUU/hmp/docs/source/notebooks/sample_data/eeg/participant1_epo.fif ...
+    Found the data of interest:
+        t =    -250.00 ...    2998.00 ms
+        0 CTF compensation matrices available
+Adding metadata with 6 columns
+189 matching events found
+No baseline correction applied
+0 projection items activated
+Replacing existing metadata with 6 columns
+Overwriting existing file.
+Overwriting existing file.
+Reading /home/gabriel/ownCloud/projects/RUGUU/hmp/docs/source/notebooks/sample_data/eeg/participant2_epo.fif ...
+    Found the data of interest:
+        t =    -250.00 ...    2998.00 ms
+        0 CTF compensation matrices available
+Adding metadata with 6 columns
+193 matching events found
+No baseline correction applied
+0 projection items activated
+Replacing existing metadata with 6 columns
+Overwriting existing file.
+Overwriting existing file.
+</pre></div></div>
+</div>
+</section>
+</section>
+<section id="2.-Reading-raw-data">
+<h2>2. Reading raw data<a class="headerlink" href="#2.-Reading-raw-data" title="Link to this heading"></a></h2>
+<p>The following is useful if you:</p>
+<ul class="simple">
+<li><p>Do not have the behavioral data to use RTs and associated conditions</p></li>
+<li><p>Haven’t epoched the data or just want to take a quick look at HMP models with raw data lying around</p></li>
+</ul>
+<p><strong>Nota bene</strong>: the data is assumed to be preprocessed and only works with .bdf and .fif (also BIDS, see section 4)</p>
+<p>In this case we will simulate EEG data with a structure close to actual recordings</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">hmp</span><span class="w"> </span><span class="kn">import</span> <span class="n">simulations</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">gamma</span>
+
+<span class="n">cpus</span> <span class="o">=</span> <span class="mi">2</span> <span class="c1"># For multiprocessing, usually a good idea to use multiple CPUs as long as you have enough RAM</span>
+
+<span class="n">n_trials</span> <span class="o">=</span> <span class="mi">100</span> <span class="c1">#Number of trials to simulate</span>
+<span class="n">sfreq</span> <span class="o">=</span> <span class="mi">500</span> <span class="c1">#Sampling rate of the simulated data</span>
+
+<span class="c1">##### Here we define the sources of the brain activity (event) for each trial</span>
+<span class="n">n_events</span> <span class="o">=</span> <span class="mi">4</span> <span class="c1">#How many events to simulate</span>
+<span class="n">frequency</span> <span class="o">=</span> <span class="mf">10.</span> <span class="c1">#Frequency of the event defining its duration, half-sine of 10Hz = 50ms</span>
+<span class="n">amplitude</span> <span class="o">=</span> <span class="mf">.2e-7</span> <span class="c1">#Amplitude of the event in nAm, defining signal to noise ratio</span>
+<span class="n">shape</span> <span class="o">=</span> <span class="mi">2</span> <span class="c1">#shape of the gamma distribution, with the defined means below it dictates the onset time probabilities</span>
+<span class="n">means</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">60</span><span class="p">,</span> <span class="mi">150</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">80</span><span class="p">])</span><span class="o">/</span><span class="n">shape</span> <span class="c1">#Mean duration of the between event times in ms</span>
+<span class="c1">#Which source to activate for each event (see atlas when calling simulations.available_sources())</span>
+<span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;inferiortemporal-lh&#39;</span><span class="p">,</span><span class="s1">&#39;caudalanteriorcingulate-rh&#39;</span><span class="p">,</span><span class="s1">&#39;bankssts-lh&#39;</span><span class="p">,</span><span class="s1">&#39;superiorparietal-lh&#39;</span><span class="p">,</span><span class="s1">&#39;superiorparietal-lh&#39;</span><span class="p">]</span>
+
+<span class="n">sources</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">source</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">names</span><span class="p">,</span> <span class="n">means</span><span class="p">):</span> <span class="c1">#One source = one frequency, one amplitude and a given by-trial variability distribution</span>
+    <span class="n">sources</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">source</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">frequency</span><span class="p">,</span> <span class="n">amplitude</span><span class="p">,</span> <span class="n">gamma</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">source</span><span class="p">[</span><span class="mi">1</span><span class="p">])])</span>
+
+<span class="c1"># Function used to generate the data</span>
+<span class="n">file</span> <span class="o">=</span> <span class="n">simulations</span><span class="o">.</span><span class="n">simulate</span><span class="p">(</span><span class="n">sources</span><span class="p">,</span> <span class="n">n_trials</span><span class="p">,</span> <span class="n">cpus</span><span class="p">,</span> <span class="s1">&#39;dataset&#39;</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">sfreq</span><span class="o">=</span><span class="n">sfreq</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="c1">#load electrode position, specific to the simulations</span>
+<span class="n">info</span> <span class="o">=</span> <span class="n">simulations</span><span class="o">.</span><span class="n">positions</span><span class="p">()</span>
+<span class="c1">#Recovering the events to epoch the data (in the number of trials defined above)</span>
+<span class="n">events</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">file</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/simulations.py:220: UserWarning: /home/gabriel/ownCloud/projects/RUGUU/hmp/docs/source/notebooks/./dataset_raw.fif exists no new simulation performed
+  warn(f&#34;{subj_file} exists no new simulation performed&#34;, UserWarning)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1">#Recovering the events to epoch the data (in the number of trials defined above)</span>
+<span class="n">events</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">file</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+<span class="c1">#Visualising the raw simulated EEG data</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">mne</span>
+<span class="n">raw</span> <span class="o">=</span> <span class="n">mne</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read_raw_fif</span><span class="p">(</span><span class="n">file</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">preload</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">raw</span><span class="o">.</span><span class="n">pick_types</span><span class="p">(</span><span class="n">eeg</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">scalings</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">eeg</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">),</span> <span class="n">events</span><span class="o">=</span><span class="n">events</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="kc">True</span><span class="p">);</span>
+<br/></pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_Data_loading_23_0.png" src="../_images/notebooks_Data_loading_23_0.png" />
+</div>
+</div>
+<p>This looks close to actual data, we’ll now illustrate how to read this data and prepare it for HMP analysis. The following code will read the raw data, epoch it from stimulus to response, and prepare it for HMP analysis.</p>
+<section id="2.1-Reading-the-data">
+<h3>2.1 Reading the data<a class="headerlink" href="#2.1-Reading-the-data" title="Link to this heading"></a></h3>
+<p>First we have to declare what trigger to epoch on</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">stimulus_id</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;stimulus/dummy&#39;</span><span class="p">:</span><span class="mi">1</span><span class="p">}</span><span class="c1">#trigger 1 = stimulus, in real data this could be several e.g. {&#39;stimulus/left&#39;: 1, &#39;stimulus/right&#39;:2} if you have several conditions for exmple</span>
+</pre></div>
+</div>
+</div>
+<p>Then what trigger(s) define the response</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">resp_id</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;response/dummy&#39;</span><span class="p">:</span><span class="mi">6</span><span class="p">}</span> <span class="c1"># trigger 6 = response, in real data this could again be multiple e.g. {&#39;response/left&#39;: 6, &#39;response/right&#39;:7}</span>
+</pre></div>
+</div>
+</div>
+<p>** Note** when using the following code, the triggers in stimulus_id and response_id are expected to follow the convention <code class="docutils literal notranslate"><span class="pre">'stimulus/condition_name':</span> <span class="pre">trigger_number</span></code> and <code class="docutils literal notranslate"><span class="pre">'response/condition_name':</span> <span class="pre">trigger_number</span></code>. This is the convention used in the MNE-Python library, which is also used by HMP.</p>
+<p>Next we can directly use the <code class="docutils literal notranslate"><span class="pre">file</span></code> list and feed it to the <code class="docutils literal notranslate"><span class="pre">hmp.io.read_mne_data</span></code> but first you have to decide on a number of parameters regarding EEG processing, see the following helper of the function</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">hmp</span>
+hmp.io.read_mne_data<span class="o">?</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+<span class="ansi-red-fg">Signature:</span>
+hmp.io.read_mne_data(
+    pfiles: str | list,
+    event_id: dict | <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> = <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>,
+    resp_id: dict | <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> = <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>,
+    data_format: str = <span class="ansi-yellow-fg">&#39;raw&#39;</span>,
+    sfreq: float | <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> = <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>,
+    subj_name: list | <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> = <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>,
+    metadata: list | <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> = <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>,
+    events_provided: numpy.ndarray | <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> = <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>,
+    rt_col: str = <span class="ansi-yellow-fg">&#39;rt&#39;</span>,
+    rts: numpy.ndarray | <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> = <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>,
+    verbose: bool = <span class="ansi-bold" style="color: rgb(0,135,0)">True</span>,
+    tmin: float = -<span class="ansi-green-fg">0.2</span>,
+    tmax: float = <span class="ansi-green-fg">5</span>,
+    offset_after_resp: float = <span class="ansi-green-fg">0</span>,
+    high_pass: float | <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> = <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>,
+    low_pass: float | <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> = <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>,
+    pick_channels: str | list = <span class="ansi-yellow-fg">&#39;eeg&#39;</span>,
+    baseline: tuple = (<span class="ansi-bold" style="color: rgb(0,135,0)">None</span>, <span class="ansi-green-fg">0</span>),
+    upper_limit_rt: float = inf,
+    lower_limit_rt: float = <span class="ansi-green-fg">0</span>,
+    reject_threshold: float | <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> = <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>,
+    scale: float = <span class="ansi-green-fg">1</span>,
+    reference: str | <span class="ansi-bold" style="color: rgb(0,135,0)">None</span> = <span class="ansi-bold" style="color: rgb(0,135,0)">None</span>,
+    ignore_rt: bool = <span class="ansi-bold" style="color: rgb(0,135,0)">False</span>,
+    bids_parameters: dict = {},
+) -&gt; xarray.core.dataset.Dataset
+<span class="ansi-red-fg">Docstring:</span>
+Read EEG/MEG data format (.fif or .bdf) using MNE&#39;s integrated function.
+
+Notes
+-----
+- Only EEG or MEG data are selected (other channel types are discarded).
+- All times are expressed in seconds.
+- If multiple files are provided in ``pfiles``, each participant&#39;s data is read and processed sequentially.
+- For non-epoched data: Reaction Times are only computed if the response trigger is in the epoching
+  window (determined by ``tmin`` and ``tmax``).
+
+## Procedure:
+
+If data is not already epoched:
+
+    - The data is filtered using the specified ``low_pass`` and ``high_pass`` parameters.
+    - If no events are provided, events are detected in the stimulus channel and only those with IDs
+      in ``event_id`` and ``resp_id`` are kept.
+    - Downsampling is performed if ``sfreq`` is lower than the data&#39;s sampling frequency.
+    - Epochs are created based on stimulus onsets (``event_id``) and the ``tmin``/``tmax`` window.
+      Epochs with &#39;BAD&#39; annotations are removed. Baseline correction is applied from
+      ``tmin`` to stimulus onset (time 0).
+
+Then (or if data is already epoched):
+
+    1. Reaction times (RT) are computed as the time difference between stimulus and response triggers.
+       If no response event occurs after a stimulus in the epoch window, or if
+       ``RT &gt; upper_limit_rt`` or ``RT &lt; lower_limit_rt``, RT is set to 0.
+    2. All non-rejected epochs with positive RTs are cropped from stimulus onset to
+       ``stimulus_onset + RT``.
+
+Parameters
+----------
+pfiles : str or list of str
+    Path(s) to EEG files to read. Can be a single file path or a list of file paths.
+event_id : dict, optional
+    Dictionary mapping condition names (keys) to event codes (values).
+resp_id : dict, optional
+    Dictionary mapping response names (keys) to event codes (values).
+data_format : str, default=epochs
+    What MNE compatible data type, can be &#39;epochs&#39; or &#39;raw&#39;.
+sfreq : float, optional
+    Desired sampling frequency for downsampling.
+subj_name : list of str, optional
+    List of subject identifiers. If not provided, defaults to &#34;S0&#34;, &#34;S1&#34;, etc.
+metadata : list of pandas.DataFrame, optional
+    List of metadata DataFrames corresponding to each participant.
+events_provided : np.ndarray, optional
+    Array with 3 columns: [sample of the event, initial value of the channel, event code].
+    Used if automated event detection is not suitable.
+rt_col : str, default=&#34;rt&#34;
+    Column name in metadata containing reaction times.
+rts : np.ndarray, optional
+    Array of reaction times. Used if metadata is not provided.
+verbose : bool, default=True
+    Whether to display MNE&#39;s messages.
+tmin : float, default=-0.2
+    Start time (in seconds) relative to stimulus onset for epoching.
+tmax : float, default=5
+    End time (in seconds) relative to stimulus onset for epoching.
+offset_after_resp : float, default=0
+    Additional time (in seconds) to include after the response onset.
+high_pass : float, optional
+    High-pass filter cutoff frequency.
+low_pass : float, optional
+    Low-pass filter cutoff frequency.
+pick_channels : str or list, default=&#34;eeg&#34;
+    Channels to retain. Use &#34;eeg&#34;/&#34;meg&#34; to keep only EEG/MEG channels or provide a list of channel names.
+baseline : tuple, default=(None, 0)
+    Time range for baseline correction (start, end) in seconds.
+upper_limit_rt : float, default=np.inf
+    Upper limit for reaction times. Longer RTs are discarded.
+lower_limit_rt : float, default=0
+    Lower limit for reaction times. Shorter RTs are discarded.
+reject_threshold : float, optional
+    Threshold for rejecting epochs based on signal amplitude within the stimulus-response interval.
+scale : float, default=1
+    Scaling factor for reaction times (e.g., 1000 for milliseconds).
+reference : str, optional
+    Reference to use for EEG data. If None, the existing reference is kept.
+ignore_rt : bool, default=False
+    Whether to ignore reaction times and parse epochs up to `tmax`.
+
+Returns
+-------
+epoch_data : xarray.Dataset
+    An xarray Dataset containing the processed EEG/MEG data, events, channels, and participants.
+    Metadata and epoch indices are preserved. The chosen sampling frequency is stored as an attribute.
+<span class="ansi-red-fg">File:</span>      ~/ownCloud/projects/RUGUU/hmp/hmp/io.py
+<span class="ansi-red-fg">Type:</span>      function
+</pre></div></div>
+</div>
+<p>This is then an example call to the function based on previous <em>hmp</em> applications</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">sfreq</span> <span class="o">=</span> <span class="mi">250</span> <span class="c1">#at what sampling rate we want the data, downsampling to 250Hz just to show that we can use any SF</span>
+<span class="n">tmin</span><span class="p">,</span> <span class="n">tmax</span> <span class="o">=</span> <span class="o">-</span><span class="mf">.2</span><span class="p">,</span> <span class="mi">2</span> <span class="c1">#window size for the epochs, from 250ms before the stimulus up to 2 seconds after, data will be baseline corrected from tmin to 0</span>
+<span class="n">lower_limit_rt</span><span class="p">,</span> <span class="n">upper_limit_rt</span> <span class="o">=</span> <span class="mf">.2</span><span class="p">,</span> <span class="mi">2</span> <span class="c1">#lower and upper limit for the RTs, all values outside of this range are discarded, choose carefully</span>
+
+<span class="n">epoch_data</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read_mne_data</span><span class="p">(</span><span class="n">file</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                                  <span class="n">event_id</span><span class="o">=</span><span class="n">stimulus_id</span><span class="p">,</span> <span class="c1"># centering event</span>
+                                  <span class="n">resp_id</span><span class="o">=</span><span class="n">resp_id</span><span class="p">,</span> <span class="c1"># event defining the RT or duration</span>
+                                  <span class="n">data_format</span><span class="o">=</span><span class="s1">&#39;raw&#39;</span><span class="p">,</span>
+                                  <span class="n">subj_name</span><span class="o">=</span><span class="s1">&#39;S0&#39;</span><span class="p">,</span>
+                                  <span class="n">tmin</span><span class="o">=</span><span class="n">tmin</span><span class="p">,</span> <span class="n">tmax</span><span class="o">=</span><span class="n">tmax</span><span class="p">,</span>
+                                  <span class="n">sfreq</span><span class="o">=</span><span class="n">sfreq</span><span class="p">,</span>
+                                  <span class="n">events_provided</span> <span class="o">=</span> <span class="n">events</span><span class="p">,</span> <span class="c1"># events structure, usually not needed as real data have a trigger channel from which this is inferred</span>
+                                  <span class="n">reject_threshold</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span><span class="c1">#Reject if more than 100microV between stimulus and response</span>
+                                 <span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Processing participant /home/gabriel/ownCloud/projects/RUGUU/hmp/docs/source/notebooks/./dataset_raw.fif&#39;s raw eeg
+Opening raw data file /home/gabriel/ownCloud/projects/RUGUU/hmp/docs/source/notebooks/./dataset_raw.fif...
+    Read a total of 1 projection items:
+        Average EEG reference (1 x 60) active
+    Range : 0 ... 86535 =      0.000 ...   173.070 secs
+Ready.
+Reading 0 ... 86535  =      0.000 ...   173.070 secs...
+Downsampling to 250 Hz
+Filtering raw data in 1 contiguous segment
+Setting up low-pass filter at 81 Hz
+
+FIR filter parameters
+---------------------
+Designing a one-pass, zero-phase, non-causal lowpass filter:
+- Windowed time-domain design (firwin) method
+- Hamming window with 0.0194 passband ripple and 53 dB stopband attenuation
+- Upper passband edge: 80.65 Hz
+- Upper transition bandwidth: 20.16 Hz (-6 dB cutoff frequency: 90.73 Hz)
+- Filter length: 83 samples (0.166 s)
+
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+[Parallel(n_jobs=1)]: Done  17 tasks      | elapsed:    0.1s
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Creating epochs based on following event ID :[1 2 3 4 5 6]
+Adding metadata with 2 columns
+100 matching events found
+Setting baseline interval to [-0.2, 0.0] s
+Applying baseline correction (mode: mean)
+Created an SSP operator (subspace dimension = 1)
+1 projection items activated
+Using data from preloaded Raw for 100 events and 1101 original time points (prior to decimation) ...
+0 bad epochs dropped
+Applying reaction time trim to keep RTs between 0 and 1.996 seconds
+100 RTs kept of 100 clean epochs
+0 trials rejected based on threshold of 0.0001
+100 trials were retained for participant /home/gabriel/ownCloud/projects/RUGUU/hmp/docs/source/notebooks/./dataset_raw.fif
+End sampling frequency is 250 Hz
+</pre></div></div>
+</div>
+<p>This is then the data ready to be used with hmp instances</p>
+</section>
+<section id="2.2-Working-with-sensor-location">
+<h3>2.2 Working with sensor location<a class="headerlink" href="#2.2-Working-with-sensor-location" title="Link to this heading"></a></h3>
+<p>In this case as in the first example with epoched data, we can simply call the info object of one of the file to use the positions of the electrodes (note that this time the positions are recorded and not assumed).</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">epoch</span> <span class="o">=</span> <span class="n">mne</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read_raw</span><span class="p">(</span><span class="n">file</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">epoch</span><span class="o">.</span><span class="n">plot_sensors</span><span class="p">(</span><span class="n">show_names</span><span class="o">=</span><span class="kc">True</span><span class="p">);</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_Data_loading_36_0.png" src="../_images/notebooks_Data_loading_36_0.png" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># See the two next tutorials for more details on how to fit an HMP model and how to visualize the results.</span>
+<span class="n">preprocessed</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">preprocessing</span><span class="o">.</span><span class="n">Preprocessing</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">,</span> <span class="n">n_comp</span><span class="o">=</span><span class="mi">6</span><span class="p">)</span>
+<span class="n">pattern</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">patterns</span><span class="o">.</span><span class="n">HalfSine</span><span class="o">.</span><span class="n">create_expected</span><span class="p">(</span><span class="n">sfreq</span><span class="o">=</span><span class="n">epoch_data</span><span class="o">.</span><span class="n">sfreq</span><span class="p">)</span>
+<span class="n">trial_data</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">trialdata</span><span class="o">.</span><span class="n">TrialData</span><span class="o">.</span><span class="n">from_preprocessed</span><span class="p">(</span><span class="n">preprocessed</span><span class="o">=</span><span class="n">preprocessed</span><span class="p">,</span> <span class="n">pattern</span><span class="o">=</span><span class="n">pattern</span><span class="o">.</span><span class="n">template</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">EventModel</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">n_events</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<span class="n">_</span><span class="p">,</span> <span class="n">estimates</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">trial_data</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/preprocessing.py:196: UserWarning: Data will be modified inplace, re-read the data or use copy=True if multiplecalls to this function
+  warn(
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Estimating 4 events model with 1 starting point(s)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">mne.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read_info</span>
+<span class="n">info</span> <span class="o">=</span> <span class="n">read_info</span><span class="p">(</span><span class="n">file</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">hmp</span><span class="o">.</span><span class="n">visu</span><span class="o">.</span><span class="n">plot_topo_timecourse</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">,</span> <span class="n">estimates</span><span class="p">,</span> <span class="n">info</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_Data_loading_38_0.png" src="../_images/notebooks_Data_loading_38_0.png" />
+</div>
+</div>
+</section>
+</section>
+<section id="3.-Data-already-epoched-from-stimulus-to-response">
+<h2>3. Data already epoched from stimulus to response<a class="headerlink" href="#3.-Data-already-epoched-from-stimulus-to-response" title="Link to this heading"></a></h2>
+<p>In case you prefer to do your own stimulus-response epoching of your data, you can use the output to build an HMP data object as well.</p>
+<p>In this case, you will create an HMP object for each subject, concatenate these in a list, and finally concatenate as xarray. Each subject matrix need to have shape <code class="docutils literal notranslate"><span class="pre">epochs</span> <span class="pre">X</span> <span class="pre">channels</span> <span class="pre">X</span> <span class="pre">samples</span></code>, where non-existing datapoints (i.e. after the response) have the value NaN.</p>
+<p>Assuming that the data were stored for each subject in a .fif file, this the required code:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">mne</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">hmp</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">xarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xr</span>
+
+<span class="c1">#subjects</span>
+<span class="n">subs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s1">&#39;77032&#39;</span><span class="p">,</span><span class="s1">&#39;77038&#39;</span><span class="p">,</span><span class="s1">&#39;77044&#39;</span><span class="p">])</span>
+
+<span class="c1">#list containing subject specific HMP objects</span>
+<span class="n">epoch_data</span> <span class="o">=</span> <span class="p">[]</span>
+
+<span class="c1">#for each subject:</span>
+<span class="k">for</span> <span class="n">subj</span> <span class="ow">in</span> <span class="n">subs</span><span class="p">:</span>
+
+    <span class="c1">#load data</span>
+    <span class="c1">#note that these data were preprocessed such that epochs._data has samples set to NaN after the response</span>
+    <span class="n">epochs</span> <span class="o">=</span> <span class="n">mne</span><span class="o">.</span><span class="n">read_epochs</span><span class="p">(</span><span class="s1">&#39;sample_data/eeg_stim-resp-epoched/epochs_stim-to-resp-&#39;</span> <span class="o">+</span> <span class="n">subj</span> <span class="o">+</span> <span class="s1">&#39;_epo.fif&#39;</span><span class="p">,</span> <span class="n">preload</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="c1">#make into hmp format and append to epoch_data</span>
+    <span class="n">epoch_data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hmp</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">hmp_data_format</span><span class="p">(</span><span class="n">epochs</span><span class="o">.</span><span class="n">get_data</span><span class="p">(),</span> <span class="n">epochs</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;sfreq&#39;</span><span class="p">],</span> <span class="kc">None</span><span class="p">,</span> <span class="n">channels</span> <span class="o">=</span> <span class="n">epochs</span><span class="o">.</span><span class="n">ch_names</span><span class="p">,</span> <span class="n">metadata</span> <span class="o">=</span> <span class="n">epochs</span><span class="o">.</span><span class="n">metadata</span><span class="p">))</span>
+
+<span class="c1">#concatenate into xarray</span>
+<span class="n">epoch_data</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">,</span> <span class="n">dim</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">DataArray</span><span class="p">(</span><span class="n">subs</span><span class="p">,</span> <span class="n">dims</span><span class="o">=</span><span class="s1">&#39;participant&#39;</span><span class="p">),</span> <span class="n">fill_value</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;event&#39;</span><span class="p">:</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="s1">&#39;data&#39;</span><span class="p">:</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">})</span>
+
+<span class="c1">#save</span>
+<span class="n">epoch_data</span><span class="o">.</span><span class="n">to_netcdf</span><span class="p">(</span><span class="s1">&#39;sample_data/eeg_stim-resp-epoched/epoched_for_hmp.nc&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="4.-Reading-BIDS-data">
+<h2>4. Reading BIDS data<a class="headerlink" href="#4.-Reading-BIDS-data" title="Link to this heading"></a></h2>
+<p>Given the developments of the BIDS data structure, HMP comes with a function to read BIDS data and convert it to the HMP format. The BIDS format is particularly appropriate given that events are typically clearly defined along the E/MEG recordings, allowing for an easy reconstruction of the conditions for each trial. Check out the different tutorials in MATLAB or python on how to turn your data into BIDS.</p>
+<p>Here below we illustrate how to prepare BIDS data from the ERP-core dataset transformed to BIDS (see <a class="reference external" href="https://osf.io/3zk6n">https://osf.io/3zk6n</a>). First we need to install the <code class="docutils literal notranslate"><span class="pre">mne_bids</span></code> package if not already installed. You can do this via pip: <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">mne_bids</span></code> Then we download the data (1.8 GB!)</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">mne_bids</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mne_bids</span><span class="w"> </span><span class="kn">import</span> <span class="n">BIDSPath</span><span class="p">,</span> <span class="n">read_raw_bids</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">platform</span>
+
+<span class="c1"># ERP CORE BIDS dataset</span>
+<span class="c1"># We&#39;ll use mne_bids to download and organize the first 5 participants&#39; data</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">zipfile</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZipFile</span>
+
+<span class="c1"># Download the ERP CORE P3 dataset (if not already present)</span>
+
+<span class="n">erp_core_url</span> <span class="o">=</span> <span class="s2">&quot;https://osf.io/download/3zk6n/&quot;</span>
+<span class="n">zip_path</span> <span class="o">=</span> <span class="s2">&quot;sample_data/ERP_CORE_P3.zip&quot;</span>
+<span class="n">extract_dir</span> <span class="o">=</span> <span class="s2">&quot;sample_data/&quot;</span>
+
+<span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">zip_path</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Downloading ERP CORE dataset...&quot;</span><span class="p">)</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">erp_core_url</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">zip_path</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">r</span><span class="o">.</span><span class="n">iter_content</span><span class="p">(</span><span class="n">chunk_size</span><span class="o">=</span><span class="mi">8192</span><span class="p">):</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Extracting ERP CORE dataset...&quot;</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">ZipFile</span><span class="p">(</span><span class="n">zip_path</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">zip_ref</span><span class="p">:</span>
+    <span class="n">zip_ref</span><span class="o">.</span><span class="n">extractall</span><span class="p">(</span><span class="n">extract_dir</span><span class="p">)</span>
+<br/><br/></pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Extracting ERP CORE dataset...
+</pre></div></div>
+</div>
+<p>And we read the data as in section 2 except that we specify the BIDS parameters to read the data from the BIDS dataset. Note that this requires the BIDS dataset to be structured correctly, with the events and metadata stored in the appropriate files.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">hmp</span>
+
+<span class="n">sfreq</span> <span class="o">=</span> <span class="mi">250</span> <span class="c1">#at what sampling rate we want the data, downsampling to 250Hz just to show that we can use any SF</span>
+<span class="n">tmin</span><span class="p">,</span> <span class="n">tmax</span> <span class="o">=</span> <span class="o">-</span><span class="mf">.2</span><span class="p">,</span> <span class="mi">2</span> <span class="c1">#window size for the epochs, from 250ms before the stimulus up to 2 seconds after, data will be baseline corrected from tmin to 0</span>
+<span class="n">lower_limit_rt</span><span class="p">,</span> <span class="n">upper_limit_rt</span> <span class="o">=</span> <span class="mf">.2</span><span class="p">,</span> <span class="mi">2</span> <span class="c1">#lower and upper limit for the RTs, all values outside of this range are discarded, choose carefully</span>
+
+<span class="n">epoch_data</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read_mne_data</span><span class="p">([],</span>
+                                  <span class="n">data_format</span><span class="o">=</span><span class="s1">&#39;bids&#39;</span><span class="p">,</span>
+                                  <span class="n">tmin</span><span class="o">=</span><span class="n">tmin</span><span class="p">,</span> <span class="n">tmax</span><span class="o">=</span><span class="n">tmax</span><span class="p">,</span>
+                                  <span class="n">sfreq</span><span class="o">=</span><span class="n">sfreq</span><span class="p">,</span>
+                                  <span class="n">bids_parameters</span><span class="o">=</span><span class="p">{</span>
+                                      <span class="s1">&#39;bids_root&#39;</span><span class="p">:</span> <span class="s1">&#39;sample_data/ERP_CORE&#39;</span><span class="p">,</span>
+                                      <span class="s1">&#39;task&#39;</span><span class="p">:</span> <span class="s1">&#39;P3&#39;</span><span class="p">,</span>
+                                      <span class="s1">&#39;datatype&#39;</span><span class="p">:</span> <span class="s1">&#39;eeg&#39;</span><span class="p">,</span>
+                                      <span class="s1">&#39;session&#39;</span><span class="p">:</span> <span class="s1">&#39;P3&#39;</span>
+                                  <span class="p">},</span>
+                                  <span class="n">reject_threshold</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span><span class="c1">#Reject if more than 100microV between stimulus and response</span>
+                                  <span class="n">reference</span><span class="o">=</span><span class="s1">&#39;average&#39;</span><span class="p">,</span><span class="c1"># VERY IMPORTANT, use the average as reference, other type of reference (except REST) can give weird topographies</span>
+                                  <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span>
+                                  <span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Processing participant sub-018&#39;s bids eeg
+Downsampling to 250 Hz
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:345: RuntimeWarning: Data file name in EEG.data (sub-018_task-P3_eeg.fdt) is incorrect, the file name must have changed on disk, using the correct file name (sub-018_ses-P3_task-P3_eeg.fdt).
+  data = mne_bids.read_raw_bids(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:345: RuntimeWarning: Unable to map the following column(s) to to MNE:
+handedness: right
+  data = mne_bids.read_raw_bids(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus A (event id 11)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus A (event id 21)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus B (event id 12)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus B (event id 22)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus C (event id 13)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus C (event id 23)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus D (event id 14)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus D (event id 24)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus E (event id 15)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus E (event id 25)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:345: RuntimeWarning: Data file name in EEG.data (sub-019_task-P3_eeg.fdt) is incorrect, the file name must have changed on disk, using the correct file name (sub-019_ses-P3_task-P3_eeg.fdt).
+  data = mne_bids.read_raw_bids(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:345: RuntimeWarning: Unable to map the following column(s) to to MNE:
+handedness: left
+  data = mne_bids.read_raw_bids(
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+36 trials rejected based on threshold of 0.0001
+164 trials were retained for participant sub-018
+Processing participant sub-019&#39;s bids eeg
+Downsampling to 250 Hz
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus A (event id 11)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus A (event id 21)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus B (event id 12)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus B (event id 22)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus C (event id 13)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus C (event id 23)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus D (event id 14)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus D (event id 24)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus E (event id 15)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus E (event id 25)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:345: RuntimeWarning: Data file name in EEG.data (sub-015_task-P3_eeg.fdt) is incorrect, the file name must have changed on disk, using the correct file name (sub-015_ses-P3_task-P3_eeg.fdt).
+  data = mne_bids.read_raw_bids(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:345: RuntimeWarning: Unable to map the following column(s) to to MNE:
+handedness: right
+  data = mne_bids.read_raw_bids(
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+0 trials rejected based on threshold of 0.0001
+200 trials were retained for participant sub-019
+Processing participant sub-015&#39;s bids eeg
+Downsampling to 250 Hz
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus A (event id 11)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus A (event id 21)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus B (event id 12)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus B (event id 22)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus C (event id 13)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus C (event id 23)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus D (event id 14)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus D (event id 24)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus E (event id 15)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus E (event id 25)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:345: RuntimeWarning: Data file name in EEG.data (sub-017_task-P3_eeg.fdt) is incorrect, the file name must have changed on disk, using the correct file name (sub-017_ses-P3_task-P3_eeg.fdt).
+  data = mne_bids.read_raw_bids(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:345: RuntimeWarning: Unable to map the following column(s) to to MNE:
+handedness: right
+  data = mne_bids.read_raw_bids(
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+2 trials rejected based on threshold of 0.0001
+198 trials were retained for participant sub-015
+Processing participant sub-017&#39;s bids eeg
+Downsampling to 250 Hz
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus A (event id 11)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus A (event id 21)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus B (event id 12)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus B (event id 22)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus C (event id 13)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus C (event id 23)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus D (event id 14)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus D (event id 24)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus E (event id 15)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus E (event id 25)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:345: RuntimeWarning: Data file name in EEG.data (sub-016_task-P3_eeg.fdt) is incorrect, the file name must have changed on disk, using the correct file name (sub-016_ses-P3_task-P3_eeg.fdt).
+  data = mne_bids.read_raw_bids(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:345: RuntimeWarning: Unable to map the following column(s) to to MNE:
+handedness: right
+  data = mne_bids.read_raw_bids(
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+33 trials rejected based on threshold of 0.0001
+167 trials were retained for participant sub-017
+Processing participant sub-016&#39;s bids eeg
+Downsampling to 250 Hz
+5 trials rejected based on threshold of 0.0001
+195 trials were retained for participant sub-016
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus A (event id 11)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus A (event id 21)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus B (event id 12)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus B (event id 22)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus C (event id 13)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus C (event id 23)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus D (event id 14)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus D (event id 24)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target A, trial stimulus E (event id 15)
+  epochs = mne.Epochs(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/io.py:422: RuntimeWarning: No matching events found for stimulus/block target B, trial stimulus E (event id 25)
+  epochs = mne.Epochs(
+</pre></div></div>
+</div>
+<p>And we can use the data as in the other cases</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># See the two next tutorials for more details on how to fit an HMP model and how to visualize the results.</span>
+<span class="n">preprocessed</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">preprocessing</span><span class="o">.</span><span class="n">Preprocessing</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">,</span> <span class="n">n_comp</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">pattern</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">patterns</span><span class="o">.</span><span class="n">HalfSine</span><span class="o">.</span><span class="n">create_expected</span><span class="p">(</span><span class="n">sfreq</span><span class="o">=</span><span class="n">epoch_data</span><span class="o">.</span><span class="n">sfreq</span><span class="p">)</span>
+<span class="n">trial_data</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">trialdata</span><span class="o">.</span><span class="n">TrialData</span><span class="o">.</span><span class="n">from_preprocessed</span><span class="p">(</span><span class="n">preprocessed</span><span class="o">=</span><span class="n">preprocessed</span><span class="p">,</span> <span class="n">pattern</span><span class="o">=</span><span class="n">pattern</span><span class="o">.</span><span class="n">template</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">EventModel</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">n_events</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<span class="n">_</span><span class="p">,</span> <span class="n">estimates</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">trial_data</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/preprocessing.py:196: UserWarning: Data will be modified inplace, re-read the data or use copy=True if multiplecalls to this function
+  warn(
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/preprocessing.py:374: RuntimeWarning: Mean of empty slice
+  mean_last_dim = np.nanmean(data.values, axis=-1)
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Estimating 4 events model with 1 starting point(s)
+</pre></div></div>
+</div>
+<p>For the electrode position we can build a montage based on the names of the electrodes in the dataset</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Rename FP1 and FP2 channels to Fp1 and Fp2</span>
+<span class="n">epoch_data</span> <span class="o">=</span> <span class="n">epoch_data</span><span class="o">.</span><span class="n">assign_coords</span><span class="p">(</span>
+    <span class="n">channel</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">ch</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;FP1&quot;</span><span class="p">,</span> <span class="s2">&quot;Fp1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;FP2&quot;</span><span class="p">,</span> <span class="s2">&quot;Fp2&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">ch</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;FP1&quot;</span><span class="p">,</span> <span class="s2">&quot;FP2&quot;</span><span class="p">]</span> <span class="k">else</span> <span class="n">ch</span>
+        <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="n">epoch_data</span><span class="o">.</span><span class="n">channel</span><span class="o">.</span><span class="n">values</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+
+<span class="n">montage</span> <span class="o">=</span> <span class="n">mne</span><span class="o">.</span><span class="n">channels</span><span class="o">.</span><span class="n">make_standard_montage</span><span class="p">(</span><span class="s1">&#39;standard_1020&#39;</span><span class="p">)</span>
+<span class="c1"># Keep only channels in the montage that are in epoch_data.channel</span>
+<span class="n">keep_chs</span> <span class="o">=</span> <span class="p">[</span><span class="n">ch</span> <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="n">montage</span><span class="o">.</span><span class="n">ch_names</span> <span class="k">if</span> <span class="n">ch</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">epoch_data</span><span class="o">.</span><span class="n">channel</span><span class="o">.</span><span class="n">values</span><span class="p">)]</span>
+<span class="c1"># Create a new montage with only the desired channels</span>
+<span class="n">montage</span> <span class="o">=</span> <span class="n">mne</span><span class="o">.</span><span class="n">channels</span><span class="o">.</span><span class="n">make_dig_montage</span><span class="p">(</span>
+    <span class="p">{</span><span class="n">ch</span><span class="p">:</span> <span class="n">montage</span><span class="o">.</span><span class="n">get_positions</span><span class="p">()[</span><span class="s1">&#39;ch_pos&#39;</span><span class="p">][</span><span class="n">ch</span><span class="p">]</span> <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="n">keep_chs</span><span class="p">},</span>
+    <span class="n">coord_frame</span><span class="o">=</span><span class="n">montage</span><span class="o">.</span><span class="n">get_positions</span><span class="p">()[</span><span class="s1">&#39;coord_frame&#39;</span><span class="p">]</span>
+<span class="p">)</span>
+
+<span class="n">info</span> <span class="o">=</span> <span class="n">mne</span><span class="o">.</span><span class="n">create_info</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">epoch_data</span><span class="o">.</span><span class="n">channel</span><span class="o">.</span><span class="n">values</span><span class="p">),</span> <span class="n">sfreq</span><span class="p">,</span> <span class="n">ch_types</span><span class="o">=</span><span class="s1">&#39;eeg&#39;</span><span class="p">)</span>
+<span class="n">info</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">set_montage</span><span class="p">(</span><span class="n">montage</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">hmp</span><span class="o">.</span><span class="n">visu</span><span class="o">.</span><span class="n">plot_topo_timecourse</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">,</span> <span class="n">estimates</span><span class="p">,</span><span class="n">info</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/tmp/ipykernel_338456/1064243124.py:19: RuntimeWarning: Fiducial point nasion not found, assuming identity unknown to head transformation
+  info = info.set_montage(montage, verbose=False)
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_Data_loading_49_1.png" src="../_images/notebooks_Data_loading_49_1.png" />
+</div>
+</div>
+<p>Note that in this case the data was not preprocessed so still contains large artifacts (e.g. blinks).</p>
+</section>
+<section id="4.-Reading-alternative-data-formats">
+<h2>4. Reading alternative data formats<a class="headerlink" href="#4.-Reading-alternative-data-formats" title="Link to this heading"></a></h2>
+<p>If none of these case are suitable to you then it’ll require quite a lot of work as we cannot account for the multiple ways EEG data can be acquired and processed. To avoid such hassle we advise to either re-read the data in MNE and use the functions in 1. or convert the dataset to BIDS and use the dunctions in 4. If none of these would be suitable, we provide here an example that we made for the P3 task of the <a class="reference external" href="https://erpinfo.org/erp-core">ERP CORE dataset</a>. This code reads the data from
+the P3 task, processes it, and saves it in an MNE format that can then be used as in 1.1. The code uses read the EEG epochs with MNE, sets channel types, applies an average reference to the EEG data and re-shape the metadata. It also translates event codes into a more readable format and saves the processed epochs in a new file.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">mne</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProcessPoolExecutor</span>
+
+<span class="c1"># Define the base path where the numbered folders are located</span>
+<span class="n">base_path</span> <span class="o">=</span> <span class="s1">&#39;P3 All Data and Scripts/&#39;</span>
+<span class="n">base_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="n">base_path</span><span class="p">)</span>
+
+<span class="c1"># Define the channel types to be set</span>
+<span class="n">channel_types</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;HEOG_left&#39;</span><span class="p">:</span> <span class="s1">&#39;eog&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;HEOG_right&#39;</span><span class="p">:</span> <span class="s1">&#39;eog&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;VEOG_lower&#39;</span><span class="p">:</span> <span class="s1">&#39;eog&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;(corr) HEOG&#39;</span><span class="p">:</span> <span class="s1">&#39;eog&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;(corr) VEOG&#39;</span><span class="p">:</span> <span class="s1">&#39;eog&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;(uncorr) HEOG&#39;</span><span class="p">:</span> <span class="s1">&#39;eog&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;(uncorr) VEOG&#39;</span><span class="p">:</span> <span class="s1">&#39;eog&#39;</span>
+<span class="p">}</span>
+
+<span class="n">mapping_scheme</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="mi">11</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+    <span class="mi">21</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+    <span class="mi">31</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;C&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+    <span class="mi">41</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;D&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+    <span class="mi">51</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;E&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+    <span class="mi">12</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span>
+    <span class="mi">22</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span>
+    <span class="mi">32</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;C&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span>
+    <span class="mi">42</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;D&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span>
+    <span class="mi">52</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;E&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span>
+    <span class="mi">13</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;C&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
+    <span class="mi">23</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;C&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
+    <span class="mi">33</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;C&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="s1">&#39;C&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
+    <span class="mi">43</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;D&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="s1">&#39;C&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
+    <span class="mi">53</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;E&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;C&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
+    <span class="mi">14</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;D&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>
+    <span class="mi">24</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;D&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>
+    <span class="mi">34</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;C&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="s1">&#39;D&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>
+    <span class="mi">44</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;D&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="s1">&#39;D&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>
+    <span class="mi">54</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;E&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;D&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>
+    <span class="mi">15</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;E&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span>
+    <span class="mi">25</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;E&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span>
+    <span class="mi">35</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;C&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="s1">&#39;E&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span>
+    <span class="mi">45</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;D&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="s1">&#39;E&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span>
+    <span class="mi">55</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;E&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;E&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">]</span>
+<span class="p">}</span>
+
+
+<span class="c1"># Function to translate ecode using the mapping scheme</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">translate_ecode</span><span class="p">(</span><span class="n">ecode</span><span class="p">,</span> <span class="n">mapping_scheme</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">mapping_scheme</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">ecode</span><span class="p">,</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="mi">6</span><span class="p">)</span>
+
+
+<span class="c1"># Iterate over the numbered folders</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">process_folder</span><span class="p">(</span><span class="n">folder</span><span class="p">):</span>
+        <span class="n">folder_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_path</span><span class="p">,</span> <span class="n">folder</span><span class="p">)</span>
+
+        <span class="c1"># Read the EEG epochs</span>
+        <span class="n">epochs_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">folder_path</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">folder</span><span class="si">}</span><span class="s1">_P3_shifted_ds_reref_ucbip_hpfilt_ica_corr_cbip_elist_bins_epoch_interp_ar.set&#39;</span><span class="p">)</span>
+        <span class="n">epochs</span> <span class="o">=</span> <span class="n">mne</span><span class="o">.</span><span class="n">read_epochs_eeglab</span><span class="p">(</span><span class="n">epochs_path</span><span class="p">)</span>
+
+        <span class="c1"># Set the channel types</span>
+        <span class="n">epochs</span><span class="o">.</span><span class="n">set_channel_types</span><span class="p">(</span><span class="n">channel_types</span><span class="p">)</span>
+
+        <span class="c1"># Pick only EEG channels</span>
+        <span class="n">epochs</span> <span class="o">=</span> <span class="n">epochs</span><span class="o">.</span><span class="n">pick_types</span><span class="p">(</span><span class="n">eeg</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Read the event list file (if needed)</span>
+        <span class="n">event_list_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">folder_path</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">folder</span><span class="si">}</span><span class="s1">_P3_Eventlist_RTs.txt&#39;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">event_list_path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+            <span class="n">lines</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">readlines</span><span class="p">()</span>
+
+        <span class="c1"># Find the line where the actual data starts</span>
+        <span class="n">data_start</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">line</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">lines</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;# item&#39;</span><span class="p">):</span>
+                <span class="n">data_start</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">2</span>  <span class="c1"># data starts two lines after the header line</span>
+                <span class="k">break</span>
+
+        <span class="c1"># Process the data lines into a list of dictionaries</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">[</span><span class="n">data_start</span><span class="p">:]:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>  <span class="c1"># Skip empty lines</span>
+                <span class="k">continue</span>
+            <span class="c1"># Split line by whitespace</span>
+            <span class="n">split_line</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+            <span class="c1"># Combine all parts after the 10th element (index 9) into one field</span>
+            <span class="n">combined_last_field</span> <span class="o">=</span> <span class="s1">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">split_line</span><span class="p">[</span><span class="mi">10</span><span class="p">:])</span>
+            <span class="c1"># Extract digits from the brackets</span>
+            <span class="n">digits_in_brackets</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;\d+&#39;</span><span class="p">,</span> <span class="n">combined_last_field</span><span class="p">)</span>
+            <span class="c1"># Append the first 10 elements and the list of digits</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+                <span class="s1">&#39;item&#39;</span><span class="p">:</span> <span class="n">split_line</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="s1">&#39;bepoch&#39;</span><span class="p">:</span> <span class="n">split_line</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                <span class="s1">&#39;ecode&#39;</span><span class="p">:</span> <span class="n">split_line</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+                <span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="n">split_line</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+                <span class="s1">&#39;onset&#39;</span><span class="p">:</span> <span class="n">split_line</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>
+                <span class="s1">&#39;diff&#39;</span><span class="p">:</span> <span class="n">split_line</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span>
+                <span class="s1">&#39;dura&#39;</span><span class="p">:</span> <span class="n">split_line</span><span class="p">[</span><span class="mi">6</span><span class="p">],</span>
+                <span class="s1">&#39;b_flags&#39;</span><span class="p">:</span> <span class="n">split_line</span><span class="p">[</span><span class="mi">7</span><span class="p">],</span>
+                <span class="s1">&#39;a_flags&#39;</span><span class="p">:</span> <span class="n">split_line</span><span class="p">[</span><span class="mi">8</span><span class="p">],</span>
+                <span class="s1">&#39;enable&#39;</span><span class="p">:</span> <span class="n">split_line</span><span class="p">[</span><span class="mi">9</span><span class="p">],</span>
+                <span class="s1">&#39;bin&#39;</span><span class="p">:</span> <span class="n">digits_in_brackets</span>
+            <span class="p">})</span>
+        <span class="c1"># MNE read trigger description</span>
+        <span class="n">mapping_dict</span> <span class="o">=</span> <span class="n">epochs</span><span class="o">.</span><span class="n">event_id</span>
+        <span class="c1"># Create the DataFrame</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">df</span><span class="p">[</span><span class="s1">&#39;rt&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;diff&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">metadata</span> <span class="o">=</span> <span class="n">df</span>
+        <span class="n">metadata</span><span class="o">.</span><span class="n">bepoch</span> <span class="o">=</span> <span class="n">metadata</span><span class="o">.</span><span class="n">bepoch</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+        <span class="n">metadata</span><span class="o">.</span><span class="n">ecode</span> <span class="o">=</span> <span class="n">metadata</span><span class="o">.</span><span class="n">ecode</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;rt&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;rt&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+
+        <span class="n">arr</span> <span class="o">=</span> <span class="n">epochs</span><span class="o">.</span><span class="n">events</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="c1"># Invert keys and values of mapping_dict, keeping only the three-digit code in parentheses</span>
+        <span class="n">inverted_mapping</span> <span class="o">=</span> <span class="p">{</span><span class="n">v</span><span class="p">:</span> <span class="n">k</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;(&#39;</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;)&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">mapping_dict</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="s1">&#39;(&#39;</span> <span class="ow">in</span> <span class="n">k</span><span class="p">}</span>
+
+        <span class="c1"># Replace last column using inverted mapping dictionary</span>
+        <span class="n">arr</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">inverted_mapping</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">arr</span><span class="p">]</span>
+
+        <span class="c1"># Find indices where metadata_ecode matches arr_last_column</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">filtered_metadata</span> <span class="o">=</span> <span class="n">metadata</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">arr</span><span class="p">[:,</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="k">while</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">metadata</span><span class="o">.</span><span class="n">ecode</span><span class="p">)</span> <span class="ow">and</span> <span class="n">metadata</span><span class="o">.</span><span class="n">ecode</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">!=</span> <span class="n">value</span><span class="p">:</span>
+                <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+            <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="k">assert</span> <span class="p">(</span><span class="n">arr</span><span class="p">[:,</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span>  <span class="n">metadata</span><span class="o">.</span><span class="n">ecode</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="n">indices</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+
+        <span class="c1"># Create a DataFrame from metadata_ecode and translate using the mapping scheme</span>
+        <span class="n">translated_columns</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;target&#39;</span><span class="p">,</span> <span class="s1">&#39;num1&#39;</span><span class="p">,</span> <span class="s1">&#39;stimulus&#39;</span><span class="p">,</span> <span class="s1">&#39;num2&#39;</span><span class="p">,</span>  <span class="s1">&#39;_&#39;</span><span class="p">,</span><span class="s1">&#39;__&#39;</span><span class="p">]</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="n">translated_columns</span><span class="p">]</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;ecode&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">translate_ecode</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mapping_scheme</span><span class="p">)))</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;Trial type&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;target&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;stimulus&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">({</span><span class="s1">&#39;True&#39;</span><span class="p">:</span> <span class="s1">&#39;Rare&#39;</span><span class="p">,</span> <span class="s1">&#39;False&#39;</span><span class="p">:</span> <span class="s1">&#39;Frequent&#39;</span><span class="p">})</span>
+        <span class="n">epochs</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="n">metadata</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span>
+
+        <span class="c1"># Remove epoch discarded during AR</span>
+        <span class="n">filtered_metadata</span> <span class="o">=</span> <span class="n">epochs</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="n">epochs</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;bin&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)]</span>
+        <span class="n">epochs_clean</span> <span class="o">=</span> <span class="n">epochs</span><span class="p">[</span><span class="n">filtered_metadata</span><span class="o">.</span><span class="n">index</span><span class="p">]</span>
+        <span class="n">epochs_clean</span><span class="o">.</span><span class="n">set_eeg_reference</span><span class="p">(</span><span class="s1">&#39;average&#39;</span><span class="p">)</span>
+        <span class="n">epochs_clean</span><span class="o">.</span><span class="n">apply_baseline</span><span class="p">()</span>
+        <span class="n">epochs_clean</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;P3/</span><span class="si">{</span><span class="n">folder</span><span class="si">}</span><span class="s1">_reref_epo.fif&#39;</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Saved </span><span class="si">{</span><span class="n">folder</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+<span class="c1"># Get the list of folders to process</span>
+<span class="n">folders</span> <span class="o">=</span> <span class="p">[</span><span class="n">folder</span> <span class="k">for</span> <span class="n">folder</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">base_path</span><span class="p">)</span> <span class="k">if</span> <span class="n">folder</span><span class="o">.</span><span class="n">isdigit</span><span class="p">()]</span>
+
+<span class="c1"># Use ProcessPoolExecutor to parallelize the processing</span>
+<span class="k">with</span> <span class="n">ProcessPoolExecutor</span><span class="p">()</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
+    <span class="n">executor</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">process_folder</span><span class="p">,</span> <span class="n">folders</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="5-advanced--model_selection.html" class="btn btn-neutral float-left" title="5. Performing model selection" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Gabriel Weindel, Maarten Schermer, Raoul Schram, Leendert van Maanen, Jelmer Borst.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,1315 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3. Applying HMP to real data &mdash; hmp 1.0.0-b.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/tabs.css?v=4c969af8" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=12f248e0"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/tabs.js?v=3ee01567"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="4. Advanced multilevel models" href="4-advanced-multilevel_models.html" />
+    <link rel="prev" title="2. The different model classes" href="2-The_different_model_classes.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/hmp.html">hmp package</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Notebooks</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="1-How_HMP_works.html">1 How HMP works: practical, methodological and theoretical grounds</a></li>
+<li class="toctree-l1"><a class="reference internal" href="2-The_different_model_classes.html">2. The different model classes</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">3. Applying HMP to real data</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#Data-preparation">Data preparation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Fitting">Fitting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Example-application-1:-looking-at-individual-topographies">Example application 1: looking at individual topographies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Example-application-2:-analyzing-condition-effect-on-interval-between-events">Example application 2: analyzing condition effect on interval between events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Example-application-3:-Comparing-conditions-on-centered-ERPs:">Example application 3: Comparing conditions on centered ERPs:</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Splitting-conditions">Splitting conditions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="4-advanced-multilevel_models.html">4. Advanced multilevel models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="5-advanced--model_selection.html">5. Performing model selection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Data_loading.html">Reading your own data</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">hmp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content style-external-links">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">3. Applying HMP to real data</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/notebooks/3-Applying_HMP_to_real_data.ipynb.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="3.-Applying-HMP-to-real-data">
+<h1>3. Applying HMP to real data<a class="headerlink" href="#3.-Applying-HMP-to-real-data" title="Link to this heading"></a></h1>
+<p>For this tutorial we will use the data from application 2 of this <a class="reference external" href="https://link.springer.com/article/10.1007/s42113-021-00105-2">this</a> paper. For the purpose of this tutorial we will only use the first 5 participants of the data (see the <a class="reference external" href="(https://direct.mit.edu/imag/article/doi/10.1162/imag_a_00400/125469)">HMP</a> paper for the method and <a class="reference external" href="https://osf.io/29tgr/">https://osf.io/29tgr/</a> for the whole (preprocessed) data).</p>
+<p>In this experiment, participants performed a random-dot motion task. They were asked to indicate the direction of motion of a cloud of moving dots. While a proportion of the dots moved in a target direction, the remainder moved randomly and makes the direction discrimination more difficult. Difficulty of the task was calibrated per subject. Prior to each trial, participants received a cue that indicated whether they should respond as quickly as possible or whether they should focus on giving an
+accurate response: the ‘speed’ and ‘accuracy’ conditions. In this tutorial we will ignore the difference between these conditions, but in the next tutorial we will look at how we can take conditions into account in the HMP analysis.</p>
+<section id="Data-preparation">
+<h2>Data preparation<a class="headerlink" href="#Data-preparation" title="Link to this heading"></a></h2>
+<p>First, we load the required packages and download the data. Depending on your internet connection this can take some time</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">xarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xr</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">hmp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mne.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read_info</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+<span class="c1"># Declaring path where the EEG data will be stored</span>
+<span class="n">epoch_data_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;sample_data&#39;</span><span class="p">,</span> <span class="s1">&#39;eeg&#39;</span><span class="p">)</span>
+<span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">epoch_data_path</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># URLs of the first 5 participants in the SAT experiment, navigate the osf folder and adapt those if you want to do this tutorial on other data (e.g. P3, N2pc)</span>
+<span class="n">file_urls</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;https://osf.io/download/67cffa85f67af67e7a92f0a6/&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;https://osf.io/download/67cffa85f67af67e7a92f0a8/&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;https://osf.io/download/67cffa85f67af67e7a92f0aa/&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;https://osf.io/download/67cffa85f67af67e7a92f0ac/&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;https://osf.io/download/67cffa85f67af67e7a92f0ae/&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="c1"># Download and save each file if not already in folder</span>
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">url</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">file_urls</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+    <span class="n">file_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">epoch_data_path</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;participant</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">_epo.fif&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">file_path</span><span class="p">):</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+
+<span class="c1"># Recovering individual files and participant names</span>
+<span class="n">subj_files</span> <span class="o">=</span> <span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">epoch_data_path</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">epoch_data_path</span><span class="p">)</span> <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;.fif&#39;</span><span class="p">)]</span>  <span class="c1"># Create a list of files with full paths</span>
+<span class="n">subj_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">f</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">epoch_data_path</span><span class="p">)</span> <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;.fif&#39;</span><span class="p">)]</span>  <span class="c1"># Extract subject names based on file names</span>
+
+<span class="c1"># Recovering channel information (assuming the same for all participant)</span>
+<span class="n">info</span> <span class="o">=</span> <span class="n">read_info</span><span class="p">(</span><span class="n">subj_files</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># At what frequency we want the data, upsample only if you have a large amount of RAM (and time)</span>
+<span class="c1"># Note that upsampling usually doesn&#39;t improve the results, it is however useful if you want to use patterns that are shorter than the standard 50ms Halfsines</span>
+<span class="n">sfreq</span> <span class="o">=</span> <span class="mi">100</span>
+
+<span class="c1"># Then we read the data as shown in Tutorial 1</span>
+<span class="n">epoch_data</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read_mne_data</span><span class="p">(</span><span class="n">subj_files</span><span class="p">,</span> <span class="n">data_format</span><span class="o">=</span><span class="s1">&#39;epochs&#39;</span><span class="p">,</span> <span class="n">sfreq</span><span class="o">=</span><span class="n">sfreq</span><span class="p">,</span>
+                            <span class="n">lower_limit_rt</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">upper_limit_rt</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                            <span class="n">rt_col</span> <span class="o">=</span> <span class="s1">&#39;RT&#39;</span><span class="p">,</span> <span class="n">scale</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span> <span class="c1">#In this case the rts are contained in the dataframe column &quot;RT&quot; and is in milliseconds, thus we adapt</span>
+                            <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">subj_name</span><span class="o">=</span><span class="n">subj_names</span><span class="p">)</span><span class="c1">#Turning verbose off for the documentation but it is recommended to leave it on as some output from MNE might be useful</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Processing participant sample_data/eeg/participant3_epo.fif&#39;s epochs eeg
+177 trials were retained for participant sample_data/eeg/participant3_epo.fif
+Processing participant sample_data/eeg/participant4_epo.fif&#39;s epochs eeg
+159 trials were retained for participant sample_data/eeg/participant4_epo.fif
+Processing participant sample_data/eeg/participant5_epo.fif&#39;s epochs eeg
+183 trials were retained for participant sample_data/eeg/participant5_epo.fif
+Processing participant sample_data/eeg/participant1_epo.fif&#39;s epochs eeg
+187 trials were retained for participant sample_data/eeg/participant1_epo.fif
+Processing participant sample_data/eeg/participant2_epo.fif&#39;s epochs eeg
+193 trials were retained for participant sample_data/eeg/participant2_epo.fif
+&lt;xarray.Dataset&gt; Size: 47MB
+Dimensions:      (participant: 5, epoch: 200, channel: 30, sample: 194)
+Coordinates:
+  * epoch        (epoch) int64 2kB 0 1 2 3 4 5 6 ... 193 194 195 196 197 198 199
+  * channel      (channel) &lt;U3 360B &#39;Fp1&#39; &#39;Fp2&#39; &#39;AFz&#39; &#39;F7&#39; ... &#39;CPz&#39; &#39;CP2&#39; &#39;CP6&#39;
+  * sample       (sample) int64 2kB 0 1 2 3 4 5 6 ... 188 189 190 191 192 193
+    stim         (participant, epoch) float64 8kB 1.0 nan 1.0 ... 2.0 1.0 2.0
+    resp         (participant, epoch) object 8kB &#39;resp_left&#39; ... &#39;resp_right&#39;
+    RT           (participant, epoch) float64 8kB 907.0 nan ... 468.0 350.0
+    cue          (participant, epoch) object 8kB &#39;AC&#39; nan &#39;AC&#39; ... &#39;SP&#39; &#39;AC&#39;
+    movement     (participant, epoch) object 8kB &#39;stim_left&#39; ... &#39;stim_right&#39;
+    trigger      (participant, epoch) object 8kB &#39;AC/stim_left/resp_left&#39; ......
+  * participant  (participant) &lt;U16 320B &#39;participant3_epo&#39; ... &#39;participant2...
+Data variables:
+    data         (participant, epoch, channel, sample) float64 47MB -7.935 .....
+Attributes:
+    sfreq:             100.0
+    offset:            0
+    lowpass:           35.0
+    highpass:          1.0
+    lower_limit_rt:    0.2
+    upper_limit_rt:    2
+    reject_threshold:  None
+    n_trials:          899
+</pre></div></div>
+</div>
+<p>As you can see the HMP formatted EEG dataset contains some info on the experiment such as the sampling frequency, the number of trials, the number of participants, and the number of channels. The data is epoched between stimulus and response onset (RT) and it also contains metadata such as the RTs and other information on the experiment.</p>
+<p>At this point we have the epoched EEG data with 30 channels, which we need to transform to PC space. When transforming the data, a prompt requests how many PCs we want to keep. The best is to maximise the number of components kept so that we don’t lose information. However, the more PCs we include the more computationally intensive the estimations will be. For this two rules of thumb exists, taking PCs that explain x% of the variance of the data or select the PC number at which the explained
+variance seems to almost stop decreasing (i.e. the “elbow” method).</p>
+<p>The HMP <code class="docutils literal notranslate"><span class="pre">preprocessing</span></code> module will show you the two graphs below, and asks you how many PCs you would like to retain:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">preprocessed</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">preprocessing</span><span class="o">.</span><span class="n">Preprocessing</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/preprocessing.py:196: UserWarning: Data will be modified inplace, re-read the data or use copy=True if multiplecalls to this function
+  warn(
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_3-Applying_HMP_to_real_data_8_1.png" src="../_images/notebooks_3-Applying_HMP_to_real_data_8_1.png" />
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+How many PCs (95 and 99% explained variance at component n3 and n6; components till n4 explain at least 1%)? 6
+</pre></div></div>
+</div>
+<p>In this case we see that 99% explained variance is achieved with 6 PCs, and that this is coherent with when the explained variance really drops (with a larger number of electrodes than the 30 used here, 99% might be achieved with more PCs).</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">preprocessed</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+&lt;xarray.DataArray (component: 6, all_samples: 64690)&gt; Size: 3MB
+array([[-0.37843614,  0.54970101,  1.18656407, ...,  1.6378993 ,
+         1.18647756,  1.27125379],
+       [-0.90974883, -1.34064728, -0.98165245, ..., -2.01661048,
+        -2.62934806, -2.4849967 ],
+       [-0.24744799, -0.26765736,  0.06243987, ...,  0.6490494 ,
+        -0.11392254,  0.26422928],
+       [ 0.53060647,  0.80575069,  0.2425211 , ..., -1.22800291,
+        -1.32209665, -1.22543997],
+       [-0.26560867, -0.54000581, -1.85716144, ..., -0.69323033,
+        -0.20642558,  0.48890299],
+       [ 1.80807049,  1.16127648, -0.45168922, ..., -0.75253032,
+        -0.79259553, -1.67712504]], shape=(6, 64690))
+Coordinates:
+    stim         (all_samples) float64 518kB 1.0 1.0 1.0 1.0 ... 2.0 2.0 2.0 2.0
+    resp         (all_samples) object 518kB &#39;resp_left&#39; ... &#39;resp_right&#39;
+    RT           (all_samples) float64 518kB 907.0 907.0 907.0 ... 350.0 350.0
+    cue          (all_samples) object 518kB &#39;AC&#39; &#39;AC&#39; &#39;AC&#39; ... &#39;AC&#39; &#39;AC&#39; &#39;AC&#39;
+    movement     (all_samples) object 518kB &#39;stim_left&#39; ... &#39;stim_right&#39;
+    trigger      (all_samples) object 518kB &#39;AC/stim_left/resp_left&#39; ... &#39;AC/...
+  * component    (component) int64 48B 0 1 2 3 4 5
+  * all_samples  (all_samples) object 518kB MultiIndex
+  * participant  (all_samples) &lt;U16 4MB &#39;participant3_epo&#39; ... &#39;participant2_...
+  * epoch        (all_samples) int64 518kB 0 0 0 0 0 0 ... 199 199 199 199 199
+  * sample       (all_samples) int64 518kB 0 1 2 3 4 5 6 ... 29 30 31 32 33 34
+Attributes:
+    sfreq:    100.0
+    offset:   0
+</pre></div></div>
+</div>
+<p>The data is now arranged as 6 PCs x 64690 samples: all trials of all participants were concatenated for the remainder of the analysis.</p>
+<p>Finally, we need to initialize the model.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Defining the expected HMP pattern</span>
+<span class="n">event_properties</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">patterns</span><span class="o">.</span><span class="n">HalfSine</span><span class="o">.</span><span class="n">create_expected</span><span class="p">(</span><span class="n">sfreq</span><span class="o">=</span><span class="n">epoch_data</span><span class="o">.</span><span class="n">sfreq</span><span class="p">)</span>
+<span class="c1"># Performing the crosscorrelation between the preprocessed data and the expected pattern</span>
+<span class="n">trial_data</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">trialdata</span><span class="o">.</span><span class="n">TrialData</span><span class="o">.</span><span class="n">from_preprocessed</span><span class="p">(</span><span class="n">preprocessed</span><span class="o">=</span><span class="n">preprocessed</span><span class="p">,</span> <span class="n">pattern</span><span class="o">=</span><span class="n">event_properties</span><span class="o">.</span><span class="n">template</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Fitting">
+<h2>Fitting<a class="headerlink" href="#Fitting" title="Link to this heading"></a></h2>
+<p>As introduced in Tutorial 2, the <code class="docutils literal notranslate"><span class="pre">CumulativeEstimation</span></code> method starts by sliding a candidate event from 0 to mean RT. When an event is found – the Expectation Maximization estimation converges – one event is added to the model and the slide continues. This way we can detect new events while accounting for the previous ones.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">CumulativeMethod</span><span class="p">(</span><span class="n">event_properties</span><span class="p">)</span>
+<span class="n">_</span><span class="p">,</span> <span class="n">estimates_cumulative</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">trial_data</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<script type="application/vnd.jupyter.widget-view+json">{"model_id": "1ee530b4f02d4bdcb3b57e3d873866c7", "version_major": 2, "version_minor": 0}</script></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Transition event 1 found around time 90.0
+Transition event 2 found around time 280.0
+Transition event 3 found around time 500.0
+Transition event 4 found around time 690.0
+
+All events found, refitting final combination.
+Estimating 4 events model
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">hmp</span><span class="o">.</span><span class="n">visu</span><span class="o">.</span><span class="n">plot_topo_timecourse</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">,</span> <span class="n">estimates_cumulative</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">as_time</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="n">vmin</span><span class="o">=-</span><span class="mf">7.5</span><span class="p">,</span>  <span class="n">vmax</span><span class="o">=</span><span class="mf">7.5</span><span class="p">,)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_3-Applying_HMP_to_real_data_16_0.png" src="../_images/notebooks_3-Applying_HMP_to_real_data_16_0.png" />
+</div>
+</div>
+</section>
+<section id="Example-application-1:-looking-at-individual-topographies">
+<h2>Example application 1: looking at individual topographies<a class="headerlink" href="#Example-application-1:-looking-at-individual-topographies" title="Link to this heading"></a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Plotting individual topographies for a specific event across participants</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mne.viz</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_topomap</span>
+
+<span class="c1"># Get event-channel weights for each trial</span>
+<span class="n">by_trial_weights</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">event_channels</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">,</span> <span class="n">estimates_cumulative</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="c1"># Plot topographies for each participant for a selected event</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">))</span>
+<span class="n">axes</span> <span class="o">=</span> <span class="n">axes</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+<span class="n">event</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># Event index to plot (1-based for display, 0-based for indexing)</span>
+
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">participant</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">epoch_data</span><span class="o">.</span><span class="n">participant</span><span class="p">):</span>
+    <span class="n">ax</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+    <span class="c1"># Average across epochs for the selected event and participant</span>
+    <span class="n">topo</span> <span class="o">=</span> <span class="n">by_trial_weights</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">event</span><span class="o">=</span><span class="n">event</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">participant</span><span class="o">=</span><span class="n">participant</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="s1">&#39;epoch&#39;</span><span class="p">)</span>
+    <span class="n">plot_topomap</span><span class="p">(</span>
+        <span class="n">topo</span><span class="p">,</span>
+        <span class="n">info</span><span class="p">,</span>
+        <span class="n">sensors</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;Spectral_r&#39;</span><span class="p">,</span>
+        <span class="n">res</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+        <span class="n">show</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">axes</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span>
+        <span class="n">contours</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">participant</span><span class="o">.</span><span class="n">values</span><span class="p">)[:</span><span class="o">-</span><span class="mi">4</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_3-Applying_HMP_to_real_data_18_0.png" src="../_images/notebooks_3-Applying_HMP_to_real_data_18_0.png" />
+</div>
+</div>
+</section>
+<section id="Example-application-2:-analyzing-condition-effect-on-interval-between-events">
+<h2>Example application 2: analyzing condition effect on interval between events<a class="headerlink" href="#Example-application-2:-analyzing-condition-effect-on-interval-between-events" title="Link to this heading"></a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Compute max likely time for each trial and each event</span>
+<span class="n">times</span> <span class="o">=</span>  <span class="n">hmp</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">event_times</span><span class="p">(</span><span class="n">estimates_cumulative</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">add_rt</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">as_time</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">times</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div><svg style="position: absolute; width: 0; height: 0; overflow: hidden">
+<defs>
+<symbol id="icon-database" viewBox="0 0 32 32">
+<path d="M16 0c-8.837 0-16 2.239-16 5v4c0 2.761 7.163 5 16 5s16-2.239 16-5v-4c0-2.761-7.163-5-16-5z"></path>
+<path d="M16 17c-8.837 0-16-2.239-16-5v6c0 2.761 7.163 5 16 5s16-2.239 16-5v-6c0 2.761-7.163 5-16 5z"></path>
+<path d="M16 26c-8.837 0-16-2.239-16-5v6c0 2.761 7.163 5 16 5s16-2.239 16-5v-6c0 2.761-7.163 5-16 5z"></path>
+</symbol>
+<symbol id="icon-file-text2" viewBox="0 0 32 32">
+<path d="M28.681 7.159c-0.694-0.947-1.662-2.053-2.724-3.116s-2.169-2.030-3.116-2.724c-1.612-1.182-2.393-1.319-2.841-1.319h-15.5c-1.378 0-2.5 1.121-2.5 2.5v27c0 1.378 1.122 2.5 2.5 2.5h23c1.378 0 2.5-1.122 2.5-2.5v-19.5c0-0.448-0.137-1.23-1.319-2.841zM24.543 5.457c0.959 0.959 1.712 1.825 2.268 2.543h-4.811v-4.811c0.718 0.556 1.584 1.309 2.543 2.268zM28 29.5c0 0.271-0.229 0.5-0.5 0.5h-23c-0.271 0-0.5-0.229-0.5-0.5v-27c0-0.271 0.229-0.5 0.5-0.5 0 0 15.499-0 15.5 0v7c0 0.552 0.448 1 1 1h7v19.5z"></path>
+<path d="M23 26h-14c-0.552 0-1-0.448-1-1s0.448-1 1-1h14c0.552 0 1 0.448 1 1s-0.448 1-1 1z"></path>
+<path d="M23 22h-14c-0.552 0-1-0.448-1-1s0.448-1 1-1h14c0.552 0 1 0.448 1 1s-0.448 1-1 1z"></path>
+<path d="M23 18h-14c-0.552 0-1-0.448-1-1s0.448-1 1-1h14c0.552 0 1 0.448 1 1s-0.448 1-1 1z"></path>
+</symbol>
+</defs>
+</svg>
+<style>/* CSS stylesheet for displaying xarray objects in jupyterlab.
+ *
+ */
+
+:root {
+  --xr-font-color0: var(--jp-content-font-color0, rgba(0, 0, 0, 1));
+  --xr-font-color2: var(--jp-content-font-color2, rgba(0, 0, 0, 0.54));
+  --xr-font-color3: var(--jp-content-font-color3, rgba(0, 0, 0, 0.38));
+  --xr-border-color: var(--jp-border-color2, #e0e0e0);
+  --xr-disabled-color: var(--jp-layout-color3, #bdbdbd);
+  --xr-background-color: var(--jp-layout-color0, white);
+  --xr-background-color-row-even: var(--jp-layout-color1, white);
+  --xr-background-color-row-odd: var(--jp-layout-color2, #eeeeee);
+}
+
+html[theme="dark"],
+html[data-theme="dark"],
+body[data-theme="dark"],
+body.vscode-dark {
+  --xr-font-color0: rgba(255, 255, 255, 1);
+  --xr-font-color2: rgba(255, 255, 255, 0.54);
+  --xr-font-color3: rgba(255, 255, 255, 0.38);
+  --xr-border-color: #1f1f1f;
+  --xr-disabled-color: #515151;
+  --xr-background-color: #111111;
+  --xr-background-color-row-even: #111111;
+  --xr-background-color-row-odd: #313131;
+}
+
+.xr-wrap {
+  display: block !important;
+  min-width: 300px;
+  max-width: 700px;
+}
+
+.xr-text-repr-fallback {
+  /* fallback to plain text repr when CSS is not injected (untrusted notebook) */
+  display: none;
+}
+
+.xr-header {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: solid 1px var(--xr-border-color);
+}
+
+.xr-header > div,
+.xr-header > ul {
+  display: inline;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.xr-obj-type,
+.xr-array-name {
+  margin-left: 2px;
+  margin-right: 10px;
+}
+
+.xr-obj-type {
+  color: var(--xr-font-color2);
+}
+
+.xr-sections {
+  padding-left: 0 !important;
+  display: grid;
+  grid-template-columns: 150px auto auto 1fr 0 20px 0 20px;
+}
+
+.xr-section-item {
+  display: contents;
+}
+
+.xr-section-item input {
+  display: inline-block;
+  opacity: 0;
+  height: 0;
+}
+
+.xr-section-item input + label {
+  color: var(--xr-disabled-color);
+}
+
+.xr-section-item input:enabled + label {
+  cursor: pointer;
+  color: var(--xr-font-color2);
+}
+
+.xr-section-item input:focus + label {
+  border: 2px solid var(--xr-font-color0);
+}
+
+.xr-section-item input:enabled + label:hover {
+  color: var(--xr-font-color0);
+}
+
+.xr-section-summary {
+  grid-column: 1;
+  color: var(--xr-font-color2);
+  font-weight: 500;
+}
+
+.xr-section-summary > span {
+  display: inline-block;
+  padding-left: 0.5em;
+}
+
+.xr-section-summary-in:disabled + label {
+  color: var(--xr-font-color2);
+}
+
+.xr-section-summary-in + label:before {
+  display: inline-block;
+  content: "►";
+  font-size: 11px;
+  width: 15px;
+  text-align: center;
+}
+
+.xr-section-summary-in:disabled + label:before {
+  color: var(--xr-disabled-color);
+}
+
+.xr-section-summary-in:checked + label:before {
+  content: "▼";
+}
+
+.xr-section-summary-in:checked + label > span {
+  display: none;
+}
+
+.xr-section-summary,
+.xr-section-inline-details {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.xr-section-inline-details {
+  grid-column: 2 / -1;
+}
+
+.xr-section-details {
+  display: none;
+  grid-column: 1 / -1;
+  margin-bottom: 5px;
+}
+
+.xr-section-summary-in:checked ~ .xr-section-details {
+  display: contents;
+}
+
+.xr-array-wrap {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 20px auto;
+}
+
+.xr-array-wrap > label {
+  grid-column: 1;
+  vertical-align: top;
+}
+
+.xr-preview {
+  color: var(--xr-font-color3);
+}
+
+.xr-array-preview,
+.xr-array-data {
+  padding: 0 5px !important;
+  grid-column: 2;
+}
+
+.xr-array-data,
+.xr-array-in:checked ~ .xr-array-preview {
+  display: none;
+}
+
+.xr-array-in:checked ~ .xr-array-data,
+.xr-array-preview {
+  display: inline-block;
+}
+
+.xr-dim-list {
+  display: inline-block !important;
+  list-style: none;
+  padding: 0 !important;
+  margin: 0;
+}
+
+.xr-dim-list li {
+  display: inline-block;
+  padding: 0;
+  margin: 0;
+}
+
+.xr-dim-list:before {
+  content: "(";
+}
+
+.xr-dim-list:after {
+  content: ")";
+}
+
+.xr-dim-list li:not(:last-child):after {
+  content: ",";
+  padding-right: 5px;
+}
+
+.xr-has-index {
+  font-weight: bold;
+}
+
+.xr-var-list,
+.xr-var-item {
+  display: contents;
+}
+
+.xr-var-item > div,
+.xr-var-item label,
+.xr-var-item > .xr-var-name span {
+  background-color: var(--xr-background-color-row-even);
+  margin-bottom: 0;
+}
+
+.xr-var-item > .xr-var-name:hover span {
+  padding-right: 5px;
+}
+
+.xr-var-list > li:nth-child(odd) > div,
+.xr-var-list > li:nth-child(odd) > label,
+.xr-var-list > li:nth-child(odd) > .xr-var-name span {
+  background-color: var(--xr-background-color-row-odd);
+}
+
+.xr-var-name {
+  grid-column: 1;
+}
+
+.xr-var-dims {
+  grid-column: 2;
+}
+
+.xr-var-dtype {
+  grid-column: 3;
+  text-align: right;
+  color: var(--xr-font-color2);
+}
+
+.xr-var-preview {
+  grid-column: 4;
+}
+
+.xr-index-preview {
+  grid-column: 2 / 5;
+  color: var(--xr-font-color2);
+}
+
+.xr-var-name,
+.xr-var-dims,
+.xr-var-dtype,
+.xr-preview,
+.xr-attrs dt {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 10px;
+}
+
+.xr-var-name:hover,
+.xr-var-dims:hover,
+.xr-var-dtype:hover,
+.xr-attrs dt:hover {
+  overflow: visible;
+  width: auto;
+  z-index: 1;
+}
+
+.xr-var-attrs,
+.xr-var-data,
+.xr-index-data {
+  display: none;
+  background-color: var(--xr-background-color) !important;
+  padding-bottom: 5px !important;
+}
+
+.xr-var-attrs-in:checked ~ .xr-var-attrs,
+.xr-var-data-in:checked ~ .xr-var-data,
+.xr-index-data-in:checked ~ .xr-index-data {
+  display: block;
+}
+
+.xr-var-data > table {
+  float: right;
+}
+
+.xr-var-name span,
+.xr-var-data,
+.xr-index-name div,
+.xr-index-data,
+.xr-attrs {
+  padding-left: 25px !important;
+}
+
+.xr-attrs,
+.xr-var-attrs,
+.xr-var-data,
+.xr-index-data {
+  grid-column: 1 / -1;
+}
+
+dl.xr-attrs {
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 125px auto;
+}
+
+.xr-attrs dt,
+.xr-attrs dd {
+  padding: 0;
+  margin: 0;
+  float: left;
+  padding-right: 10px;
+  width: auto;
+}
+
+.xr-attrs dt {
+  font-weight: normal;
+  grid-column: 1;
+}
+
+.xr-attrs dt:hover span {
+  display: inline-block;
+  background: var(--xr-background-color);
+  padding-right: 10px;
+}
+
+.xr-attrs dd {
+  grid-column: 2;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.xr-icon-database,
+.xr-icon-file-text2,
+.xr-no-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 1em;
+  height: 1.5em !important;
+  stroke-width: 0;
+  stroke: currentColor;
+  fill: currentColor;
+}
+</style><pre class='xr-text-repr-fallback'>&lt;xarray.DataArray (trial: 899, event: 5)&gt; Size: 36kB
+array([[ 70., 160., 220., 420.,  30.],
+       [130., 220., 270., 460.,  10.],
+       [120., 220., 480., 530.,  10.],
+       ...,
+       [170., 170.,  70.,  90.,  20.],
+       [140., 100., 150.,  60.,  10.],
+       [ 60., 180.,  60.,  30.,  10.]], shape=(899, 5))
+Coordinates:
+  * trial        (trial) object 7kB MultiIndex
+  * participant  (trial) object 7kB &#x27;participant3_epo&#x27; ... &#x27;participant2_epo&#x27;
+  * epoch        (trial) int64 7kB 0 2 3 5 7 8 9 ... 192 193 194 195 197 198 199
+  * event        (event) int64 40B 0 1 2 3 4
+    level        (trial) int8 899B 0 0 0 0 0 0 0 0 0 0 0 ... 0 0 0 0 0 0 0 0 0 0</pre><div class='xr-wrap' style='display:none'><div class='xr-header'><div class='xr-obj-type'>xarray.DataArray</div><div class='xr-array-name'></div><ul class='xr-dim-list'><li><span class='xr-has-index'>trial</span>: 899</li><li><span class='xr-has-index'>event</span>: 5</li></ul></div><ul class='xr-sections'><li class='xr-section-item'><div class='xr-array-wrap'><input id='section-b0d8b26d-f09b-44db-9ee2-fb281e047fd0' class='xr-array-in' type='checkbox' checked><label for='section-b0d8b26d-f09b-44db-9ee2-fb281e047fd0' title='Show/hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-array-preview xr-preview'><span>70.0 160.0 220.0 420.0 30.0 130.0 ... 10.0 60.0 180.0 60.0 30.0 10.0</span></div><div class='xr-array-data'><pre>array([[ 70., 160., 220., 420.,  30.],
+       [130., 220., 270., 460.,  10.],
+       [120., 220., 480., 530.,  10.],
+       ...,
+       [170., 170.,  70.,  90.,  20.],
+       [140., 100., 150.,  60.,  10.],
+       [ 60., 180.,  60.,  30.,  10.]], shape=(899, 5))</pre></div></div></li><li class='xr-section-item'><input id='section-0fbc5c82-a5d1-42ca-9d60-301a51bb6b1a' class='xr-section-summary-in' type='checkbox'  checked><label for='section-0fbc5c82-a5d1-42ca-9d60-301a51bb6b1a' class='xr-section-summary' >Coordinates: <span>(5)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>trial</span></div><div class='xr-var-dims'>(trial)</div><div class='xr-var-dtype'>object</div><div class='xr-var-preview xr-preview'>MultiIndex</div><input id='attrs-703cf20e-3ef0-4d45-b61f-922532cbcbaf' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-703cf20e-3ef0-4d45-b61f-922532cbcbaf' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-50f0fd74-97e3-47a5-833e-96532487511c' class='xr-var-data-in' type='checkbox'><label for='data-50f0fd74-97e3-47a5-833e-96532487511c' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([(&#x27;participant3_epo&#x27;, 0), (&#x27;participant3_epo&#x27;, 2),
+       (&#x27;participant3_epo&#x27;, 3), ..., (&#x27;participant2_epo&#x27;, 197),
+       (&#x27;participant2_epo&#x27;, 198), (&#x27;participant2_epo&#x27;, 199)],
+      shape=(202,), dtype=object)</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>participant</span></div><div class='xr-var-dims'>(trial)</div><div class='xr-var-dtype'>object</div><div class='xr-var-preview xr-preview'>&#x27;participant3_epo&#x27; ... &#x27;particip...</div><input id='attrs-978a2a92-6ad0-4764-b425-b81eab31293a' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-978a2a92-6ad0-4764-b425-b81eab31293a' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-4f6ead1c-fdbe-4ec4-851a-60e077346ec2' class='xr-var-data-in' type='checkbox'><label for='data-4f6ead1c-fdbe-4ec4-851a-60e077346ec2' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([&#x27;participant3_epo&#x27;, &#x27;participant3_epo&#x27;, &#x27;participant3_epo&#x27;, ...,
+       &#x27;participant2_epo&#x27;, &#x27;participant2_epo&#x27;, &#x27;participant2_epo&#x27;],
+      shape=(202,), dtype=object)</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>epoch</span></div><div class='xr-var-dims'>(trial)</div><div class='xr-var-dtype'>int64</div><div class='xr-var-preview xr-preview'>0 2 3 5 7 8 ... 194 195 197 198 199</div><input id='attrs-ae4a9491-f6ca-42f3-b13f-40d061ad9db2' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-ae4a9491-f6ca-42f3-b13f-40d061ad9db2' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-7166d1db-9009-4942-bddd-9ea1d5563819' class='xr-var-data-in' type='checkbox'><label for='data-7166d1db-9009-4942-bddd-9ea1d5563819' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([  0,   2,   3, ..., 197, 198, 199], shape=(202,))</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>event</span></div><div class='xr-var-dims'>(event)</div><div class='xr-var-dtype'>int64</div><div class='xr-var-preview xr-preview'>0 1 2 3 4</div><input id='attrs-97d967f9-98be-43ae-a3d8-f43cb9f509fc' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-97d967f9-98be-43ae-a3d8-f43cb9f509fc' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-1ab32bb1-7bcd-4225-873c-639678aaaa2f' class='xr-var-data-in' type='checkbox'><label for='data-1ab32bb1-7bcd-4225-873c-639678aaaa2f' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([0, 1, 2, 3, 4])</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span>level</span></div><div class='xr-var-dims'>(trial)</div><div class='xr-var-dtype'>int8</div><div class='xr-var-preview xr-preview'>0 0 0 0 0 0 0 0 ... 0 0 0 0 0 0 0 0</div><input id='attrs-28bfbce8-079f-409e-a43a-d71e78dc2864' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-28bfbce8-079f-409e-a43a-d71e78dc2864' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-afd16936-0ea0-4fe9-8b59-2a7ea15f7bda' class='xr-var-data-in' type='checkbox'><label for='data-afd16936-0ea0-4fe9-8b59-2a7ea15f7bda' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+...
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      dtype=int8)</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-c29520d9-9951-4752-b7a2-9e19e2885eba' class='xr-section-summary-in' type='checkbox'  ><label for='section-c29520d9-9951-4752-b7a2-9e19e2885eba' class='xr-section-summary' >Indexes: <span>(2)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-index-name'><div>trial<br>participant<br>epoch</div></div><div class='xr-index-preview'>PandasMultiIndex</div><input type='checkbox' disabled/><label></label><input id='index-e4ff58bb-35c3-46c7-bf49-bb1713f671af' class='xr-index-data-in' type='checkbox'/><label for='index-e4ff58bb-35c3-46c7-bf49-bb1713f671af' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(MultiIndex([(&#x27;participant3_epo&#x27;,   0),
+            (&#x27;participant3_epo&#x27;,   2),
+            (&#x27;participant3_epo&#x27;,   3),
+            (&#x27;participant3_epo&#x27;,   5),
+            (&#x27;participant3_epo&#x27;,   7),
+            (&#x27;participant3_epo&#x27;,   8),
+            (&#x27;participant3_epo&#x27;,   9),
+            (&#x27;participant3_epo&#x27;,  12),
+            (&#x27;participant3_epo&#x27;,  13),
+            (&#x27;participant3_epo&#x27;,  14),
+            ...
+            (&#x27;participant2_epo&#x27;, 189),
+            (&#x27;participant2_epo&#x27;, 190),
+            (&#x27;participant2_epo&#x27;, 191),
+            (&#x27;participant2_epo&#x27;, 192),
+            (&#x27;participant2_epo&#x27;, 193),
+            (&#x27;participant2_epo&#x27;, 194),
+            (&#x27;participant2_epo&#x27;, 195),
+            (&#x27;participant2_epo&#x27;, 197),
+            (&#x27;participant2_epo&#x27;, 198),
+            (&#x27;participant2_epo&#x27;, 199)],
+           name=&#x27;trial&#x27;, length=899))</pre></div></li><li class='xr-var-item'><div class='xr-index-name'><div>event</div></div><div class='xr-index-preview'>PandasIndex</div><input type='checkbox' disabled/><label></label><input id='index-f6304224-06e5-4189-a66d-d5b621b84cb1' class='xr-index-data-in' type='checkbox'/><label for='index-f6304224-06e5-4189-a66d-d5b621b84cb1' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(Index([0, 1, 2, 3, 4], dtype=&#x27;int64&#x27;, name=&#x27;event&#x27;))</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-b95e02ea-ff61-4e9f-b76b-80988564d991' class='xr-section-summary-in' type='checkbox' disabled ><label for='section-b95e02ea-ff61-4e9f-b76b-80988564d991' class='xr-section-summary'  title='Expand/collapse section'>Attributes: <span>(0)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><dl class='xr-attrs'></dl></div></li></ul></div></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Turn into dataframe and recover metadata</span>
+<span class="n">times</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">unstack</span><span class="p">()</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;duration&#39;</span><span class="p">)</span>
+<span class="n">times</span> <span class="o">=</span> <span class="n">times</span><span class="p">[</span><span class="o">~</span><span class="n">times</span><span class="o">.</span><span class="n">duration</span><span class="o">.</span><span class="n">isna</span><span class="p">()]</span>  <span class="c1">#Remove rejected trials</span>
+<span class="n">times</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span><span class="o">.</span><span class="n">set_index</span><span class="p">([</span><span class="s1">&#39;participant&#39;</span><span class="p">,</span><span class="s1">&#39;epoch&#39;</span><span class="p">])</span>
+
+<span class="c1"># Recover metadata and merge with times</span>
+<span class="n">times_metadata</span> <span class="o">=</span> <span class="n">epoch_data</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">sample</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="s1">&#39;Cz&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span><span class="mi">3</span><span class="p">:]</span>
+<span class="n">times_metadata</span> <span class="o">=</span> <span class="n">times_metadata</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span><span class="o">.</span><span class="n">set_index</span><span class="p">([</span><span class="s1">&#39;participant&#39;</span><span class="p">,</span><span class="s1">&#39;epoch&#39;</span><span class="p">])</span>
+<span class="n">times</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">times_metadata</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;participant&#39;</span><span class="p">,</span><span class="s1">&#39;epoch&#39;</span><span class="p">])</span>
+
+<span class="n">times</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th></th>
+      <th>event</th>
+      <th>level</th>
+      <th>duration</th>
+      <th>stim</th>
+      <th>resp</th>
+      <th>RT</th>
+      <th>cue</th>
+      <th>movement</th>
+      <th>trigger</th>
+    </tr>
+    <tr>
+      <th>participant</th>
+      <th>epoch</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th rowspan="5" valign="top">participant1_epo</th>
+      <th>1</th>
+      <td>0</td>
+      <td>0.0</td>
+      <td>160.0</td>
+      <td>1.0</td>
+      <td>resp_left</td>
+      <td>683.0</td>
+      <td>SP</td>
+      <td>stim_left</td>
+      <td>SP/stim_left/resp_left</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>0</td>
+      <td>0.0</td>
+      <td>40.0</td>
+      <td>1.0</td>
+      <td>resp_right</td>
+      <td>1068.0</td>
+      <td>AC</td>
+      <td>stim_left</td>
+      <td>AC/stim_left/resp_right</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>0</td>
+      <td>0.0</td>
+      <td>20.0</td>
+      <td>1.0</td>
+      <td>resp_right</td>
+      <td>994.0</td>
+      <td>SP</td>
+      <td>stim_left</td>
+      <td>SP/stim_left/resp_right</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>0</td>
+      <td>0.0</td>
+      <td>190.0</td>
+      <td>1.0</td>
+      <td>resp_left</td>
+      <td>1352.0</td>
+      <td>AC</td>
+      <td>stim_left</td>
+      <td>AC/stim_left/resp_left</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>0</td>
+      <td>0.0</td>
+      <td>40.0</td>
+      <td>2.0</td>
+      <td>resp_left</td>
+      <td>722.0</td>
+      <td>SP</td>
+      <td>stim_right</td>
+      <td>SP/stim_right/resp_left</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th rowspan="5" valign="top">participant5_epo</th>
+      <th>193</th>
+      <td>4</td>
+      <td>0.0</td>
+      <td>10.0</td>
+      <td>1.0</td>
+      <td>resp_right</td>
+      <td>555.0</td>
+      <td>AC</td>
+      <td>stim_left</td>
+      <td>AC/stim_left/resp_right</td>
+    </tr>
+    <tr>
+      <th>194</th>
+      <td>4</td>
+      <td>0.0</td>
+      <td>10.0</td>
+      <td>1.0</td>
+      <td>resp_left</td>
+      <td>418.0</td>
+      <td>AC</td>
+      <td>stim_left</td>
+      <td>AC/stim_left/resp_left</td>
+    </tr>
+    <tr>
+      <th>195</th>
+      <td>4</td>
+      <td>0.0</td>
+      <td>10.0</td>
+      <td>1.0</td>
+      <td>resp_right</td>
+      <td>377.0</td>
+      <td>SP</td>
+      <td>stim_left</td>
+      <td>SP/stim_left/resp_right</td>
+    </tr>
+    <tr>
+      <th>197</th>
+      <td>4</td>
+      <td>0.0</td>
+      <td>20.0</td>
+      <td>1.0</td>
+      <td>resp_right</td>
+      <td>649.0</td>
+      <td>AC</td>
+      <td>stim_left</td>
+      <td>AC/stim_left/resp_right</td>
+    </tr>
+    <tr>
+      <th>199</th>
+      <td>4</td>
+      <td>0.0</td>
+      <td>10.0</td>
+      <td>1.0</td>
+      <td>resp_right</td>
+      <td>301.0</td>
+      <td>AC</td>
+      <td>stim_left</td>
+      <td>AC/stim_left/resp_right</td>
+    </tr>
+  </tbody>
+</table>
+<p>4495 rows × 9 columns</p>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">mean_ac</span> <span class="o">=</span> <span class="n">times</span><span class="p">[</span><span class="n">times</span><span class="o">.</span><span class="n">cue</span> <span class="o">==</span> <span class="s1">&#39;AC&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">&#39;event&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">duration</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+<span class="n">mean_sp</span> <span class="o">=</span> <span class="n">times</span><span class="p">[</span><span class="n">times</span><span class="o">.</span><span class="n">cue</span> <span class="o">==</span> <span class="s1">&#39;SP&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">&#39;event&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">duration</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">mean_ac</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">mean_ac</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="s1">&#39;o-&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;AC&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">mean_sp</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">mean_sp</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="s1">&#39;o-&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;SP&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Event&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Duration (ms)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Event durations by condition&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Text(0.5, 1.0, &#39;Event durations by condition&#39;)
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_3-Applying_HMP_to_real_data_22_1.png" src="../_images/notebooks_3-Applying_HMP_to_real_data_22_1.png" />
+</div>
+</div>
+</section>
+<section id="Example-application-3:-Comparing-conditions-on-centered-ERPs:">
+<h2>Example application 3: Comparing conditions on centered ERPs:<a class="headerlink" href="#Example-application-3:-Comparing-conditions-on-centered-ERPs:" title="Link to this heading"></a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Plotting centered ERPs for each condition (AC and SP) with confidence intervals (±1 std)</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># Get event times (positions not durations) for all events/trials, including stimulus onset</span>
+<span class="n">times_position</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">event_times</span><span class="p">(</span><span class="n">estimates_cumulative</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">add_stim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># Define window size in samples</span>
+<span class="n">baseline</span> <span class="o">=</span> <span class="o">-</span><span class="mf">.1</span><span class="o">*</span><span class="n">sfreq</span>  <span class="c1"># 100 ms before event</span>
+<span class="n">n_samples</span> <span class="o">=</span> <span class="mf">.4</span><span class="o">*</span><span class="n">sfreq</span>  <span class="c1"># 400 ms window</span>
+
+<span class="n">event</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># Event index to center on, 0 is stimulus</span>
+
+<span class="c1"># Select a subset of channels to analyze (e.g., centroparietal channels)</span>
+<span class="n">channel_subset</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;CP1&#39;</span><span class="p">,</span> <span class="s1">&#39;CP2&#39;</span><span class="p">]</span>
+
+<span class="k">for</span> <span class="n">SAT</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;AC&quot;</span><span class="p">,</span><span class="s2">&quot;SP&quot;</span><span class="p">]:</span>
+    <span class="c1"># Select trials for the current condition and stack participant/epoch as &#39;trial&#39; for easiness</span>
+    <span class="n">subset</span> <span class="o">=</span> <span class="n">epoch_data</span><span class="o">.</span><span class="n">where</span><span class="p">((</span><span class="n">epoch_data</span><span class="o">.</span><span class="n">cue</span> <span class="o">==</span> <span class="n">SAT</span><span class="p">),</span> <span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">stack</span><span class="p">({</span><span class="s1">&#39;trial&#39;</span><span class="p">:[</span><span class="s1">&#39;participant&#39;</span><span class="p">,</span><span class="s1">&#39;epoch&#39;</span><span class="p">]})</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="s1">&#39;trial&#39;</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">)</span>
+    <span class="c1"># Center activity on the event for selected channels</span>
+    <span class="n">centered</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">centered_activity</span><span class="p">(</span><span class="n">subset</span><span class="p">,</span> <span class="n">times_position</span><span class="p">,</span> <span class="n">channel_subset</span><span class="p">,</span>
+        <span class="n">event</span><span class="o">=</span><span class="n">event</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">baseline</span><span class="o">=</span><span class="n">baseline</span><span class="p">)</span>
+    <span class="c1"># Average across channels,</span>
+    <span class="n">centered</span> <span class="o">=</span> <span class="n">centered</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">unstack</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="s1">&#39;channel&#39;</span><span class="p">)</span>
+    <span class="c1"># Compute mean and std across participants</span>
+    <span class="n">indiv_traces</span> <span class="o">=</span> <span class="n">centered</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s1">&#39;participant&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="s1">&#39;epoch&#39;</span><span class="p">)</span>
+    <span class="n">mean_tc</span> <span class="o">=</span> <span class="n">indiv_traces</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="s1">&#39;participant&#39;</span><span class="p">)</span>
+    <span class="n">std_tc</span> <span class="o">=</span> <span class="n">indiv_traces</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="s1">&#39;participant&#39;</span><span class="p">)</span>
+    <span class="c1"># Plot the timecourse with confidence interval</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">centered</span><span class="o">.</span><span class="n">sample</span><span class="p">,</span> <span class="n">mean_tc</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">SAT</span><span class="p">,)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">fill_between</span><span class="p">(</span><span class="n">centered</span><span class="o">.</span><span class="n">sample</span><span class="p">,</span> <span class="n">mean_tc</span><span class="o">-</span><span class="n">std_tc</span><span class="p">,</span> <span class="n">mean_tc</span><span class="o">+</span><span class="n">std_tc</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Time from Event </span><span class="si">{</span><span class="n">event</span><span class="si">}</span><span class="s1"> (ms)&#39;</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Amplitude (V)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s1">&#39;Condition&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_3-Applying_HMP_to_real_data_24_0.png" src="../_images/notebooks_3-Applying_HMP_to_real_data_24_0.png" />
+</div>
+</div>
+</section>
+<section id="Splitting-conditions">
+<h2>Splitting conditions<a class="headerlink" href="#Splitting-conditions" title="Link to this heading"></a></h2>
+<p>When estimating a model across all conditions, we can also split the data by condition. This is useful to see how the model estimates differ across conditions, such as a left vs a right response in this case.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">speed_epoch_data</span> <span class="o">=</span> <span class="n">epoch_data</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">epoch_data</span><span class="o">.</span><span class="n">cue</span> <span class="o">==</span> <span class="s1">&#39;SP&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">stack</span><span class="p">({</span><span class="s1">&#39;trial&#39;</span><span class="p">:[</span><span class="s1">&#39;participant&#39;</span><span class="p">,</span><span class="s1">&#39;epoch&#39;</span><span class="p">]})</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="s1">&#39;trial&#39;</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">)</span>
+<span class="n">accuracy_epoch_data</span> <span class="o">=</span> <span class="n">epoch_data</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">epoch_data</span><span class="o">.</span><span class="n">cue</span> <span class="o">==</span> <span class="s1">&#39;AC&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">stack</span><span class="p">({</span><span class="s1">&#39;trial&#39;</span><span class="p">:[</span><span class="s1">&#39;participant&#39;</span><span class="p">,</span><span class="s1">&#39;epoch&#39;</span><span class="p">]})</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="s1">&#39;trial&#39;</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">)</span>
+
+<span class="n">hmp</span><span class="o">.</span><span class="n">visu</span><span class="o">.</span><span class="n">plot_topo_timecourse</span><span class="p">(</span><span class="n">speed_epoch_data</span><span class="p">,</span> <span class="n">estimates_cumulative</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">max_time</span><span class="o">=</span><span class="mi">90</span><span class="p">)</span>
+<span class="n">hmp</span><span class="o">.</span><span class="n">visu</span><span class="o">.</span><span class="n">plot_topo_timecourse</span><span class="p">(</span><span class="n">accuracy_epoch_data</span><span class="p">,</span> <span class="n">estimates_cumulative</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">max_time</span><span class="o">=</span><span class="mi">90</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_3-Applying_HMP_to_real_data_27_0.png" src="../_images/notebooks_3-Applying_HMP_to_real_data_27_0.png" />
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_3-Applying_HMP_to_real_data_27_1.png" src="../_images/notebooks_3-Applying_HMP_to_real_data_27_1.png" />
+</div>
+</div>
+<p>But in this case the HMP parameters are all shared across conditions so we might want to estimate the model separately for each condition if there is a reason to expect a difference. This is done by selecting the condition of interest and then estimating the model on the selected data.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">speed_preprocessed_data</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">condition_selection</span><span class="p">(</span><span class="n">preprocessed</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="s1">&#39;SP&#39;</span><span class="p">,</span> <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;cue&#39;</span><span class="p">)</span>
+<span class="n">trial_data_speed</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">trialdata</span><span class="o">.</span><span class="n">TrialData</span><span class="o">.</span><span class="n">from_preprocessed</span><span class="p">(</span><span class="n">speed_preprocessed_data</span><span class="p">,</span> <span class="n">pattern</span><span class="o">=</span><span class="n">event_properties</span><span class="o">.</span><span class="n">template</span><span class="p">)</span>
+
+<span class="n">accuracy_preprocesssed_data</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">condition_selection</span><span class="p">(</span><span class="n">preprocessed</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="s1">&#39;AC&#39;</span><span class="p">,</span> <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;cue&#39;</span><span class="p">)</span>
+<span class="n">trial_data_accuracy</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">trialdata</span><span class="o">.</span><span class="n">TrialData</span><span class="o">.</span><span class="n">from_preprocessed</span><span class="p">(</span><span class="n">accuracy_preprocesssed_data</span><span class="p">,</span> <span class="n">pattern</span><span class="o">=</span><span class="n">event_properties</span><span class="o">.</span><span class="n">template</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">model_speed</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">CumulativeMethod</span><span class="p">(</span><span class="n">event_properties</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">trial_data_speed</span><span class="p">)</span>
+<span class="n">ll_cumulative</span><span class="p">,</span> <span class="n">estimates</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">final_model</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">trial_data_speed</span><span class="p">)</span>
+<span class="n">hmp</span><span class="o">.</span><span class="n">visu</span><span class="o">.</span><span class="n">plot_topo_timecourse</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">,</span> <span class="n">estimates</span><span class="p">,</span> <span class="n">info</span><span class="p">,)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<script type="application/vnd.jupyter.widget-view+json">{"model_id": "4373bf895cd14e7eb9f0da974f360c79", "version_major": 2, "version_minor": 0}</script></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Transition event 1 found around time 100.0
+Transition event 2 found around time 280.0
+Transition event 3 found around time 530.0
+
+All events found, refitting final combination.
+Estimating 3 events model
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_3-Applying_HMP_to_real_data_30_2.png" src="../_images/notebooks_3-Applying_HMP_to_real_data_30_2.png" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">model_accuracy</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">CumulativeMethod</span><span class="p">(</span><span class="n">event_properties</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">trial_data_accuracy</span><span class="p">)</span>
+<span class="n">ll_cumulative</span><span class="p">,</span> <span class="n">estimates</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">final_model</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">trial_data_accuracy</span><span class="p">)</span>
+<span class="n">hmp</span><span class="o">.</span><span class="n">visu</span><span class="o">.</span><span class="n">plot_topo_timecourse</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">,</span> <span class="n">estimates</span><span class="p">,</span> <span class="n">info</span><span class="p">,)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<script type="application/vnd.jupyter.widget-view+json">{"model_id": "b9a71aee478448708db58c58bc417508", "version_major": 2, "version_minor": 0}</script></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Transition event 1 found around time 90.0
+Transition event 2 found around time 290.0
+Transition event 3 found around time 520.0
+Transition event 4 found around time 820.0
+
+All events found, refitting final combination.
+Estimating 4 events model
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_3-Applying_HMP_to_real_data_31_2.png" src="../_images/notebooks_3-Applying_HMP_to_real_data_31_2.png" />
+</div>
+</div>
+<p>In this case, the models are completely independent and the cumulative method finds an additional event for the accuracy condition, but not for the speed condition.</p>
+<p>In the two next advanced tutorials we cover how to build models that share some parameters between conditions or participants and how to properly select a given number of events using LOOCV.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="2-The_different_model_classes.html" class="btn btn-neutral float-left" title="2. The different model classes" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="4-advanced-multilevel_models.html" class="btn btn-neutral float-right" title="4. Advanced multilevel models" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Gabriel Weindel, Maarten Schermer, Raoul Schram, Leendert van Maanen, Jelmer Borst.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

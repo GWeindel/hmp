@@ -1,0 +1,2030 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>1 How HMP works: practical, methodological and theoretical grounds &mdash; hmp 1.0.0-b.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/tabs.css?v=4c969af8" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=12f248e0"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/tabs.js?v=3ee01567"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="2. The different model classes" href="2-The_different_model_classes.html" />
+    <link rel="prev" title="Eliminative estimation method" href="../api/hmp.models.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/hmp.html">hmp package</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Notebooks</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">1 How HMP works: practical, methodological and theoretical grounds</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#Data">Data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#Simulation">Simulation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#Data-Format">Data Format</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#Data-preprocessing">Data preprocessing</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#HMP-and-implementation-assumptions">HMP and implementation assumptions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#Expected-pattern">Expected pattern</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#Expected-time-distribution">Expected time distribution</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#An-HMP-model">An HMP model</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#HMP-parameters">HMP parameters</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#Time-parameters">Time parameters</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#Channel-parameters">Channel parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#Transforming-the-data-to-event-probability-space-using-these-parameters">Transforming the data to event probability space using these parameters</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#Visualizing-the-average-time-location-and-topographies-associated-with-the-estimated-events">Visualizing the average time location and topographies associated with the estimated events</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#Estimating-a-model-without-the-ground-truth">Estimating a model without the ground truth</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#EM-algorithm">EM algorithm</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#Using-the-single-trial-estimation">Using the single trial estimation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Saving-and-loading-a-model">Saving and loading a model</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="2-The_different_model_classes.html">2. The different model classes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="3-Applying_HMP_to_real_data.html">3. Applying HMP to real data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="4-advanced-multilevel_models.html">4. Advanced multilevel models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="5-advanced--model_selection.html">5. Performing model selection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Data_loading.html">Reading your own data</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">hmp</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content style-external-links">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">1 How HMP works: practical, methodological and theoretical grounds</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/notebooks/1-How_HMP_works.ipynb.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="1-How-HMP-works:-practical,-methodological-and-theoretical-grounds">
+<h1>1 How HMP works: practical, methodological and theoretical grounds<a class="headerlink" href="#1-How-HMP-works:-practical,-methodological-and-theoretical-grounds" title="Link to this heading"></a></h1>
+<section id="Data">
+<h2>Data<a class="headerlink" href="#Data" title="Link to this heading"></a></h2>
+<section id="Simulation">
+<h3>Simulation<a class="headerlink" href="#Simulation" title="Link to this heading"></a></h3>
+<p>We will start by simulating data to demonstrate the HMP analysis on simulated data. First, we need to load several libraries, after which we simulate a dataset with 4 events and the resulting 5 inter-event times (stimulus -&gt; event 1, event 1 -&gt; event 2, …, event 4 -&gt; response.</p>
+<blockquote>
+<div><p>[!NOTE] Most of this code is specific to simulation cases, to apply to your own data, use the code of the next tutorials</p>
+</div></blockquote>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1">## Importing these packages is specific for this simulation case</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">gamma</span>
+
+<span class="c1">## Importing HMP</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">hmp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">hmp</span><span class="w"> </span><span class="kn">import</span> <span class="n">simulations</span>
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">cpus</span> <span class="o">=</span> <span class="mi">2</span> <span class="c1"># For multiprocessing, usually a good idea to use multiple CPUs as long as you have enough RAM</span>
+
+<span class="n">n_trials</span> <span class="o">=</span> <span class="mi">100</span> <span class="c1">#Number of trials to simulate</span>
+<span class="n">sfreq</span> <span class="o">=</span> <span class="mi">500</span> <span class="c1">#Sampling rate of the simulated data</span>
+
+<span class="c1">##### Here we define the sources of the brain activity (event) for each trial</span>
+<span class="n">n_events</span> <span class="o">=</span> <span class="mi">4</span> <span class="c1">#How many events to simulate</span>
+<span class="n">frequency</span> <span class="o">=</span> <span class="mf">10.</span> <span class="c1">#Frequency of the event defining its duration, half-sine of 10Hz = 50ms</span>
+<span class="n">amplitude</span> <span class="o">=</span> <span class="mf">.2e-7</span> <span class="c1">#Amplitude of the event in nAm, defining signal to noise ratio</span>
+<span class="n">shape</span> <span class="o">=</span> <span class="mi">2</span> <span class="c1">#shape of the gamma distribution, with the defined means below it dictates the onset time probabilities</span>
+<span class="n">means</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">60</span><span class="p">,</span> <span class="mi">150</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">80</span><span class="p">])</span><span class="o">/</span><span class="n">shape</span> <span class="c1">#Mean duration of the between event times in ms</span>
+<span class="c1">#Which source to activate for each event (see atlas when calling simulations.available_sources())</span>
+<span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;inferiortemporal-lh&#39;</span><span class="p">,</span><span class="s1">&#39;caudalanteriorcingulate-rh&#39;</span><span class="p">,</span><span class="s1">&#39;bankssts-lh&#39;</span><span class="p">,</span><span class="s1">&#39;superiorparietal-lh&#39;</span><span class="p">,</span><span class="s1">&#39;superiorparietal-lh&#39;</span><span class="p">]</span>
+
+<span class="n">sources</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">source</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">names</span><span class="p">,</span> <span class="n">means</span><span class="p">):</span> <span class="c1">#One source = one frequency, one amplitude and a given by-trial variability distribution</span>
+    <span class="n">sources</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">source</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">frequency</span><span class="p">,</span> <span class="n">amplitude</span><span class="p">,</span> <span class="n">gamma</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">source</span><span class="p">[</span><span class="mi">1</span><span class="p">])])</span>
+
+<span class="c1"># Function used to generate the data</span>
+<span class="n">file</span> <span class="o">=</span> <span class="n">simulations</span><span class="o">.</span><span class="n">simulate</span><span class="p">(</span><span class="n">sources</span><span class="p">,</span> <span class="n">n_trials</span><span class="p">,</span> <span class="n">cpus</span><span class="p">,</span> <span class="s1">&#39;dataset&#39;</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">sfreq</span><span class="o">=</span><span class="n">sfreq</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="c1">#load electrode position, specific to the simulations</span>
+<span class="n">info</span> <span class="o">=</span> <span class="n">simulations</span><span class="o">.</span><span class="n">positions</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/simulations.py:220: UserWarning: /home/gabriel/ownCloud/projects/RUGUU/hmp/docs/source/notebooks/./dataset_raw.fif exists no new simulation performed
+  warn(f&#34;{subj_file} exists no new simulation performed&#34;, UserWarning)
+</pre></div></div>
+</div>
+<p>Next, we load the simulated data, reflecting a realistic EEG dataset of a single participant. As you can see, we use standard MNE functions here.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1">#Recovering the events to epoch the data (in the number of trials defined above)</span>
+<span class="n">events</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">file</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+<span class="n">resp_trigger</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">events</span><span class="p">[:,</span><span class="mi">2</span><span class="p">])))</span><span class="c1">#Resp trigger is the last source in each trial</span>
+<span class="n">event_id</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;stimulus&#39;</span><span class="p">:</span><span class="mi">1</span><span class="p">}</span><span class="c1">#trigger 1 = stimulus</span>
+<span class="n">resp_id</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;response&#39;</span><span class="p">:</span><span class="n">resp_trigger</span><span class="p">}</span>
+<span class="c1">#Keeping only stimulus and response triggers</span>
+
+<span class="c1">#Visualising the raw simulated EEG data</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">mne</span>
+<span class="n">raw</span> <span class="o">=</span> <span class="n">mne</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read_raw_fif</span><span class="p">(</span><span class="n">file</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">preload</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">raw</span><span class="o">.</span><span class="n">pick_types</span><span class="p">(</span><span class="n">eeg</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">scalings</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">eeg</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">),</span> <span class="n">events</span><span class="o">=</span><span class="n">events</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="kc">True</span><span class="p">);</span>
+<br/></pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_7_0.png" src="../_images/notebooks_1-How_HMP_works_7_0.png" />
+</div>
+</div>
+</section>
+<section id="Data-Format">
+<h3>Data Format<a class="headerlink" href="#Data-Format" title="Link to this heading"></a></h3>
+<p>We now prepare the data for the HMP package. First, we read the data into an xarray.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1">### Reading the data</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">hmp</span><span class="w"> </span><span class="kn">import</span> <span class="n">io</span>
+<span class="n">epoch_data</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">read_mne_data</span><span class="p">(</span><span class="n">file</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">data_format</span><span class="o">=</span><span class="s1">&#39;raw&#39;</span><span class="p">,</span> <span class="n">event_id</span><span class="o">=</span><span class="n">event_id</span><span class="p">,</span> <span class="n">resp_id</span><span class="o">=</span><span class="n">resp_id</span><span class="p">,</span> <span class="n">sfreq</span><span class="o">=</span><span class="n">sfreq</span><span class="p">,</span>
+            <span class="n">events_provided</span><span class="o">=</span><span class="n">events</span><span class="p">,</span> <span class="n">tmin</span> <span class="o">=-</span><span class="mf">.1</span><span class="p">,</span> <span class="n">tmax</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,)</span><span class="c1">#We add an offset to ensure a smooth estimation at the end of the RT</span>
+<span class="n">epoch_data</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Processing participant /home/gabriel/ownCloud/projects/RUGUU/hmp/docs/source/notebooks/./dataset_raw.fif&#39;s raw eeg
+100 trials were retained for participant /home/gabriel/ownCloud/projects/RUGUU/hmp/docs/source/notebooks/./dataset_raw.fif
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div><svg style="position: absolute; width: 0; height: 0; overflow: hidden">
+<defs>
+<symbol id="icon-database" viewBox="0 0 32 32">
+<path d="M16 0c-8.837 0-16 2.239-16 5v4c0 2.761 7.163 5 16 5s16-2.239 16-5v-4c0-2.761-7.163-5-16-5z"></path>
+<path d="M16 17c-8.837 0-16-2.239-16-5v6c0 2.761 7.163 5 16 5s16-2.239 16-5v-6c0 2.761-7.163 5-16 5z"></path>
+<path d="M16 26c-8.837 0-16-2.239-16-5v6c0 2.761 7.163 5 16 5s16-2.239 16-5v-6c0 2.761-7.163 5-16 5z"></path>
+</symbol>
+<symbol id="icon-file-text2" viewBox="0 0 32 32">
+<path d="M28.681 7.159c-0.694-0.947-1.662-2.053-2.724-3.116s-2.169-2.030-3.116-2.724c-1.612-1.182-2.393-1.319-2.841-1.319h-15.5c-1.378 0-2.5 1.121-2.5 2.5v27c0 1.378 1.122 2.5 2.5 2.5h23c1.378 0 2.5-1.122 2.5-2.5v-19.5c0-0.448-0.137-1.23-1.319-2.841zM24.543 5.457c0.959 0.959 1.712 1.825 2.268 2.543h-4.811v-4.811c0.718 0.556 1.584 1.309 2.543 2.268zM28 29.5c0 0.271-0.229 0.5-0.5 0.5h-23c-0.271 0-0.5-0.229-0.5-0.5v-27c0-0.271 0.229-0.5 0.5-0.5 0 0 15.499-0 15.5 0v7c0 0.552 0.448 1 1 1h7v19.5z"></path>
+<path d="M23 26h-14c-0.552 0-1-0.448-1-1s0.448-1 1-1h14c0.552 0 1 0.448 1 1s-0.448 1-1 1z"></path>
+<path d="M23 22h-14c-0.552 0-1-0.448-1-1s0.448-1 1-1h14c0.552 0 1 0.448 1 1s-0.448 1-1 1z"></path>
+<path d="M23 18h-14c-0.552 0-1-0.448-1-1s0.448-1 1-1h14c0.552 0 1 0.448 1 1s-0.448 1-1 1z"></path>
+</symbol>
+</defs>
+</svg>
+<style>/* CSS stylesheet for displaying xarray objects in jupyterlab.
+ *
+ */
+
+:root {
+  --xr-font-color0: var(--jp-content-font-color0, rgba(0, 0, 0, 1));
+  --xr-font-color2: var(--jp-content-font-color2, rgba(0, 0, 0, 0.54));
+  --xr-font-color3: var(--jp-content-font-color3, rgba(0, 0, 0, 0.38));
+  --xr-border-color: var(--jp-border-color2, #e0e0e0);
+  --xr-disabled-color: var(--jp-layout-color3, #bdbdbd);
+  --xr-background-color: var(--jp-layout-color0, white);
+  --xr-background-color-row-even: var(--jp-layout-color1, white);
+  --xr-background-color-row-odd: var(--jp-layout-color2, #eeeeee);
+}
+
+html[theme="dark"],
+html[data-theme="dark"],
+body[data-theme="dark"],
+body.vscode-dark {
+  --xr-font-color0: rgba(255, 255, 255, 1);
+  --xr-font-color2: rgba(255, 255, 255, 0.54);
+  --xr-font-color3: rgba(255, 255, 255, 0.38);
+  --xr-border-color: #1f1f1f;
+  --xr-disabled-color: #515151;
+  --xr-background-color: #111111;
+  --xr-background-color-row-even: #111111;
+  --xr-background-color-row-odd: #313131;
+}
+
+.xr-wrap {
+  display: block !important;
+  min-width: 300px;
+  max-width: 700px;
+}
+
+.xr-text-repr-fallback {
+  /* fallback to plain text repr when CSS is not injected (untrusted notebook) */
+  display: none;
+}
+
+.xr-header {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: solid 1px var(--xr-border-color);
+}
+
+.xr-header > div,
+.xr-header > ul {
+  display: inline;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.xr-obj-type,
+.xr-array-name {
+  margin-left: 2px;
+  margin-right: 10px;
+}
+
+.xr-obj-type {
+  color: var(--xr-font-color2);
+}
+
+.xr-sections {
+  padding-left: 0 !important;
+  display: grid;
+  grid-template-columns: 150px auto auto 1fr 0 20px 0 20px;
+}
+
+.xr-section-item {
+  display: contents;
+}
+
+.xr-section-item input {
+  display: inline-block;
+  opacity: 0;
+  height: 0;
+}
+
+.xr-section-item input + label {
+  color: var(--xr-disabled-color);
+}
+
+.xr-section-item input:enabled + label {
+  cursor: pointer;
+  color: var(--xr-font-color2);
+}
+
+.xr-section-item input:focus + label {
+  border: 2px solid var(--xr-font-color0);
+}
+
+.xr-section-item input:enabled + label:hover {
+  color: var(--xr-font-color0);
+}
+
+.xr-section-summary {
+  grid-column: 1;
+  color: var(--xr-font-color2);
+  font-weight: 500;
+}
+
+.xr-section-summary > span {
+  display: inline-block;
+  padding-left: 0.5em;
+}
+
+.xr-section-summary-in:disabled + label {
+  color: var(--xr-font-color2);
+}
+
+.xr-section-summary-in + label:before {
+  display: inline-block;
+  content: "►";
+  font-size: 11px;
+  width: 15px;
+  text-align: center;
+}
+
+.xr-section-summary-in:disabled + label:before {
+  color: var(--xr-disabled-color);
+}
+
+.xr-section-summary-in:checked + label:before {
+  content: "▼";
+}
+
+.xr-section-summary-in:checked + label > span {
+  display: none;
+}
+
+.xr-section-summary,
+.xr-section-inline-details {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.xr-section-inline-details {
+  grid-column: 2 / -1;
+}
+
+.xr-section-details {
+  display: none;
+  grid-column: 1 / -1;
+  margin-bottom: 5px;
+}
+
+.xr-section-summary-in:checked ~ .xr-section-details {
+  display: contents;
+}
+
+.xr-array-wrap {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 20px auto;
+}
+
+.xr-array-wrap > label {
+  grid-column: 1;
+  vertical-align: top;
+}
+
+.xr-preview {
+  color: var(--xr-font-color3);
+}
+
+.xr-array-preview,
+.xr-array-data {
+  padding: 0 5px !important;
+  grid-column: 2;
+}
+
+.xr-array-data,
+.xr-array-in:checked ~ .xr-array-preview {
+  display: none;
+}
+
+.xr-array-in:checked ~ .xr-array-data,
+.xr-array-preview {
+  display: inline-block;
+}
+
+.xr-dim-list {
+  display: inline-block !important;
+  list-style: none;
+  padding: 0 !important;
+  margin: 0;
+}
+
+.xr-dim-list li {
+  display: inline-block;
+  padding: 0;
+  margin: 0;
+}
+
+.xr-dim-list:before {
+  content: "(";
+}
+
+.xr-dim-list:after {
+  content: ")";
+}
+
+.xr-dim-list li:not(:last-child):after {
+  content: ",";
+  padding-right: 5px;
+}
+
+.xr-has-index {
+  font-weight: bold;
+}
+
+.xr-var-list,
+.xr-var-item {
+  display: contents;
+}
+
+.xr-var-item > div,
+.xr-var-item label,
+.xr-var-item > .xr-var-name span {
+  background-color: var(--xr-background-color-row-even);
+  margin-bottom: 0;
+}
+
+.xr-var-item > .xr-var-name:hover span {
+  padding-right: 5px;
+}
+
+.xr-var-list > li:nth-child(odd) > div,
+.xr-var-list > li:nth-child(odd) > label,
+.xr-var-list > li:nth-child(odd) > .xr-var-name span {
+  background-color: var(--xr-background-color-row-odd);
+}
+
+.xr-var-name {
+  grid-column: 1;
+}
+
+.xr-var-dims {
+  grid-column: 2;
+}
+
+.xr-var-dtype {
+  grid-column: 3;
+  text-align: right;
+  color: var(--xr-font-color2);
+}
+
+.xr-var-preview {
+  grid-column: 4;
+}
+
+.xr-index-preview {
+  grid-column: 2 / 5;
+  color: var(--xr-font-color2);
+}
+
+.xr-var-name,
+.xr-var-dims,
+.xr-var-dtype,
+.xr-preview,
+.xr-attrs dt {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 10px;
+}
+
+.xr-var-name:hover,
+.xr-var-dims:hover,
+.xr-var-dtype:hover,
+.xr-attrs dt:hover {
+  overflow: visible;
+  width: auto;
+  z-index: 1;
+}
+
+.xr-var-attrs,
+.xr-var-data,
+.xr-index-data {
+  display: none;
+  background-color: var(--xr-background-color) !important;
+  padding-bottom: 5px !important;
+}
+
+.xr-var-attrs-in:checked ~ .xr-var-attrs,
+.xr-var-data-in:checked ~ .xr-var-data,
+.xr-index-data-in:checked ~ .xr-index-data {
+  display: block;
+}
+
+.xr-var-data > table {
+  float: right;
+}
+
+.xr-var-name span,
+.xr-var-data,
+.xr-index-name div,
+.xr-index-data,
+.xr-attrs {
+  padding-left: 25px !important;
+}
+
+.xr-attrs,
+.xr-var-attrs,
+.xr-var-data,
+.xr-index-data {
+  grid-column: 1 / -1;
+}
+
+dl.xr-attrs {
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 125px auto;
+}
+
+.xr-attrs dt,
+.xr-attrs dd {
+  padding: 0;
+  margin: 0;
+  float: left;
+  padding-right: 10px;
+  width: auto;
+}
+
+.xr-attrs dt {
+  font-weight: normal;
+  grid-column: 1;
+}
+
+.xr-attrs dt:hover span {
+  display: inline-block;
+  background: var(--xr-background-color);
+  padding-right: 10px;
+}
+
+.xr-attrs dd {
+  grid-column: 2;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.xr-icon-database,
+.xr-icon-file-text2,
+.xr-no-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 1em;
+  height: 1.5em !important;
+  stroke-width: 0;
+  stroke: currentColor;
+  fill: currentColor;
+}
+</style><pre class='xr-text-repr-fallback'>&lt;xarray.Dataset&gt; Size: 30MB
+Dimensions:      (participant: 1, epoch: 100, channel: 59, sample: 635)
+Coordinates:
+  * epoch        (epoch) int64 800B 0 1 2 3 4 5 6 7 ... 92 93 94 95 96 97 98 99
+  * channel      (channel) &lt;U7 2kB &#x27;EEG 001&#x27; &#x27;EEG 002&#x27; ... &#x27;EEG 059&#x27; &#x27;EEG 060&#x27;
+  * sample       (sample) int64 5kB 0 1 2 3 4 5 6 ... 629 630 631 632 633 634
+    event_name   (epoch) object 800B &#x27;stimulus&#x27; &#x27;stimulus&#x27; ... &#x27;stimulus&#x27;
+    rt           (epoch) float64 800B 0.35 0.554 0.624 0.364 ... 0.48 0.468 0.36
+  * participant  (participant) &lt;U2 8B &#x27;S0&#x27;
+Data variables:
+    data         (participant, epoch, channel, sample) float64 30MB -5.709e-0...
+Attributes:
+    sfreq:             500.0
+    offset:            0
+    lowpass:           40.0
+    highpass:          0.10000000149011612
+    lower_limit_rt:    0
+    upper_limit_rt:    inf
+    reject_threshold:  None
+    n_trials:          100</pre><div class='xr-wrap' style='display:none'><div class='xr-header'><div class='xr-obj-type'>xarray.Dataset</div></div><ul class='xr-sections'><li class='xr-section-item'><input id='section-2b160f90-035f-4897-bb5f-9a718718eddb' class='xr-section-summary-in' type='checkbox' disabled ><label for='section-2b160f90-035f-4897-bb5f-9a718718eddb' class='xr-section-summary'  title='Expand/collapse section'>Dimensions:</label><div class='xr-section-inline-details'><ul class='xr-dim-list'><li><span class='xr-has-index'>participant</span>: 1</li><li><span class='xr-has-index'>epoch</span>: 100</li><li><span class='xr-has-index'>channel</span>: 59</li><li><span class='xr-has-index'>sample</span>: 635</li></ul></div><div class='xr-section-details'></div></li><li class='xr-section-item'><input id='section-3e1f004d-6388-4508-bce9-81c6c7800357' class='xr-section-summary-in' type='checkbox'  checked><label for='section-3e1f004d-6388-4508-bce9-81c6c7800357' class='xr-section-summary' >Coordinates: <span>(6)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>epoch</span></div><div class='xr-var-dims'>(epoch)</div><div class='xr-var-dtype'>int64</div><div class='xr-var-preview xr-preview'>0 1 2 3 4 5 6 ... 94 95 96 97 98 99</div><input id='attrs-0ca852ff-5cf7-4328-ac39-4bdab61d26e8' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-0ca852ff-5cf7-4328-ac39-4bdab61d26e8' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-903df9c2-a9f3-4995-967b-a21cd2d7e36b' class='xr-var-data-in' type='checkbox'><label for='data-903df9c2-a9f3-4995-967b-a21cd2d7e36b' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
+       18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+       36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
+       54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71,
+       72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+       90, 91, 92, 93, 94, 95, 96, 97, 98, 99])</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>channel</span></div><div class='xr-var-dims'>(channel)</div><div class='xr-var-dtype'>&lt;U7</div><div class='xr-var-preview xr-preview'>&#x27;EEG 001&#x27; &#x27;EEG 002&#x27; ... &#x27;EEG 060&#x27;</div><input id='attrs-a70286df-5e1a-4c0f-91a2-cdc3721c23cd' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-a70286df-5e1a-4c0f-91a2-cdc3721c23cd' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-5404edd0-c1eb-4d83-980d-db8621e5b53a' class='xr-var-data-in' type='checkbox'><label for='data-5404edd0-c1eb-4d83-980d-db8621e5b53a' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([&#x27;EEG 001&#x27;, &#x27;EEG 002&#x27;, &#x27;EEG 003&#x27;, &#x27;EEG 004&#x27;, &#x27;EEG 005&#x27;, &#x27;EEG 006&#x27;,
+       &#x27;EEG 007&#x27;, &#x27;EEG 008&#x27;, &#x27;EEG 009&#x27;, &#x27;EEG 010&#x27;, &#x27;EEG 011&#x27;, &#x27;EEG 012&#x27;,
+       &#x27;EEG 013&#x27;, &#x27;EEG 014&#x27;, &#x27;EEG 015&#x27;, &#x27;EEG 016&#x27;, &#x27;EEG 017&#x27;, &#x27;EEG 018&#x27;,
+       &#x27;EEG 019&#x27;, &#x27;EEG 020&#x27;, &#x27;EEG 021&#x27;, &#x27;EEG 022&#x27;, &#x27;EEG 023&#x27;, &#x27;EEG 024&#x27;,
+       &#x27;EEG 025&#x27;, &#x27;EEG 026&#x27;, &#x27;EEG 027&#x27;, &#x27;EEG 028&#x27;, &#x27;EEG 029&#x27;, &#x27;EEG 030&#x27;,
+       &#x27;EEG 031&#x27;, &#x27;EEG 032&#x27;, &#x27;EEG 033&#x27;, &#x27;EEG 034&#x27;, &#x27;EEG 035&#x27;, &#x27;EEG 036&#x27;,
+       &#x27;EEG 037&#x27;, &#x27;EEG 038&#x27;, &#x27;EEG 039&#x27;, &#x27;EEG 040&#x27;, &#x27;EEG 041&#x27;, &#x27;EEG 042&#x27;,
+       &#x27;EEG 043&#x27;, &#x27;EEG 044&#x27;, &#x27;EEG 045&#x27;, &#x27;EEG 046&#x27;, &#x27;EEG 047&#x27;, &#x27;EEG 048&#x27;,
+       &#x27;EEG 049&#x27;, &#x27;EEG 050&#x27;, &#x27;EEG 051&#x27;, &#x27;EEG 052&#x27;, &#x27;EEG 054&#x27;, &#x27;EEG 055&#x27;,
+       &#x27;EEG 056&#x27;, &#x27;EEG 057&#x27;, &#x27;EEG 058&#x27;, &#x27;EEG 059&#x27;, &#x27;EEG 060&#x27;], dtype=&#x27;&lt;U7&#x27;)</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>sample</span></div><div class='xr-var-dims'>(sample)</div><div class='xr-var-dtype'>int64</div><div class='xr-var-preview xr-preview'>0 1 2 3 4 5 ... 630 631 632 633 634</div><input id='attrs-80efedba-a36a-4bbf-bc1b-dadbc2665ab2' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-80efedba-a36a-4bbf-bc1b-dadbc2665ab2' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-221f3229-98be-4ab2-87b9-01c47879aef5' class='xr-var-data-in' type='checkbox'><label for='data-221f3229-98be-4ab2-87b9-01c47879aef5' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([  0,   1,   2, ..., 632, 633, 634], shape=(635,))</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span>event_name</span></div><div class='xr-var-dims'>(epoch)</div><div class='xr-var-dtype'>object</div><div class='xr-var-preview xr-preview'>&#x27;stimulus&#x27; ... &#x27;stimulus&#x27;</div><input id='attrs-16d0167b-7fb8-4c8f-8233-481d98866dfc' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-16d0167b-7fb8-4c8f-8233-481d98866dfc' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-b853a8dc-e4a0-4bb2-a790-3784dee4bc80' class='xr-var-data-in' type='checkbox'><label for='data-b853a8dc-e4a0-4bb2-a790-3784dee4bc80' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([&#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;,
+       &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;, &#x27;stimulus&#x27;],
+      dtype=object)</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span>rt</span></div><div class='xr-var-dims'>(epoch)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>0.35 0.554 0.624 ... 0.468 0.36</div><input id='attrs-803d4069-b50a-4f59-b6fe-8359965a9d68' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-803d4069-b50a-4f59-b6fe-8359965a9d68' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-cadb6b8a-422a-4b28-bbd8-c55abc2bcd68' class='xr-var-data-in' type='checkbox'><label for='data-cadb6b8a-422a-4b28-bbd8-c55abc2bcd68' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([0.35 , 0.554, 0.624, 0.364, 0.422, 0.7  , 0.438, 0.516, 0.648,
+       0.416, 0.634, 0.728, 0.364, 0.688, 0.6  , 0.262, 0.658, 0.612,
+       0.376, 0.834, 0.534, 0.408, 0.202, 1.034, 0.648, 0.388, 0.548,
+       0.422, 0.588, 0.578, 0.426, 0.292, 0.574, 0.732, 0.694, 0.748,
+       0.83 , 0.732, 0.68 , 0.764, 0.698, 0.432, 0.518, 0.758, 0.53 ,
+       0.48 , 0.708, 0.322, 0.474, 0.496, 0.438, 0.428, 0.47 , 1.034,
+       0.858, 0.48 , 0.538, 0.766, 0.442, 1.27 , 0.422, 0.77 , 0.398,
+       0.34 , 1.048, 0.344, 0.586, 0.574, 0.578, 0.818, 0.578, 0.636,
+       0.376, 0.712, 0.738, 1.172, 0.826, 0.406, 0.428, 0.652, 0.392,
+       0.358, 0.482, 0.618, 0.808, 0.426, 0.396, 0.62 , 0.91 , 0.518,
+       0.21 , 0.52 , 0.428, 0.204, 0.61 , 0.622, 0.378, 0.48 , 0.468,
+       0.36 ])</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>participant</span></div><div class='xr-var-dims'>(participant)</div><div class='xr-var-dtype'>&lt;U2</div><div class='xr-var-preview xr-preview'>&#x27;S0&#x27;</div><input id='attrs-5c912607-c7e1-4697-8dac-8923ec6e1a0e' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-5c912607-c7e1-4697-8dac-8923ec6e1a0e' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-7acbf84b-f83d-4dba-81e1-cac42fd60fba' class='xr-var-data-in' type='checkbox'><label for='data-7acbf84b-f83d-4dba-81e1-cac42fd60fba' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([&#x27;S0&#x27;], dtype=&#x27;&lt;U2&#x27;)</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-1165954a-930d-4540-bd39-dbbf25e3032f' class='xr-section-summary-in' type='checkbox'  checked><label for='section-1165954a-930d-4540-bd39-dbbf25e3032f' class='xr-section-summary' >Data variables: <span>(1)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span>data</span></div><div class='xr-var-dims'>(participant, epoch, channel, sample)</div><div class='xr-var-dtype'>float64</div><div class='xr-var-preview xr-preview'>-5.709e-07 -3.166e-06 ... nan nan</div><input id='attrs-dc5c05d1-c5e4-4245-90ff-7cf398b2f95f' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-dc5c05d1-c5e4-4245-90ff-7cf398b2f95f' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-b49feeea-7859-43ab-b161-151125d7a61f' class='xr-var-data-in' type='checkbox'><label for='data-b49feeea-7859-43ab-b161-151125d7a61f' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([[[[-5.70883512e-07, -3.16597644e-06, -3.22927834e-06, ...,
+                      nan,             nan,             nan],
+         [ 3.54434340e-06,  2.08445302e-06,  2.36496999e-06, ...,
+                      nan,             nan,             nan],
+         [-1.01062823e-07,  8.80339141e-07,  7.97356555e-07, ...,
+                      nan,             nan,             nan],
+         ...,
+         [ 3.87053355e-06,  3.16618667e-06,  1.88804157e-06, ...,
+                      nan,             nan,             nan],
+         [-7.57897653e-07, -9.20709267e-07, -1.88289220e-06, ...,
+                      nan,             nan,             nan],
+         [-1.01732712e-06, -7.80073932e-07, -9.07231804e-07, ...,
+                      nan,             nan,             nan]],
+
+        [[ 2.45133038e-06,  2.67078040e-06, -3.81476446e-07, ...,
+                      nan,             nan,             nan],
+         [-1.20085339e-06, -2.12295655e-06, -2.38418896e-06, ...,
+                      nan,             nan,             nan],
+         [-2.42124508e-06, -2.75544284e-06, -1.33498430e-06, ...,
+                      nan,             nan,             nan],
+...
+                      nan,             nan,             nan],
+         [-1.39024576e-06, -1.47035675e-06,  1.23451370e-06, ...,
+                      nan,             nan,             nan],
+         [ 1.95541666e-06,  1.53539335e-06,  1.52739305e-07, ...,
+                      nan,             nan,             nan]],
+
+        [[ 1.38305724e-06,  2.20127495e-06,  1.71956201e-06, ...,
+                      nan,             nan,             nan],
+         [-1.64983121e-06, -1.71234516e-07,  3.46513322e-08, ...,
+                      nan,             nan,             nan],
+         [ 2.92432783e-06,  2.38656664e-06,  1.24576848e-06, ...,
+                      nan,             nan,             nan],
+         ...,
+         [-3.33488186e-06, -3.06040087e-06, -3.18796477e-06, ...,
+                      nan,             nan,             nan],
+         [ 4.23098109e-06,  3.85299440e-06,  3.68690989e-06, ...,
+                      nan,             nan,             nan],
+         [ 4.85526613e-06,  2.97903358e-06,  3.04658068e-06, ...,
+                      nan,             nan,             nan]]]],
+      shape=(1, 100, 59, 635))</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-36ecaf01-3e68-430d-a03f-e932235a590b' class='xr-section-summary-in' type='checkbox'  ><label for='section-36ecaf01-3e68-430d-a03f-e932235a590b' class='xr-section-summary' >Indexes: <span>(4)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-index-name'><div>epoch</div></div><div class='xr-index-preview'>PandasIndex</div><input type='checkbox' disabled/><label></label><input id='index-a1117236-03a7-4ad4-bc1e-6bc79b274ab5' class='xr-index-data-in' type='checkbox'/><label for='index-a1117236-03a7-4ad4-bc1e-6bc79b274ab5' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(Index([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
+       18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+       36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
+       54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71,
+       72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+       90, 91, 92, 93, 94, 95, 96, 97, 98, 99],
+      dtype=&#x27;int64&#x27;, name=&#x27;epoch&#x27;))</pre></div></li><li class='xr-var-item'><div class='xr-index-name'><div>channel</div></div><div class='xr-index-preview'>PandasIndex</div><input type='checkbox' disabled/><label></label><input id='index-fa802d98-5ebd-447b-92d9-9b1ec2c935c1' class='xr-index-data-in' type='checkbox'/><label for='index-fa802d98-5ebd-447b-92d9-9b1ec2c935c1' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(Index([&#x27;EEG 001&#x27;, &#x27;EEG 002&#x27;, &#x27;EEG 003&#x27;, &#x27;EEG 004&#x27;, &#x27;EEG 005&#x27;, &#x27;EEG 006&#x27;,
+       &#x27;EEG 007&#x27;, &#x27;EEG 008&#x27;, &#x27;EEG 009&#x27;, &#x27;EEG 010&#x27;, &#x27;EEG 011&#x27;, &#x27;EEG 012&#x27;,
+       &#x27;EEG 013&#x27;, &#x27;EEG 014&#x27;, &#x27;EEG 015&#x27;, &#x27;EEG 016&#x27;, &#x27;EEG 017&#x27;, &#x27;EEG 018&#x27;,
+       &#x27;EEG 019&#x27;, &#x27;EEG 020&#x27;, &#x27;EEG 021&#x27;, &#x27;EEG 022&#x27;, &#x27;EEG 023&#x27;, &#x27;EEG 024&#x27;,
+       &#x27;EEG 025&#x27;, &#x27;EEG 026&#x27;, &#x27;EEG 027&#x27;, &#x27;EEG 028&#x27;, &#x27;EEG 029&#x27;, &#x27;EEG 030&#x27;,
+       &#x27;EEG 031&#x27;, &#x27;EEG 032&#x27;, &#x27;EEG 033&#x27;, &#x27;EEG 034&#x27;, &#x27;EEG 035&#x27;, &#x27;EEG 036&#x27;,
+       &#x27;EEG 037&#x27;, &#x27;EEG 038&#x27;, &#x27;EEG 039&#x27;, &#x27;EEG 040&#x27;, &#x27;EEG 041&#x27;, &#x27;EEG 042&#x27;,
+       &#x27;EEG 043&#x27;, &#x27;EEG 044&#x27;, &#x27;EEG 045&#x27;, &#x27;EEG 046&#x27;, &#x27;EEG 047&#x27;, &#x27;EEG 048&#x27;,
+       &#x27;EEG 049&#x27;, &#x27;EEG 050&#x27;, &#x27;EEG 051&#x27;, &#x27;EEG 052&#x27;, &#x27;EEG 054&#x27;, &#x27;EEG 055&#x27;,
+       &#x27;EEG 056&#x27;, &#x27;EEG 057&#x27;, &#x27;EEG 058&#x27;, &#x27;EEG 059&#x27;, &#x27;EEG 060&#x27;],
+      dtype=&#x27;object&#x27;, name=&#x27;channel&#x27;))</pre></div></li><li class='xr-var-item'><div class='xr-index-name'><div>sample</div></div><div class='xr-index-preview'>PandasIndex</div><input type='checkbox' disabled/><label></label><input id='index-6fa43ca1-a64e-4e63-833e-ef17c7511a5b' class='xr-index-data-in' type='checkbox'/><label for='index-6fa43ca1-a64e-4e63-833e-ef17c7511a5b' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(Index([  0,   1,   2,   3,   4,   5,   6,   7,   8,   9,
+       ...
+       625, 626, 627, 628, 629, 630, 631, 632, 633, 634],
+      dtype=&#x27;int64&#x27;, name=&#x27;sample&#x27;, length=635))</pre></div></li><li class='xr-var-item'><div class='xr-index-name'><div>participant</div></div><div class='xr-index-preview'>PandasIndex</div><input type='checkbox' disabled/><label></label><input id='index-04aec5d4-ede6-4284-8d3e-7e861ecbf0e8' class='xr-index-data-in' type='checkbox'/><label for='index-04aec5d4-ede6-4284-8d3e-7e861ecbf0e8' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(Index([&#x27;S0&#x27;], dtype=&#x27;object&#x27;, name=&#x27;participant&#x27;))</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-796209e8-d4df-4403-b71e-aeb93dbedc21' class='xr-section-summary-in' type='checkbox'  checked><label for='section-796209e8-d4df-4403-b71e-aeb93dbedc21' class='xr-section-summary' >Attributes: <span>(8)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><dl class='xr-attrs'><dt><span>sfreq :</span></dt><dd>500.0</dd><dt><span>offset :</span></dt><dd>0</dd><dt><span>lowpass :</span></dt><dd>40.0</dd><dt><span>highpass :</span></dt><dd>0.10000000149011612</dd><dt><span>lower_limit_rt :</span></dt><dd>0</dd><dt><span>upper_limit_rt :</span></dt><dd>inf</dd><dt><span>reject_threshold :</span></dt><dd>None</dd><dt><span>n_trials :</span></dt><dd>100</dd></dl></div></li></ul></div></div></div>
+</div>
+<p>The previous function epochs the data around our (simulated) stimuli, cut the EEG data at each RT value (with an offset to avoid edge effects) and stores any additional infomation along (here ‘event_name’).</p>
+<p>xarray is a handy way of using matrices with named dimensions. For example we can now very easily draw an ERP:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1">#example usage of xarray</span>
+<span class="n">epoch_data</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">channel</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;EEG 001&#39;</span><span class="p">,</span><span class="s1">&#39;EEG 002&#39;</span><span class="p">,</span><span class="s1">&#39;EEG 003&#39;</span><span class="p">],</span> <span class="n">sample</span><span class="o">=</span><span class="nb">range</span><span class="p">(</span><span class="mi">400</span><span class="p">))</span>\
+    <span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s1">&#39;sample&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">([</span><span class="s1">&#39;participant&#39;</span><span class="p">,</span><span class="s1">&#39;epoch&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">plot</span><span class="o">.</span><span class="n">line</span><span class="p">(</span><span class="n">hue</span><span class="o">=</span><span class="s1">&#39;channel&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_11_0.png" src="../_images/notebooks_1-How_HMP_works_11_0.png" />
+</div>
+</div>
+</section>
+<section id="Data-preprocessing">
+<h3>Data preprocessing<a class="headerlink" href="#Data-preprocessing" title="Link to this heading"></a></h3>
+<p>Next, we transform the data for HMP:</p>
+<ul class="simple">
+<li><p>Apply PCA and select top components to lower computational load</p></li>
+<li><p>zscore the data per trial</p></li>
+</ul>
+<p>This analysis step asks you to choose a number of PC components; in the case of this illustration we just take 3 components for simplicity (more on this with real data in Tutorial 3).</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">hmp</span><span class="w"> </span><span class="kn">import</span> <span class="n">preprocessing</span>
+<span class="n">preprocessed</span> <span class="o">=</span> <span class="n">preprocessing</span><span class="o">.</span><span class="n">Preprocessing</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/preprocessing.py:196: UserWarning: Data will be modified inplace, re-read the data or use copy=True if multiplecalls to this function
+  warn(
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_14_1.png" src="../_images/notebooks_1-How_HMP_works_14_1.png" />
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+How many PCs (95 and 99% explained variance at component n54 and n57; components till n56 explain at least 1%)? 3
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">hmp.visu</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_components_sensor</span>
+<span class="n">plot_components_sensor</span><span class="p">(</span><span class="n">preprocessed</span><span class="o">.</span><span class="n">weights</span><span class="p">,</span> <span class="n">info</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_15_0.png" src="../_images/notebooks_1-How_HMP_works_15_0.png" />
+</div>
+</div>
+<p>From now on the estimation performed by HMP will be done on these 3 virtual channels</p>
+</section>
+</section>
+<section id="HMP-and-implementation-assumptions">
+<h2>HMP and implementation assumptions<a class="headerlink" href="#HMP-and-implementation-assumptions" title="Link to this heading"></a></h2>
+<section id="Expected-pattern">
+<h3>Expected pattern<a class="headerlink" href="#Expected-pattern" title="Link to this heading"></a></h3>
+<p>HMP assumes that a transition or cognitive event is represented in the data as a specific pattern. Therefore, before estimating a model one needs to build such an expected event characteristics.</p>
+<p>The standard 50ms half-sine can be created by invoking the default <code class="docutils literal notranslate"><span class="pre">EventProperties</span></code> class. The class will then store the expected pattern given the sampling frequency of the data.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">hmp.patterns</span><span class="w"> </span><span class="kn">import</span> <span class="n">HalfSine</span>
+
+<span class="n">event_properties</span> <span class="o">=</span> <span class="n">HalfSine</span><span class="o">.</span><span class="n">create_expected</span><span class="p">(</span><span class="n">sfreq</span><span class="o">=</span><span class="n">epoch_data</span><span class="o">.</span><span class="n">sfreq</span><span class="p">)</span>
+<span class="n">event_properties</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+HalfSine(sfreq=500.0, width_samples=25, location=25, template=array([0.00502324, 0.01499051, 0.02472136, 0.03406234, 0.04286614,
+       0.05099392, 0.05831749, 0.06472136, 0.07010453, 0.07438212,
+       0.07748665, 0.07936918, 0.08      , 0.07936918, 0.07748665,
+       0.07438212, 0.07010453, 0.06472136, 0.05831749, 0.05099392,
+       0.04286614, 0.03406234, 0.02472136, 0.01499051, 0.00502324]))
+</pre></div></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">event_properties.template</span></code> contains the default shape that we expect in the data, but we can replace that with whatever template we want if we have specific hypothesis:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">event_properties</span><span class="o">.</span><span class="n">template</span><span class="p">,</span> <span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Normalized value&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Samples NOT time&#39;</span><span class="p">)</span>
+
+<span class="c1"># Alternative template, just for fun</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy</span><span class="w"> </span><span class="kn">import</span> <span class="n">signal</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">hmp.patterns</span><span class="w"> </span><span class="kn">import</span> <span class="n">Arbitrary</span>
+
+<span class="n">fancy</span> <span class="o">=</span> <span class="n">signal</span><span class="o">.</span><span class="n">windows</span><span class="o">.</span><span class="n">flattop</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">event_properties</span><span class="o">.</span><span class="n">template</span><span class="p">))</span>
+<span class="n">fancy</span> <span class="o">=</span> <span class="n">fancy</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">fancy</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="c1">#Normalizing as the original one</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">fancy</span><span class="p">,</span> <span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;fancy&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">();</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_22_0.png" src="../_images/notebooks_1-How_HMP_works_22_0.png" />
+</div>
+</div>
+<p>If we wanted the fancy one we could simply do:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">hmp.patterns</span><span class="w"> </span><span class="kn">import</span> <span class="n">Arbitrary</span>
+<span class="n">event_properties</span> <span class="o">=</span> <span class="n">Arbitrary</span><span class="o">.</span><span class="n">create_expected</span><span class="p">(</span><span class="n">sfreq</span><span class="o">=</span><span class="n">epoch_data</span><span class="o">.</span><span class="n">sfreq</span><span class="p">,</span> <span class="n">template</span><span class="o">=</span><span class="n">fancy</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>We then create a <code class="docutils literal notranslate"><span class="pre">TrialData</span></code> class that combines the expected pattern with the data. The class will automatically cross-correlate the data with the provided template.</p>
+<p>Below, we plot those cross-correlated values; the vertical lines indicate the start of the events in the simulated data.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">hmp.trialdata</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrialData</span>
+
+<span class="n">trial_data</span> <span class="o">=</span> <span class="n">TrialData</span><span class="o">.</span><span class="n">from_preprocessed</span><span class="p">(</span><span class="n">preprocessed</span><span class="o">=</span><span class="n">preprocessed</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">pattern</span><span class="o">=</span><span class="n">event_properties</span><span class="o">.</span><span class="n">template</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">trial_data</span><span class="o">.</span><span class="n">cross_corr</span><span class="p">[</span><span class="n">trial_data</span><span class="o">.</span><span class="n">starts</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">trial_data</span><span class="o">.</span><span class="n">ends</span><span class="p">[</span><span class="mi">0</span><span class="p">]])</span>
+
+<span class="c1">#Recover the actual time of the simulated events</span>
+<span class="n">sim_source_times</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ediff1d</span><span class="p">(</span><span class="n">events</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span><span class="n">to_begin</span><span class="o">=</span><span class="mi">0</span><span class="p">)[</span><span class="n">events</span><span class="p">[:,</span><span class="mi">2</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">],</span> <span class="p">(</span><span class="n">n_trials</span><span class="p">,</span> <span class="n">n_events</span><span class="o">+</span><span class="mi">1</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">vlines</span><span class="p">(</span><span class="n">sim_source_times</span><span class="p">[</span><span class="mi">0</span><span class="p">,:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(),</span> <span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">,</span> <span class="s1">&#39;k&#39;</span><span class="p">)</span> <span class="c1">#overlaying the simulated event onset times</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_25_0.png" src="../_images/notebooks_1-How_HMP_works_25_0.png" />
+</div>
+</div>
+<p>The specific pattern to be expected is an open discussion, given the transient and oscillatory nature of E/MEG signals, a half-sine is a good starting point. The specific width (or frequency) of the half-sine is more crucial (see tutorial on assumption and the simulations in the <a class="reference external" href="https://direct.mit.edu/imag/article/doi/10.1162/imag_a_00400/125469/Trial-by-trial-detection-of-cognitive-events-in">paper</a>), overall the shorter the pattern the better up to the point were high frequency noise gets
+in the way of the estimation.</p>
+<p>Based on experience, a pattern width between 30 and 50ms generally provides the most robust solutions (but caution regarding the number of points in the pattern given the sampling rate, e.g. no use to take a 100Hz signal with a 30ms half-sine as the pattern would only be defined on three points)</p>
+</section>
+<section id="Expected-time-distribution">
+<h3>Expected time distribution<a class="headerlink" href="#Expected-time-distribution" title="Link to this heading"></a></h3>
+<p>Next HMP assumes that the time of the event peak follow a specific one-parameter time distribution. By default we expect event peak times to vary per-trial according to a Gamma distribution with a shape of 2 and a scale free to vary:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">hmp.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Gamma</span>
+
+<span class="n">gamma_2</span> <span class="o">=</span> <span class="n">Gamma</span><span class="p">()</span>
+<span class="n">gamma_2</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+&lt;hmp.distributions.Gamma at 0x72b931b6b950&gt;
+</pre></div></div>
+</div>
+<p>For example an event happening on average 100ms following stimulus would have the blue distribution given a Gamma with a shape of 2 or the orange one with a Weibull and a shape of 5.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">example_mean</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">500</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">gamma_2</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">gamma_2</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+        <span class="n">scale</span><span class="o">=</span><span class="n">gamma_2</span><span class="o">.</span><span class="n">mean_to_scale</span><span class="p">(</span><span class="n">example_mean</span><span class="p">)),</span>
+        <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s1">&#39;Default Gamma$_2$&#39;</span><span class="p">)</span>
+
+<span class="c1">## Other distribution to illustrate</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">hmp.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Weibull</span>
+
+<span class="n">other_time_distribution</span> <span class="o">=</span> <span class="n">Weibull</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">other_time_distribution</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">other_time_distribution</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+        <span class="n">scale</span><span class="o">=</span><span class="n">other_time_distribution</span><span class="o">.</span><span class="n">mean_to_scale</span><span class="p">(</span><span class="n">example_mean</span><span class="p">)),</span>
+        <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s1">&#39;Example Weibull$_5$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_31_0.png" src="../_images/notebooks_1-How_HMP_works_31_0.png" />
+</div>
+</div>
+<p>Overall the specific distribution doesn’t really matter (see tutorials on assumptions and the appendix of the <a class="reference external" href="https://direct.mit.edu/imag/article/doi/10.1162/imag_a_00400/125469/Trial-by-trial-detection-of-cognitive-events-in">paper</a>). The most important thing is to not exclude likely times (e.g. the Weibull doesn’t allow event to happen directly after the stimulus for example).</p>
+<blockquote>
+<div><p>[!NOTE] Declaring a time distribution is not a requirement, if you don’t provide one, HMP will assume a Gamma distribution with a shape of 2 and a scale free to vary. This is the default setting and works well in most cases.</p>
+</div></blockquote>
+</section>
+</section>
+<section id="An-HMP-model">
+<h2>An HMP model<a class="headerlink" href="#An-HMP-model" title="Link to this heading"></a></h2>
+<p>After having defined the expected event pattern, cross-correlated it with the transformed data, and the overall shape of the by-trial time distributions we can create a proper HMP model. In this case we’ll use the <code class="docutils literal notranslate"><span class="pre">EventModel</span></code> which is a model with a pre-defined number of events (more on the different model classes in the next tutorial).</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">hmp.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">EventModel</span>
+<span class="n">model_true</span> <span class="o">=</span> <span class="n">EventModel</span><span class="p">(</span><span class="n">event_properties</span><span class="p">,</span> <span class="n">gamma_2</span><span class="p">,</span> <span class="n">n_events</span><span class="o">=</span><span class="n">n_events</span><span class="p">,</span>
+                        <span class="n">max_iteration</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="c1">#max_iteration=0 prevents from actually going through the EM</span>
+<span class="n">model_true</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">trial_data</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="c1"># Just to illustrate the default starting points</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/gabriel/ownCloud/projects/RUGUU/hmp/hmp/models/event.py:559: RuntimeWarning: Convergence failed, estimation hit the maximum number of iterations: (0)
+  warn(
+</pre></div></div>
+</div>
+<section id="HMP-parameters">
+<h3>HMP parameters<a class="headerlink" href="#HMP-parameters" title="Link to this heading"></a></h3>
+<p>Given an expected number of events, the model will estimate the parameters of the distribution of the time interval between events and the contribution of each channel (here principal components) to each event. In this simulation case we know when in time we simulated each event and also what channels were associated with which source, so we can use this information to estimate the ground truth model. The following cell basically extract those true parameters but of course only works on
+simulated data.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># `events` refers to the actual simulation times of the events, specific to simulations only</span>
+<span class="n">sim_source_times</span><span class="p">,</span> <span class="n">true_time_pars</span><span class="p">,</span> <span class="n">true_channel_pars</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> \
+        <span class="n">simulations</span><span class="o">.</span><span class="n">simulated_times_and_parameters</span><span class="p">(</span><span class="n">events</span><span class="p">,</span> <span class="n">model_true</span><span class="p">,</span> <span class="n">trial_data</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<section id="Time-parameters">
+<h4>Time parameters<a class="headerlink" href="#Time-parameters" title="Link to this heading"></a></h4>
+<p>The <code class="docutils literal notranslate"><span class="pre">time_pars</span></code> attribute of an HMP model contains the time parameter of the choosen distribution for each event. The matrix below is a 2D array where each row corresponds to an event and each column corresponds to a parameter of the time distribution (in this case the Gamma distribution). The first column is the shape parameter (fixed in the cells above) and the second column is the scale parameter (that will be updated as we estimate an HMP model).</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Fixing true parameter in model, specific to simulations</span>
+<span class="n">model_true</span><span class="o">.</span><span class="n">time_pars</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">true_time_pars</span><span class="p">])</span>
+<span class="n">model_true</span><span class="o">.</span><span class="n">time_pars</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([[[ 2, 15],
+        [ 2, 35],
+        [ 2, 51],
+        [ 2, 21],
+        [ 2, 18]]])
+</pre></div></div>
+</div>
+<p>If we represent those as Gamma distributions we obtain the following probability densities (the expected mean of a gamma is <code class="docutils literal notranslate"><span class="pre">shape</span> <span class="pre">*</span> <span class="pre">scale</span></code>):</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+<span class="n">colors</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">rainbow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+
+<span class="n">T</span> <span class="o">=</span> <span class="mi">350</span>
+
+<span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="mi">1001</span><span class="p">),</span>
+             <span class="n">gamma_2</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="mi">1001</span><span class="p">),</span> <span class="n">gamma_2</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">model_true</span><span class="o">.</span><span class="n">time_pars</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">event</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span>
+             <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;to event </span><span class="si">{</span><span class="n">event</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="n">event</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;t&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_43_0.png" src="../_images/notebooks_1-How_HMP_works_43_0.png" />
+</div>
+</div>
+<p>The width of these distribution indicates the variability of the between-event durations over trials and (with real data) participants.</p>
+</section>
+<section id="Channel-parameters">
+<h4>Channel parameters<a class="headerlink" href="#Channel-parameters" title="Link to this heading"></a></h4>
+<p>The <code class="docutils literal notranslate"><span class="pre">channel_pars</span></code> attribute of an HMP model contains the contribution of each channel/PC to each event. The matrix below is a 2D array where each row corresponds to an event and each column corresponds to a channel.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Fixing true parameter in model, specific to simulations</span>
+<span class="n">model_true</span><span class="o">.</span><span class="n">channel_pars</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">true_channel_pars</span><span class="p">])</span>
+<span class="n">model_true</span><span class="o">.</span><span class="n">channel_pars</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([[[ 2.27998886,  0.56456789, -0.59330625],
+        [-0.39585184,  2.31361486, -0.72073836],
+        [-2.11448823,  0.64686449,  1.16394691],
+        [-2.16347821, -0.68996724, -1.56779367]]])
+</pre></div></div>
+</div>
+<p>Again if we represent this visually we observe the following plot</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">model_true</span><span class="o">.</span><span class="n">channel_pars</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="s2">&quot;lower&quot;</span><span class="p">,</span> <span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Principal components&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Event number&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">yticks</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">trial_data</span><span class="o">.</span><span class="n">n_dims</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">trial_data</span><span class="o">.</span><span class="n">n_dims</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xticks</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n_events</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n_events</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_49_0.png" src="../_images/notebooks_1-How_HMP_works_49_0.png" />
+</div>
+</div>
+<p>We used 3 PC components (y-axis) to estimate 4 events. As is visible in the matrix above, each event has a unique combination of component contributions, although this is not a requirement.</p>
+</section>
+</section>
+<section id="Transforming-the-data-to-event-probability-space-using-these-parameters">
+<h3>Transforming the data to event probability space using these parameters<a class="headerlink" href="#Transforming-the-data-to-event-probability-space-using-these-parameters" title="Link to this heading"></a></h3>
+<p>As an exceedingly simple example, we will first feed these true time and channel parameters into the HMP model fitting procedure as starting points. We then call the <code class="docutils literal notranslate"><span class="pre">transform</span></code> method which gives, for a set of time and channel parameters, the probability associated with each event for each E/MEG sample.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Transforming to event probability space</span>
+<span class="n">loglikelihood_true</span><span class="p">,</span> <span class="n">estimates_true</span> <span class="o">=</span> <span class="n">model_true</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">trial_data</span><span class="p">,</span> <span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>We can now look at the probabilities associated with this true model</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">estimates_true</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div><svg style="position: absolute; width: 0; height: 0; overflow: hidden">
+<defs>
+<symbol id="icon-database" viewBox="0 0 32 32">
+<path d="M16 0c-8.837 0-16 2.239-16 5v4c0 2.761 7.163 5 16 5s16-2.239 16-5v-4c0-2.761-7.163-5-16-5z"></path>
+<path d="M16 17c-8.837 0-16-2.239-16-5v6c0 2.761 7.163 5 16 5s16-2.239 16-5v-6c0 2.761-7.163 5-16 5z"></path>
+<path d="M16 26c-8.837 0-16-2.239-16-5v6c0 2.761 7.163 5 16 5s16-2.239 16-5v-6c0 2.761-7.163 5-16 5z"></path>
+</symbol>
+<symbol id="icon-file-text2" viewBox="0 0 32 32">
+<path d="M28.681 7.159c-0.694-0.947-1.662-2.053-2.724-3.116s-2.169-2.030-3.116-2.724c-1.612-1.182-2.393-1.319-2.841-1.319h-15.5c-1.378 0-2.5 1.121-2.5 2.5v27c0 1.378 1.122 2.5 2.5 2.5h23c1.378 0 2.5-1.122 2.5-2.5v-19.5c0-0.448-0.137-1.23-1.319-2.841zM24.543 5.457c0.959 0.959 1.712 1.825 2.268 2.543h-4.811v-4.811c0.718 0.556 1.584 1.309 2.543 2.268zM28 29.5c0 0.271-0.229 0.5-0.5 0.5h-23c-0.271 0-0.5-0.229-0.5-0.5v-27c0-0.271 0.229-0.5 0.5-0.5 0 0 15.499-0 15.5 0v7c0 0.552 0.448 1 1 1h7v19.5z"></path>
+<path d="M23 26h-14c-0.552 0-1-0.448-1-1s0.448-1 1-1h14c0.552 0 1 0.448 1 1s-0.448 1-1 1z"></path>
+<path d="M23 22h-14c-0.552 0-1-0.448-1-1s0.448-1 1-1h14c0.552 0 1 0.448 1 1s-0.448 1-1 1z"></path>
+<path d="M23 18h-14c-0.552 0-1-0.448-1-1s0.448-1 1-1h14c0.552 0 1 0.448 1 1s-0.448 1-1 1z"></path>
+</symbol>
+</defs>
+</svg>
+<style>/* CSS stylesheet for displaying xarray objects in jupyterlab.
+ *
+ */
+
+:root {
+  --xr-font-color0: var(--jp-content-font-color0, rgba(0, 0, 0, 1));
+  --xr-font-color2: var(--jp-content-font-color2, rgba(0, 0, 0, 0.54));
+  --xr-font-color3: var(--jp-content-font-color3, rgba(0, 0, 0, 0.38));
+  --xr-border-color: var(--jp-border-color2, #e0e0e0);
+  --xr-disabled-color: var(--jp-layout-color3, #bdbdbd);
+  --xr-background-color: var(--jp-layout-color0, white);
+  --xr-background-color-row-even: var(--jp-layout-color1, white);
+  --xr-background-color-row-odd: var(--jp-layout-color2, #eeeeee);
+}
+
+html[theme="dark"],
+html[data-theme="dark"],
+body[data-theme="dark"],
+body.vscode-dark {
+  --xr-font-color0: rgba(255, 255, 255, 1);
+  --xr-font-color2: rgba(255, 255, 255, 0.54);
+  --xr-font-color3: rgba(255, 255, 255, 0.38);
+  --xr-border-color: #1f1f1f;
+  --xr-disabled-color: #515151;
+  --xr-background-color: #111111;
+  --xr-background-color-row-even: #111111;
+  --xr-background-color-row-odd: #313131;
+}
+
+.xr-wrap {
+  display: block !important;
+  min-width: 300px;
+  max-width: 700px;
+}
+
+.xr-text-repr-fallback {
+  /* fallback to plain text repr when CSS is not injected (untrusted notebook) */
+  display: none;
+}
+
+.xr-header {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: solid 1px var(--xr-border-color);
+}
+
+.xr-header > div,
+.xr-header > ul {
+  display: inline;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.xr-obj-type,
+.xr-array-name {
+  margin-left: 2px;
+  margin-right: 10px;
+}
+
+.xr-obj-type {
+  color: var(--xr-font-color2);
+}
+
+.xr-sections {
+  padding-left: 0 !important;
+  display: grid;
+  grid-template-columns: 150px auto auto 1fr 0 20px 0 20px;
+}
+
+.xr-section-item {
+  display: contents;
+}
+
+.xr-section-item input {
+  display: inline-block;
+  opacity: 0;
+  height: 0;
+}
+
+.xr-section-item input + label {
+  color: var(--xr-disabled-color);
+}
+
+.xr-section-item input:enabled + label {
+  cursor: pointer;
+  color: var(--xr-font-color2);
+}
+
+.xr-section-item input:focus + label {
+  border: 2px solid var(--xr-font-color0);
+}
+
+.xr-section-item input:enabled + label:hover {
+  color: var(--xr-font-color0);
+}
+
+.xr-section-summary {
+  grid-column: 1;
+  color: var(--xr-font-color2);
+  font-weight: 500;
+}
+
+.xr-section-summary > span {
+  display: inline-block;
+  padding-left: 0.5em;
+}
+
+.xr-section-summary-in:disabled + label {
+  color: var(--xr-font-color2);
+}
+
+.xr-section-summary-in + label:before {
+  display: inline-block;
+  content: "►";
+  font-size: 11px;
+  width: 15px;
+  text-align: center;
+}
+
+.xr-section-summary-in:disabled + label:before {
+  color: var(--xr-disabled-color);
+}
+
+.xr-section-summary-in:checked + label:before {
+  content: "▼";
+}
+
+.xr-section-summary-in:checked + label > span {
+  display: none;
+}
+
+.xr-section-summary,
+.xr-section-inline-details {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.xr-section-inline-details {
+  grid-column: 2 / -1;
+}
+
+.xr-section-details {
+  display: none;
+  grid-column: 1 / -1;
+  margin-bottom: 5px;
+}
+
+.xr-section-summary-in:checked ~ .xr-section-details {
+  display: contents;
+}
+
+.xr-array-wrap {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 20px auto;
+}
+
+.xr-array-wrap > label {
+  grid-column: 1;
+  vertical-align: top;
+}
+
+.xr-preview {
+  color: var(--xr-font-color3);
+}
+
+.xr-array-preview,
+.xr-array-data {
+  padding: 0 5px !important;
+  grid-column: 2;
+}
+
+.xr-array-data,
+.xr-array-in:checked ~ .xr-array-preview {
+  display: none;
+}
+
+.xr-array-in:checked ~ .xr-array-data,
+.xr-array-preview {
+  display: inline-block;
+}
+
+.xr-dim-list {
+  display: inline-block !important;
+  list-style: none;
+  padding: 0 !important;
+  margin: 0;
+}
+
+.xr-dim-list li {
+  display: inline-block;
+  padding: 0;
+  margin: 0;
+}
+
+.xr-dim-list:before {
+  content: "(";
+}
+
+.xr-dim-list:after {
+  content: ")";
+}
+
+.xr-dim-list li:not(:last-child):after {
+  content: ",";
+  padding-right: 5px;
+}
+
+.xr-has-index {
+  font-weight: bold;
+}
+
+.xr-var-list,
+.xr-var-item {
+  display: contents;
+}
+
+.xr-var-item > div,
+.xr-var-item label,
+.xr-var-item > .xr-var-name span {
+  background-color: var(--xr-background-color-row-even);
+  margin-bottom: 0;
+}
+
+.xr-var-item > .xr-var-name:hover span {
+  padding-right: 5px;
+}
+
+.xr-var-list > li:nth-child(odd) > div,
+.xr-var-list > li:nth-child(odd) > label,
+.xr-var-list > li:nth-child(odd) > .xr-var-name span {
+  background-color: var(--xr-background-color-row-odd);
+}
+
+.xr-var-name {
+  grid-column: 1;
+}
+
+.xr-var-dims {
+  grid-column: 2;
+}
+
+.xr-var-dtype {
+  grid-column: 3;
+  text-align: right;
+  color: var(--xr-font-color2);
+}
+
+.xr-var-preview {
+  grid-column: 4;
+}
+
+.xr-index-preview {
+  grid-column: 2 / 5;
+  color: var(--xr-font-color2);
+}
+
+.xr-var-name,
+.xr-var-dims,
+.xr-var-dtype,
+.xr-preview,
+.xr-attrs dt {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 10px;
+}
+
+.xr-var-name:hover,
+.xr-var-dims:hover,
+.xr-var-dtype:hover,
+.xr-attrs dt:hover {
+  overflow: visible;
+  width: auto;
+  z-index: 1;
+}
+
+.xr-var-attrs,
+.xr-var-data,
+.xr-index-data {
+  display: none;
+  background-color: var(--xr-background-color) !important;
+  padding-bottom: 5px !important;
+}
+
+.xr-var-attrs-in:checked ~ .xr-var-attrs,
+.xr-var-data-in:checked ~ .xr-var-data,
+.xr-index-data-in:checked ~ .xr-index-data {
+  display: block;
+}
+
+.xr-var-data > table {
+  float: right;
+}
+
+.xr-var-name span,
+.xr-var-data,
+.xr-index-name div,
+.xr-index-data,
+.xr-attrs {
+  padding-left: 25px !important;
+}
+
+.xr-attrs,
+.xr-var-attrs,
+.xr-var-data,
+.xr-index-data {
+  grid-column: 1 / -1;
+}
+
+dl.xr-attrs {
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 125px auto;
+}
+
+.xr-attrs dt,
+.xr-attrs dd {
+  padding: 0;
+  margin: 0;
+  float: left;
+  padding-right: 10px;
+  width: auto;
+}
+
+.xr-attrs dt {
+  font-weight: normal;
+  grid-column: 1;
+}
+
+.xr-attrs dt:hover span {
+  display: inline-block;
+  background: var(--xr-background-color);
+  padding-right: 10px;
+}
+
+.xr-attrs dd {
+  grid-column: 2;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.xr-icon-database,
+.xr-icon-file-text2,
+.xr-no-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 1em;
+  height: 1.5em !important;
+  stroke-width: 0;
+  stroke: currentColor;
+  fill: currentColor;
+}
+</style><pre class='xr-text-repr-fallback'>&lt;xarray.DataArray (trial: 100, sample: 635, event: 4)&gt; Size: 2MB
+array([[[0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [2.36961982e-04, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [4.93104762e-04, 2.52932334e-08, 0.00000000e+00, 0.00000000e+00],
+        ...,
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00]],
+
+       [[0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [3.93831734e-05, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [7.46882519e-05, 1.73446839e-10, 0.00000000e+00, 0.00000000e+00],
+        ...,
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00]],
+
+       [[0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [4.80817488e-04, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [1.10902687e-03, 4.19061895e-08, 0.00000000e+00, 0.00000000e+00],
+        ...,
+...
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00]],
+
+       [[0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [3.72071206e-04, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [1.19141844e-03, 9.69906315e-08, 0.00000000e+00, 0.00000000e+00],
+        ...,
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00]],
+
+       [[0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [4.98942694e-04, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [1.39774090e-03, 1.66111329e-08, 0.00000000e+00, 0.00000000e+00],
+        ...,
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00]]],
+      shape=(100, 635, 4))
+Coordinates:
+  * event        (event) int64 32B 0 1 2 3
+  * sample       (sample) int64 5kB 0 1 2 3 4 5 6 ... 629 630 631 632 633 634
+  * trial        (trial) object 800B MultiIndex
+  * participant  (trial) object 800B &#x27;S0&#x27; &#x27;S0&#x27; &#x27;S0&#x27; &#x27;S0&#x27; ... &#x27;S0&#x27; &#x27;S0&#x27; &#x27;S0&#x27; &#x27;S0&#x27;
+  * epoch        (trial) int64 800B 0 1 2 3 4 5 6 7 ... 92 93 94 95 96 97 98 99
+    level        (trial) int8 100B 0 0 0 0 0 0 0 0 0 0 0 ... 0 0 0 0 0 0 0 0 0 0
+Attributes:
+    sfreq:                500.0
+    event_width_samples:  25</pre><div class='xr-wrap' style='display:none'><div class='xr-header'><div class='xr-obj-type'>xarray.DataArray</div><div class='xr-array-name'></div><ul class='xr-dim-list'><li><span class='xr-has-index'>trial</span>: 100</li><li><span class='xr-has-index'>sample</span>: 635</li><li><span class='xr-has-index'>event</span>: 4</li></ul></div><ul class='xr-sections'><li class='xr-section-item'><div class='xr-array-wrap'><input id='section-640fc4ad-ea14-42b8-b920-724d9c3f2366' class='xr-array-in' type='checkbox' checked><label for='section-640fc4ad-ea14-42b8-b920-724d9c3f2366' title='Show/hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-array-preview xr-preview'><span>0.0 0.0 0.0 0.0 0.000237 0.0 0.0 0.0 ... 0.0 0.0 0.0 0.0 0.0 0.0 0.0</span></div><div class='xr-array-data'><pre>array([[[0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [2.36961982e-04, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [4.93104762e-04, 2.52932334e-08, 0.00000000e+00, 0.00000000e+00],
+        ...,
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00]],
+
+       [[0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [3.93831734e-05, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [7.46882519e-05, 1.73446839e-10, 0.00000000e+00, 0.00000000e+00],
+        ...,
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00]],
+
+       [[0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [4.80817488e-04, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [1.10902687e-03, 4.19061895e-08, 0.00000000e+00, 0.00000000e+00],
+        ...,
+...
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00]],
+
+       [[0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [3.72071206e-04, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [1.19141844e-03, 9.69906315e-08, 0.00000000e+00, 0.00000000e+00],
+        ...,
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00]],
+
+       [[0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [4.98942694e-04, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [1.39774090e-03, 1.66111329e-08, 0.00000000e+00, 0.00000000e+00],
+        ...,
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00],
+        [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00]]],
+      shape=(100, 635, 4))</pre></div></div></li><li class='xr-section-item'><input id='section-3c4b5a44-44d8-4ebb-bf07-91c92383c07d' class='xr-section-summary-in' type='checkbox'  checked><label for='section-3c4b5a44-44d8-4ebb-bf07-91c92383c07d' class='xr-section-summary' >Coordinates: <span>(6)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>event</span></div><div class='xr-var-dims'>(event)</div><div class='xr-var-dtype'>int64</div><div class='xr-var-preview xr-preview'>0 1 2 3</div><input id='attrs-75f5447f-c419-4830-b2d3-d4243953e825' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-75f5447f-c419-4830-b2d3-d4243953e825' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-65b3aff1-288f-471f-9aeb-d932b9e4ba5b' class='xr-var-data-in' type='checkbox'><label for='data-65b3aff1-288f-471f-9aeb-d932b9e4ba5b' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([0, 1, 2, 3])</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>sample</span></div><div class='xr-var-dims'>(sample)</div><div class='xr-var-dtype'>int64</div><div class='xr-var-preview xr-preview'>0 1 2 3 4 5 ... 630 631 632 633 634</div><input id='attrs-222e0b78-7acd-45c5-9c8c-95d171511b74' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-222e0b78-7acd-45c5-9c8c-95d171511b74' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-30d7db89-e79f-4a65-980a-3ef4a9c863ce' class='xr-var-data-in' type='checkbox'><label for='data-30d7db89-e79f-4a65-980a-3ef4a9c863ce' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([  0,   1,   2, ..., 632, 633, 634], shape=(635,))</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>trial</span></div><div class='xr-var-dims'>(trial)</div><div class='xr-var-dtype'>object</div><div class='xr-var-preview xr-preview'>MultiIndex</div><input id='attrs-913b829c-4e52-45f4-8202-fb15b6d98ef4' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-913b829c-4e52-45f4-8202-fb15b6d98ef4' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-1eb112bd-20a1-4173-991a-415208e92c8a' class='xr-var-data-in' type='checkbox'><label for='data-1eb112bd-20a1-4173-991a-415208e92c8a' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([(&#x27;S0&#x27;, 0), (&#x27;S0&#x27;, 1), (&#x27;S0&#x27;, 2), (&#x27;S0&#x27;, 3), (&#x27;S0&#x27;, 4), (&#x27;S0&#x27;, 5),
+       (&#x27;S0&#x27;, 6), (&#x27;S0&#x27;, 7), (&#x27;S0&#x27;, 8), (&#x27;S0&#x27;, 9), (&#x27;S0&#x27;, 10), (&#x27;S0&#x27;, 11),
+       (&#x27;S0&#x27;, 12), (&#x27;S0&#x27;, 13), (&#x27;S0&#x27;, 14), (&#x27;S0&#x27;, 15), (&#x27;S0&#x27;, 16), (&#x27;S0&#x27;, 17),
+       (&#x27;S0&#x27;, 18), (&#x27;S0&#x27;, 19), (&#x27;S0&#x27;, 20), (&#x27;S0&#x27;, 21), (&#x27;S0&#x27;, 22), (&#x27;S0&#x27;, 23),
+       (&#x27;S0&#x27;, 24), (&#x27;S0&#x27;, 25), (&#x27;S0&#x27;, 26), (&#x27;S0&#x27;, 27), (&#x27;S0&#x27;, 28), (&#x27;S0&#x27;, 29),
+       (&#x27;S0&#x27;, 30), (&#x27;S0&#x27;, 31), (&#x27;S0&#x27;, 32), (&#x27;S0&#x27;, 33), (&#x27;S0&#x27;, 34), (&#x27;S0&#x27;, 35),
+       (&#x27;S0&#x27;, 36), (&#x27;S0&#x27;, 37), (&#x27;S0&#x27;, 38), (&#x27;S0&#x27;, 39), (&#x27;S0&#x27;, 40), (&#x27;S0&#x27;, 41),
+       (&#x27;S0&#x27;, 42), (&#x27;S0&#x27;, 43), (&#x27;S0&#x27;, 44), (&#x27;S0&#x27;, 45), (&#x27;S0&#x27;, 46), (&#x27;S0&#x27;, 47),
+       (&#x27;S0&#x27;, 48), (&#x27;S0&#x27;, 49), (&#x27;S0&#x27;, 50), (&#x27;S0&#x27;, 51), (&#x27;S0&#x27;, 52), (&#x27;S0&#x27;, 53),
+       (&#x27;S0&#x27;, 54), (&#x27;S0&#x27;, 55), (&#x27;S0&#x27;, 56), (&#x27;S0&#x27;, 57), (&#x27;S0&#x27;, 58), (&#x27;S0&#x27;, 59),
+       (&#x27;S0&#x27;, 60), (&#x27;S0&#x27;, 61), (&#x27;S0&#x27;, 62), (&#x27;S0&#x27;, 63), (&#x27;S0&#x27;, 64), (&#x27;S0&#x27;, 65),
+       (&#x27;S0&#x27;, 66), (&#x27;S0&#x27;, 67), (&#x27;S0&#x27;, 68), (&#x27;S0&#x27;, 69), (&#x27;S0&#x27;, 70), (&#x27;S0&#x27;, 71),
+       (&#x27;S0&#x27;, 72), (&#x27;S0&#x27;, 73), (&#x27;S0&#x27;, 74), (&#x27;S0&#x27;, 75), (&#x27;S0&#x27;, 76), (&#x27;S0&#x27;, 77),
+       (&#x27;S0&#x27;, 78), (&#x27;S0&#x27;, 79), (&#x27;S0&#x27;, 80), (&#x27;S0&#x27;, 81), (&#x27;S0&#x27;, 82), (&#x27;S0&#x27;, 83),
+       (&#x27;S0&#x27;, 84), (&#x27;S0&#x27;, 85), (&#x27;S0&#x27;, 86), (&#x27;S0&#x27;, 87), (&#x27;S0&#x27;, 88), (&#x27;S0&#x27;, 89),
+       (&#x27;S0&#x27;, 90), (&#x27;S0&#x27;, 91), (&#x27;S0&#x27;, 92), (&#x27;S0&#x27;, 93), (&#x27;S0&#x27;, 94), (&#x27;S0&#x27;, 95),
+       (&#x27;S0&#x27;, 96), (&#x27;S0&#x27;, 97), (&#x27;S0&#x27;, 98), (&#x27;S0&#x27;, 99)], dtype=object)</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>participant</span></div><div class='xr-var-dims'>(trial)</div><div class='xr-var-dtype'>object</div><div class='xr-var-preview xr-preview'>&#x27;S0&#x27; &#x27;S0&#x27; &#x27;S0&#x27; ... &#x27;S0&#x27; &#x27;S0&#x27; &#x27;S0&#x27;</div><input id='attrs-9ef45a63-b92c-4426-b7a6-cf19cf882cdd' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-9ef45a63-b92c-4426-b7a6-cf19cf882cdd' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-00b5713c-03c5-400b-8dce-d0206a19bf8a' class='xr-var-data-in' type='checkbox'><label for='data-00b5713c-03c5-400b-8dce-d0206a19bf8a' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([&#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;,
+       &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;,
+       &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;,
+       &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;,
+       &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;,
+       &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;,
+       &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;,
+       &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;,
+       &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;, &#x27;S0&#x27;], dtype=object)</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span class='xr-has-index'>epoch</span></div><div class='xr-var-dims'>(trial)</div><div class='xr-var-dtype'>int64</div><div class='xr-var-preview xr-preview'>0 1 2 3 4 5 6 ... 94 95 96 97 98 99</div><input id='attrs-8e2c8107-440d-41e4-b32f-d9e1726f41e2' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-8e2c8107-440d-41e4-b32f-d9e1726f41e2' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-5df344e7-ce98-4148-a176-a21cb7271aa3' class='xr-var-data-in' type='checkbox'><label for='data-5df344e7-ce98-4148-a176-a21cb7271aa3' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
+       18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+       36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
+       54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71,
+       72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+       90, 91, 92, 93, 94, 95, 96, 97, 98, 99])</pre></div></li><li class='xr-var-item'><div class='xr-var-name'><span>level</span></div><div class='xr-var-dims'>(trial)</div><div class='xr-var-dtype'>int8</div><div class='xr-var-preview xr-preview'>0 0 0 0 0 0 0 0 ... 0 0 0 0 0 0 0 0</div><input id='attrs-ae7b380e-8f55-4e9e-8de5-3263507f66c9' class='xr-var-attrs-in' type='checkbox' disabled><label for='attrs-ae7b380e-8f55-4e9e-8de5-3263507f66c9' title='Show/Hide attributes'><svg class='icon xr-icon-file-text2'><use xlink:href='#icon-file-text2'></use></svg></label><input id='data-d501d227-c548-48da-825b-e81a5cea391c' class='xr-var-data-in' type='checkbox'><label for='data-d501d227-c548-48da-825b-e81a5cea391c' title='Show/Hide data repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-var-attrs'><dl class='xr-attrs'></dl></div><div class='xr-var-data'><pre>array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=int8)</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-ff1b5a92-fb72-4b71-b796-242e906cd54b' class='xr-section-summary-in' type='checkbox'  ><label for='section-ff1b5a92-fb72-4b71-b796-242e906cd54b' class='xr-section-summary' >Indexes: <span>(3)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><ul class='xr-var-list'><li class='xr-var-item'><div class='xr-index-name'><div>event</div></div><div class='xr-index-preview'>PandasIndex</div><input type='checkbox' disabled/><label></label><input id='index-a27b1d0f-93f1-4e76-a1e9-3311539bf8be' class='xr-index-data-in' type='checkbox'/><label for='index-a27b1d0f-93f1-4e76-a1e9-3311539bf8be' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(Index([0, 1, 2, 3], dtype=&#x27;int64&#x27;, name=&#x27;event&#x27;))</pre></div></li><li class='xr-var-item'><div class='xr-index-name'><div>sample</div></div><div class='xr-index-preview'>PandasIndex</div><input type='checkbox' disabled/><label></label><input id='index-bbaddeb6-215c-4916-8a4b-7b34e1f97928' class='xr-index-data-in' type='checkbox'/><label for='index-bbaddeb6-215c-4916-8a4b-7b34e1f97928' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(Index([  0,   1,   2,   3,   4,   5,   6,   7,   8,   9,
+       ...
+       625, 626, 627, 628, 629, 630, 631, 632, 633, 634],
+      dtype=&#x27;int64&#x27;, name=&#x27;sample&#x27;, length=635))</pre></div></li><li class='xr-var-item'><div class='xr-index-name'><div>trial<br>participant<br>epoch</div></div><div class='xr-index-preview'>PandasMultiIndex</div><input type='checkbox' disabled/><label></label><input id='index-75c8ffc5-b406-49e3-917c-0cb84f1cad65' class='xr-index-data-in' type='checkbox'/><label for='index-75c8ffc5-b406-49e3-917c-0cb84f1cad65' title='Show/Hide index repr'><svg class='icon xr-icon-database'><use xlink:href='#icon-database'></use></svg></label><div class='xr-index-data'><pre>PandasIndex(MultiIndex([(&#x27;S0&#x27;,  0),
+            (&#x27;S0&#x27;,  1),
+            (&#x27;S0&#x27;,  2),
+            (&#x27;S0&#x27;,  3),
+            (&#x27;S0&#x27;,  4),
+            (&#x27;S0&#x27;,  5),
+            (&#x27;S0&#x27;,  6),
+            (&#x27;S0&#x27;,  7),
+            (&#x27;S0&#x27;,  8),
+            (&#x27;S0&#x27;,  9),
+            (&#x27;S0&#x27;, 10),
+            (&#x27;S0&#x27;, 11),
+            (&#x27;S0&#x27;, 12),
+            (&#x27;S0&#x27;, 13),
+            (&#x27;S0&#x27;, 14),
+            (&#x27;S0&#x27;, 15),
+            (&#x27;S0&#x27;, 16),
+            (&#x27;S0&#x27;, 17),
+            (&#x27;S0&#x27;, 18),
+            (&#x27;S0&#x27;, 19),
+            (&#x27;S0&#x27;, 20),
+            (&#x27;S0&#x27;, 21),
+            (&#x27;S0&#x27;, 22),
+            (&#x27;S0&#x27;, 23),
+            (&#x27;S0&#x27;, 24),
+            (&#x27;S0&#x27;, 25),
+            (&#x27;S0&#x27;, 26),
+            (&#x27;S0&#x27;, 27),
+            (&#x27;S0&#x27;, 28),
+            (&#x27;S0&#x27;, 29),
+            (&#x27;S0&#x27;, 30),
+            (&#x27;S0&#x27;, 31),
+            (&#x27;S0&#x27;, 32),
+            (&#x27;S0&#x27;, 33),
+            (&#x27;S0&#x27;, 34),
+            (&#x27;S0&#x27;, 35),
+            (&#x27;S0&#x27;, 36),
+            (&#x27;S0&#x27;, 37),
+            (&#x27;S0&#x27;, 38),
+            (&#x27;S0&#x27;, 39),
+            (&#x27;S0&#x27;, 40),
+            (&#x27;S0&#x27;, 41),
+            (&#x27;S0&#x27;, 42),
+            (&#x27;S0&#x27;, 43),
+            (&#x27;S0&#x27;, 44),
+            (&#x27;S0&#x27;, 45),
+            (&#x27;S0&#x27;, 46),
+            (&#x27;S0&#x27;, 47),
+            (&#x27;S0&#x27;, 48),
+            (&#x27;S0&#x27;, 49),
+            (&#x27;S0&#x27;, 50),
+            (&#x27;S0&#x27;, 51),
+            (&#x27;S0&#x27;, 52),
+            (&#x27;S0&#x27;, 53),
+            (&#x27;S0&#x27;, 54),
+            (&#x27;S0&#x27;, 55),
+            (&#x27;S0&#x27;, 56),
+            (&#x27;S0&#x27;, 57),
+            (&#x27;S0&#x27;, 58),
+            (&#x27;S0&#x27;, 59),
+            (&#x27;S0&#x27;, 60),
+            (&#x27;S0&#x27;, 61),
+            (&#x27;S0&#x27;, 62),
+            (&#x27;S0&#x27;, 63),
+            (&#x27;S0&#x27;, 64),
+            (&#x27;S0&#x27;, 65),
+            (&#x27;S0&#x27;, 66),
+            (&#x27;S0&#x27;, 67),
+            (&#x27;S0&#x27;, 68),
+            (&#x27;S0&#x27;, 69),
+            (&#x27;S0&#x27;, 70),
+            (&#x27;S0&#x27;, 71),
+            (&#x27;S0&#x27;, 72),
+            (&#x27;S0&#x27;, 73),
+            (&#x27;S0&#x27;, 74),
+            (&#x27;S0&#x27;, 75),
+            (&#x27;S0&#x27;, 76),
+            (&#x27;S0&#x27;, 77),
+            (&#x27;S0&#x27;, 78),
+            (&#x27;S0&#x27;, 79),
+            (&#x27;S0&#x27;, 80),
+            (&#x27;S0&#x27;, 81),
+            (&#x27;S0&#x27;, 82),
+            (&#x27;S0&#x27;, 83),
+            (&#x27;S0&#x27;, 84),
+            (&#x27;S0&#x27;, 85),
+            (&#x27;S0&#x27;, 86),
+            (&#x27;S0&#x27;, 87),
+            (&#x27;S0&#x27;, 88),
+            (&#x27;S0&#x27;, 89),
+            (&#x27;S0&#x27;, 90),
+            (&#x27;S0&#x27;, 91),
+            (&#x27;S0&#x27;, 92),
+            (&#x27;S0&#x27;, 93),
+            (&#x27;S0&#x27;, 94),
+            (&#x27;S0&#x27;, 95),
+            (&#x27;S0&#x27;, 96),
+            (&#x27;S0&#x27;, 97),
+            (&#x27;S0&#x27;, 98),
+            (&#x27;S0&#x27;, 99)],
+           name=&#x27;trial&#x27;))</pre></div></li></ul></div></li><li class='xr-section-item'><input id='section-29463918-bdf4-4303-83d0-43a2c138479b' class='xr-section-summary-in' type='checkbox'  checked><label for='section-29463918-bdf4-4303-83d0-43a2c138479b' class='xr-section-summary' >Attributes: <span>(2)</span></label><div class='xr-section-inline-details'></div><div class='xr-section-details'><dl class='xr-attrs'><dt><span>sfreq :</span></dt><dd>500.0</dd><dt><span>event_width_samples :</span></dt><dd>25</dd></dl></div></li></ul></div></div></div>
+</div>
+<p>This is a matrix with dimensions trial x sample_in_trial x event, where the values indicate the probablity of that event occurring at that sample.</p>
+<p>We can represent this graphically, for example by plotting the average probability for each event at each time sample:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_events</span><span class="p">):</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">estimates_true</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span> <span class="n">event</span><span class="o">=</span><span class="n">event</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="s1">&#39;trial&#39;</span><span class="p">),</span> <span class="n">label</span><span class="o">=</span><span class="n">event</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="n">event</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;P(event)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Time (sample)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_58_0.png" src="../_images/notebooks_1-How_HMP_works_58_0.png" />
+</div>
+</div>
+<p>And we can even look at a single trial:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_events</span><span class="p">):</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">estimates_true</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">trial</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;S0&#39;</span><span class="p">,</span><span class="mi">0</span><span class="p">),</span> <span class="n">event</span><span class="o">=</span><span class="n">event</span><span class="p">),</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Event </span><span class="si">{</span><span class="n">event</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="n">event</span><span class="p">])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;P(event)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Time (sample)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">225</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_60_0.png" src="../_images/notebooks_1-How_HMP_works_60_0.png" />
+</div>
+</div>
+<p><strong>Note</strong> In this trial there is a first bump in the probabilities for the 1st event (and the smaller one for the 2nd event). This is because the time distribution of this first event expect it to happen most of the time before sample 50 (thus some likelihood is also given to the next one starting early). But in this case, the simulated event was later, thus the initial time expectation was overweighted by the fact that an event with very similar topography happened slightly later.</p>
+<section id="Visualizing-the-average-time-location-and-topographies-associated-with-the-estimated-events">
+<h4>Visualizing the average time location and topographies associated with the estimated events<a class="headerlink" href="#Visualizing-the-average-time-location-and-topographies-associated-with-the-estimated-events" title="Link to this heading"></a></h4>
+<p>Now the above plots might not be the most informative visually, what we can do is average the electrodes values at each most likely time point of each event, and then plot the topographies associated with these times. This gives us a nice overview of the average event position and the topographies associated with each event.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Visualize the average event position and the topographies assocaited with each event</span>
+<span class="n">hmp</span><span class="o">.</span><span class="n">visu</span><span class="o">.</span><span class="n">plot_topo_timecourse</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">,</span> <span class="n">estimates_true</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">times_to_display</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">vlines</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">sim_source_times</span><span class="p">,</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">4</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">4</span><span class="p">),</span> <span class="n">zorder</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;k&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_64_0.png" src="../_images/notebooks_1-How_HMP_works_64_0.png" />
+</div>
+</div>
+<p>In the plot above we see the four recovered events; the vertical lines again indicate the average peak time of the simulated events. Not surprisingly, as we just used the true time and channel parameters, the recovery is perfect.</p>
+</section>
+</section>
+</section>
+<section id="Estimating-a-model-without-the-ground-truth">
+<h2>Estimating a model without the ground truth<a class="headerlink" href="#Estimating-a-model-without-the-ground-truth" title="Link to this heading"></a></h2>
+<p>in real data, to estimate this unkown set of parameters (time and channel parameters) we use the expectation maximization algorithm on the event probability as obtained through the Baum-Welsh algorithm. We start with neutral guess on the time and channel parameters (0’s for <code class="docutils literal notranslate"><span class="pre">channel_pars</span></code>, and mean RT / n_events for the <code class="docutils literal notranslate"><span class="pre">time_pars</span></code>).</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1">#r Defining a fresh model as we would do for real data</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">EventModel</span><span class="p">(</span><span class="n">event_properties</span><span class="p">,</span> <span class="n">gamma_2</span><span class="p">,</span> <span class="n">n_events</span><span class="o">=</span><span class="n">n_events</span><span class="p">)</span>
+<span class="n">loglikelihood</span><span class="p">,</span> <span class="n">estimates</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">trial_data</span><span class="p">)</span><span class="c1">#This function simultaneously estimates the paraneters and transform the data to event probability space</span>
+
+<span class="n">hmp</span><span class="o">.</span><span class="n">visu</span><span class="o">.</span><span class="n">plot_topo_timecourse</span><span class="p">(</span><span class="n">epoch_data</span><span class="p">,</span> <span class="n">estimates</span><span class="p">,</span> <span class="n">info</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Estimating 4 events model with 1 starting point(s)
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_68_1.png" src="../_images/notebooks_1-How_HMP_works_68_1.png" />
+</div>
+</div>
+<p>Also without providing the true magnitudes and parameters, the algorithm manages to recover the events, <strong>on average</strong>, in the simulated data.</p>
+<section id="EM-algorithm">
+<h3>EM algorithm<a class="headerlink" href="#EM-algorithm" title="Link to this heading"></a></h3>
+<p>Under the hood, HMP uses an expectation maximization algorithm to find the solution that best explains the data. The way it works is:</p>
+<ol class="arabic simple">
+<li><p>make a first proposal on the time location and channel contribution towards each event</p></li>
+<li><p>Compute the most likely location of the events given this proposition</p></li>
+<li><p>Update the parameters according to this most likely position</p></li>
+<li><p>Repeat steps 2-3 up to the moment where the loglikelihood of the data stops increasing more than the tolerance criterion (default 1e-4)</p></li>
+</ol>
+<p>More details about the algorithm can be found in the accompanying 2024 <a class="reference external" href="https://direct.mit.edu/imag/article/doi/10.1162/imag_a_00400/125469/Trial-by-trial-detection-of-cognitive-events-in">paper</a></p>
+<p>We can inspect the traces of this EM algorithm to see how the log-likelihood of the fit developed with iterations. This shows how many iterations it needed and at what Log-likelihood (LL) it stopped according to the default tolerance on the increase in LL (default 1e-4).</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">traces</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Log-likelihood&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;EM iteration&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_72_0.png" src="../_images/notebooks_1-How_HMP_works_72_0.png" />
+</div>
+</div>
+<p>Along this we can take a look at how the position of the events were updated, i.e. how the time parameters changed according to the evolution of the EM algorithm:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">time_pars_dev</span><span class="p">[:,</span><span class="mi">0</span><span class="p">,:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;Interval &#39;</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">5</span><span class="p">]])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;Gamma$_2$ scale&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;EM iteration&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_74_0.png" src="../_images/notebooks_1-How_HMP_works_74_0.png" />
+</div>
+</div>
+<p>Here we see that the the first EM iteration starts with the assumption that all events are equally spaced in the RT. Then for example the first interval progressively became shorter while the second one became longer. As we progress in the EM iteration the time distribution parameters get more stable. We can increase the tolerance but this, most of the time, wouldn’t have much consequences except making the fit slower:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1">#re-defining the model to remove previous run</span>
+<span class="n">lowtol_model</span> <span class="o">=</span> <span class="n">EventModel</span><span class="p">(</span><span class="n">event_properties</span><span class="p">,</span> <span class="n">gamma_2</span><span class="p">,</span> <span class="n">n_events</span><span class="o">=</span><span class="n">n_events</span><span class="p">,</span> <span class="n">tolerance</span><span class="o">=</span><span class="mf">1e-10</span><span class="p">)</span>
+<span class="n">lowtol_loglikelohood</span><span class="p">,</span> <span class="n">lowtol_estimates</span> <span class="o">=</span> <span class="n">lowtol_model</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">trial_data</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">lowtol_model</span><span class="o">.</span><span class="n">time_pars_dev</span><span class="p">[:,</span><span class="mi">0</span><span class="p">,:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;Interval &#39;</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">5</span><span class="p">]])</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;Gamma$_2$ scale&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;EM iteration&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Estimating 4 events model with 1 starting point(s)
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_76_1.png" src="../_images/notebooks_1-How_HMP_works_76_1.png" />
+</div>
+</div>
+<p>Here the profile is exactly the same except that the EM algorithm went through a few more iterations.</p>
+</section>
+</section>
+<section id="Using-the-single-trial-estimation">
+<h2>Using the single trial estimation<a class="headerlink" href="#Using-the-single-trial-estimation" title="Link to this heading"></a></h2>
+<p>If we select for all trials the most likely sample to contain a transition (i.e. vertical lines in the plot above) we can take a look at the recovery of our simulated times on all trials:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Estimate the duration between events based on the most time for each event at each trial</span>
+<span class="n">estimated_times</span> <span class="o">=</span> <span class="n">hmp</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">event_times</span><span class="p">(</span><span class="n">estimates</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">add_rt</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">n_events</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span><span class="mf">2.5</span><span class="o">*</span><span class="n">n_events</span><span class="o">+</span><span class="mi">1</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">sharex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;point-wise&#39;</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Histograms&#39;</span><span class="p">)</span>
+<span class="n">ax</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Real by-trial peak&#39;</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">estimated_times</span><span class="p">:</span>
+    <span class="n">ax</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">event</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">event</span><span class="p">)],</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">event</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">event</span><span class="p">)],</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;k&#39;</span><span class="p">)</span>
+
+    <span class="n">ax</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">sim_source_times</span><span class="p">[:,</span><span class="n">i</span><span class="p">],</span> <span class="n">event</span><span class="p">,</span> <span class="s1">&#39;o&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+    <span class="n">ax</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;estimated peak </span><span class="si">{</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s1"> time&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">event</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">bins</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">histtype</span><span class="o">=</span><span class="s1">&#39;step&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Estimated&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">sim_source_times</span><span class="p">[:,</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;k&#39;</span><span class="p">,</span> <span class="n">bins</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">histtype</span><span class="o">=</span><span class="s1">&#39;step&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;True&#39;</span><span class="p">)</span>
+    <span class="n">i</span><span class="o">+=</span> <span class="mi">1</span>
+<span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">250</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1-How_HMP_works_80_0.png" src="../_images/notebooks_1-How_HMP_works_80_0.png" />
+</div>
+</div>
+<p>Overall the exact time of the simulated event is detected as the most likely time by HMP! Of course this will depend on the signal to noise ratio and the non-violation of HMP’s assumptions (see the simulations in the <a class="reference external" href="https://direct.mit.edu/imag/article/doi/10.1162/imag_a_00400/125469/Trial-by-trial-detection-of-cognitive-events-in">paper</a>)</p>
+</section>
+<section id="Saving-and-loading-a-model">
+<h2>Saving and loading a model<a class="headerlink" href="#Saving-and-loading-a-model" title="Link to this heading"></a></h2>
+<p>Depending on the size of the data (with main factor the sampling rate) the HMP model can take a while to estimate. Therefore, it is often useful to save the model and the estimates for later use.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">hmp</span><span class="w"> </span><span class="kn">import</span> <span class="n">io</span>
+<span class="c1"># Saving</span>
+<span class="n">io</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s1">&#39;model.pkl&#39;</span><span class="p">)</span>
+<span class="c1"># Loading</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s1">&#39;model.pkl&#39;</span><span class="p">)</span>
+
+<span class="c1"># Same goes fpr the estimates</span>
+<span class="n">io</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">estimates</span><span class="p">,</span> <span class="s1">&#39;estimates.pkl&#39;</span><span class="p">)</span>
+<br/></pre></div>
+</div>
+</div>
+<p>For those who are not conmortable in continuing in python you also have the option to just export the estimated event probabilities to a csv for use in other languages/softwares</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">io</span><span class="o">.</span><span class="n">save_eventprobs_csv</span><span class="p">(</span><span class="n">estimates</span><span class="p">,</span> <span class="s1">&#39;estimates.csv&#39;</span><span class="p">)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="n">df_estimates</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">&#39;estimates.csv&#39;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">df_estimates</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../api/hmp.models.html" class="btn btn-neutral float-left" title="Eliminative estimation method" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="2-The_different_model_classes.html" class="btn btn-neutral float-right" title="2. The different model classes" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Gabriel Weindel, Maarten Schermer, Raoul Schram, Leendert van Maanen, Jelmer Borst.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
