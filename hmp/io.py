@@ -189,7 +189,7 @@ def read_mne_data(
                             pick_channels,
                             bids_parameters)
         else:
-            raise ValueError(f"Unknown data type {data_format}, should be 'epochs' or 'raw'")
+            raise ValueError(f"Unknown data type {data_format}, should be 'epochs', 'raw' or 'bids'")
         
         if reference is not None:
             epochs = epochs.set_eeg_reference(reference)
@@ -706,30 +706,6 @@ def load_xr(filename):
         )
     return data.to_dataarray().drop_vars('variable').squeeze()
 
-def save(object_to_save, filename):
-    """Save an hmp model to a pickle file.
-
-    Parameters
-    ----------
-    object_to_save : object
-        The Python object to save.
-    filename : str
-        The name of the file where the object will be saved.
-    """
-    with open(filename, 'wb') as output:
-        pickle.dump(object_to_save, output)
-
-def load(filename):
-    """Load an hmp model from a pickle file.
-    
-    Parameters
-    ----------
-    filename : str
-        The name of the file where the object will be saved.
-    """
-    with open(filename, 'rb') as pkl_file:
-        object_to_load = pickle.load(pkl_file)
-    return object_to_load
 
 def save_eventprobs_csv(estimates, filename):
     """
