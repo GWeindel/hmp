@@ -25,10 +25,8 @@ class TrialData:
 
     Attributes
     ----------
-    named_durations : xr.DataArray
-        Durations of each trial with names corresponding to trial indices.
-    coords : dict
-        Coordinates of the trial data (metadata to keep).
+    xrdurations : xr.DataArray
+        Durations of each trial with corresponding trial coordinates.
     starts : np.ndarray
         Array of start indices for each trial (usually stimulus onsets position in samples).
     ends : np.ndarray
@@ -43,11 +41,8 @@ class TrialData:
         Offset applied to the data.
     cross_corr : np.ndarray
         Cross-correlation values between the data and a given pattern.
-    trial_coords : dict
-        Coordinates specific to each trial.
     """
-    named_durations: xr.DataArray
-    coords: dict
+    xrdurations: xr.DataArray
     starts: np.ndarray
     ends: np.ndarray
     n_trials: int
@@ -55,7 +50,6 @@ class TrialData:
     sfreq: float
     offset: int
     cross_corr: np.ndarray
-    trial_coords: dict
 
     @classmethod
     def from_preprocessed(cls, preprocessed, pattern):
@@ -83,7 +77,7 @@ class TrialData:
         # compute sequence durations based on number of samples
         durations = (
             data.unstack()
-            .sel(component=0)
+            .sel(component=0).drop_vars('component')
             .stack(trial=["participant", "epoch"])
             .dropna(dim="trial", how="all")
             .groupby("trial")
@@ -92,35 +86,31 @@ class TrialData:
             .squeeze()
         )
 
-        if durations.trial.count() > 1:
-            dur_dropped_na = durations.dropna("trial")
-            starts = np.roll(dur_dropped_na.data, 1)
-            starts[0] = 0
-            ends = dur_dropped_na.data - 1
-            named_durations = durations.dropna("trial") - durations.dropna(
-                "trial"
-            ).shift(trial=1, fill_value=0)
-            coords = durations.reset_index("trial").coords
-        else:
-            dur_dropped_na = durations
-            starts = np.array([0])
-            ends = np.array([dur_dropped_na.data - 1])
-            named_durations = durations
-            coords = durations.coords
+        dur_dropped_na = durations.dropna("trial")
+        starts = np.roll(dur_dropped_na.data, 1)
+        starts[0] = 0
+        ends = dur_dropped_na.data - 1
+        xrdurations = durations.dropna("trial") - durations.dropna(
+            "trial"
+        ).shift(trial=1, fill_value=0)
 
         n_trials = durations.trial.count().values
         n_samples, n_dims = np.shape(data.data.T)
         cross_corr = cross_correlation(data.data.T, n_trials, n_dims, starts, ends, pattern)  # Equation 1 in 2024 paper
-        trial_coords = (
-            data.unstack()
-            .sel(component=0, sample=0)
-            .stack(trial=["participant", "epoch"])
-            .dropna(dim="trial", how="all")
-            .coords
-        )
-        return cls(named_durations=named_durations, coords=coords, starts=starts, ends=ends,
+
+        metadata = (data.unstack()
+                        .sel(component=0, sample=0).drop_vars(['component', 'sample'])
+                        .stack(trial=["participant", "epoch"])
+                        .dropna(dim="trial", how="all")
+                   )
+        metadata = {k: v for k, v in metadata.coords.items() if k not in metadata.dims}
+        for name, coord in metadata.items():
+            if name not in xrdurations.coords:
+                xrdurations = xrdurations.assign_coords({name: coord})
+
+        return cls(xrdurations=xrdurations, starts=starts, ends=ends,
                    n_trials=n_trials, n_samples=n_samples, cross_corr=cross_corr,
-                   trial_coords=trial_coords, offset=data.offset, sfreq=data.sfreq)
+                   offset=data.offset, sfreq=data.sfreq)
 
     @cached_property
     def durations(self):
