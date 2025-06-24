@@ -26,12 +26,13 @@ class EliminativeMethod(BaseModel):
     Parameters
     ----------
     max_events : int, optional
-        Maximum number of events to estimate. Defaults to None, this number is then inferred from the data.
+        Maximum number of events to be estimated. By default, it is inferred using 
+        `compute_max_events()` if not provided. 
     min_events : int, optional
-        Minimum number of events to estimate. Defaults to 1.
-    max_starting_points : int, optional
-        Number of starting points for the estimation of the model with the maximum number of events.
-        Defaults to 1.
+        The minimum number of events to be estimated. Defaults to 1.
+    base_fit : EventModel, optional
+        To start the elimination from a specfic model this argument can 
+        be provided with a fitted EventModel. Defaults to None.
     tolerance : float, optional
         Tolerance for the expectation maximization algorithm. Defaults to 1e-4.
     max_iteration : int, optional
@@ -43,14 +44,14 @@ class EliminativeMethod(BaseModel):
         *args,
         max_events: int | None = None,
         min_events: int = 0,
-        max_starting_points: int = 1,
+        base_fit: EventModel | None = None,
         tolerance: float = 1e-4,
         max_iteration: int = 1000,
         **kwargs,
     ):
-        self.max_events: int | None = max_events
+        self.max_events: int = max_events
         self.min_events: int = min_events
-        self.max_starting_points: int = max_starting_points
+        self.base_fit: EventModel | None = base_fit
         self.tolerance: float = tolerance
         self.max_iteration: int = max_iteration
         self.submodels: dict[int, EventModel] = {}
@@ -59,9 +60,6 @@ class EliminativeMethod(BaseModel):
     def fit(
         self,
         trial_data: TrialData,
-        max_events: int | None = None, #TODO remove, take attribute
-        min_events: int = 0, #TODO remove, take attribute
-        base_fit: tuple[np.ndarray, xr.Dataset] | None = None,
         cpus: int = 1,
     ) -> None:
         """Perform the eliminative estimation.
@@ -73,14 +71,6 @@ class EliminativeMethod(BaseModel):
         ----------
         trial_data : TrialData
             The dataset containing the crosscorrelated data and infos on durations and trials.
-        max_events : int, optional
-            Maximum number of events to be estimated. By default, it is inferred using 
-            `compute_max_events()` if not provided. 
-        min_events : int, optional
-            The minimum number of events to be estimated. Defaults to 1.
-        base_fit : EventModel, optional
-            To avoid re-estimating the model with the maximum number of events, this argument can 
-            be provided with a fitted EventModel. Defaults to None.
         cpus : int, optional
             Number of CPUs to use for parallel processing. Defaults to 1.
 
@@ -89,22 +79,26 @@ class EliminativeMethod(BaseModel):
         None
         """
 
-        if max_events is None and base_fit is None:
+        if self.max_events is None:
             max_events = self.compute_max_events(trial_data)
-        if not base_fit:
+        else:
+            max_events = self.max_events
+
+        min_events = self.min_events
+        
+        if not self.base_fit:
             print(
                 f"Estimating all solutions for maximal number of events ({max_events})"
             )
-            event_model = self.get_fixed_model(n_events=max_events, starting_points=1)
-            loglikelihood, eventprobs = event_model.fit_transform(trial_data, verbose=False,
-                                                                    cpus=cpus)
+            base_fit = self.get_event_model(n_events=max_events, starting_points=1)
+            base_fit.fit(trial_data, verbose=False, cpus=cpus)
         else:
-            loglikelihood, eventprobs = base_fit
-        max_events = eventprobs.event.max().values + 1
-        self.submodels[max_events] = event_model
+            base_fit = self.base_fit
+        max_events = base_fit.n_events
+        self.submodels[max_events] = base_fit
 
         for n_events in np.arange(max_events - 1, min_events, -1):
-            event_model = self.get_fixed_model(n_events, starting_points=n_events+1)
+            event_model = self.get_event_model(n_events, starting_points=n_events+1)
 
             print(f"Estimating all solutions for {n_events} events")
 
@@ -178,7 +172,7 @@ class EliminativeMethod(BaseModel):
             return self._concatted_attr(attr)
         return super().__getattribute__(attr)
 
-    def get_fixed_model(self, n_events, starting_points):
+    def get_event_model(self, n_events, starting_points):
         return EventModel(
             self.pattern, self.distribution, n_events=n_events,
             starting_points=starting_points,
