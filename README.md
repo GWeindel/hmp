@@ -6,7 +6,7 @@ HMP
 
 > [!WARNING]
 > Important update (2025-06-26) we're moving to 1.0.0 in the `devel` branch, the new version implies a complete new structure.
-> The beta will be released in a few days, you can send an email to gabriel.weindel[at]gmaail.com if you want to participate in the test of the beta version.
+> The beta will be released in a few days, you can send an email to gabriel.weindel[at]gmail.com if you want to participate in the test of the beta version.
 
 
 HMP is an open-source Python package to analyze neural time-series (e.g. EEG) to estimate Hidden Multivariate Patterns (HMP).  HMP is described in Weindel, van Maanen & Borst (2024, [see the preprint on biorXiv](https://www.biorxiv.org/content/10.1101/2024.02.13.580102v1)) and is a generalized and simplified version of the HsMM-MVPA method developed by Anderson, Zhang, Borst, & Walsh  ([2016](https://psycnet.apa.org/doi/10.1037/rev0000030)).
