@@ -100,7 +100,7 @@ def plot_topo_timecourse(
         'max' or 'mean'. Either take the max probability of each event on each trial,
         or the weighted average.
     combined : bool, optional
-        Whether to combine levels by averaging across them (True) or plot each level (False, default).
+        Whether to combine groups by averaging across them (True) or plot each group (False, default).
 
     Returns
     -------
@@ -153,12 +153,12 @@ def plot_topo_timecourse(
     ).data  # compute corresponding times
     if combined:
         times = np.array([np.mean(times, axis=0)])
-        level = [0]
+        group = [0]
     else:
-        level = np.unique(estimates.level)
-    n_level = len(np.unique(level))
+        group = np.unique(estimates.group)
+    n_group = len(np.unique(group))
 
-    # reverse order, to make correspond to level maps
+    # reverse order, to make correspond to group maps
     channel_data = np.flip(channel_data, axis=1)
     times =  np.flip(times, axis=0)
     
@@ -182,7 +182,7 @@ def plot_topo_timecourse(
     elif isinstance(times_to_display, str) and times_to_display == 'all':
         times_to_display = times
     if len(times_to_display.shape) == 1:
-        times_to_display = [times_to_display] * n_level
+        times_to_display = [times_to_display] * n_group
     
     # based the size of the topographies on event_size and magnify or only on magnify
     if topo_size_scaling:  # does topo width scale with time interval of plot?
@@ -193,26 +193,26 @@ def plot_topo_timecourse(
         ) + time_step
         topo_size = 0.08 * timescale * magnify  # 8% of time scale
 
-    # set ylabels to level
+    # set ylabels to group
     if ylabels == []:
-        ylabels = np.arange(n_level)#estimates.clabels
+        ylabels = np.arange(n_group)#estimates.glabels
     return_ax = True
     
     # make axis
     if ax is None:
         if figsize is None:
-            figsize = (12, n_level * 0.7* np.max([magnify, 1.8]))  # make sure they don't get too flat
+            figsize = (12, n_group * 0.7* np.max([magnify, 1.8]))  # make sure they don't get too flat
         _, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
         return_ax = False
 
     axes = []
     # plot row by row
-    rowheight = 1 / n_level
+    rowheight = 1 / n_group
     n_event = estimates.event.max()+1
-    for i, level in enumerate(level):
-        times_level = times[i]
-        missing_evts = np.where(np.isnan(times_level))[0]
-        times_level = np.delete(times_level, missing_evts)
+    for i, group in enumerate(group):
+        times_group = times[i]
+        missing_evts = np.where(np.isnan(times_group))[0]
+        times_group = np.delete(times_group, missing_evts)
         channel_data_ = channel_data[:, i, :]
         channel_data_ = np.delete(channel_data_, missing_evts, axis=1)
         ylow = i * rowheight
@@ -223,7 +223,7 @@ def plot_topo_timecourse(
                 axes.append(
                     ax.inset_axes(
                         [
-                            times_level[event] - topo_size / 2,
+                            times_group[event] - topo_size / 2,
                             ylow + 0.1 * rowheight,
                             topo_size,
                             rowheight * 0.8,
@@ -244,21 +244,21 @@ def plot_topo_timecourse(
     
                 # lines/fill of detected event
                 if event_lines:
-                    # bottom of row + 5% if n_level > 1
+                    # bottom of row + 5% if n_group > 1
                     ylow2 = (
-                        level * rowheight
-                        if n_level == 1
-                        else level * rowheight + 0.05 * rowheight
+                        group * rowheight
+                        if n_group == 1
+                        else group * rowheight + 0.05 * rowheight
                     )
-                    # top of row - 5% if n_level > 1
+                    # top of row - 5% if n_group > 1
                     yhigh = (
-                        (level + 1) * rowheight
-                        if n_level == 1
-                        else (level + 1) * rowheight - 0.05 * rowheight
+                        (group + 1) * rowheight
+                        if n_group == 1
+                        else (group + 1) * rowheight - 0.05 * rowheight
                     )
     
                     ax.vlines(
-                        times_level[event] - event_size / 2,
+                        times_group[event] - event_size / 2,
                         ylow2,
                         yhigh,
                         linestyles="dotted",
@@ -267,7 +267,7 @@ def plot_topo_timecourse(
                         transform=ax.get_xaxis_transform(),
                     )
                     ax.vlines(
-                        times_level[event] + event_size / 2,
+                        times_group[event] + event_size / 2,
                         ylow2,
                         yhigh,
                         linestyles="dotted",
@@ -278,8 +278,8 @@ def plot_topo_timecourse(
                     ax.fill_between(
                         np.array(
                             [
-                                times_level[event] - event_size / 2,
-                                times_level[event] + event_size / 2,
+                                times_group[event] - event_size / 2,
+                                times_group[event] + event_size / 2,
                             ]
                         ),
                         ylow2,
@@ -290,19 +290,19 @@ def plot_topo_timecourse(
                         edgecolor=None,
                     )
 
-        # add lines per level
-        # bottom of row + 5% if n_level > 1
+        # add lines per group
+        # bottom of row + 5% if n_group > 1
         ylow = (
-            level * rowheight if n_level == 1 else level * rowheight + 0.05 * rowheight
+            group * rowheight if n_group == 1 else group * rowheight + 0.05 * rowheight
         )
-        # top of row - 5% if n_level > 1
+        # top of row - 5% if n_group > 1
         yhigh = (
-            (level + 1) * rowheight
-            if n_level == 1
-            else (level + 1) * rowheight - 0.05 * rowheight
+            (group + 1) * rowheight
+            if n_group == 1
+            else (group + 1) * rowheight - 0.05 * rowheight
         )
         ax.vlines(
-            np.array(times_to_display[level]),
+            np.array(times_to_display[group]),
             ylow,
             yhigh,
             linestyles="--",
@@ -311,7 +311,7 @@ def plot_topo_timecourse(
 
     # legend
     if colorbar:
-        cheight = 1 if n_level == 1 else 2 / n_level
+        cheight = 1 if n_group == 1 else 2 / n_group
         # axins = ax.inset_axes(width="0.5%", height=cheight, loc="lower left", \
         #         bbox_to_anchor=(1.025, 0, 2, 1), bbox_transform=ax.transAxes, borderpad=0)
         axins = ax.inset_axes([1.025, 0, 0.03, cheight])
@@ -338,7 +338,7 @@ def plot_topo_timecourse(
     # plot ylabels
     if isinstance(ylabels, dict):
         tick_labels = [str(x) for x in list(ylabels.values())[0]]
-        if level_plot:
+        if group_plot:
             tick_labels.reverse()
         ax.set_yticks(np.arange(len(list(ylabels.values())[0])) + 0.5, tick_labels)
         ax.set_ylabel(str(list(ylabels.keys())[0]))
@@ -349,7 +349,7 @@ def plot_topo_timecourse(
     if not return_ax:
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
-        ax.set_ylim(0, n_level)  # -1
+        ax.set_ylim(0, n_group)  # -1
         ax.set_xlabel(xlabel)
         if title:
             ax.set_title(title)
@@ -357,7 +357,7 @@ def plot_topo_timecourse(
         plt.gcf().subplots_adjust(top=0.85, bottom=0.2)  # tight layout didn't work anymore
     if return_ax:
         
-        ax.set_ylim(0, n_level)  # -1
+        ax.set_ylim(0, n_group)  # -1
         return ax
 
 
@@ -590,8 +590,8 @@ def plot_latencies(
             "n_events" in estimates.dims and estimates.n_events.count() > 1
         ):  # and there are multiple different fits (eg backward estimation)
             ydim = "n_events"
-        elif "level" in estimates:
-            ydim = "level"
+        elif "group" in estimates:
+            ydim = "group"
         avg_durations = event_times(
             estimates, mean=True, duration=True, add_rt=True, as_time=as_time
         ).data
@@ -617,7 +617,7 @@ def plot_latencies(
         if errs is not None:
             errorbars = errorbars * time_step
 
-        if ydim == "level":  # reverse order, to make correspond to level maps
+        if ydim == "group":  # reverse order, to make correspond to group maps
             avg_durations = np.flipud(avg_durations)
             avg_times = np.flipud(avg_times)
             if errs is not None:
@@ -628,8 +628,8 @@ def plot_latencies(
         raise ValueError("Expected an hmp fitted object")
 
     if labels == []:
-        if ydim == "level":
-            labels = [str(x) for x in reversed(list(estimates.clabels.values())[0])]
+        if ydim == "group":
+            labels = [str(x) for x in reversed(list(estimates.glabels.values())[0])]
         else:
             labels = np.arange(n_model)
 
@@ -638,9 +638,9 @@ def plot_latencies(
     f, axs = plt.subplots(1, 1, figsize=figsize, dpi=100)
 
     cycol = cycle(colors)
-    cur_colors = [next(cycol) for x in np.arange(n_model)]  # color per level/model (line plot)
+    cur_colors = [next(cycol) for x in np.arange(n_model)]  # color per group/model (line plot)
 
-    for j in range(n_model):  # per level/model
+    for j in range(n_model):  # per group/model
         avg_times_model = np.hstack((0, avg_times[j, :]))
         avg_durations_model = avg_durations[j, :]
         n_stages = len(avg_durations_model)
