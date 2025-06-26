@@ -314,7 +314,8 @@ def simulate(
 
             n_events = len(sources_subj) - 1
             if save_noiseless:
-                raw.save(file + "_noiseless_raw.fif", overwrite=True)
+                raw.save(subj_file.split(".fif")[0] + "_noiseless.fif", overwrite=True)
+
             if data_type == "eeg":
                 raw = raw.pick_types(meg=False, eeg=True, stim=True)
             elif data_type == "meg":
@@ -350,7 +351,7 @@ def simulate(
                 files_subj.append(subj_file.split(".fif")[0] + "_snr.npy")
             files.append(files_subj)
             if save_noiseless:
-                files_subj.append(file + "_noiseless_raw.fif")
+                files_subj.append(subj_file.split(".fif")[0] + "_noiseless.fif")
             print(f"{subj_file} simulated")
 
     if n_subj == 1:

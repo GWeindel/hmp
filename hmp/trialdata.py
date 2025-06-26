@@ -120,6 +120,45 @@ class TrialData:
     def n_dims(self):
         return self.cross_corr.shape[1]
 
+    def split(self, participant):
+        # participants_idx = participant.values
+        # Extracting data with and without left out participant
+        data_pp = self.xrdurations.sel(participant=participant, drop=False)
+        # data_without_pp = self.xrdurations.drop_sel(participant=participant)
+        return data_pp
+
+    def get_participant(self, participant):
+        # Extracting metadata for participant
+        indices = np.where(self.xrdurations.participant == participant)[0]
+        durations = self.durations[indices]
+
+        #Rebuild on subselection
+        new_starts = np.concatenate(([0], np.cumsum(durations)[:-1]))
+        new_ends =  np.cumsum(durations)-1
+
+        # Subsetting cross_corr
+        cross_corr_subset = np.zeros([int(np.sum(durations)), np.shape(self.cross_corr)[1]])
+        for i, indic in enumerate(indices):
+
+            cross_corr_subset[new_starts[i]:new_ends[i]+1,:] = \
+                self.cross_corr[self.starts[indic] : self.ends[indic] + 1, :]
+
+        new_xrdurations = self.xrdurations.unstack().sel(participant=participant, drop=False)\
+                .expand_dims('participant').stack({'trial':['participant','epoch']})
+
+        #Recreate trialData object
+        new_trial_data = TrialData(
+            xrdurations=new_xrdurations,
+            starts=new_starts,
+            ends=new_ends,
+            n_trials=len(indices),
+            n_samples=int(np.sum(durations)),
+            sfreq=self.sfreq,
+            offset=self.offset,
+            cross_corr=cross_corr_subset)
+        return new_trial_data
+
+
 def cross_correlation(
     data: np.ndarray, 
     n_trials: int, 

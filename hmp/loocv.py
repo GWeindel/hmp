@@ -8,6 +8,78 @@ import xarray as xr
 
 import hmp
 
+def loocv_calcs_new(model, trial_data, participant):
+    # Extracting data with and without left out participant
+    trialdata_without_pp, trialdata_with_pp = trial_data.split(participant)
+
+    model_without_pp = model.get_copy()
+    model_with_pp = model.get_copy()
+
+
+    # fit the HMP using previously estimated parameters as initial parameters,
+    # and estimate likelihood
+    # dur_ratio = trialdata_with_pp.mean_duration / trialdata_without_pp.mean_duration
+    n_events = model.n_events # Fix for backward/cumulative
+    if "level" in model.dims:
+        locations = np.zeros(model.pars_map.shape, dtype=int)
+        for c in range(len(model.pars_map)):
+            indexes = np.arange(len(model.pars_map[c]))[
+                model.pars_map[c, :] >= 0
+            ]  # Actual estimated event
+            if len(indexes[1:-1]) > 0:
+                locations[c, indexes[1:-1]] = (
+                    model.events.location
+                )  # add location at every non first or last estimated event
+        model_without_pp.fit(
+            magnitudes=model.magnitudes.values,
+            parameters=model.parameters.values,
+            mags_map=model.mags_map,
+            pars_map=model.pars_map,
+            level_dict=model.level_dict,
+            verbose=False,
+        )
+        # calc lkh
+        # adjust params to fit average duration of subject
+        params = model_without_pp.parameters.values
+        # params[:, :, 1] = params[:, :, 1]# * dur_ratio
+        levels_pp = model.sel(participant=participant)["levels"].values
+        likelihood = model_with_pp.fit_transform(
+            trialdata_with_pp,
+            model_without_pp.magnitudes.values,
+            params,
+            locations,
+            model.mags_map,
+            model.pars_map,
+            levels_pp,
+            lkh_only=True,
+        )
+    else:
+        locations = np.zeros(n_events + 1, dtype=int)
+        locations[1:-1] = model.events.location
+        # fit model
+        fit_without_pp = model_without_pp.fit_n(
+            trialdata_without_pp,
+            model.magnitudes.dropna("event", how="all").values,
+            model.parameters.dropna("stage").values,
+            verbose=False,
+        )
+        # calc lkh
+        # adjust params to fit average duration of subject
+        params = fit_without_pp.parameters.dropna("stage").values
+        # params[:, 1] = params[:, 1]# * dur_ratio
+        likelihood = model_with_pp.fit_transform(
+            trialdata_with_pp,
+            fit_without_pp.magnitudes.dropna("event", how="all").values,
+            parameters=params,
+        )
+
+    return likelihood
+
+
+
+
+
+
 
 def loocv_calcs(data, init, participant, initial_fit, cpus=None, verbose=False):
     """Fit the model and compute likelihood of left out data.
