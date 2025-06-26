@@ -111,7 +111,7 @@ def user_input_n_comp(data):
     return n_comp
 
 
-class Preprocessing:
+class Standard:
     """Preprocess EEG epoched data (in xarray format) for HMP analysis.
 
     This function performs several preprocessing steps on EEG data:

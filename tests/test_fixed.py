@@ -15,7 +15,7 @@ from test_io import init_data
 
 def data():
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
-    hmp_data = hmp.preprocessing.Preprocessing(epoch_data, n_comp=2,)
+    hmp_data = hmp.preprocessing.Standard(epoch_data, n_comp=2,)
     return event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events
 
 def test_fixed_simple():

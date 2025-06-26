@@ -8,7 +8,7 @@ from functools import cached_property
 from itertools import cycle, product
 from typing import Any
 from warnings import resetwarnings, warn
-from hmp.preprocessing import Preprocessing
+from hmp.preprocessing import Standard
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -68,7 +68,7 @@ class TrialData:
         TrialData
             An instance of TrialData with computed durations, cross-correlation, and metadata.
         """
-        if isinstance(preprocessed, Preprocessing):
+        if isinstance(preprocessed, Standard):
             data = preprocessed.data
         elif 'component' in preprocessed.dims:
             data = preprocessed
