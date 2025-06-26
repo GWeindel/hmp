@@ -70,7 +70,7 @@ class EventModel(BaseModel):
         self.min_iteration = min_iteration
         self.starting_points = starting_points
         self.max_scale = max_scale
-        self.level_dict = {}
+        self.grouping_dict = {}
         self.time_map = np.zeros((1, self.n_events + 1))
         self.channel_map = np.zeros((1, self.n_events))
         super().__init__(*args, **kwargs)
@@ -86,7 +86,7 @@ class EventModel(BaseModel):
         cpus: int = 1,
         channel_map: np.ndarray = None,
         time_map: np.ndarray = None,
-        level_dict: dict = None,
+        grouping_dict: dict = None,
     ):
 
         """
@@ -97,10 +97,10 @@ class EventModel(BaseModel):
         trial_data : TrialData
             The trial data to fit the model to.
         channel_pars : ndarray, optional
-            2D ndarray (n_levels * n_events * n_channels) or 4D (starting_points * n_levels * n_levels * n_events * n_channels),
+            2D ndarray (n_groups * n_events * n_channels) or 4D (starting_points * n_groups * n_groups * n_events * n_channels),
             initial conditions for event channel contributions. Default is None.
         time_pars : ndarray, optional
-            3D ndarray (n_levels * n_stages * 2) or 4D (starting_points * n_levels * n_stages * 2),
+            3D ndarray (n_groups * n_stages * 2) or 4D (starting_points * n_groups * n_stages * 2),
             initial conditions for time distribution parameters. Default is None.
         fixed_time_pars : list, optional
             Indices of time parameters to fix during estimation. Default is None.
@@ -117,13 +117,13 @@ class EventModel(BaseModel):
         cpus : int, optional
             Number of cores to use in multiprocessing functions. Default is 1.
         channel_map : ndarray, optional
-            2D ndarray (n_levels * n_events) indicating which channel contributions are shared between levels.
+            2D ndarray (n_groups * n_events) indicating which channel contributions are shared between groups.
             Default is None.
         time_map : ndarray, optional
-            2D ndarray (n_levels * n_stages) indicating which time parameters are shared between levels.
+            2D ndarray (n_groups * n_stages) indicating which time parameters are shared between groups.
             Default is None.
-        level_dict : dict, optional
-            Dictionary defining levels for multilevel modeling. Keys are level names, and values are lists of levels.
+        grouping_dict : dict, optional
+            Dictionary defining groups for grouping modeling. Keys are group names, and values are lists of groups.
             Default is None.
 
         Returns
@@ -139,17 +139,17 @@ class EventModel(BaseModel):
 
         self.n_dims = trial_data.n_dims
 
-        if level_dict is None:
-            level_dict = self.level_dict
+        if grouping_dict is None:
+            grouping_dict = self.grouping_dict
             channel_map = self.channel_map
             time_map = self.time_map
-        n_levels, levels, clabels = self.level_constructor(
-            trial_data, level_dict, channel_map, time_map, verbose
+        n_groups, groups, glabels = self.group_constructor(
+            trial_data, grouping_dict, channel_map, time_map, verbose
         )
         infos_to_store["channel_map"] = channel_map
         infos_to_store["time_map"] = time_map
-        infos_to_store["clabels"] = clabels
-        infos_to_store["level_dict"] = level_dict
+        infos_to_store["glabels"] = glabels
+        infos_to_store["grouping_dict"] = grouping_dict
         if verbose:
             if time_pars is None:
                 print(
@@ -182,20 +182,20 @@ class EventModel(BaseModel):
             # If no time parameters starting points are provided generate standard ones
             # Or random ones if starting_points > 1
             time_pars = (
-                np.zeros((n_levels, self.n_events + 1, 2)) * np.nan
+                np.zeros((n_groups, self.n_events + 1, 2)) * np.nan
             )  # by default nan for missing stages
-            for cur_level in range(n_levels):
-                time_level = np.where(time_map[cur_level, :] >= 0)[0]
-                n_stage_level = len(time_level)
+            for cur_group in range(n_groups):
+                time_group = np.where(time_map[cur_group, :] >= 0)[0]
+                n_stage_group = len(time_group)
                 # by default starting point is to split the average duration in equal bins
-                time_pars[cur_level, time_level, :] = np.tile(
+                time_pars[cur_group, time_group, :] = np.tile(
                     [
                         self.distribution.shape,
                         self.distribution.mean_to_scale(
-                            np.mean(trial_data.durations[levels == cur_level]) / (n_stage_level)
+                            np.mean(trial_data.durations[groups == cur_group]) / (n_stage_group)
                         ),
                     ],
-                    (n_stage_level, 1),
+                    (n_stage_group, 1),
                 )
             initial_p = time_pars
             time_pars = [initial_p]
@@ -208,13 +208,13 @@ class EventModel(BaseModel):
                 infos_to_store["starting_points"] = self.starting_points
                 for _ in np.arange(self.starting_points):
                     proposal_p = (
-                        np.zeros((n_levels, self.n_events + 1, 2)) * np.nan
+                        np.zeros((n_groups, self.n_events + 1, 2)) * np.nan
                     )  # by default nan for missing stages
-                    for cur_level in range(n_levels):
-                        time_level = np.where(time_map[cur_level, :] >= 0)[0]
-                        n_stage_level = len(time_level)
-                        proposal_p[cur_level, time_level, :] = self.gen_random_stages(n_stage_level - 1)
-                        proposal_p[cur_level, fixed_time_pars, :] = initial_p[0, fixed_time_pars]
+                    for cur_group in range(n_groups):
+                        time_group = np.where(time_map[cur_group, :] >= 0)[0]
+                        n_stage_group = len(time_group)
+                        proposal_p[cur_group, time_group, :] = self.gen_random_stages(n_stage_group - 1)
+                        proposal_p[cur_group, fixed_time_pars, :] = initial_p[0, fixed_time_pars]
                     time_pars.append(proposal_p)
                 time_pars = np.array(time_pars)
         else:
@@ -222,10 +222,10 @@ class EventModel(BaseModel):
 
         if channel_pars is None:
             # By defaults c_pars are initiated to 0
-            channel_pars = np.zeros((n_levels, self.n_events, self.n_dims), dtype=np.float64)
+            channel_pars = np.zeros((n_groups, self.n_events, self.n_dims), dtype=np.float64)
             if (channel_map < 0).any():  # set missing c_pars to nan
-                for cur_level in range(n_levels):
-                    channel_pars[cur_level, np.where(channel_map[cur_level, :] < 0)[0], :] = np.nan
+                for cur_group in range(n_groups):
+                    channel_pars[cur_group, np.where(channel_map[cur_group, :] < 0)[0], :] = np.nan
             initial_m = channel_pars
             channel_pars = np.tile(initial_m, (self.starting_points + 1, 1, 1, 1))
         else:
@@ -243,7 +243,7 @@ class EventModel(BaseModel):
                 itertools.repeat(self.min_iteration),
                 itertools.repeat(channel_map),
                 itertools.repeat(time_map),
-                itertools.repeat(levels),
+                itertools.repeat(groups),
                 itertools.repeat(1),
             )
             with mp.Pool(processes=cpus) as pool:
@@ -267,7 +267,7 @@ class EventModel(BaseModel):
                         self.min_iteration,
                         channel_map,
                         time_map,
-                        levels,
+                        groups,
                         1,
                     )
                 )
@@ -288,8 +288,8 @@ class EventModel(BaseModel):
             self.time_pars = np.array(estimates[max_lkhs][2])
             self.traces = np.array(estimates[max_lkhs][3])
             self.time_pars_dev = np.array(estimates[max_lkhs][4])
-            self.level_dict = level_dict
-            self.level = levels
+            self.grouping_dict = grouping_dict
+            self.group = groups
             self.channel_map = channel_map
             self.time_map = time_map
 
@@ -309,12 +309,12 @@ class EventModel(BaseModel):
         xr_eventprobs : xr.DataArray
             Concatenated event probability arrays for all submodels, indexed by number of events.
         """
-        _, levels, clabels = self.level_constructor(
-                trial_data, self.level_dict
+        _, groups, glabels = self.group_constructor(
+                trial_data, self.grouping_dict
             )
-        likelihoods, xreventprobs = self._distribute_levels(
+        likelihoods, xreventprobs = self._distribute_groups(
             trial_data, self.channel_pars, self.time_pars,
-            self.channel_map, self.time_map, levels, False
+            self.channel_map, self.time_map, groups, False
         )
         return likelihoods, xreventprobs
 
@@ -328,16 +328,16 @@ class EventModel(BaseModel):
         Returns
         -------
         xr.DataArray
-            An xarray DataArray with dimensions ("em_iteration", "level") containing the log-likelihood traces.
+            An xarray DataArray with dimensions ("em_iteration", "group") containing the log-likelihood traces.
         """
         self._check_fitted("get traces")
         return xr.DataArray(
             self.traces,
-            dims=("em_iteration", "level"),
+            dims=("em_iteration", "group"),
             name="traces",
             coords={
                 "em_iteration": range(self.traces.shape[0]),
-                "level": range(self.traces.shape[1]),
+                "group": range(self.traces.shape[1]),
             }
         )
 
@@ -362,13 +362,13 @@ class EventModel(BaseModel):
         Returns
         -------
         xr.DataArray
-            An xarray DataArray with dimensions ("em_iteration", "level", "stage", "time_pars") containing
+            An xarray DataArray with dimensions ("em_iteration", "group", "stage", "time_pars") containing
             the time parameter deviations.
         """
         self._check_fitted("get dev time pars")
         return xr.DataArray(
             self.time_pars_dev,
-            dims=("em_iteration", "level", "stage", "time_pars"),
+            dims=("em_iteration", "group", "stage", "time_pars"),
             name="time_pars_dev",
             coords=[
                 range(self.time_pars_dev.shape[0]),
@@ -386,15 +386,15 @@ class EventModel(BaseModel):
         Returns
         -------
         xr.DataArray
-            An xarray DataArray with dimensions ("level", "stage", "parameter") containing the time parameters.
+            An xarray DataArray with dimensions ("group", "stage", "parameter") containing the time parameters.
         """
         self._check_fitted("get xrtime_pars")
         return xr.DataArray(
             self.time_pars,
-            dims=("level", "stage", "parameter"),
+            dims=("group", "stage", "parameter"),
             name="time_pars",
             coords={
-                "level": range(self.time_pars.shape[0]),
+                "group": range(self.time_pars.shape[0]),
                 "stage": range(self.n_events + 1),
                 "parameter": ["shape", "scale"],
             },
@@ -408,15 +408,15 @@ class EventModel(BaseModel):
         Returns
         -------
         xr.DataArray
-            An xarray DataArray with dimensions ("level", "event", "channel") containing the channel parameters.
+            An xarray DataArray with dimensions ("group", "event", "channel") containing the channel parameters.
         """
         self._check_fitted("get xrchannel_pars")
         return xr.DataArray(
             self.channel_pars,
-            dims=("level", "event", "channel"),
+            dims=("group", "event", "channel"),
             name="channel_pars",
             coords={
-                "level": range(self.channel_pars.shape[0]),
+                "group": range(self.channel_pars.shape[0]),
                 "event": range(self.n_events),
                 "channel": range(self.n_dims),
             },
@@ -437,7 +437,7 @@ class EventModel(BaseModel):
         min_iteration: int = 1,
         channel_map: np.ndarray = None,
         time_map: np.ndarray = None,
-        levels: np.ndarray = None,
+        groups: np.ndarray = None,
         cpus: int = 1,
     ) -> tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -464,11 +464,11 @@ class EventModel(BaseModel):
         min_iteration : int, optional
             Minimum number of iterations for the expectation maximization algorithm. Default is 1.
         channel_map : np.ndarray, optional
-            2D array mapping channel parameters to levels. Default is None.
+            2D array mapping channel parameters to groups. Default is None.
         time_map : np.ndarray, optional
-            2D array mapping time parameters to levels. Default is None.
-        levels : np.ndarray, optional
-            Array indicating the levels for multilevel modeling. Default is None.
+            2D array mapping time parameters to groups. Default is None.
+        groups : np.ndarray, optional
+            Array indicating the groups for grouping modeling. Default is None.
         cpus : int, optional
             Number of cores to use in multiprocessing functions. Default is 1.
     Returns
@@ -487,14 +487,14 @@ class EventModel(BaseModel):
 
 
         assert channel_map.shape[0] == time_map.shape[0], (
-            "Both maps need to indicate the same number of levels."
+            "Both maps need to indicate the same number of groups."
         )
 
-        lkh, eventprobs = self._distribute_levels(
+        lkh, eventprobs = self._distribute_groups(
             trial_data, initial_channel_pars, initial_time_pars, 
-            channel_map, time_map, levels, cpus=cpus
+            channel_map, time_map, groups, cpus=cpus
         )
-        data_levels = np.unique(levels)
+        data_groups = np.unique(groups)
         channel_pars = initial_channel_pars.copy() 
         time_pars = initial_time_pars.copy()
         traces = [lkh]
@@ -511,24 +511,24 @@ class EventModel(BaseModel):
             # As long as new run gives better likelihood, go on
             lkh_prev = lkh.copy()
 
-            for cur_level in data_levels:  # get params/c_pars
-                channel_map_level = np.where(channel_map[cur_level, :] >= 0)[0]
-                time_map_level = np.where(time_map[cur_level, :] >= 0)[0]
-                epochs_level = np.where(levels == cur_level)[0]
-                # get c_pars/t_pars by level
-                channel_pars[cur_level, channel_map_level, :], time_pars[cur_level, time_map_level, :] = (
+            for cur_group in data_groups:  # get params/c_pars
+                channel_map_group = np.where(channel_map[cur_group, :] >= 0)[0]
+                time_map_group = np.where(time_map[cur_group, :] >= 0)[0]
+                epochs_group = np.where(groups == cur_group)[0]
+                # get c_pars/t_pars by group
+                channel_pars[cur_group, channel_map_group, :], time_pars[cur_group, time_map_group, :] = (
                     self.get_channel_time_parameters_expectation(
                         trial_data,
-                        eventprobs.values[:, :np.max(trial_data.durations[epochs_level]), channel_map_level],
-                        subset_epochs=epochs_level,
+                        eventprobs.values[:, :np.max(trial_data.durations[epochs_group]), channel_map_group],
+                        subset_epochs=epochs_group,
                     )
                 )
 
-                channel_pars[cur_level, fixed_channel_pars, :] = initial_channel_pars[
-                    cur_level, fixed_channel_pars, :
+                channel_pars[cur_group, fixed_channel_pars, :] = initial_channel_pars[
+                    cur_group, fixed_channel_pars, :
                 ].copy()
-                time_pars[cur_level, fixed_time_pars, :] = initial_time_pars[
-                    cur_level, fixed_time_pars, :
+                time_pars[cur_group, fixed_time_pars, :] = initial_time_pars[
+                    cur_group, fixed_time_pars, :
                 ].copy()
 
             # set c_pars to mean if requested in map
@@ -548,8 +548,8 @@ class EventModel(BaseModel):
                         )
 
             
-            lkh, eventprobs = self._distribute_levels(
-                trial_data, channel_pars, time_pars, channel_map, time_map, levels, cpus=cpus
+            lkh, eventprobs = self._distribute_groups(
+                trial_data, channel_pars, time_pars, channel_map, time_map, groups, cpus=cpus
             )
             traces.append(lkh)
             time_pars_dev.append(time_pars.copy())
@@ -605,7 +605,7 @@ class EventModel(BaseModel):
             # average across trial
 
         # Time parameters from Expectation Eq 10 from 2024 paper
-        # calc averagepos here as mean_d can be level dependent, whereas scale_parameters() assumes
+        # calc averagepos here as mean_d can be group dependent, whereas scale_parameters() assumes
         # it's general
         event_times_mean = np.concatenate(
             [
@@ -801,22 +801,22 @@ class EventModel(BaseModel):
         eventprobs = eventprobs.transpose((1,0,2))
         return [likelihood, eventprobs]
 
-    def _distribute_levels(
+    def _distribute_groups(
         self,
         trial_data: TrialData,
         channel_pars: np.ndarray,
         time_pars: np.ndarray,
         channel_map: np.ndarray,
         time_map: np.ndarray,
-        levels: np.ndarray,
+        groups: np.ndarray,
         location: bool = True,
         cpus: int = 1,
     ) -> tuple[np.ndarray, xr.DataArray]:
         """
-        Estimate probability levels for multilevel models.
+        Estimate probability groups for grouping models.
 
-        This method computes the log-likelihood and event probabilities for each level
-        in the multilevel model, using the provided channel and time parameters.
+        This method computes the log-likelihood and event probabilities for each group
+        in the grouping model, using the provided channel and time parameters.
 
         Parameters
         ----------
@@ -831,11 +831,11 @@ class EventModel(BaseModel):
             (iteration, n_stages, n_parameters) containing initial conditions for 
             the distribution parameters.
         channel_map : np.ndarray
-            A 2D array mapping channel parameters to levels.
+            A 2D array mapping channel parameters to groups.
         time_map : np.ndarray
-            A 2D array mapping time parameters to levels.
-        levels : np.ndarray
-            An array indicating the levels for multilevel modeling.
+            A 2D array mapping time parameters to groups.
+        groups : np.ndarray
+            An array indicating the groups for grouping modeling.
         location : bool, optional
             Whether to add a minimum distance between events to avoid event collapse 
             during the expectation-maximization algorithm. Default is True.
@@ -844,60 +844,60 @@ class EventModel(BaseModel):
         Returns
         -------
         loglikelihood : np.ndarray
-            A 1D array of log-likelihood values for each level.
+            A 1D array of log-likelihood values for each group.
         all_xreventprobs : xr.DataArray
             An xarray DataArray containing event probabilities with dimensions ("trial", "sample", "event").
         """
-        data_levels = np.unique(levels)
-        likes_events_level = []
+        data_groups = np.unique(groups)
+        likes_events_group = []
         all_xreventprobs = []
         if cpus > 1:
             with mp.Pool(processes=cpus) as pool:
-                likes_events_level = pool.starmap(
+                likes_events_group = pool.starmap(
                     self.estim_probs,
                     zip(
                         itertools.repeat(trial_data),
-                        [channel_pars[cur_level, channel_map[cur_level, :] >= 0, :] for cur_level in data_levels],
-                        [time_pars[cur_level, time_map[cur_level, :] >= 0, :] for cur_level in data_levels],
+                        [channel_pars[cur_group, channel_map[cur_group, :] >= 0, :] for cur_group in data_groups],
+                        [time_pars[cur_group, time_map[cur_group, :] >= 0, :] for cur_group in data_groups],
                         itertools.repeat(location),
-                        [levels == cur_level for cur_level in data_levels],
+                        [groups == cur_group for cur_group in data_groups],
                         itertools.repeat(False),
                     ),
                 )
         else:
-            for cur_level in data_levels:
-                channel_pars_level = channel_pars[
-                    cur_level, channel_map[cur_level, :] >= 0, :
+            for cur_group in data_groups:
+                channel_pars_group = channel_pars[
+                    cur_group, channel_map[cur_group, :] >= 0, :
                 ]  # select existing magnitudes
-                time_pars_level = time_pars[cur_level, time_map[cur_level, :] >= 0, :]  # select existing params
-                likes_events_level.append(
+                time_pars_group = time_pars[cur_group, time_map[cur_group, :] >= 0, :]  # select existing params
+                likes_events_group.append(
                     self.estim_probs(
                         trial_data,
-                        channel_pars_level,
-                        time_pars_level,
+                        channel_pars_group,
+                        time_pars_group,
                         location,
-                        subset_epochs=(levels == cur_level),
+                        subset_epochs=(groups == cur_group),
                     )
                 )
 
-        likelihood = np.array([x[0] for x in likes_events_level])
+        likelihood = np.array([x[0] for x in likes_events_group])
 
-        for i, cur_level in enumerate(data_levels):
-            part = trial_data.xrdurations.coords["participant"].values[(levels == cur_level)]
-            epoch = trial_data.xrdurations.coords["epoch"].values[(levels == cur_level)]
-            data_events =  channel_map[cur_level, :] >= 0
+        for i, cur_group in enumerate(data_groups):
+            part = trial_data.xrdurations.coords["participant"].values[(groups == cur_group)]
+            epoch = trial_data.xrdurations.coords["epoch"].values[(groups == cur_group)]
+            data_events =  channel_map[cur_group, :] >= 0
             trial_x_part = xr.Coordinates.from_pandas_multiindex(
                 MultiIndex.from_arrays([part, epoch], names=("participant", "epoch")),
                 "trial",
             )
-            xreventprobs = xr.DataArray(likes_events_level[i][1], dims=("trial", "sample", "event"),
+            xreventprobs = xr.DataArray(likes_events_group[i][1], dims=("trial", "sample", "event"),
                 coords={
                     "event": ("event", np.arange(self.n_events)[data_events]),
-                    "sample": ("sample", range(np.shape(likes_events_level[i][1])[1])),
+                    "sample": ("sample", range(np.shape(likes_events_group[i][1])[1])),
                 },
             )
             xreventprobs = xreventprobs.assign_coords(trial_x_part)
-            xreventprobs = xreventprobs.assign_coords(level=("trial", levels[levels == cur_level],))
+            xreventprobs = xreventprobs.assign_coords(group=("trial", groups[groups == cur_group],))
             all_xreventprobs.append(xreventprobs)
         all_xreventprobs = xr.concat(all_xreventprobs, dim="trial")
         all_xreventprobs.attrs['sfreq'] = self.sfreq
@@ -931,121 +931,121 @@ class EventModel(BaseModel):
         p[np.isnan(p)] = 0  # remove potential nans
         return p
 
-    def level_constructor(
+    def group_constructor(
         self, 
         trial_data: TrialData, 
-        level_dict: dict, 
+        grouping_dict: dict, 
         channel_map: np.ndarray = None, 
         time_map: np.ndarray = None, 
         verbose: bool = False
     ) -> tuple[int, np.ndarray, dict]:
         """
-        Adapt the model to levels by constructing level mappings and validating provided maps.
+        Adapt the model to groups by constructing group mappings and validating provided maps.
 
         Parameters
         ----------
         trial_data : TrialData
-            The trial data containing trial-level information.
-        level_dict : dict
-            A dictionary defining levels for multilevel modeling. Keys are level names, and values are lists of levels.
+            The trial data containing trial-group information.
+        grouping_dict : dict
+            A dictionary defining groups for grouping modeling. Keys are group names, and values are lists of groups.
         channel_map : np.ndarray, optional
-            A 2D array mapping channel parameters to levels. Default is None.
+            A 2D array mapping channel parameters to groups. Default is None.
         time_map : np.ndarray, optional
-            A 2D array mapping time parameters to levels. Default is None.
+            A 2D array mapping time parameters to groups. Default is None.
         verbose : bool, optional
-            If True, prints detailed information about the level construction process. Default is False.
+            If True, prints detailed information about the group construction process. Default is False.
 
         Returns
         -------
-        n_levels : int
-            The number of unique levels.
-        levels : np.ndarray
-            An array indicating the level assignment for each trial.
-        clabels : dict
-            A dictionary containing level names and their corresponding modalities.
+        n_groups : int
+            The number of unique groups.
+        groups : np.ndarray
+            An array indicating the group assignment for each trial.
+        glabels : dict
+            A dictionary containing group names and their corresponding modalities.
         """
-        ## levels
-        assert isinstance(level_dict, dict), "levels have to be specified as a dictionary"
-        if len(level_dict.keys()) == 0:
+        ## groups
+        assert isinstance(grouping_dict, dict), "groups have to be specified as a dictionary"
+        if len(grouping_dict.keys()) == 0:
             verbose = False
-        # collect level names, levels, and trial coding
-        level_names = []
-        level_mods = []
-        level_trials = []
-        for level in level_dict.keys():
-            level_names.append(level)
-            level_mods.append(level_dict[level])
-            level_trials.append(trial_data.xrdurations.coords[level])
+        # collect group names, groups, and trial coding
+        group_names = []
+        group_mods = []
+        group_trials = []
+        for group in grouping_dict.keys():
+            group_names.append(group)
+            group_mods.append(grouping_dict[group])
+            group_trials.append(trial_data.xrdurations.coords[group])
             if verbose:
-                print('Level "' + level_names[-1] + '" analyzed, with levels:', level_mods[-1])
+                print('group "' + group_names[-1] + '" analyzed, with groups:', group_mods[-1])
 
-        level_mods = list(product(*level_mods))
-        level_mods = np.array(level_mods, dtype=object)
-        n_levels = len(level_mods)
+        group_mods = list(product(*group_mods))
+        group_mods = np.array(group_mods, dtype=object)
+        n_groups = len(group_mods)
 
-        # build level array with digit indicating the combined levels
-        if n_levels > 1:
-            level_trials = np.vstack(level_trials).T
-            levels = np.zeros((level_trials.shape[0])) * np.nan
+        # build group array with digit indicating the combined groups
+        if n_groups > 1:
+            group_trials = np.vstack(group_trials).T
+            groups = np.zeros((group_trials.shape[0])) * np.nan
             if verbose:
                 print("\nCoded as follows: ")
-            for i, mod in enumerate(level_mods):
-                # assert len(np.where((level_trials == mod).all(axis=1))[0]) > 0, (
-                #     f"Modality {mod} of level does not occur in the data"
+            for i, mod in enumerate(group_mods):
+                # assert len(np.where((group_trials == mod).all(axis=1))[0]) > 0, (
+                #     f"Modality {mod} of group does not occur in the data"
                 # )
-                levels[np.where((level_trials == mod).all(axis=1))] = i
+                groups[np.where((group_trials == mod).all(axis=1))] = i
                 if verbose:
-                    print(str(i) + ": " + str(level))
+                    print(str(i) + ": " + str(mod))
         else:
-            levels = np.zeros(trial_data.n_trials)
-        levels = np.int8(levels)
-        clabels = {"level " + str(level_names): level_mods}
+            groups = np.zeros(trial_data.n_trials)
+        groups = np.int8(groups)
+        glabels = {"group " + str(group_names): group_mods}
 
         # check maps if provided
         if channel_map is not None and time_map is not None:
-            n_levels_mags = 0 if channel_map is None else channel_map.shape[0]
-            n_levels_pars = 0 if time_map is None else time_map.shape[0]
+            n_groups_mags = 0 if channel_map is None else channel_map.shape[0]
+            n_groups_pars = 0 if time_map is None else time_map.shape[0]
             if (
-                n_levels_mags > 0 and n_levels_pars > 0
-            ):  # either both maps should have the same number of levels, or 0
-                assert n_levels_mags == n_levels_pars, (
-                    "Channel and time parameter maps have to indicate the same number of levels"
+                n_groups_mags > 0 and n_groups_pars > 0
+            ):  # either both maps should have the same number of groups, or 0
+                assert n_groups_mags == n_groups_pars, (
+                    "Channel and time parameter maps have to indicate the same number of groups"
                 )
                 # make sure nr of events correspond per row
-                for cur_level in range(n_levels):
-                    assert sum(channel_map[cur_level, :] >= 0) + 1 == sum(time_map[cur_level, :] >= 0), (
+                for cur_group in range(n_groups):
+                    assert sum(channel_map[cur_group, :] >= 0) + 1 == sum(time_map[cur_group, :] >= 0), (
                         "nr of events in channel map and time map do not correspond on row "
-                        + str(cur_level)
+                        + str(cur_group)
                     )
-            elif n_levels_mags == 0:
+            elif n_groups_mags == 0:
                 assert not (time_map < 0).any(), (
                     "If negative time parameter are provided, channel map is required."
                 )
-                channel_map = np.zeros((n_levels, time_map.shape[1] - 1), dtype=int)
+                channel_map = np.zeros((n_groups, time_map.shape[1] - 1), dtype=int)
             else:
-                time_map = np.zeros((n_levels, channel_map.shape[1] + 1), dtype=int)
+                time_map = np.zeros((n_groups, channel_map.shape[1] + 1), dtype=int)
                 if (channel_map < 0).any():
-                    for cur_level in range(n_levels):
-                        time_map[cur_level, np.where(channel_map[cur_level, :] < 0)[0]] = -1
-                        time_map[cur_level, np.where(channel_map[cur_level, :] < 0)[0] + 1] = 1
+                    for cur_group in range(n_groups):
+                        time_map[cur_group, np.where(channel_map[cur_group, :] < 0)[0]] = -1
+                        time_map[cur_group, np.where(channel_map[cur_group, :] < 0)[0] + 1] = 1
     
-            # at this point, all should indicate the same number of levels
-            assert n_levels == channel_map.shape[0] == time_map.shape[0], (
-                "number of unique levels should correspond to number of rows in map(s)"
+            # at this point, all should indicate the same number of groups
+            assert n_groups == channel_map.shape[0] == time_map.shape[0], (
+                "number of unique groups should correspond to number of rows in map(s)"
             )
     
             if verbose:
                 print("\nChannel map:")
-                for cnt in range(n_levels):
+                for cnt in range(n_groups):
                     print(str(cnt) + ": ", channel_map[cnt, :])
     
                 print("\nTime map:")
-                for cnt in range(n_levels):
+                for cnt in range(n_groups):
                     print(str(cnt) + ": ", time_map[cnt, :])
 
-            # at this point, all should indicate the same number of levels
-            assert n_levels == channel_map.shape[0] == time_map.shape[0], (
-                "number of unique levels should correspond to number of rows in map(s)"
+            # at this point, all should indicate the same number of groups
+            assert n_groups == channel_map.shape[0] == time_map.shape[0], (
+                "number of unique groups should correspond to number of rows in map(s)"
             )
 
-        return n_levels, levels, clabels
+        return n_groups, groups, glabels
