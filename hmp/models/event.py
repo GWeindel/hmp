@@ -995,7 +995,7 @@ class EventModel(BaseModel):
                 # )
                 groups[np.where((group_trials == mod).all(axis=1))] = i
                 if verbose:
-                    print(str(i) + ": " + str(group))
+                    print(str(i) + ": " + str(mod))
         else:
             groups = np.zeros(trial_data.n_trials)
         groups = np.int8(groups)
