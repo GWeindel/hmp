@@ -33,7 +33,7 @@ def test_plot():
     # Fit model on both conditions (noiseless b should help estimate a)
 
     trial_data = TrialData.from_preprocessed(preprocessed=hmp_data.data, pattern=event_properties.template)
-    lkh_comb, estimates_comb = model.fit_transform(trial_data, time_map=time_map, channel_map=channel_map, group_dict=group_dict)
+    lkh_comb, estimates_comb = model.fit_transform(trial_data, time_map=time_map, channel_map=channel_map, grouping_dict=group_dict)
     lkh_b_group, estimates_b_group = model.transform(trial_data_b)
 
     plot_topo_timecourse(epoch_data, estimates_comb, positions, as_time=True, colorbar=False, )
