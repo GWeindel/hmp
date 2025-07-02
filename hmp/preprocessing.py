@@ -19,7 +19,7 @@ from mne.filter import filter_data
 from sklearn.decomposition import PCA
 from typing import Union, Optional
 from warnings import warn
-from hmp import mcca
+from hmp import (mcca, utils)
 
 
 class ApplyZScore(Enum):
@@ -79,37 +79,6 @@ class AnalysisMethod(Enum):
             return cls.MCCA
         else:
             raise KeyError(f"Unknown method: '{label}'; valid options: {', '.join([e.value for e in cls])} or None")  # noqa: E501
-
-
-def user_input_n_comp(data):
-
-    n_comp = np.shape(data)[0] - 1
-    fig, ax = plt.subplots(1, 2, figsize=(0.2 * n_comp, 4))
-    pca = PCA(n_components=n_comp, svd_solver="full", copy=False)  # selecting PCs
-    pca.fit(data)
-
-    ax[0].plot(np.arange(pca.n_components) + 1, pca.explained_variance_ratio_, ".-")
-    ax[0].set_ylabel("Normalized explained variance")
-    ax[0].set_xlabel("Component")
-    ax[1].plot(np.arange(pca.n_components) + 1, np.cumsum(pca.explained_variance_ratio_), ".-")
-    ax[1].set_ylabel("Cumulative normalized explained variance")
-    ax[1].set_xlabel("Component")
-    plt.tight_layout()
-    plt.show()
-
-    # TODO: needs user input validation?
-    n_comp = int(
-        input(
-            f"How many PCs (95 and 99% explained variance at component "
-            f"n{np.where(np.cumsum(pca.explained_variance_ratio_) >= 0.95)[0][0] + 1} and "
-            f"n{np.where(np.cumsum(pca.explained_variance_ratio_) >= 0.99)[0][0] + 1}; "
-            f"components till n{np.where(pca.explained_variance_ratio_ >= 0.01)[0][-1] + 1} "
-            f"explain at least 1%)?"
-        )
-    )
-
-    return n_comp
-
 
 class Standard:
     """Preprocess EEG epoched data (in xarray format) for HMP analysis.
@@ -258,6 +227,10 @@ class Standard:
                     )
                 pca_ready_data = np.mean(np.array(indiv_data), axis=0)
                 # Performing spatial PCA on the average var-cov matrix
+
+                if n_comp is None:
+                    n_comp = self.user_input_n_comp(data=pca_ready_data)
+
                 weights, preprocessing_model = self._pca(pca_ready_data, n_comp, data.coords["channel"].values)
                 data = data @ weights
                 weights = weights
@@ -379,8 +352,6 @@ class Standard:
 
     @staticmethod
     def _pca(pca_ready_data: xr.DataArray, n_comp: int, channel) -> xr.DataArray:
-        # TODO: test seperate function
-        n_comp = user_input_n_comp(data=pca_ready_data) if n_comp is None else n_comp
         pca = PCA(n_components=n_comp, svd_solver="full")  # selecting Principale components (PC)
         pca.fit(pca_ready_data)
         # Rebuilding pca PCs as xarray to ease computation
@@ -462,3 +433,32 @@ class Standard:
     def _standardize(x):
         """Scaling variances to mean variance of the group."""
         return (x.data / x.data.std(dim=...)) * x.mean_std
+
+    def user_input_n_comp(data):
+
+        n_comp = np.shape(data)[0] - 1
+        fig, ax = plt.subplots(1, 2, figsize=(0.2 * n_comp, 4))
+        pca = PCA(n_components=n_comp, svd_solver="full", copy=False)  # selecting PCs
+        pca.fit(data)
+
+        ax[0].plot(np.arange(pca.n_components) + 1, pca.explained_variance_ratio_, ".-")
+        ax[0].set_ylabel("Normalized explained variance")
+        ax[0].set_xlabel("Component")
+        ax[1].plot(np.arange(pca.n_components) + 1, np.cumsum(pca.explained_variance_ratio_), ".-")
+        ax[1].set_ylabel("Cumulative normalized explained variance")
+        ax[1].set_xlabel("Component")
+        plt.tight_layout()
+        plt.show()
+
+        # TODO: needs user input validation?
+        n_comp = int(
+            input(
+                f"How many PCs (95 and 99% explained variance at component "
+                f"n{np.where(np.cumsum(pca.explained_variance_ratio_) >= 0.95)[0][0] + 1} and "
+                f"n{np.where(np.cumsum(pca.explained_variance_ratio_) >= 0.99)[0][0] + 1}; "
+                f"components till n{np.where(pca.explained_variance_ratio_ >= 0.01)[0][-1] + 1} "
+                f"explain at least 1%)?"
+            )
+        )
+
+        return n_comp
