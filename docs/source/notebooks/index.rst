@@ -1,6 +1,6 @@
 .. _notebooks:
 
-Notebooks
+Tutorials
 =========
 
 This section contains example Jupyter notebooks.

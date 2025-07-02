@@ -434,6 +434,7 @@ class Standard:
         """Scaling variances to mean variance of the group."""
         return (x.data / x.data.std(dim=...)) * x.mean_std
 
+    @staticmethod
     def user_input_n_comp(data):
 
         n_comp = np.shape(data)[0] - 1
