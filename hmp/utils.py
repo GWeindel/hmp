@@ -9,24 +9,6 @@ from pandas import MultiIndex
 
 from hmp import mcca
 
-filterwarnings(
-    "ignore",
-    "Degrees of freedom <= 0 for slice.",
-)  # weird warning, likely due to nan in xarray, not important but better fix it later
-filterwarnings("ignore", "Mean of empty slice")  # When trying to center all-nans trial
-
-
-def zscore_xarray(data):
-    """Zscore of the data in an xarray, avoiding any nans."""
-    if isinstance(data, xr.Dataset):  # if no PCA
-        data = data.data
-    non_nan_mask = ~np.isnan(data.values)
-    if non_nan_mask.any():  # if not everything is nan, calc zscore
-        data.values[non_nan_mask] = (
-            data.values[non_nan_mask] - data.values[non_nan_mask].mean()
-        ) / data.values[non_nan_mask].std()
-    return data
-
 
 def stack_data(data):
     """Stack the data.
