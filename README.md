@@ -24,7 +24,7 @@ The package is available through *pip*.
 A way of using the package is to use a conda environment (see [anaconda](https://www.anaconda.com/products/distribution>) for how to install conda):
 
 > [!WARNING]
-> We are currently moving to 1.0.0 with important changes to the API. New users can either use the latest stable release (0.5.0, install from `pip` as below) but whose structure will be deprecated or use the upcoming beta for the v1.0.0 but accept the risk of name changes and bugs up to the final verison of 1.0.0
+> We are currently moving to 1.0.0 with important changes to the API. New users can either use the latest stable release (0.5.0, install from `pip` as below and see previous version of the [docs](https://github.com/GWeindel/hmp/tree/b26ab6939e8221475af19914da8dddc02df55ca0)) but whose structure will be deprecated or use the upcoming beta for the v1.0.0-b.1 but accept the risk of name changes and bugs up to the final verison of 1.0.0
 
 
 ```bash
@@ -55,12 +55,11 @@ After either installation path you can import hmp in your favorite python IDE th
 ## To get started
 To get started with the code:
 - Check the demo below 
-- Inspect the tutorials in the tutorials repository
-    - [Load EEG data ](tutorials/Data_loading.ipynb)
-    - [General aspects on HMP (tutorial 1)](tutorials/1-Background_on_HMP.ipynb)
-    - [Estimating a model (tutorial 2)](tutorials/2-Estimating_a_model.ipynb)
-    - [Test for the best number of events (tutorial 3)](tutorials/3-Testing_the_number_of_events.ipynb)
-    - [Looking at condition differences (tutorial 4)](tutorials/4-Analyzing_condition_differences.ipynb)
+- Inspect the tutorials:
+    - [General aspects on HMP (tutorial 1)](docs/source/notebooks/1-How_HMP_works.ipynb)
+    - [The different estimation methods (tutorial 2)](docs/source/notebooks/2-The_different_model_classes.ipynb)
+    - [Applying HMP to real data (tutorial 3)](docs/source/notebooks/3-Applying_HMP_to_real_data.ipynb)
+    - [Load your won EEG data ](docs/source/notebooks/Data_loading.ipynb)
 
 
 ## Demo on simulated data
@@ -89,12 +88,10 @@ import hmp
 
 In the following code block we simulate 200 trials with four HMP events defined as the activation of four neural sources (in the source space of MNE's sample participant). This is not code you would need for your own analysis except if you'd want to simulate and test properties of HMP models. All four sources are defined by a location in sensor space, an activation amplitude and a distribution in time (here a gamma with shape and scale parameters) for the onsets of the events on each trial. The simulation functions are based on this [MNE tutorial ](https://mne.tools/stable/auto_examples/simulation/simulated_raw_data_using_subject_anatomy.html).
 
-[!IMPORTANT] It can take a while to simulate data, you can also just download the corresponding simulation files (`dataset_README_raw_generating_events.npy` and `dataset_README_raw.fif`) and place it in the same folder from where you are running this notebook
+> [!NOTE] It can take a while to simulate this data, for faster rendering you can 1) decrease `sfreq` and reduce the number of trials in `n_trials`
 
 
 ```python
-cpus = 1 # For multiprocessing, usually a good idea to use multiple CPUs as long as you have enough RAM
-
 n_trials = 200 #Number of trials to simulate, we use 200 to get nice ERPs but you can reduce for speed
 
 ##### Here we define the sources of the brain activity (event) for each trial
@@ -111,7 +108,7 @@ for source in zip(names, scales):#One source = one frequency/event width, one am
     sources.append([source[0], frequency, amplitude, gamma(shape, scale=source[1])])
 
 # Function used to generate the data
-file = simulations.simulate(sources, n_trials, cpus, 'dataset_README',  overwrite=False, sfreq=sfreq, seed=1)
+file = simulations.simulate(sources, n_trials, 1, 'dataset_README',  overwrite=False, sfreq=sfreq, seed=1)
 #load electrode position, specific to the simulations
 positions = simulations.positions()
 ```
@@ -146,8 +143,6 @@ raw.pick_types(eeg=True).plot(scalings=dict(eeg=1e-5), events=events, block=True
     
 
 
-![png](README_files/README_7_1.png)
-
 ### Recovering number of events as well as actual by-trial variation
 
 To see how well HMP does at recovering by-trial events, first we get the ground truth from our simulation. Unfortunately, with an actual dataset you don’t have access to this, of course. 
@@ -173,7 +168,7 @@ epoch_data = hmp.io.read_mne_data(file[0], event_id=event_id, resp_id=resp_id, s
 
 ```
 
-    Processing participant /home/gabriel/ownCloud/projects/RUGUU/hmp/./dataset_README_raw.fif's continuous eeg
+    Processing participant /home/gabriel/ownCloud/projects/RUGUU/hmp/./dataset_README_raw.fif's raw eeg
 
 
     200 trials were retained for participant /home/gabriel/ownCloud/projects/RUGUU/hmp/./dataset_README_raw.fif
@@ -209,14 +204,14 @@ epoch_data.sel(channel=['EEG 001','EEG 002','EEG 003'], sample=range(400))\
         lowpass:           40.0
         highpass:          0.10000000149011612
         lower_limit_rt:    0
-        upper_limit_rt:    5.002
-        reject_threshold:  inf
+        upper_limit_rt:    inf
+        reject_threshold:  None
         n_trials:          200
 
 
 
     
-![png](README_files/README_12_1.png)
+![png](README_files/README_11_1.png)
     
 
 
@@ -239,12 +234,12 @@ Once the data is in the expected format, we can initialize an HMP object; note t
 # Create the expected 50ms halfsine template
 expected_pattern = hmp.patterns.HalfSine.create_expected(sfreq=epoch_data.sfreq, width=50)
 # Correlate this pattern with the data
-trial_data = hmp.trialdata.TrialData.from_preprocessed_data(preprocessed=preprocessed.data, pattern=expected_pattern.template)
+trial_data = hmp.trialdata.TrialData.from_preprocessed(preprocessed=preprocessed.data, pattern=expected_pattern.template)
 # Create a standard one-parameter distribution that separate event peaks
 time_distribution = hmp.distributions.Gamma()
 
 #Build all this in a model
-model = hmp.models.CumulativeEstimationModel(expected_pattern, time_distribution)
+model = hmp.models.CumulativeMethod(expected_pattern, time_distribution)
 ```
 
 ## Estimating an HMP model
@@ -253,10 +248,8 @@ We can directly fit an HMP model without giving any info on the number of events
 
 
 ```python
-# Estimate model parameters
-model.fit(trial_data)
-# Transform the data into event probability space
-_, estimates = model.fitted_model.transform(trial_data)
+# Estimate model parameters and transform the data into event probability space
+loglikelihood, estimates = model.fit_transform(trial_data)
 ```
 
 
@@ -297,7 +290,7 @@ hmp.visu.plot_topo_timecourse(epoch_data, estimates, #Data and estimations
 
 
     
-![png](README_files/README_20_0.png)
+![png](README_files/README_19_0.png)
     
 
 
@@ -315,13 +308,13 @@ plt.legend()
 
 
 
-    <matplotlib.legend.Legend at 0x751a2835a030>
+    <matplotlib.legend.Legend at 0x7d79e28347d0>
 
 
 
 
     
-![png](README_files/README_22_1.png)
+![png](README_files/README_21_1.png)
     
 
 
@@ -357,7 +350,7 @@ plt.tight_layout();
 
 
     
-![png](README_files/README_24_0.png)
+![png](README_files/README_23_0.png)
     
 
 
@@ -392,7 +385,7 @@ for channel in channels:
 
 
     
-![png](README_files/README_28_0.png)
+![png](README_files/README_27_0.png)
     
 
 
@@ -421,7 +414,7 @@ ax[-1].legend(bbox_to_anchor=(1,1));
 
 
     
-![png](README_files/README_30_0.png)
+![png](README_files/README_29_0.png)
     
 
 
@@ -436,9 +429,7 @@ Now HMP is not merely a method to look at ERPs or by-trial times. A lot can be d
 ### Follow-up
 
 For examples on how to use the package on real data, or to compare event time onset across conditions see the tutorial notebooks:
-- [Load EEG data ](tutorials/Data_loading.ipynb)
-- [General aspects on HMP (tutorial 1)](tutorials/1-Background_on_HMP.ipynb)
-- [Estimating a model (tutorial 2)](tutorials/2-Estimating_a_model.ipynb)
-- [Test for the best number of events (tutorial 3)](tutorials/3-Testing_the_number_of_events.ipynb)
-- [Looking at condition differences (tutorial 4)](tutorials/4-Analyzing_condition_differences.ipynb)
-
+- [General aspects on HMP (tutorial 1)](docs/source/notebooks/1-How_HMP_works.ipynb)
+- [The different estimation methods (tutorial 2)](docs/source/notebooks/2-The_different_model_classes.ipynb)
+- [Applying HMP to real data (tutorial 3)](docs/source/notebooks/3-Applying_HMP_to_real_data.ipynb)
+- [Load your won EEG data ](docs/source/notebooks/Data_loading.ipynb)

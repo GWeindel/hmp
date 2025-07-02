@@ -1,4 +1,4 @@
-hmp package
+API
 ===========
 
 Welcome to the HMP API documentation!

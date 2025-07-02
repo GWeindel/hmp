@@ -21,7 +21,7 @@ Step 3: Install hmp
 
 .. code-block:: console
 
-	pip install hmp
+	pip install hmp==1.0.0-b.1
 
 Step 6: Verifying Installation
 -------------------------------

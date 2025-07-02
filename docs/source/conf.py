@@ -40,6 +40,7 @@ extensions = [
     "sphinx_inline_tabs",
     "sphinx_copybutton",
     "sphinx.ext.autosummary",
+    "nbsphinx",
 ]
 
 # Add any paths that contain templates here, relative to this directory.

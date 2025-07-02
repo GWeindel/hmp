@@ -80,7 +80,6 @@ class AnalysisMethod(Enum):
         else:
             raise KeyError(f"Unknown method: '{label}'; valid options: {', '.join([e.value for e in cls])} or None")  # noqa: E501
 
-
 class Standard:
     """Preprocess EEG epoched data (in xarray format) for HMP analysis.
 
@@ -435,6 +434,7 @@ class Standard:
         """Scaling variances to mean variance of the group."""
         return (x.data / x.data.std(dim=...)) * x.mean_std
 
+    @staticmethod
     def user_input_n_comp(data):
 
         n_comp = np.shape(data)[0] - 1
