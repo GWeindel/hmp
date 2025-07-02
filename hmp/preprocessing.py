@@ -1,3 +1,16 @@
+"""This module provides tools for dimensionality reduction and normalization prior to HMP analysis.
+
+Features:
+    - Standardization of participant variances
+    - Spatial PCA and MCCA transformations
+    - Flexible z-scoring (across all data, by participant, or by trial)
+    - Optional bandpass filtering
+
+Classes:
+    - ApplyZScore: Specifies how and whether to apply z-scoring (options: all data, by participant, by trial, or not at all).
+    - AnalysisMethod: Specifies which method to reduce channel space (PCA, MCCA, or none).
+    - Preprocessing: Main class for preprocessing EEG data.
+"""
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
@@ -68,8 +81,65 @@ class AnalysisMethod(Enum):
             raise KeyError(f"Unknown method: '{label}'; valid options: {', '.join([e.value for e in cls])} or None")  # noqa: E501
 
 
-class Preprocessing:
+class Standard:
+    """Preprocess EEG epoched data (in xarray format) for HMP analysis.
 
+    This function performs several preprocessing steps on EEG data:
+
+    1. Optionally standardizes individual variances between participants (if ``apply_standard=True``).
+    2. Applies a spatial PCA or MCCA on the data, depending on the selected method.
+    3. Stacks the data from the format [n_participants * n_epochs * n_samples * n_channels] 
+       to [sample * channel].
+    4. Optionally applies z-scoring on the data, either across all data, by participant, 
+       or by trial, depending on the ``apply_zscore`` parameter.
+
+    Parameters
+    ----------
+    epoch_data : xr.DataArray
+        Input data with dimensions [n_participants * n_epochs * n_samples * n_channels].
+    participants_variable : str, optional
+        Name of the dimension for participant IDs. Default is 'participant'.
+    apply_standard : bool, optional
+        Whether to standardize variance between participants. Recommended when there are 
+        few participants (e.g., < 10). Default is False.
+    averaged : bool, optional
+        Whether to apply PCA/MCCA on the averaged ERP (True) or single-trial ERP (False). 
+        Only applicable for the MCCA method when cov=False. Default is False.
+    apply_zscore : Union[bool, str, ApplyZScore], optional
+        Specifies whether to apply z-scoring and on what data. Options are:
+        - 'all': Z-score across all data.
+        - 'participant': Z-score by participant.
+        - 'trial': Z-score by trial.
+        - None or 'dont_apply': No z-scoring.
+        If set to True, defaults to 'trial' for backward compatibility. Default is ApplyZScore.TRIAL.
+    method : Union[bool, str, AnalysisMethod], optional
+        Analysis method to apply. Options are:
+        - 'pca': Apply PCA.
+        - 'mcca': Apply MCCA.
+        - 'no_analysis': Skip analysis. Default is AnalysisMethod.PCA.
+    cov : bool, optional
+        Whether to apply PCA/MCCA to the variance-covariance matrix (True) or the epoched data (False). 
+        Only applicable for the MCCA method. Default is True.
+    n_comp : int, optional
+        Number of components to retain in the PC space. If None, a scree plot is displayed, 
+        and the user is prompted to specify the number of components. Default is None.
+    n_ppcas : int, optional
+        For the MCCA method, controls the number of components retained for by-participant PCAs. Default is None.
+    weights : Optional[xr.DataArray], optional
+        Precomputed linear combinations of channels. Default is None.
+    bandfilter : Optional[tuple[float, float]], optional
+        Frequency range for bandpass filtering (lfreq, hfreq). If None, no filtering is applied. 
+        Filtering at this step is suboptimal; it is recommended to filter before epoching. Default is None.
+    mcca_reg : float, optional
+        Regularization parameter for the MCCA computation. Default is 0.
+    copy : bool, optional
+        Whether to copy the data before transforming. If False, the data is modified in place. Default is False.
+
+    Returns
+    -------
+    data : xr.DataArray
+        Preprocessed data with dimensions [n_samples * n_comp], expressed in the PC space, ready for HMP analysis.
+    """
     def __init__(
         self,
         epoch_data: xr.DataArray,
@@ -88,60 +158,6 @@ class Preprocessing:
         mcca_reg: float = 0,
         copy: bool = False,
     ) -> None:
-        """Adapt EEG epoched data (in xarray format) to the expected data format for hmp.
-
-        First this code can apply standardization of individual variances
-            (if apply_standard=True).
-        Second, a spatial PCA on the average variance-covariance matrix is performed
-            (if method='pca', more methods in development).
-        Third, stacks the data going from format [n_participants * n_epochs * n_samples * n_channels] to
-            [sample * channel].
-        Last, performs z-scoring on each epoch and for each principal component (PC), or for each
-            participant and PC, or across all data for each PC.
-
-        Parameters
-        ----------
-        epoch_data : xarray
-            xarray with dimensions [n_participants * n_epochs * n_samples * n_channels]
-        participants_variable : str
-            name of the dimension for participants ID
-        apply_standard : bool
-            Whether to apply standardization of variance between participants, recommended when they
-            are few of them (e.g. < 10)
-        averaged : bool
-            Applying the pca on the averaged ERP (True) or single trial ERP (False, default).
-            No effect if cov = True. Only works for MCCA method
-        apply_zscore : str
-            Whether to apply z-scoring and on what data, either None, 'all', 'participant', 'trial',
-            for zscoring across all data, by participant, or by trial, respectively. If set to true,
-            evaluates to 'trial' for backward compatibility.
-        method : str
-            Method to apply, 'pca' or 'mcca'
-        cov : bool
-            Wether to apply the pca/mcca to the variance covariance (True, default) or the epoched
-            data. Only works for MCCA method
-        n_comp : int
-            How many components to select from the PC space, if None plots the scree plot and a
-            prompt requires user to specify how many PCs should be retained
-        n_ppcas : int
-            If method = 'mcca', controls the number of components retained for the by-participant
-            PCAs
-        pca_weigths : xarray
-            Weights of a PCA to apply to the data (e.g. in the resample function)
-        bandfilter: None | (lfreq, hfreq)
-            If none, no filtering is appliedn. If tuple, data is filtered between lfreq-hfreq.
-            NOTE: filtering at this step is suboptimal, filter before epoching if at all possible,
-            see also
-            https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
-        mcca_reg: float
-            regularization used for the mcca computation (see mcca.py)
-        copy: bool
-            Whether to copy the data before transforming
-        Returns
-        -------
-        data : xarray.Dataset
-            xarray dataset [n_samples * n_comp] data expressed in the PC space, ready for HMP fit
-        """
         offset = epoch_data.offset
         if copy is True:
             data = epoch_data.copy(deep=True)
@@ -419,7 +435,6 @@ class Preprocessing:
         """Scaling variances to mean variance of the group."""
         return (x.data / x.data.std(dim=...)) * x.mean_std
 
-    @staticmethod
     def user_input_n_comp(data):
 
         n_comp = np.shape(data)[0] - 1

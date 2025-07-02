@@ -113,11 +113,11 @@ def event_times(
     else:
         times = xr.dot(eventprobs, eventprobs.sample, dims="sample") - event_shift
     times = times.astype("float32")  # needed for eventual addition of NANs
-    times_level = (
-        times.groupby("level").mean("trial").values
-    )  # take average to make sure it's not just 0 on the trial-level
-    for c, e in np.argwhere(times_level == -event_shift):
-        times[times["level"] == c, e] = np.nan
+    times_group = (
+        times.groupby("group").mean("trial").values
+    )  # take average to make sure it's not just 0 on the trial-group
+    for c, e in np.argwhere(times_group == -event_shift):
+        times[times["group"] == c, e] = np.nan
     
     if add_rt:
         rts = estimates.cumsum('sample').argmax('sample').max('event')+1
@@ -136,8 +136,8 @@ def event_times(
         )
         times = times.assign_coords(event=times.event + 1)
         times = times.combine_first(added)
-        for c in np.unique(times["level"].values):
-            tmp = times.isel(trial=estimates["level"] == c).values
+        for c in np.unique(times["group"].values):
+            tmp = times.isel(trial=estimates["group"] == c).values
             # identify nan columns == missing events
             missing_evts = np.where(np.isnan(np.mean(tmp, axis=0)))[0]
             tmp = np.diff(
@@ -148,7 +148,7 @@ def event_times(
                 tmp = np.insert(tmp, missing - 1, np.nan, axis=1)
             # add extra column to match shape
             tmp = np.hstack((tmp, np.tile(np.nan, (tmp.shape[0], 1))))
-            times[estimates["level"] == c, :] = tmp
+            times[estimates["group"] == c, :] = tmp
         times = times[:, :-1]  # remove extra column
     elif add_stim:
         added = xr.DataArray(
@@ -159,17 +159,17 @@ def event_times(
         times = times.combine_first(added)
 
     if mean:
-        times = times.groupby("level").mean("trial")
+        times = times.groupby("group").mean("trial")
     elif errorbars:
-        errorbars_model = np.zeros((len(np.unique(times["level"])), 2, times.shape[1]))
+        errorbars_model = np.zeros((len(np.unique(times["group"])), 2, times.shape[1]))
         if errorbars == "std":
-            std_errs = times.groupby("level").reduce(np.std, dim="trial").values
-            for c in np.unique(times["level"]):
+            std_errs = times.groupby("group").reduce(np.std, dim="trial").values
+            for c in np.unique(times["group"]):
                 errorbars_model[c, :, :] = np.tile(std_errs[c, :], (2, 1))
         else:
             raise ValueError(
                 "Unknown error bars, 'std' is for now the only accepted argument in the "
-                "multilevel models"
+                "multigroup models"
             )
         times = errorbars_model
     return times
@@ -234,7 +234,7 @@ def event_channels(
     event_values = np.zeros((n_channel, n_trial, n_events))*np.nan
     for ev in range(n_events):
         for tr in range(n_trial):
-            # If time is nan, means that no event was estimated for that trial/level
+            # If time is nan, means that no event was estimated for that trial/group
             if np.isfinite(times.values[tr, ev]):
                 samp = int(times.values[tr, ev])
                 if peak:
@@ -258,11 +258,11 @@ def event_channels(
     )
 
     event_values = event_values.assign_coords(
-        level=("trial", times.level.data)
+        group=("trial", times.group.data)
     )
 
     if mean:
-        event_values = event_values.groupby("level").mean("trial")
+        event_values = event_values.groupby("group").mean("trial")
     return event_values
 
 
@@ -417,19 +417,19 @@ def centered_activity(
     return centered_data.assign_coords(trial_x_part)
 
 
-def condition_selection(hmp_data, condition_string, variable="event", method="equal"):
-    """Select a subset from hmp_data.
+def condition_selection(preprocessed_data, condition_string, variable="event", method="equal"):
+    """Select a subset from preprocessed_data.
 
     The function selects epochs for which 'condition_string' is in 'variable' based on 'method'.
 
     Parameters
     ----------
-    hmp_data : xr.Dataset
+    preprocessed_data : xr.Dataset
         transformed EEG data for hmp, from utils.transform_data
     condition_string : str | num
         condition indicator for selection
     variable : str
-        variable present in hmp_data that is used for condition selection
+        variable present in preprocessed_data that is used for condition selection
     method : str
         'equal' selects equal trial, 'contains' selects trial in which conditions_string
         appears in variable
@@ -437,9 +437,9 @@ def condition_selection(hmp_data, condition_string, variable="event", method="eq
     Returns
     -------
     data : xr.Dataset
-        Subset of hmp_data.
+        Subset of preprocessed_data.
     """
-    unstacked = hmp_data.unstack()
+    unstacked = preprocessed_data.unstack()
     unstacked[variable] = unstacked[variable].fillna("")
     if method == "equal":
         unstacked = unstacked.where(unstacked[variable] == condition_string, drop=True)
@@ -449,7 +449,7 @@ def condition_selection(hmp_data, condition_string, variable="event", method="eq
         stacked = stack_data(unstacked)
     else:
         warn("unknown method, returning original data")
-        stacked = hmp_data
+        stacked = preprocessed_data
     return stacked
 
 
@@ -465,7 +465,7 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
     condition_string : str | num
         condition indicator for selection
     variable : str
-        variable present in hmp_data that is used for condition selection
+        variable present in preprocessed_data that is used for condition selection
     method : str
         'equal' selects equal trial, 'contains' selects trial in which conditions_string
         appears in variable
@@ -473,7 +473,7 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
     Returns
     -------
     data : xr.Dataset
-        Subset of hmp_data.
+        Subset of preprocessed_data.
     """
     if len(epoch_data.dims) == 4:
         stacked_epoch_data = epoch_data.stack(trial=("participant", "epoch")).dropna(
@@ -491,12 +491,12 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
     return stacked_epoch_data.unstack()
 
 
-def participant_selection(hmp_data, participant):
-    """Select a participant from hmp_data.
+def participant_selection(preprocessed_data, participant):
+    """Select a participant from preprocessed_data.
 
     Parameters
     ----------
-    hmp_data : xr.Dataset
+    preprocessed_data : xr.Dataset
         transformed EEG data for hmp, from utils.transform_data
     participant : str | num
         Name of the participant
@@ -504,8 +504,8 @@ def participant_selection(hmp_data, participant):
     Returns
     -------
     data : xr.Dataset
-        Subset of hmp_data.
+        Subset of preprocessed_data.
     """
-    unstacked = hmp_data.unstack().sel(participant=participant)
+    unstacked = preprocessed_data.unstack().sel(participant=participant)
     stacked = stack_data(unstacked)
     return stacked

@@ -1,3 +1,6 @@
+"""This module defines classes for several probability distributions (Gamma, Lognormal, Wald, Weibull).
+"""
+
 from scipy.stats import gamma, lognorm, invgauss, weibull_min
 from scipy.special import gamma as gamma_func
 import numpy as np

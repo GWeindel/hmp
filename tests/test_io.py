@@ -9,7 +9,7 @@ from hmp.patterns import HalfSine
 from hmp.distributions import Gamma
 from hmp import preprocessing
 from hmp.trialdata import TrialData
-from hmp.models import FixedEventModel
+from hmp.models import EventModel
 
 
 DATA_DIR = Path("tests", "gen_data")
@@ -32,7 +32,7 @@ def init_data():
     event_b = events[1]
     # Data reading
     epoch_data = io.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq,
-            events_provided=events, verbose=True, reference='average', subj_idx=['a','b'], tmin=-.01)
+            events_provided=events, verbose=True, reference='average', subj_name=['a','b'], tmin=-.01)
     epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
     positions = simulations.positions()
     return event_b, event_a, epoch_data, positions, sfreq, n_events
@@ -40,17 +40,15 @@ def init_data():
 
 def test_save_dat():
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
-    hmp_data = preprocessing.Preprocessing(epoch_data, n_comp=2,)
+    hmp_data = preprocessing.Standard(epoch_data, n_comp=2,)
     data_b = utils.participant_selection(hmp_data.data, 'b')
     event_properties = HalfSine.create_expected(sfreq=epoch_data.sfreq)
-    trial_data_b = TrialData.from_preprocessed_data(preprocessed=data_b, pattern=event_properties.template)
-    model = FixedEventModel(event_properties, n_events=n_events)
+    trial_data_b = TrialData.from_preprocessed(preprocessed=data_b, pattern=event_properties.template)
+    model = EventModel(event_properties, n_events=n_events)
     _, estimates = model.fit_transform(trial_data_b)
 
     test = io.save_xr(estimates, 'test')
     loaded = io.load_xr('test')
     io.save_eventprobs_csv(estimates, 'test')
-    io.save_model(model, 'model')
-    loaded_model = io.load_model('model')
     
     

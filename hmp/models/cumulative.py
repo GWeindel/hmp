@@ -1,4 +1,4 @@
-"""Models to estimate event probabilities."""
+"""Models to estimate cumulative event models."""
 
 from warnings import warn
 
@@ -6,7 +6,7 @@ import numpy as np
 from scipy.stats import norm as norm_pval
 
 from hmp.models.base import BaseModel
-from hmp.models.fixedn import FixedEventModel
+from hmp.models.event import EventModel
 from hmp.trialdata import TrialData
 
 try:
@@ -18,46 +18,49 @@ except NameError:
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
 
-class CumulativeEstimationModel(BaseModel):
-    def __init__(self, *args, step=None, end=None, by_sample=False, tolerance=1e-4, fitted_model_tolerance=1e-4,
-                 **kwargs):
-        """Fit the model starting with 1 event model.
+class CumulativeMethod(BaseModel):
+    """Initialize the CumulativeMethod.
 
-        Instead of fitting an n event model this method starts by fitting a 1 event model
-        (two stages) using each sample from the time 0 (stimulus onset) to the mean RT.
-        Therefore it tests for the landing point of the expectation maximization algorithm given
-        each sample as starting point and the likelihood associated with this landing point.
-        As soon as a starting points reaches the convergence criterion, the function fits an n+1
-        event model and uses the next samples in the RT as starting point for the following event
+    This method initializes the model and sets up parameters for fitting a cumulative event model.
+    The fitting process starts with a 1-event model and iteratively adds events based on the 
+    convergence of the expectation maximization algorithm.
 
-        Parameters
-        ----------
-        args:
-            Extra arguments to be passed through to the BaseModel, at least events and distribution
-            objects.
-        step: float
-            The size of the step from 0 to the mean RT, defaults to the widths of
-            the expected event.
-        end: int
-            The maximum number of samples to explore within each trial
-        tolerance: float
-            The tolerance used for the convergence in the EM() function for the cumulative step
-        fitted_model_tolerance: float
-            The tolerance used for the final model
-        by_sample : bool
-            try every sample as the starting point, even if a later event has already
-            been identified. This in case the method jumped over a local maximum in an earlier
-            estimation.
-        kwargs:
-            Keyword estimates to be passed on to the BaseModel.
-        """
+    Parameters
+    ----------
+    args : tuple
+        Extra arguments to be passed to the BaseModel, including at least events and distribution objects.
+    step : float, optional
+        The size of the step from 0 to the mean RT. Defaults to the width of the expected event.
+    end : int, optional
+        The maximum number of samples to explore within each trial. Defaults to None.
+    by_sample : bool, optional
+        If True, tries every sample as the starting point, even if a later event has already been identified.
+        This is useful in cases where the method might jump over a local maximum in an earlier estimation.
+        Defaults to False.
+    tolerance : float, optional
+        The tolerance used for convergence in the EM() function for the cumulative step. Defaults to 1e-4.
+    final_model_tolerance : float, optional
+        The tolerance used for the final model. Defaults to 1e-4.
+    kwargs : dict
+        Additional keyword arguments to be passed to the BaseModel.
+    """
+    def __init__(
+        self,
+        *args,
+        step: float = None,
+        end: int = None,
+        by_sample: bool = False,
+        tolerance: float = 1e-4,
+        final_model_tolerance: float = 1e-4,
+        **kwargs,
+    ):
         self.step = step
         self.end = end
         self.by_sample = by_sample
         self.tolerance = tolerance
-        self.fitted_model_tolerance = tolerance if fitted_model_tolerance is None else fitted_model_tolerance
+        self.final_model_tolerance = tolerance if final_model_tolerance is None else final_model_tolerance
         self.submodels = {}
-        self.fitted_model = None
+        self.final_model = None
         super().__init__(*args, **kwargs)
 
     def fit(
@@ -65,17 +68,27 @@ class CumulativeEstimationModel(BaseModel):
         trial_data: TrialData,
         verbose: bool = True,
         cpus: int = 1,
-    ):
-        """Fit the model starting with 1 event model.
+    ) -> None:
+        """
+        Fit the model starting with a 1-event model and iteratively add events.
+
+        This method fits the cumulative event model to the provided trial data. It begins with a 
+        single-event model and incrementally adds events based on the convergence of the expectation 
+        maximization algorithm. The process continues until the maximum number of events (given the 
+        minimum duration) is reached or the likelihood no longer improves.
 
         Parameters
         ----------
-        trial_data:
-            Trial data to fit the data on.
-        verbose:
-            Set to True for more detail on what is happening.
-        cpus:
-            Number of cpu cores to be used for the computation.
+        trial_data : TrialData
+            The trial data to fit the model on.
+        verbose : bool, optional
+            If True, provides detailed output about the fitting process. Defaults to True.
+        cpus : int, optional
+            The number of CPU cores to use for computation. Defaults to 1.
+
+        Returns
+        -------
+        None
         """
         self.trial_data = trial_data
         end = trial_data.durations.mean() if self.end is None else self.end
@@ -103,9 +116,9 @@ class CumulativeEstimationModel(BaseModel):
             self.distribution.scale_to_mean(last_stage) >= self.location and n_events <= max_event_n
         ):
             prev_time = time
-            fixed_n_model = FixedEventModel(self.pattern, self.distribution, tolerance=self.tolerance, n_events=n_events)
+            event_model = EventModel(self.pattern, self.distribution, tolerance=self.tolerance, n_events=n_events)
             # get new parameters
-            channel_pars_props, time_pars_props = self.propose_fit_params(
+            channel_pars_props, time_pars_props = self._propose_fit_params(
                 trial_data,
                 n_events, self.by_sample, step, j, channel_pars, time_pars, end
             )
@@ -113,29 +126,29 @@ class CumulativeEstimationModel(BaseModel):
             time_pars_props = np.array([time_pars_props])
 
             # Estimate model based on these propositions
-            fixed_n_model.fit(
+            event_model.fit(
                 trial_data,
                 np.array([channel_pars_props]),
                 np.array([time_pars_props]),
                 verbose=False,
                 cpus=cpus,
             )
-            self.submodels[n_events] = fixed_n_model
+            self.submodels[n_events] = event_model
             sol_sample_new_event = int(
                 np.round(
                     self.distribution.scale_to_mean(
-                        np.sum(fixed_n_model.time_pars[0, :n_events, 1])
+                        np.sum(event_model.time_pars[0, :n_events, 1])
                     )
                 )
             )
-            likelihoods = fixed_n_model.lkhs.sum()
+            likelihoods = event_model.lkhs.sum()
             # check solution
             if likelihoods - lkh_prev > 0:  # accept solution if likelihood improved
                 lkh_prev = likelihoods
 
                 # update channel_pars, params,
-                channel_pars[:n_events] = fixed_n_model.channel_pars
-                time_pars[: n_events + 1] = fixed_n_model.time_pars
+                channel_pars[:n_events] = event_model.channel_pars
+                time_pars[: n_events + 1] = event_model.time_pars
 
                 # search for an additional event, starting again at sample 1 from prev event,
                 # or next sample if by_sample
@@ -162,7 +175,7 @@ class CumulativeEstimationModel(BaseModel):
                 # just a tiny bit faster this way
                 if not self.by_sample:
                     max_scale = np.max(
-                        [np.sum(x[:n_events, 1]) for x in fixed_n_model.time_pars_dev]
+                        [np.sum(x[:n_events, 1]) for x in event_model.time_pars_dev]
                     )
                     max_sample = int(np.round(self.distribution.scale_to_mean(max_scale)))
                     j = (
@@ -185,10 +198,10 @@ class CumulativeEstimationModel(BaseModel):
         channel_pars = channel_pars[:n_events, :]
         time_pars = time_pars[: n_events + 1, :]
 
-        self.fitted_model = FixedEventModel(
-            self.pattern, self.distribution, tolerance=self.fitted_model_tolerance, n_events=n_events)
+        self.final_model = EventModel(
+            self.pattern, self.distribution, tolerance=self.final_model_tolerance, n_events=n_events)
         if n_events > 0:
-            self.fitted_model.fit(
+            self.final_model.fit(
                 trial_data,
                 channel_pars=np.array([[channel_pars]]),
                 time_pars=np.array([[time_pars]]),
@@ -203,10 +216,23 @@ class CumulativeEstimationModel(BaseModel):
         pbar.update(int(np.rint(end) - int(np.rint(time))))
 
     def transform(self, *args, **kwargs):
-        self._check_fitted("transform data")
-        self.fitted_model.transform(*args, **kwargs)
+        """
+        Transform the input data using the fitted cumulative event model.
 
-    def propose_fit_params(self, trial_data, n_events, by_sample, step, j, channel_pars, time_pars, end):
+        This method applies the transformation defined by the final model to the provided data.
+
+        Returns
+        -------
+        Transformed data as returned by the final model's transform method.
+
+        """
+        self._check_fitted("transform data")
+        if self.final_model is not None:
+            return self.final_model.transform(*args, **kwargs)
+        else:
+            raise RuntimeError("No fitted model available to transform data.")
+
+    def _propose_fit_params(self, trial_data, n_events, by_sample, step, j, channel_pars, time_pars, end):
         if (
             by_sample and n_events > 1
         ):  # go through the whole range sample-by-sample, j is sample since start
@@ -265,5 +291,5 @@ class CumulativeEstimationModel(BaseModel):
         }
         if attr in property_list:
             self._check_fitted(property_list[attr])
-            return getattr(self.fitted_model, attr)
+            return getattr(self.final_model, attr)
         return super().__getattribute__(attr)
