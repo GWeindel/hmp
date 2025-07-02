@@ -27,17 +27,16 @@ Documentation Outline
 ---------------------
 
 .. toctree::
+   :caption: Installation
    :maxdepth: 2
 
    installation
-   quickstart
-   api/hmp
 
 Available demos
 ---------
 
 .. toctree::
-   :caption: Notebooks
+   :caption: Tutorials
    :maxdepth: 1
 
    notebooks/1-How_HMP_works
@@ -47,6 +46,15 @@ Available demos
    notebooks/5-advanced--model_selection
    notebooks/Data_loading
 
+
+Documentation Outline
+---------------------
+
+.. toctree::
+   :caption: API reference
+   :maxdepth: 3
+
+   api/hmp
 
 Indices and tables
 ==================
