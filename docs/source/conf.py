@@ -74,7 +74,7 @@ html_theme_options = {
         "image_dark": "logo.png",
         "text": "HMP",
         "alt_text": "HMP Logo",
-        "height": "80px",  # set your desired height
+        "height": "160px",  # set your desired height
     },
 }
 # Add any paths that contain custom static files (such as style sheets) here,
