@@ -66,9 +66,9 @@ html_theme_options = {
     "logo": {
         "image_light": "images/logos/logo.png",  # Path to the light logo
         "image_dark": "images/logos/logo.png",   # Path to the dark logo
-        "text": "Hidden Multivariate Pattern",
+        "text": "Hidden Multivariate Patterns",
         "alt_text": "HMP Logo",
-        "height": "160px",  # set your desired height
+        "height": "320px",  # set your desired height
     },
 }
 # Add any paths that contain custom static files (such as style sheets) here,
