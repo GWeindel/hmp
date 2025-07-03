@@ -1,7 +1,7 @@
 API
 ===========
 
-Welcome to the HMP API documentation!
+Technical reference for all functions, classes, and modules in HMP.
 
 Models
 -----------
