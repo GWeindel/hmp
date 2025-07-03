@@ -42,8 +42,8 @@ Available demos
    notebooks/1-How_HMP_works
    notebooks/2-The_different_model_classes
    notebooks/3-Applying_HMP_to_real_data
-   notebooks/4-advanced-multilevel_models
-   notebooks/5-advanced--model_selection
+   notebooks/4-Advanced-grouping_models
+   notebooks/5-Advanced-model_selection
    notebooks/Data_loading
 
 
