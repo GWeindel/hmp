@@ -24,7 +24,7 @@ Outline of the documentation:
 
 .. toctree::
    :caption: Demo
-   :maxdepth: 1
+   :maxdepth: 2
 
    notebooks/demo
 
