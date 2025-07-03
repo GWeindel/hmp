@@ -6,3 +6,4 @@ sphinx-autodoc-typehints
 sphinx_inline_tabs
 sphinx_copybutton
 sphinx_rtd_theme
+git+https://github.com/gweindel/HMP.git@devel#egg=HMP
