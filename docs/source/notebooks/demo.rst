@@ -9,5 +9,4 @@ Explore demos and practical examples of HMP in action.
    2-The_different_model_classes
    3-Applying_HMP_to_real_data
    4-Advanced-grouping_models
-   5-Advanced-model_selection
    Data_loading
