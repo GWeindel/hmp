@@ -5,3 +5,4 @@ nbsphinx
 sphinx-autodoc-typehints
 sphinx_inline_tabs
 sphinx_copybutton
+sphinx_rtd_theme
