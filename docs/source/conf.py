@@ -60,19 +60,13 @@ exclude_patterns = []
 html_theme = "pydata_sphinx_theme"
 html_logo = "images/logos/logo.png"
 html_theme_options = {
-    "logo": {
-        "image_light": "logo.png",  # adjust if you have dark/light variants
-        "image_dark": "logo.png",
-        "text": "Hidden Multivariate Pattern",
-        "alt_text": "HMP Logo",
-    },
     "logo_link": "/",  # optional: makes logo link to home
     "navbar_start": ["navbar-logo"],
     # Increase logo size (height in px, adjust as needed)
     "logo": {
-        "image_light": "logo.png",
-        "image_dark": "logo.png",
-        "text": "HMP",
+        "image_light": "images/logos/logo.png",  # Path to the light logo
+        "image_dark": "images/logos/logo.png",   # Path to the dark logo
+        "text": "Hidden Multivariate Pattern",
         "alt_text": "HMP Logo",
         "height": "160px",  # set your desired height
     },
