@@ -57,18 +57,29 @@ exclude_patterns = []
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "sphinx_rtd_theme"
+html_theme = "pydata_sphinx_theme"
 html_logo = "images/logos/logo.png"
 html_theme_options = {
-    "logo_only": True,
-    "navigation_depth": -1,
-    "display_version": True,
-    "style_external_links": True,
+    "logo": {
+        "image_light": "logo.png",  # adjust if you have dark/light variants
+        "image_dark": "logo.png",
+        "text": "Hidden Multivariate Pattern",
+        "alt_text": "HMP Logo",
+    },
+    "logo_link": "/",  # optional: makes logo link to home
+    "navbar_start": ["navbar-logo"],
+    # Increase logo size (height in px, adjust as needed)
+    "logo": {
+        "image_light": "logo.png",
+        "image_dark": "logo.png",
+        "text": "HMP",
+        "alt_text": "HMP Logo",
+        "height": "80px",  # set your desired height
+    },
 }
-
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 # html_static_path = ['_static']
-napoleon_use_param = Truehtml_logo = "images/logos/logo.pne"
+napoleon_use_param = Truehtml_logo = "images/logos/logo.png"
 
