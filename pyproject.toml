@@ -48,6 +48,11 @@ keywords = [
 
 [project.optional-dependencies]
 test = ["pytest"]
+docs = [
+    "sphinx<9.0.0", "sphinx-rtd-theme", "sphinxcontrib-napoleon","nbsphinx",
+    "sphinx-autodoc-typehints", "sphinx_inline_tabs", "sphinx_copybutton",
+    "pydata_sphinx_theme"
+]
 
 [project.urls]
 "Homepage" = "https://github.com/GWeindel/hmp"

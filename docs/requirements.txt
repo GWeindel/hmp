@@ -1,0 +1,11 @@
+sphinx<9.0.0
+pydata_sphinx_theme
+sphinxcontrib-napoleon
+nbsphinx
+sphinx-autodoc-typehints
+sphinx_inline_tabs
+sphinx_copybutton
+sphinx_rtd_theme
+git+https://github.com/gweindel/HMP.git@devel#egg=HMP
+jupyter_core>=5.3
+nbconvert>=7.0
