@@ -21,6 +21,7 @@ The documentation for the latest version is available on  [readthedocs: https://
 
 # To get started
 To get started with the code you can run the different tutorials in `docs/source/notebooks` after having installed HMP (see documentation)
+
     - [General aspects on HMP (tutorial 1)](docs/source/notebooks/1-How_HMP_works.ipynb)
     - [The different estimation methods (tutorial 2)](docs/source/notebooks/2-The_different_model_classes.ipynb)
     - [Applying HMP to real data (tutorial 3)](docs/source/notebooks/3-Applying_HMP_to_real_data.ipynb)
