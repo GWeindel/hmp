@@ -1,9 +1,9 @@
-"""This module defines classes for several probability distributions (Gamma, Lognormal, Wald, Weibull).
-"""
+"""Classes for several probability distributions (Gamma, Lognormal, Wald, Weibull)."""
 
-from scipy.stats import gamma, lognorm, invgauss, weibull_min
-from scipy.special import gamma as gamma_func
 import numpy as np
+from scipy.special import gamma as gamma_func
+from scipy.stats import gamma, invgauss, lognorm, weibull_min
+
 
 class Gamma():
     """
@@ -30,10 +30,11 @@ class Gamma():
     mean_to_scale(mean: float) -> float
         Compute the scale parameter of the distribution given a mean.
     """
+
     def __init__(self, shape=2):
         self.shape = shape
         self.pdf = gamma.pdf
-        
+
     def scale_to_mean(self, scale: float) -> float:
         """
         Compute the mean associated with a given scale and shape parameters.
@@ -49,7 +50,7 @@ class Gamma():
             The calculated mean value.
         """
         return scale * self.shape
-        
+
     def mean_to_scale(self, mean: float) -> float:
         """
         Compute the scale associated with a given mean and shape.
@@ -90,10 +91,11 @@ class Lognorm():
     mean_to_scale(mean: float) -> float
         Compute the scale parameter of the distribution given a mean.
     """
+
     def __init__(self, shape):
         self.shape = shape
         self.pdf = lognorm.pdf
-        
+
     def scale_to_mean(self, scale: float) -> float:
         """
         Compute the mean associated with a given scale and shape parameters.
@@ -109,7 +111,7 @@ class Lognorm():
             The calculated mean value.
         """
         return np.exp(scale + self.shape**2 / 2)
-    
+
     def mean_to_scale(self, mean: float) -> float:
         """
         Compute the scale associated with a given mean and shape.
@@ -123,7 +125,7 @@ class Lognorm():
         -------
         float
             The calculated scale parameter.
-        """     
+        """
         return np.exp(np.log(mean) - (self.shape**2 / 2))
 
 class Wald():
@@ -149,10 +151,11 @@ class Wald():
     mean_to_scale(mean: float) -> float
         Compute the scale parameter of the distribution given a mean.
     """
+
     def __init__(self, shape):
         self.shape = shape
         self.pdf = invgauss.pdf
-        
+
     def scale_to_mean(self, scale: float) -> float:
         """
         Compute the mean associated with a given scale and shape parameters.
@@ -168,7 +171,7 @@ class Wald():
             The calculated mean value.
         """
         return scale * self.shape
-        
+
     def mean_to_scale(self, mean: float) -> float:
         """
         Compute the scale associated with a given mean and shape.
@@ -185,7 +188,7 @@ class Wald():
         """
         return mean / self.shape
 
-class Weibull():  
+class Weibull():
     """
     Define a Weibull distribution.
 
@@ -208,11 +211,12 @@ class Weibull():
     mean_to_scale(mean: float) -> float
         Compute the scale parameter of the distribution given a mean.
     """
+
     def __init__(self, shape):
         self.shape = shape
         self.pdf = weibull_min.pdf
         self.gamma_func = gamma_func
-        
+
     def scale_to_mean(self, scale: float) -> float:
         """
         Compute the mean associated with a given scale and shape parameters.
@@ -228,7 +232,7 @@ class Weibull():
             The calculated mean value.
         """
         return scale * self.gamma_func(1 + 1 / self.shape)
-        
+
     def mean_to_scale(self, mean: float) -> float:
         """
         Compute the scale associated with a given mean and shape.
@@ -244,4 +248,4 @@ class Weibull():
             The calculated scale parameter.
         """
         return mean / self.gamma_func(1 + 1 / self.shape)
-        
+
