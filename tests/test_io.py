@@ -47,8 +47,6 @@ def test_save_dat():
     model = EventModel(event_properties, n_events=n_events)
     _, estimates = model.fit_transform(trial_data_b)
 
-    test = io.save_xr(estimates, 'test')
-    loaded = io.load_xr('test')
     io.save_eventprobs_csv(estimates, 'test')
     
     
