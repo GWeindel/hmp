@@ -181,7 +181,6 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
 
         elif data_format in ['raw', "bids"]:
             epochs = read_raw_and_epoch(participant,
-                            pfiles,
                             subj_idx,
                             event_id,
                             resp_id,
@@ -304,7 +303,6 @@ def _read_mne_epochs(
 
 def read_raw_and_epoch(  # noqa # Should probably be refactored.
     participant,
-    # pfiles,
     subj_idx,
     event_id,
     resp_id,
