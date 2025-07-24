@@ -1,7 +1,9 @@
 """Models to estimate event probabilities."""
 from abc import ABC, abstractmethod
 from typing import Any
+
 import numpy as np
+
 from hmp.distributions import Gamma
 from hmp.trialdata import TrialData
 

@@ -3,7 +3,6 @@
 from warnings import warn
 
 import numpy as np
-from scipy.stats import norm as norm_pval
 
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
@@ -22,28 +21,32 @@ class CumulativeMethod(BaseModel):
     """Initialize the CumulativeMethod.
 
     This method initializes the model and sets up parameters for fitting a cumulative event model.
-    The fitting process starts with a 1-event model and iteratively adds events based on the 
+    The fitting process starts with a 1-event model and iteratively adds events based on the
     convergence of the expectation maximization algorithm.
 
     Parameters
     ----------
     args : tuple
-        Extra arguments to be passed to the BaseModel, including at least events and distribution objects.
+        Extra arguments to be passed to the BaseModel, including at least events and
+        distribution objects.
     step : float, optional
         The size of the step from 0 to the mean RT. Defaults to the width of the expected event.
     end : int, optional
         The maximum number of samples to explore within each trial. Defaults to None.
     by_sample : bool, optional
-        If True, tries every sample as the starting point, even if a later event has already been identified.
-        This is useful in cases where the method might jump over a local maximum in an earlier estimation.
-        Defaults to False.
+        If True, tries every sample as the starting point, even if a later event has already been
+        identified.
+        This is useful in cases where the method might jump over a local maximum in an earlier
+        estimation. Defaults to False.
     tolerance : float, optional
-        The tolerance used for convergence in the EM() function for the cumulative step. Defaults to 1e-4.
+        The tolerance used for convergence in the EM() function for the cumulative step.
+        Defaults to 1e-4.
     final_model_tolerance : float, optional
         The tolerance used for the final model. Defaults to 1e-4.
     kwargs : dict
         Additional keyword arguments to be passed to the BaseModel.
     """
+
     def __init__(
         self,
         *args,
@@ -58,12 +61,13 @@ class CumulativeMethod(BaseModel):
         self.end = end
         self.by_sample = by_sample
         self.tolerance = tolerance
-        self.final_model_tolerance = tolerance if final_model_tolerance is None else final_model_tolerance
+        self.final_model_tolerance = (tolerance if final_model_tolerance is None
+                                      else final_model_tolerance)
         self.submodels = {}
         self.final_model = None
         super().__init__(*args, **kwargs)
 
-    def fit(
+    def fit(  # noqa: PLR0915
         self,
         trial_data: TrialData,
         verbose: bool = True,
@@ -72,9 +76,9 @@ class CumulativeMethod(BaseModel):
         """
         Fit the model starting with a 1-event model and iteratively add events.
 
-        This method fits the cumulative event model to the provided trial data. It begins with a 
-        single-event model and incrementally adds events based on the convergence of the expectation 
-        maximization algorithm. The process continues until the maximum number of events (given the 
+        This method fits the cumulative event model to the provided trial data. It begins with a
+        single-event model and incrementally adds events based on the convergence of the expectation
+        maximization algorithm. The process continues until the maximum number of events (given the
         minimum duration) is reached or the likelihood no longer improves.
 
         Parameters
@@ -100,15 +104,18 @@ class CumulativeMethod(BaseModel):
         n_events, j, time = 1, 1, 0  # j = sample after last placed event
         # Init time_pars (need this for min_model)
         time_pars = np.zeros((max_event_n + 1, 2))
-        time_pars[:, 0] = self.distribution.shape  # final time parameters during estimation, shape x scale
+
+        # final time parameters during estimation, shape x scale
+        time_pars[:, 0] = self.distribution.shape
         time_pars_props = time_pars[: n_events + 1].copy()  # gamma params of current estimation
-        time_pars_props[0, 1] = self.distribution.mean_to_scale(j * step)  # initialize time parameter at 1 sample
+        # initialize time parameter at 1 sample
+        time_pars_props[0, 1] = self.distribution.mean_to_scale(j * step)
         last_stage = self.distribution.mean_to_scale(end - j * step)  # remainder of time
         time_pars_props[-1, 1] = last_stage
 
         # Init channel_pars
-        channel_pars = np.zeros((max_event_n, trial_data.n_dims))  # final channel_pars during estimation
-
+        # final channel_pars during estimation
+        channel_pars = np.zeros((max_event_n, trial_data.n_dims))
         lkh_prev = -np.inf
 
         # Iterative fit
@@ -116,7 +123,8 @@ class CumulativeMethod(BaseModel):
             self.distribution.scale_to_mean(last_stage) >= self.location and n_events <= max_event_n
         ):
             prev_time = time
-            event_model = EventModel(self.pattern, self.distribution, tolerance=self.tolerance, n_events=n_events)
+            event_model = EventModel(self.pattern, self.distribution, tolerance=self.tolerance,
+                                     n_events=n_events)
             # get new parameters
             channel_pars_props, time_pars_props = self._propose_fit_params(
                 trial_data,
@@ -199,7 +207,8 @@ class CumulativeMethod(BaseModel):
         time_pars = time_pars[: n_events + 1, :]
 
         self.final_model = EventModel(
-            self.pattern, self.distribution, tolerance=self.final_model_tolerance, n_events=n_events)
+            self.pattern, self.distribution, tolerance=self.final_model_tolerance,
+            n_events=n_events)
         if n_events > 0:
             self.final_model.fit(
                 trial_data,
@@ -232,7 +241,8 @@ class CumulativeMethod(BaseModel):
         else:
             raise RuntimeError("No fitted model available to transform data.")
 
-    def _propose_fit_params(self, trial_data, n_events, by_sample, step, j, channel_pars, time_pars, end):
+    def _propose_fit_params(self, trial_data, n_events, by_sample, step, j, channel_pars, time_pars,
+                            end):
         if (
             by_sample and n_events > 1
         ):  # go through the whole range sample-by-sample, j is sample since start
@@ -240,7 +250,8 @@ class CumulativeMethod(BaseModel):
 
             # New parameter proposition
             time_pars_props = time_pars[:n_events].copy()  # time_pars so far
-            n_event_j = np.argwhere(scale_j > np.cumsum(time_pars_props[:, 1])) + 2  # counting from 1
+            # counting from 1
+            n_event_j = np.argwhere(scale_j > np.cumsum(time_pars_props[:, 1])) + 2
             n_event_j = np.max(n_event_j) if len(n_event_j) > 0 else 1
             n_event_j = np.min([n_event_j, n_events])  # do not insert even after last stage
 
@@ -252,7 +263,8 @@ class CumulativeMethod(BaseModel):
                 axis=0,
             )
             # subtract inserted scale from next event
-            time_pars_props[n_event_j, 1] = time_pars_props[n_event_j, 1] - time_pars_props[n_event_j - 1, 1]
+            time_pars_props[n_event_j, 1] = (time_pars_props[n_event_j, 1]
+                                             - time_pars_props[n_event_j - 1, 1])
             last_stage = self.distribution.mean_to_scale(end) - np.sum(time_pars_props[:-1, 1])
             time_pars_props[n_events, 1] = last_stage
             channel_pars_props = np.zeros((1, n_events, trial_data.n_dims))  # always 0?
@@ -277,7 +289,8 @@ class CumulativeMethod(BaseModel):
             )
 
         # in edge cases scale can get negative, make sure that doesn't happen:
-        time_pars_props[:, 1] = np.maximum(time_pars_props[:, 1], self.distribution.mean_to_scale(1))
+        time_pars_props[:, 1] = np.maximum(time_pars_props[:, 1],
+                                           self.distribution.mean_to_scale(1))
 
         return channel_pars_props, time_pars_props
 
