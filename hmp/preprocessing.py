@@ -179,6 +179,8 @@ class Standard:
         copy: bool = False,
     ) -> None:
         offset = epoch_data.offset
+        offset_before = epoch_data.offset_before
+
         if copy is True:
             data = epoch_data.copy(deep=True)
         else:
@@ -358,6 +360,7 @@ class Standard:
 
         data.attrs["sfreq"] = sfreq
         data.attrs["offset"] = offset
+        data.attrs["offset_before"] = offset_before
         self.data = self.stack_data(data)
         self.weights = weights
         self.preprocessing_model = preprocessing_model
