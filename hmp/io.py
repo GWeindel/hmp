@@ -45,6 +45,8 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
     scale: float = 1,
     reference: str | None = None,
     ignore_rt: bool = False,
+    from_rt: bool = True,
+    post_rt_time: int = 0,
     bids_parameters: dict = {}
 ) -> xr.Dataset:
     """Read EEG/MEG data format (.fif or .bdf) using MNE's integrated function.
@@ -135,6 +137,10 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
         Reference to use for EEG data. If None, the existing reference is kept.
     ignore_rt : bool, default=False
         Whether to ignore reaction times and parse epochs up to `tmax`.
+    from_rt : bool, default=True
+        Whether to epoch with stimulus onset == RT.
+    post_rt_time : int, default=0
+        Time after RT to include in the epoch (in seconds).
 
     Returns
     -------
@@ -222,6 +228,8 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
             upper_limit_rt,
             reject_threshold,
             ignore_rt,
+            from_rt,
+            post_rt_time,
             verbose
         ))
 
@@ -449,6 +457,8 @@ def _epoch_selection(epochs,  # noqa: PLR0912, PLR0913
                     upper_limit_rt,
                     reject_threshold,
                     ignore_rt,
+                    from_rt,
+                    post_rt_time,
                     verbose
     ):
     if metadata is None:
@@ -490,6 +500,9 @@ def _epoch_selection(epochs,  # noqa: PLR0912, PLR0913
     offset_after_resp_samples = np.rint(offset_after_resp * sfreq).astype(int)
     offset_before_stim_samples = np.rint(offset_before_stim * sfreq).astype(int)
 
+    if from_rt:
+        post_rt_time = np.rint(post_rt_time * sfreq).astype(int)
+
 
     cropped_data_epoch, epochs_idx = _cut_at_rt(
         data_epoch,
@@ -504,6 +517,7 @@ def _epoch_selection(epochs,  # noqa: PLR0912, PLR0913
         reject_threshold,
         valid_epoch_index,
         ignore_rt,
+        post_rt_time,
         verbose
     )
 
@@ -524,7 +538,7 @@ def _epoch_selection(epochs,  # noqa: PLR0912, PLR0913
     return epoch_data
 
 def _cut_at_rt(data_epoch, rts, triggers, offset_after_resp_samples, offset_before_stim_samples, sfreq, lower_limit_rt,  # noqa: PLR0913, PLR0912
-               upper_limit_rt, epochs, reject_threshold, valid_epoch_index, ignore_rt, verbose):  # noqa: PLR0913, PLR0912
+               upper_limit_rt, epochs, reject_threshold, valid_epoch_index, ignore_rt, post_rt_time, verbose):  # noqa: PLR0913, PLR0912
     """
     Crop each epoch to the reaction time (RT) window and apply optional rejection criteria.
 
@@ -560,6 +574,8 @@ def _cut_at_rt(data_epoch, rts, triggers, offset_after_resp_samples, offset_befo
         Indices of epochs that passed previous selection criteria.
     ignore_rt: bool
         If True, do not use RT to trim the data
+    post_rt_time : int
+        Additional time (in samples) to include after the RT in each epoch. If this is not 0, epoch from RT.
     verbose : bool
         If True, print detailed processing steps.
 
@@ -612,9 +628,12 @@ def _cut_at_rt(data_epoch, rts, triggers, offset_after_resp_samples, offset_befo
                 np.abs(data_epoch[i, :, time0 - offset_before_stim_samples : time0 + rts_arr[i] + offset_after_resp_samples])
                 < reject_threshold
             ).all():
-                cropped_data_epoch[j, :, : rts_arr[i] + offset_after_resp_samples + offset_before_stim_samples] = data_epoch[
-                    i, :, time0 - offset_before_stim_samples : time0 + rts_arr[i] + offset_after_resp_samples
-                ]
+                if post_rt_time == 0:
+                    cropped_data_epoch[j, :, : rts_arr[i] + offset_after_resp_samples + offset_before_stim_samples] = data_epoch[
+                        i, :, time0 - offset_before_stim_samples : time0 + rts_arr[i] + offset_after_resp_samples
+                    ]
+                else:
+                    cropped_data_epoch[j, :, : post_rt_time + offset_after_resp_samples + offset_before_stim_samples] = data_epoch[i, :, rts_arr[i] - offset_before_stim_samples: rts_arr[i] + post_rt_time + offset_after_resp_samples]
                 epochs_idx.append(valid_epoch_index[i])  # Keeps trial number
                 cropped_trigger.append(triggers[i])
                 j += 1
