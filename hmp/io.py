@@ -610,7 +610,7 @@ def _cut_at_rt(data_epoch, rts, triggers, offset_after_resp_samples, offset_befo
         [
             len(rts_arr[rts_arr > 0]),
             len(epochs.ch_names),
-            max(rts_arr) + offset_after_resp_samples + offset_before_stim_samples,
+            post_rt_time if post_rt_time != 0 else max(rts_arr) + offset_after_resp_samples + offset_before_stim_samples,
         ]
     )
     cropped_data_epoch[:] = np.nan
@@ -622,18 +622,16 @@ def _cut_at_rt(data_epoch, rts, triggers, offset_after_resp_samples, offset_befo
     rej = 0
     time0 = epochs.time_as_index(0)[0]
     for i in range(len(data_epoch)):
+        trial_data = data_epoch[i, :, time0 - offset_before_stim_samples : time0 + rts_arr[i] + offset_after_resp_samples] if post_rt_time == 0 else data_epoch[i, :, time0 + rts_arr[i] - offset_before_stim_samples: time0 + rts_arr[i] + post_rt_time + offset_after_resp_samples]
         if rts_arr[i] > 0:
             # Crops the epochs to time 0 (stim onset) up to RT
             if (
-                np.abs(data_epoch[i, :, time0 - offset_before_stim_samples : time0 + rts_arr[i] + offset_after_resp_samples])
-                < reject_threshold
+                np.abs(trial_data) < reject_threshold
             ).all():
                 if post_rt_time == 0:
-                    cropped_data_epoch[j, :, : rts_arr[i] + offset_after_resp_samples + offset_before_stim_samples] = data_epoch[
-                        i, :, time0 - offset_before_stim_samples : time0 + rts_arr[i] + offset_after_resp_samples
-                    ]
+                    cropped_data_epoch[j, :, : rts_arr[i] + offset_after_resp_samples + offset_before_stim_samples] = trial_data
                 else:
-                    cropped_data_epoch[j, :, : post_rt_time + offset_after_resp_samples + offset_before_stim_samples] = data_epoch[i, :, rts_arr[i] - offset_before_stim_samples: rts_arr[i] + post_rt_time + offset_after_resp_samples]
+                    cropped_data_epoch[j, :, : post_rt_time + offset_after_resp_samples + offset_before_stim_samples] = trial_data
                 epochs_idx.append(valid_epoch_index[i])  # Keeps trial number
                 cropped_trigger.append(triggers[i])
                 j += 1
