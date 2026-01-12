@@ -178,8 +178,8 @@ class Standard:
         mcca_reg: float = 0,
         copy: bool = False,
     ) -> None:
-        offset = epoch_data.offset
-        offset_before = epoch_data.offset_before
+        offset = epoch_data.offset_end
+        offset_before = epoch_data.offset_start
 
         if copy is True:
             data = epoch_data.copy(deep=True)
@@ -359,8 +359,8 @@ class Standard:
             data = data.assign_coords(ori_coords)
 
         data.attrs["sfreq"] = sfreq
-        data.attrs["offset"] = offset
-        data.attrs["offset_before"] = offset_before
+        data.attrs["offset_end"] = offset
+        data.attrs["offset_start"] = offset_before
         self.data = self.stack_data(data)
         self.weights = weights
         self.preprocessing_model = preprocessing_model

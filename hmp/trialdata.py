@@ -104,7 +104,7 @@ class TrialData:
 
         return cls(xrdurations=xrdurations, starts=starts, ends=ends,
                    n_trials=n_trials, n_samples=n_samples, cross_corr=cross_corr,
-                   offset=data.offset, sfreq=data.sfreq)
+                   offset=data.offset_end, sfreq=data.sfreq)
 
     @cached_property
     def durations(self):

@@ -33,8 +33,8 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
     verbose: bool = True,
     tmin: float = -0.2,
     tmax: float = 5,
-    offset_after_resp: float = 0,
-    offset_before_stim: float = 0,
+    offset_start: float = 0,
+    offset_end: float = 0,
     high_pass: float | None = None,
     low_pass: float | None = None,
     pick_channels: str | list = "eeg",
@@ -109,10 +109,10 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
         Start time (in seconds) relative to stimulus onset for epoching.
     tmax : float, default=5
         End time (in seconds) relative to stimulus onset for epoching.
-    offset_after_resp : float, default=0
-        Additional time (in seconds) to include after the response onset.
-    offset_before_stim : float, default=0
-        Additional time (in seconds) to include before the stimulus onset.
+    offset_start : float, default=0
+        Additional time (in seconds) to include before the epoch starts.
+    offset_end : float, default=0
+        Additional time (in seconds) to include after the end of the epoch.
     high_pass : float, optional
         High-pass filter cutoff frequency.
     low_pass : float, optional
@@ -201,8 +201,8 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
             raise ValueError(f"Unknown data type {data_format}, should be 'epochs', 'raw' or "
                              "'bids'")
         
-        if abs(epochs.tmin) < offset_before_stim:
-            raise ValueError(f"Epoch start time {epochs.tmin} is not early enough to accomodate extra time before stimulus: {offset_before_stim}")
+        if abs(epochs.tmin) < offset_start:
+            raise ValueError(f"Epoch start time {epochs.tmin} is not early enough to accomodate extra time before stimulus: {offset_start}")
         
         if reference is not None:
             epochs = epochs.set_eeg_reference(reference)
@@ -215,8 +215,8 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
             subj_idx,
             rt_col,
             scale,
-            offset_after_resp,
-            offset_before_stim,
+            offset_start,
+            offset_end,
             sfreq,
             lower_limit_rt,
             upper_limit_rt,
@@ -442,8 +442,8 @@ def _epoch_selection(epochs,  # noqa: PLR0912, PLR0913
                     subj,
                     rt_col,
                     scale,
-                    offset_after_resp,
-                    offset_before_stim,
+                    offset_start,
+                    offset_end,
                     sfreq,
                     lower_limit_rt,
                     upper_limit_rt,
@@ -487,16 +487,16 @@ def _epoch_selection(epochs,  # noqa: PLR0912, PLR0913
         raise ValueError("Expected either a metadata Dataframe or an array of Reaction Times")
     rts_arr = np.array(rts)
     triggers = metadata_i.iloc[:, 0].values  # assumes first col is trigger
-    offset_after_resp_samples = np.rint(offset_after_resp * sfreq).astype(int)
-    offset_before_stim_samples = np.rint(offset_before_stim * sfreq).astype(int)
+    offset_start_samples = np.rint(offset_start * sfreq).astype(int)
+    offset_end_samples = np.rint(offset_end * sfreq).astype(int)
 
 
     cropped_data_epoch, epochs_idx = _cut_at_rt(
         data_epoch,
         rts_arr,
         triggers,
-        offset_after_resp_samples,
-        offset_before_stim_samples,
+        offset_start_samples,
+        offset_end_samples,
         sfreq,
         lower_limit_rt,
         upper_limit_rt,
@@ -515,15 +515,15 @@ def _epoch_selection(epochs,  # noqa: PLR0912, PLR0913
             cropped_data_epoch,
             epochs.info["sfreq"],
             None,
-            offset_after_resp_samples,
-            offset_before_stim_samples,
+            offset_start_samples,
+            offset_end_samples,
             epochs=[int(x) for x in epochs_idx],
             channel=epochs.ch_names,
             metadata=metadata_i,
         )
     return epoch_data
 
-def _cut_at_rt(data_epoch, rts, triggers, offset_after_resp_samples, offset_before_stim_samples, sfreq, lower_limit_rt,  # noqa: PLR0913, PLR0912
+def _cut_at_rt(data_epoch, rts, triggers, offset_start_samples, offset_end_samples, sfreq, lower_limit_rt,  # noqa: PLR0913, PLR0912
                upper_limit_rt, epochs, reject_threshold, valid_epoch_index, ignore_rt, verbose):  # noqa: PLR0913, PLR0912
     """
     Crop each epoch to the reaction time (RT) window and apply optional rejection criteria.
@@ -542,10 +542,10 @@ def _cut_at_rt(data_epoch, rts, triggers, offset_after_resp_samples, offset_befo
         Reaction times for each epoch, in seconds.
     triggers : array-like
         Event trigger information for each epoch.
-    offset_after_resp_samples : int
-        Number of samples to include after the response event.
-    offset_before_stim_samples : int
+    offset_start_samples : int
         Number of samples to include before the stimulus onset.
+    offset_end_samples : int
+        Number of samples to include after the response event.
     sfreq : float
         Sampling frequency of the data, in Hz.
     lower_limit_rt : float
@@ -571,7 +571,7 @@ def _cut_at_rt(data_epoch, rts, triggers, offset_after_resp_samples, offset_befo
         Indices of epochs that were retained after all rejection steps.
     """
     if upper_limit_rt == np.inf:
-        upper_limit_rt = epochs.tmax - (offset_after_resp_samples + 1) / sfreq
+        upper_limit_rt = epochs.tmax - (offset_end_samples + 1) / sfreq
 
     if upper_limit_rt < 0 or lower_limit_rt < 0:
         raise ValueError("Limit to RTs cannot be negative")
@@ -594,7 +594,7 @@ def _cut_at_rt(data_epoch, rts, triggers, offset_after_resp_samples, offset_befo
         [
             len(rts_arr[rts_arr > 0]),
             len(epochs.ch_names),
-            max(rts_arr) + offset_after_resp_samples + offset_before_stim_samples,
+            max(rts_arr) + offset_end_samples + offset_start_samples,
         ]
     )
     cropped_data_epoch[:] = np.nan
@@ -609,11 +609,11 @@ def _cut_at_rt(data_epoch, rts, triggers, offset_after_resp_samples, offset_befo
         if rts_arr[i] > 0:
             # Crops the epochs to time 0 (stim onset) up to RT
             if (
-                np.abs(data_epoch[i, :, time0 - offset_before_stim_samples : time0 + rts_arr[i] + offset_after_resp_samples])
+                np.abs(data_epoch[i, :, time0 - offset_start_samples : time0 + rts_arr[i] + offset_end_samples])
                 < reject_threshold
             ).all():
-                cropped_data_epoch[j, :, : rts_arr[i] + offset_after_resp_samples + offset_before_stim_samples] = data_epoch[
-                    i, :, time0 - offset_before_stim_samples : time0 + rts_arr[i] + offset_after_resp_samples
+                cropped_data_epoch[j, :, : rts_arr[i] + offset_end_samples + offset_start_samples] = data_epoch[
+                    i, :, time0 - offset_start_samples : time0 + rts_arr[i] + offset_end_samples
                 ]
                 epochs_idx.append(valid_epoch_index[i])  # Keeps trial number
                 cropped_trigger.append(triggers[i])
@@ -634,8 +634,8 @@ def hmp_data_format(
     data: np.ndarray,
     sfreq: float,
     events: np.ndarray | None = None,
-    offset: float = 0,
-    offset_before: float = 0,
+    offset_start: int = 0,
+    offset_end: int = 0,
     participants: list | None = None,
     epochs: list | None = None,
     channel: list | None = None,
@@ -655,10 +655,10 @@ def hmp_data_format(
         Sampling frequency of the data.
     events : np.ndarray, optional
         Description for each epoch and participant that need to be stored (e.g. condition)
-    offset : float, default=0
+    offset_start : int, default=0
+        Offset in samples to apply before the epoch begins. offset_start = 5 would keep 5 samples before the start of the epoch.
+    offset_end : int, default=0
         Offset in samples to apply after the response time.
-    offset_before : float, default=0
-        Offset in samples to apply before the stimulus onset.
     participants : list, optional
         List of participant indices.
     epochs : list, optional
@@ -690,7 +690,7 @@ def hmp_data_format(
                 "data": (["epoch", "channel", "sample"], data),
             },
             coords={"epoch": epochs, "channel": channel, "sample": np.arange(n_samples)},
-            attrs={"sfreq": sfreq, "offset": offset, "offset_before": offset_before},
+            attrs={"sfreq": sfreq, "offset_start": offset_start, "offset_end": offset_end},
         )
     else:
         data = xr.Dataset(
@@ -703,7 +703,7 @@ def hmp_data_format(
                 "channel": channel,
                 "sample": np.arange(n_samples),
             },
-            attrs={"sfreq": sfreq, "offset": offset, "offset_before": offset_before},
+            attrs={"sfreq": sfreq, "offset_start": offset_start, "offset_end": offset_end},
         )
     if metadata is not None:
         metadata = metadata.loc[epochs]

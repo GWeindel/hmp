@@ -101,7 +101,7 @@ def event_times(  # noqa: PLR0912
     if add_rt:
         rts = estimates.cumsum('sample').argmax('sample').max('event')+1
         if remove_offset:
-            rts = rts-estimates.offset
+            rts = rts-estimates.offset_end
         rts = xr.DataArray(rts)
         rts = rts.assign_coords(event=int(times.event.max().values + 1))
         rts = rts.expand_dims(dim="event")
