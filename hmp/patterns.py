@@ -50,11 +50,20 @@ class HalfSine:
         Parameters
         ----------
         sfreq : float
-            Sampling frequency in Hz.
+            Sampling frequency of the modelled signal in Hz.
         width : float, optional
-            Width of the half-sine wave in milliseconds, by default 50.
+            Width of the half-sine wave in milliseconds, by default 50 ms (10H).
+            Controls for the precision of the estimate. Shorter values will
+            model narrower half-sines (i.e. higher frequencies), higher values
+            will model wider events (i.e. lower frequencies)
         location : float, optional
-            How much samples should be censored in the EM() step of model fitting.
+            How much milliseconds should be censored in the EM() step of model fitting.
+            Default is width of the event + 1 sample.
+            Shorter values than `width` allow overlap of neighboring events (e.g. width/2) 
+            but might result in the same event being duplicated in several events.
+            Larger values will prevent duplication at the risk of missing neighboring events
+            Censoring is done on samples lower or equal to the location, 
+            thus requesting 50ms at 1000Hz will censor up to 51ms
 
         Returns
         -------
@@ -62,11 +71,11 @@ class HalfSine:
             An instance of the HalfSine class.
         """
         steps = 1000 / sfreq
-        width_samples = int(np.round(width / steps))
+        width_samples = int(np.rint(width / steps))
         if location is None:
-            location = int(width / steps)
+            location = int(np.rint(width / steps))+1
         else:
-            location = int(np.rint(location))
+            location = int(np.rint(location / steps))+1
         template = cls._create_template(width_samples, steps, width)
         return cls(sfreq, width_samples, location, template)
 
@@ -130,8 +139,14 @@ class Arbitrary:
         template : np.ndarray
             The arbitrary waveform template.
         location : float, optional
-            How much samples should be censored in the EM() step of model fitting.
-
+            How much milliseconds should be censored in the EM() step of model fitting.
+            Default is width of the event + 1 sample.
+            Shorter values than `width` allow overlap of neighboring events (e.g. width/2) 
+            but might result in the same event being duplicated in several events.
+            Larger values will prevent duplication at the risk of missing neighboring events
+            Censoring is done on samples lower or equal to the location, 
+            thus requesting 50ms at 1000Hz will censor up to 51ms
+            
         Returns
         -------
         Arbitrary
@@ -139,7 +154,7 @@ class Arbitrary:
         """
         width_samples = len(template)
         if location is None:
-            location = width_samples
+            location = int(np.rint(width / steps))+1
         else:
-            location = int(np.rint(location))
+            location = int(np.rint(location / steps))+1
         return cls(sfreq, width_samples, location, template)
