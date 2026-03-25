@@ -30,14 +30,16 @@ class CumulativeMethod(BaseModel):
         Extra arguments to be passed to the BaseModel, including at least events and
         distribution objects.
     step : float, optional
-        The size of the step from 0 to the mean RT. Defaults to the width of the expected event.
+        The size of the step from 0 to the mean RT. Defaults to the location defined in the pattern.
+        Small values ensure a complete exploration of the parameter space but can be slow.
+        Higher values fasten the estimation but risk missing events due to unexplored parameter space.
     end : int, optional
         The maximum number of samples to explore within each trial. Defaults to None.
     by_sample : bool, optional
-        If True, tries every sample as the starting point, even if a later event has already been
-        identified.
+        If True, tries every successive `step` as the starting point,
+        even if a later event has already been identified.
         This is useful in cases where the method might jump over a local maximum in an earlier
-        estimation. Defaults to False.
+        estimation. Defaults to False for speed.
     tolerance : float, optional
         The tolerance used for convergence in the EM() function for the cumulative step.
         Defaults to 1e-4.
@@ -96,7 +98,7 @@ class CumulativeMethod(BaseModel):
         """
         self.trial_data = trial_data
         end = trial_data.durations.mean() if self.end is None else self.end
-        step = self.event_width_samples if self.step is None else self.step
+        step = self.location if self.step is None else self.step
 
         max_event_n = self.compute_max_events(trial_data)
 
