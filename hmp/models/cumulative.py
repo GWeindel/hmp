@@ -32,7 +32,7 @@ class CumulativeMethod(BaseModel):
     step : float, optional
         The size of the step from 0 to the mean RT. Defaults to the location defined in the pattern.
         Small values ensure a complete exploration of the parameter space but can be slow.
-        Higher values fasten the estimation but risk missing events due to unexplored parameter space.
+        Higher values fasten the estimation but risk missing event due to unexplored spaces.
     end : int, optional
         The maximum number of samples to explore within each trial. Defaults to None.
     by_sample : bool, optional
