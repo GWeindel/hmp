@@ -122,7 +122,7 @@ class CumulativeMethod(BaseModel):
 
         # Iterative fit
         while (
-            self.distribution.scale_to_mean(last_stage) > 1 and n_events <= max_event_n
+            self.distribution.scale_to_mean(last_stage) > step and n_events <= max_event_n
         ):
             prev_time = time
             event_model = EventModel(self.pattern, self.distribution, tolerance=self.tolerance,
