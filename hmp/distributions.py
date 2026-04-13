@@ -68,7 +68,7 @@ class Gamma():
         return mean / self.shape
 
 
-class Lognorm():
+class Lognormal():
     """
     Define a Lognormal distribution.
 
@@ -110,7 +110,7 @@ class Lognorm():
         float
             The calculated mean value.
         """
-        return np.exp(scale + self.shape**2 / 2)
+        return scale * np.exp(self.shape**2 / 2)
 
     def mean_to_scale(self, mean: float) -> float:
         """
@@ -126,7 +126,7 @@ class Lognorm():
         float
             The calculated scale parameter.
         """
-        return np.exp(np.log(mean) - (self.shape**2 / 2))
+        return mean / np.exp(self.shape**2 / 2)
 
 class Wald():
     """

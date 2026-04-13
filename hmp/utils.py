@@ -164,9 +164,8 @@ def event_channels(
         estimate_method : string
             'max' or 'mean', either take the max probability of each event on each trial, or the
             weighted average.
-        template: int
-            Length of the pattern in sample (e.g. 5 for a pattern of 50 ms with a 100Hz sampling
-            frequency)
+        template: np.array
+            Expected shape of the event, typically the template attribute from hmp.patterns
 
     Returns
     -------
@@ -205,7 +204,7 @@ def event_channels(
                 if peak:
                     event_values[:, tr, ev] = epoch_data.values[:, samp, tr]
                 else:
-                    vals = epoch_data.values[:, samp : samp + template // 2, tr]
+                    vals = epoch_data.values[:, samp : samp + len(template) // 2, tr]
                     event_values[:, tr, ev] = np.dot(vals, normed_template[: vals.shape[1]])
 
     event_values = xr.DataArray(

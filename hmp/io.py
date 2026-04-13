@@ -13,6 +13,7 @@ import json
 import os
 import warnings
 from pathlib import Path
+from typing import Callable, Optional
 
 import mne
 import numpy as np
@@ -38,7 +39,8 @@ def read_mne_data( # noqa: PLR0913,PLR0912
     pick_channels: str | list = "eeg",
     reference: str | None = None,
     bids_parameters: dict = {},
-    dtype: DTypeLike = np.float32
+    preprocessing_fn: Optional[Callable] = None,
+    dtype: DTypeLike = np.float32,
 ) -> xr.Dataset:
     """Read EEG/MEG data format (.fif or .bdf) using MNE's integrated function.
 
@@ -99,6 +101,11 @@ def read_mne_data( # noqa: PLR0913,PLR0912
         or provide a list of channel names.
     reference : str, optional
         Reference to use for EEG data. If None, the existing reference is kept.
+    bids_parameters: dict, optional
+        Bids root path ('root'), datatype ('datatype") to analyze.
+        A filter can also be applied to subjects, tasks and sessions
+    preprocessing_fn: callable, optional
+        A user defined function preprocessing the raw data before epoching
     dtype: np.DTypeLike
         Precision, use np.float32 or np.int64
 
@@ -164,7 +171,8 @@ def read_mne_data( # noqa: PLR0913,PLR0912
                             high_pass,
                             low_pass,
                             pick_channels,
-                            bids_parameters)
+                            bids_parameters,
+                            preprocessing_fn)
         else:
             raise ValueError(f"Unknown data type {data_format}, should be 'epochs', 'raw' or "
                              "'bids'")
@@ -319,7 +327,8 @@ def read_raw_and_epoch(  # noqa # Should probably be refactored.
     high_pass,
     low_pass,
     pick_channels,
-    bids_parameters
+    bids_parameters,
+    preprocessing_fn
 ):
     if Path(participant).suffix == ".fif":
         data = mne.io.read_raw_fif(participant, preload=True, verbose=verbose)
@@ -399,6 +408,9 @@ def read_raw_and_epoch(  # noqa # Should probably be refactored.
     if verbose:
         print(f"Creating epochs based on following event ID :{np.unique(events[:, 2])}")
 
+    if preprocessing_fn is not None:
+        data = preprocessing_fn(data)
+
     if metadata is None:
         metadata_i, meta_events, event_id = mne.epochs.make_metadata(
             events=events,
@@ -409,7 +421,10 @@ def read_raw_and_epoch(  # noqa # Should probably be refactored.
             row_events=stim,
             keep_first=["response"],
         )
-        metadata_i = metadata_i[["event_name", "response"]]  # only keep event_names and rts
+        cols = ["event_name", "response"]
+        if 'first_response' in metadata_i.columns:
+            cols.append('first_response')
+        metadata_i = metadata_i[cols]  # only keep event_names and rts
     else:
         metadata_i = metadata[subj_idx]
     epochs = mne.Epochs(
@@ -430,7 +445,7 @@ def read_raw_and_epoch(  # noqa # Should probably be refactored.
         metadata=metadata_i,
         reject_by_annotation=True,
     )
-    epochs.metadata.rename({"response": "rt"}, axis=1, inplace=True)
+    epochs.metadata.rename({"response": "rt", "first_response":"response"}, axis=1, inplace=True)
     return epochs
 
 
