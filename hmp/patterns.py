@@ -73,9 +73,9 @@ class HalfSine:
         steps = 1000 / sfreq
         width_samples = int(np.rint(width / steps))
         if location is None:
-            location = int(np.rint(width / steps))+1
+            location = int(np.ceil(width / steps))
         else:
-            location = int(np.rint(location / steps))+1
+            location = int(np.ceil(location / steps))
         template = cls._create_template(width_samples, steps, width)
         return cls(sfreq, width_samples, location, template)
 
