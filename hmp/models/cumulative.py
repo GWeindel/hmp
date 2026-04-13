@@ -111,8 +111,8 @@ class CumulativeMethod(BaseModel):
         time_pars[:, 0] = self.distribution.shape
         time_pars_props = time_pars[: n_events + 1].copy()  # gamma params of current estimation
         # initialize time parameter at 1 sample
-        time_pars_props[0, 1] = self.distribution.mean_to_scale(j * step)
-        last_stage = self.distribution.mean_to_scale(end - j * step)  # remainder of time
+        time_pars_props[0, 1] = self.distribution.mean_to_scale(j)
+        last_stage = self.distribution.mean_to_scale(end - j)  # remainder of time
         time_pars_props[-1, 1] = last_stage
 
         # Init channel_pars
@@ -122,7 +122,7 @@ class CumulativeMethod(BaseModel):
 
         # Iterative fit
         while (
-            self.distribution.scale_to_mean(last_stage) >= self.location and n_events <= max_event_n
+            self.distribution.scale_to_mean(last_stage) > 1 and n_events <= max_event_n
         ):
             prev_time = time
             event_model = EventModel(self.pattern, self.distribution, tolerance=self.tolerance,
