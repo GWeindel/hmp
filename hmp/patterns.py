@@ -15,6 +15,7 @@ and store relevant metadata such as template width and censoring location for mo
 procedures.
 """
 from dataclasses import dataclass
+from warnings import warn
 
 import numpy as np
 
@@ -59,10 +60,10 @@ class HalfSine:
         location : float, optional
             How much milliseconds should be censored in the EM() step of model fitting.
             Default is width of the event.
-            Shorter values than `width` allow overlap of neighboring events (e.g. width/2) 
+            Shorter values than `width` allow overlap of neighboring events
             but might result in the same event being duplicated in several events.
             Larger values will prevent duplication at the risk of missing neighboring events
-            Censoring is done on samples lower or equal to the location, 
+            Censoring is done on samples lower or equal to the location,
             thus requesting 50ms at 1000Hz will censor up to 50ms
 
         Returns
@@ -145,17 +146,18 @@ class Arbitrary:
         location : float, optional
             How much milliseconds should be censored in the EM() step of model fitting.
             Default is width of the event.
-            Shorter values than `width` allow overlap of neighboring events (e.g. width/2) 
+            Shorter values than `width` allow overlap of neighboring events
             but might result in the same event being duplicated in several events.
             Larger values will prevent duplication at the risk of missing neighboring events
-            Censoring is done on samples lower or equal to the location, 
+            Censoring is done on samples lower or equal to the location,
             thus requesting 50ms at 1000Hz will censor up to 50ms
-            
+
         Returns
         -------
         Arbitrary
             An instance of the Arbitrary class.
         """
+        steps = 1000 / sfreq
         width = len(template)
         if location is None:
             location = width
