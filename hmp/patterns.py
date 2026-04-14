@@ -28,16 +28,16 @@ class HalfSine:
     ----------
     sfreq : float
         Sampling frequency in Hz.
-    width_samples : int
+    width : int
         Number of samples in the half-sine wave.
     location : int
-        How much samples should be censored in the EM() step of model fitting.
+        Number of samples censored in the EM() step of model fitting.
     template : np.ndarray
         The half-sine wave template.
     """
 
     sfreq: float
-    width_samples: int
+    width: int
     location: int
     template: np.ndarray
 
@@ -58,12 +58,12 @@ class HalfSine:
             will model wider events (i.e. lower frequencies)
         location : float, optional
             How much milliseconds should be censored in the EM() step of model fitting.
-            Default is width of the event + 1 sample.
+            Default is width of the event.
             Shorter values than `width` allow overlap of neighboring events (e.g. width/2) 
             but might result in the same event being duplicated in several events.
             Larger values will prevent duplication at the risk of missing neighboring events
             Censoring is done on samples lower or equal to the location, 
-            thus requesting 50ms at 1000Hz will censor up to 51ms
+            thus requesting 50ms at 1000Hz will censor up to 50ms
 
         Returns
         -------
@@ -71,22 +71,26 @@ class HalfSine:
             An instance of the HalfSine class.
         """
         steps = 1000 / sfreq
-        width_samples = int(np.rint(width / steps))
+        width = int(np.rint(width / steps))
+        if width < 5:
+            warn('Using a pattern defined by less than 5 points is not recommended')
+        if width < 2:
+            raise ValueError("Cannot use pattern with only one data point")
         if location is None:
-            location = int(np.ceil(width / steps))
+            location = width
         else:
             location = int(np.ceil(location / steps))
-        template = cls._create_template(width_samples, steps, width)
-        return cls(sfreq, width_samples, location, template)
+        template = cls._create_template(width, steps)
+        return cls(sfreq, width, location, template)
 
     @staticmethod
-    def _create_template(width_samples: int, steps: float, width: float) -> np.ndarray:
+    def _create_template(width: int, steps: float) -> np.ndarray:
         """
         Compute the event shape as a half-sine wave.
 
         Parameters
         ----------
-        width_samples : int
+        width: int
             Number of samples in the half-sine wave.
         steps : float
             Time step in milliseconds between samples.
@@ -98,8 +102,8 @@ class HalfSine:
         np.ndarray
             The normalized half-sine wave template.
         """
-        event_idx = np.arange(width_samples) * steps + steps / 2
-        event_frequency = 1000 / (width * 2)  # Event frequency for half-sine
+        event_idx = np.arange(width) * steps + steps / 2
+        event_frequency = 1000 / (width * steps * 2)  # Event frequency for half-sine
         template = np.sin(2 * np.pi * event_idx / 1000 * event_frequency)
         template = template / np.sum(template**2)  # Weight normalized
         return template
@@ -113,7 +117,7 @@ class Arbitrary:
     ----------
     sfreq : float
         Sampling frequency in Hz.
-    width_samples : int
+    width : int
         Number of samples in the template.
     location : int
         How much samples should be censored in the EM() step of model fitting.
@@ -122,7 +126,7 @@ class Arbitrary:
     """
 
     sfreq: float
-    width_samples: int
+    width: int
     location: int
     template: np.ndarray
 
@@ -140,21 +144,21 @@ class Arbitrary:
             The arbitrary waveform template.
         location : float, optional
             How much milliseconds should be censored in the EM() step of model fitting.
-            Default is width of the event + 1 sample.
+            Default is width of the event.
             Shorter values than `width` allow overlap of neighboring events (e.g. width/2) 
             but might result in the same event being duplicated in several events.
             Larger values will prevent duplication at the risk of missing neighboring events
             Censoring is done on samples lower or equal to the location, 
-            thus requesting 50ms at 1000Hz will censor up to 51ms
+            thus requesting 50ms at 1000Hz will censor up to 50ms
             
         Returns
         -------
         Arbitrary
             An instance of the Arbitrary class.
         """
-        width_samples = len(template)
+        width = len(template)
         if location is None:
-            location = int(np.rint(width / steps))+1
+            location = width
         else:
-            location = int(np.rint(location / steps))+1
-        return cls(sfreq, width_samples, location, template)
+            location = int(np.ceil(location / steps))
+        return cls(sfreq, width, location, template)

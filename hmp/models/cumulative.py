@@ -96,7 +96,7 @@ class CumulativeMethod(BaseModel):
         """
         self.trial_data = trial_data
         end = trial_data.durations.mean() if self.end is None else self.end
-        step = self.event_width_samples if self.step is None else self.step
+        step = self.event_width if self.step is None else self.step
 
         max_event_n = self.compute_max_events(trial_data)
 

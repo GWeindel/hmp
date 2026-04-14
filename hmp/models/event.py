@@ -140,7 +140,7 @@ class EventModel(BaseModel):
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
         infos_to_store["sfreq"] = self.sfreq
-        infos_to_store["event_width_samples"] = self.event_width_samples
+        infos_to_store["event_width"] = self.event_width
         infos_to_store["tolerance"] = self.tolerance
 
         self.n_dims = trial_data.n_dims
@@ -654,9 +654,7 @@ class EventModel(BaseModel):
             A 2D array where each row contains the shape and scale parameters for a stage.
         """
         rnd_durations = np.zeros(n_events + 1)
-        assert self.event_width_samples*(n_events + 1) < self.max_scale, \
-            f"Max_scale too short, need to be more than {self.event_width_samples*(n_events+1)}"
-        while any(rnd_durations < self.event_width_samples):  # at least event_width
+        while any(rnd_durations < self.location):  # at least equal to the location
             rnd_events = np.random.default_rng().integers(
                 low=0, high=self.max_scale, size=n_events
             )  # n_events between 0 and mean_d
@@ -924,7 +922,7 @@ class EventModel(BaseModel):
             all_xreventprobs.append(xreventprobs)
         all_xreventprobs = xr.concat(all_xreventprobs, dim="trial", join='outer')
         all_xreventprobs.attrs['sfreq'] = self.sfreq
-        all_xreventprobs.attrs['event_width_samples'] = self.event_width_samples
+        all_xreventprobs.attrs['event_width'] = self.event_width
         return [np.array(likelihood), all_xreventprobs]
 
     def distribution_pdf(self, shape: float, scale: float, max_duration: int) -> np.ndarray:

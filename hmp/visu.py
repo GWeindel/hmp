@@ -169,7 +169,7 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
         time_step = 1000 / sfreq  # time_step still needed below
     else:
         time_step = 1
-    event_size = estimates.event_width_samples * time_step
+    event_size = estimates.event_width * time_step
 
     # fix vmin/vmax across topos, while keeping symmetric
     if vmax is None:  # vmax = absolute max, unless no positive values

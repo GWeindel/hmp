@@ -19,8 +19,8 @@ class BaseModel(ABC):
         (optional) Sampling frequency of the signal if not provided, inferred from the epoch_data
     cpus: int
         How many cpus to use for the functions`using multiprocessing`
-    event_width : float
-        width of events in milliseconds, by default 50 ms.
+    event_width : int
+        Width of the pattern defining events in samples.
     shape: float
         shape of the probability distributions of the by-trial stage onset
         (one shape for all stages)
@@ -29,7 +29,7 @@ class BaseModel(ABC):
         should be a vector of values capturing the expected shape over the sampling frequency
         of the data. If None, the template is created as a half-sine shape with a frequency
         derived from the event_width argument
-    location : float
+    location : int
         Minimum duration between events in samples. Default is the event_width.
     distribution : str
         Probability distribution for the by-trial onset of stages can be
@@ -49,17 +49,16 @@ class BaseModel(ABC):
 
 
     def compute_max_events(self, trial_data: TrialData):
-        """Compute the maximum possible number of events given event width minimum reaction time."""
+        """Compute the maximum possible number of events given location and minimum reaction time."""
         return int(np.rint(np.percentile(trial_data.durations, 10) // (self.location)))
 
 
     def __getattribute__(self, attr):
         if attr in ["sfreq", "steps", "location", "template"]:
             return getattr(self.pattern, attr)
+
         if attr == "event_width":
             return self.pattern.width
-        if attr == "event_width_samples":
-            return self.pattern.width_samples
 
         return super().__getattribute__(attr)
 
