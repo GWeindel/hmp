@@ -30,16 +30,14 @@ class CumulativeMethod(BaseModel):
         Extra arguments to be passed to the BaseModel, including at least events and
         distribution objects.
     step : float, optional
-        The size of the step from 0 to the mean RT. Defaults to the location defined in the pattern.
-        Small values ensure a complete exploration of the parameter space but can be slow.
-        Higher values fasten the estimation but risk missing event due to unexplored spaces.
+        The size of the step from 0 to the mean RT. Defaults to the width of the expected event.
     end : int, optional
         The maximum number of samples to explore within each trial. Defaults to None.
     by_sample : bool, optional
-        If True, tries every successive `step` as the starting point,
-        even if a later event has already been identified.
+        If True, tries every sample as the starting point, even if a later event has already been
+        identified.
         This is useful in cases where the method might jump over a local maximum in an earlier
-        estimation. Defaults to False for speed.
+        estimation. Defaults to False.
     tolerance : float, optional
         The tolerance used for convergence in the EM() function for the cumulative step.
         Defaults to 1e-4.
@@ -98,7 +96,7 @@ class CumulativeMethod(BaseModel):
         """
         self.trial_data = trial_data
         end = trial_data.durations.mean() if self.end is None else self.end
-        step = self.location if self.step is None else self.step
+        step = self.event_width_samples if self.step is None else self.step
 
         max_event_n = self.compute_max_events(trial_data)
 
@@ -111,8 +109,8 @@ class CumulativeMethod(BaseModel):
         time_pars[:, 0] = self.distribution.shape
         time_pars_props = time_pars[: n_events + 1].copy()  # gamma params of current estimation
         # initialize time parameter at 1 sample
-        time_pars_props[0, 1] = self.distribution.mean_to_scale(j)
-        last_stage = self.distribution.mean_to_scale(end - j)  # remainder of time
+        time_pars_props[0, 1] = self.distribution.mean_to_scale(j * step)
+        last_stage = self.distribution.mean_to_scale(end - j * step)  # remainder of time
         time_pars_props[-1, 1] = last_stage
 
         # Init channel_pars
@@ -122,7 +120,7 @@ class CumulativeMethod(BaseModel):
 
         # Iterative fit
         while (
-            self.distribution.scale_to_mean(last_stage) > step and n_events <= max_event_n
+            self.distribution.scale_to_mean(last_stage) >= self.location and n_events <= max_event_n
         ):
             prev_time = time
             event_model = EventModel(self.pattern, self.distribution, tolerance=self.tolerance,
