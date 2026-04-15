@@ -219,6 +219,7 @@ class CumulativeMethod(BaseModel):
             # look between which event the next proposition should go
             n_event_j = np.argwhere(scale_j >= np.cumsum(time_pars_props[:, 1])) + 2
             n_event_j = np.max(n_event_j) if len(n_event_j) > 0 else 1
+            n_event_j = np.min([n_event_j, n_events])  # do not insert even after last stage
 
             # insert j at right spot, subtract prev scales
             time_pars_props = np.insert(
