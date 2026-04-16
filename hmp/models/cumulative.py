@@ -121,7 +121,7 @@ class CumulativeMethod(BaseModel):
             event_model = EventModel(self.pattern, self.distribution, tolerance=self.tolerance,
                                      n_events=n_events)
             # get new parameters
-            j, channel_pars_props, time_pars_props = self._propose_fit_params(
+            channel_pars_props, time_pars_props = self._propose_fit_params(
                 n_events, j, channel_pars, time_pars
             )
 
@@ -245,11 +245,12 @@ class CumulativeMethod(BaseModel):
             channel_pars_props = np.zeros((1, n_events, channel_pars.shape[-1]))
             channel_pars_props[:, :n_events-1, :] = channel_pars[:n_events-1]
 
-        # Ensures non-negative time parameters, exclusively (?) 
+        # Ensures non-negative time parameters, exclusively (?) happening for last 
+        # sample when step > remainder
         time_pars_props[:, 1] = np.maximum(time_pars_props[:, 1],
                                            self.distribution.mean_to_scale(1))
         
-        return j, channel_pars_props, np.array([time_pars_props])
+        return channel_pars_props, np.array([time_pars_props])
 
     def __getattribute__(self, attr):
         property_list = {
