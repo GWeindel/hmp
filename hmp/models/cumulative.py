@@ -37,10 +37,11 @@ class CumulativeMethod(BaseModel):
         The maximum number of samples to explore within each trial. Defaults to None.
     fastforward : bool, optional
         If True cumulatively estimates HMP models by looking for a new event after the 
-        last event that improved likelihood. This fastforward version usees shortcut to speed
-        estimation but can miss events in-between two events with large SNR.
+        last event that improved likelihood. This fastforward version uses shortcuts to speed
+        estimation but can miss events in-between two events.
         If False (Default) iteratively test all samples from `start` to `end`, retain times at
-        which likelihood increased regardless of whether a subsequent event was found.
+        which likelihood increased regardless of whether a subsequent event was found. The N+1
+        solution only retains the time parameters found with the N solution.
     tolerance : float, optional
         The tolerance used for convergence in the EM() function for the cumulative step.
         Defaults to 1e-4.
