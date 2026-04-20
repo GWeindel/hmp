@@ -45,8 +45,6 @@ class CumulativeMethod(BaseModel):
     tolerance : float, optional
         The tolerance used for convergence in the EM() function for the cumulative step.
         Defaults to 1e-4.
-    final_model_tolerance : float, optional
-        The tolerance used for the final model. Defaults to 1e-4.
     kwargs : dict
         Additional keyword arguments to be passed to the BaseModel.
     """
@@ -57,16 +55,13 @@ class CumulativeMethod(BaseModel):
         step: float = None,
         end: int = None,
         fastforward: bool = True,
-        tolerance: float = 1e-4,
-        final_model_tolerance: float = 1e-4,
+        tolerance: float = 1e-4
         **kwargs,
     ):
         self.step = step
         self.end = end
         self.fastforward = fastforward
         self.tolerance = tolerance
-        self.final_model_tolerance = (tolerance if final_model_tolerance is None
-                                      else final_model_tolerance)
         self.submodels = {}
         self.final_model = None
         super().__init__(*args, **kwargs)
@@ -175,7 +170,7 @@ class CumulativeMethod(BaseModel):
         time_pars = time_pars[: n_events + 1, :]
 
         self.final_model = EventModel(
-            self.pattern, self.distribution, tolerance=self.final_model_tolerance,
+            self.pattern, self.distribution, tolerance=self.tolerance,
             n_events=n_events)
         if n_events > 0:
             self.final_model.fit(
