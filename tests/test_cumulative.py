@@ -34,7 +34,7 @@ def test_cumulative_simple():
     true_loglikelihood, true_estimates = true_model.transform(trial_data_b)
 
     # Cumulative estimation
-    model = CumulativeMethod(event_properties, by_sample=True, end=20)
+    model = CumulativeMethod(event_properties, fastforward=False, end=20)
     model.fit(trial_data_b)
     estimates = model.transform(trial_data_b)
 
