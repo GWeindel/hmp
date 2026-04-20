@@ -36,7 +36,7 @@ class CumulativeMethod(BaseModel):
     end : int, optional
         The maximum number of samples to explore within each trial. Defaults to None.
     fastforward : bool, optional
-        If True cumulatively estimates HMP models by looking for a new event after the 
+        If True cumulatively estimates HMP models by looking for a new event after the
         last event that improved likelihood. This fastforward version uses shortcuts to speed
         estimation but can miss events in-between two events.
         If False (Default) iteratively test all samples from `start` to `end`, retain times at
@@ -55,7 +55,7 @@ class CumulativeMethod(BaseModel):
         step: float = None,
         end: int = None,
         fastforward: bool = True,
-        tolerance: float = 1e-4
+        tolerance: float = 1e-4,
         **kwargs,
     ):
         self.step = step
@@ -106,11 +106,11 @@ class CumulativeMethod(BaseModel):
 
         # Initialize last stage of n=1
         time_pars[0, 1] = self.distribution.mean_to_scale(trial_data.durations.mean())
-        
+
         # final channel_pars during estimation
         channel_pars = np.zeros((int(end/self.step), trial_data.n_dims))
         lkh_prev = -np.inf
-        
+
         # Iterative fit
         while j*self.step < end:
             prev_j = j
@@ -142,8 +142,10 @@ class CumulativeMethod(BaseModel):
 
                 if verbose:
                     # Just to track advancement
-                    events_so_far = [int(np.round(self.distribution.scale_to_mean(x))*(1000/self.sfreq)) for x in 
-                                np.cumsum(event_model.time_pars[0, :n_events, 1])
+                    events_so_far = [int(np.round(self.distribution.scale_to_mean(x))
+                                         *(1000/self.sfreq))
+                                         for x in
+                                     np.cumsum(event_model.time_pars[0, :n_events, 1])
                     ]
                     print(
                         f"{n_events} events found around times "
@@ -151,9 +153,9 @@ class CumulativeMethod(BaseModel):
                     )
                 # Search for additional event
                 n_events += 1
-            
+
             if self.fastforward:
-                # # If ffwd, the next sample tested follows the last explored time 
+                # # If ffwd, the next sample tested follows the last explored time
                 max_scale = np.max(
                     [np.sum(x[0, :n_events-1, 1]) for x in event_model.time_pars_dev]
                 )
@@ -227,12 +229,14 @@ class CumulativeMethod(BaseModel):
             # subtract inserted scale from next event
             time_pars_props[n_event_j, 1] = (time_pars_props[n_event_j, 1]
                                              - time_pars_props[n_event_j - 1, 1])
-            channel_pars_props = np.zeros((1, n_events, channel_pars.shape[-1]))  # always 0            
+            channel_pars_props = np.zeros((1, n_events, channel_pars.shape[-1]))  # always 0
         else:
             time_pars_props = time_pars[: n_events + 1].copy()
             time_pars_props[n_events,1] = time_pars_props[n_events-1,1]
             # New parameter proposition for the new event based on previous run
-            new_event_prop = np.max([self.distribution.mean_to_scale(j * self.step) - np.sum(time_pars_props[:n_events-1, 1]), self.distribution.mean_to_scale(self.step)])
+            new_event_prop = (np.max([self.distribution.mean_to_scale(j * self.step) -
+                np.sum(time_pars_props[:n_events-1, 1]),self.distribution.mean_to_scale(self.step)])
+            )
             time_pars_props[n_events-1, 1] = new_event_prop
             # Subtract new proposition from last stage
             time_pars_props[-1, 1] -= new_event_prop
@@ -241,11 +245,11 @@ class CumulativeMethod(BaseModel):
             channel_pars_props = np.zeros((1, n_events, channel_pars.shape[-1]))
             channel_pars_props[:, :n_events-1, :] = channel_pars[:n_events-1]
 
-        # Ensures non-negative time parameters, exclusively (?) happening for last 
+        # Ensures non-negative time parameters, exclusively (?) happening for last
         # sample when step > remainder
         time_pars_props[:, 1] = np.maximum(time_pars_props[:, 1],
                                            self.distribution.mean_to_scale(1))
-        
+
         return channel_pars_props, np.array([time_pars_props])
 
     def __getattribute__(self, attr):
