@@ -4,7 +4,7 @@ from warnings import warn
 
 import numpy as np
 import xarray as xr
-from mne import EpochsArray, pick_info, pick_types, Info
+from mne import EpochsArray, Info, pick_info, pick_types
 from mne.io.constants import FIFF
 from mne.preprocessing import compute_current_source_density
 from pandas import MultiIndex
@@ -482,8 +482,8 @@ def participant_selection(transformed, participant):
 
 def compute_csd(epoch_data: xr.Dataset,
                 info: Info):
-    """Computes laplacian using MNE's function
-    
+    """Compute laplacian using MNE's function.
+
     Parameters
     ----------
     epoch_data : xr.Dataset
@@ -497,7 +497,6 @@ def compute_csd(epoch_data: xr.Dataset,
         Updated dataset with CSD values
     eeg_info: Info
         Updated info ubject with correct units given CSD transform
-    
     """
     eeg_info = pick_info(info, pick_types(info, meg=False, eeg=True))
     if eeg_info['chs'][0]['unit'] == FIFF.FIFF_UNIT_V:
