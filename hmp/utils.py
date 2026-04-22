@@ -5,10 +5,14 @@ from warnings import warn
 import numpy as np
 import xarray as xr
 from pandas import MultiIndex
+from mne import EpochsArray
+from mne.preprocessing import compute_current_source_density
+from mne.io.constants import FIFF
 
 from hmp.transformers.custom import ProjCustom
 from hmp.transformers.identity import ProjIdentity
 from hmp.transformers.pca import ProjPCA
+
 
 
 def _check_transformed(transformed):
@@ -476,3 +480,21 @@ def participant_selection(transformed, participant):
     if 'participant' not in data.dims:
         data = data.expand_dims('participant')
     return data.stack(trial=['participant','epoch'])
+
+def compute_csd(epoch_data, info):
+    if info['chs'][0]['unit'] == FIFF.FIFF_UNIT_V:
+        epoch_data = epoch_data.stack(trial=['participant','epoch']).dropna("trial", how="all")
+        for trial in epoch_data.trial:
+            trial_dat = epoch_data.sel(trial=trial).data
+            # Build fake Epoch mne class and use MNE's dedicated function
+            epoch = EpochsArray(np.array([trial_dat.values]), info)
+            epoch = compute_current_source_density(epoch)
+            epoch_data['data'].loc[dict(trial=trial)] = epoch.get_data()[0]
+        epoch_data = epoch_data.unstack()
+        # Set EEG channels to the correct CSD unit
+        for ch in info['chs']:
+            ch['unit'] = FIFF.FIFF_UNIT_V_M2
+
+    else:
+        raise ValueError(f"Cannot apply CSD on channels with units {info['chs'][0]['unit']}")
+    return epoch_data, info
