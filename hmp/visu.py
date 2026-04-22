@@ -14,6 +14,11 @@ from hmp.utils import event_channels, event_times
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold"]
 
+unit_map = {
+    'FIFF_UNIT_V': "Voltage (V)",
+    'FIFF_UNIT_V_M2': "V/m²",
+}
+
 def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
     epoch_data: xr.DataArray,
     estimates: xr.DataArray,
@@ -319,12 +324,10 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
         #         bbox_to_anchor=(1.025, 0, 2, 1), bbox_transform=ax.transAxes, borderpad=0)
         axins = ax.inset_axes([1.025, 0, 0.03, cheight])
         if isinstance(channel_position, Info):
-            lab = (
-                "Voltage (V)"
-                if channel_position["chs"][0]["unit"] == 107
-                else channel_position["chs"][0]["unit"]._name
-            )
+            unit_code = channel_position["chs"][0]["unit"]._name
+            lab = unit_map.get(unit_code, unit_code)
         else:
+            # Assumes monopolar EEG
             lab = "Voltage (V)"
         plot_brain_colorbar(
             axins,
