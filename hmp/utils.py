@@ -4,15 +4,14 @@ from warnings import warn
 
 import numpy as np
 import xarray as xr
-from pandas import MultiIndex
-from mne import EpochsArray, pick_types, pick_info
-from mne.preprocessing import compute_current_source_density
+from mne import EpochsArray, pick_info, pick_types, Info
 from mne.io.constants import FIFF
+from mne.preprocessing import compute_current_source_density
+from pandas import MultiIndex
 
 from hmp.transformers.custom import ProjCustom
 from hmp.transformers.identity import ProjIdentity
 from hmp.transformers.pca import ProjPCA
-
 
 
 def _check_transformed(transformed):
@@ -481,7 +480,25 @@ def participant_selection(transformed, participant):
         data = data.expand_dims('participant')
     return data.stack(trial=['participant','epoch'])
 
-def compute_csd(epoch_data, info):
+def compute_csd(epoch_data: xr.Dataset,
+                info: Info):
+    """Computes laplacian using MNE's function
+    
+    Parameters
+    ----------
+    epoch_data : xr.Dataset
+        Data read through the HMP IO module
+    info : Info
+        Info object from MNE
+
+    Returns
+    -------
+    epoch_data : xr.Dataset
+        Updated dataset with CSD values
+    eeg_info: Info
+        Updated info ubject with correct units given CSD transform
+    
+    """
     eeg_info = pick_info(info, pick_types(info, meg=False, eeg=True))
     if eeg_info['chs'][0]['unit'] == FIFF.FIFF_UNIT_V:
         epoch_data = epoch_data.stack(trial=['participant','epoch']).dropna("trial", how="all")
@@ -493,7 +510,7 @@ def compute_csd(epoch_data, info):
             epoch_data['data'].loc[dict(trial=trial)] = epoch.get_data()[0]
         epoch_data = epoch_data.unstack()
         # Set EEG channels to the correct CSD unit
-        
+
         for ch in eeg_info['chs']:
             ch['unit'] = FIFF.FIFF_UNIT_V_M2
 
