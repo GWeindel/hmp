@@ -246,5 +246,5 @@ class CumulativeMethod(BaseModel):
         }
         if attr in property_list:
             self._check_fitted(property_list[attr])
-            return getattr(self.final_model, attr)
+            return getattr(self.submodels[-1], attr)
         return super().__getattribute__(attr)

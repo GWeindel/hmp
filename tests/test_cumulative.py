@@ -39,7 +39,7 @@ def test_cumulative_simple():
     estimates = model.transform(trial_data_b)
 
     # testing if bacward identifies the 3 real events
-    assert np.isclose(model.final_model.channel_pars, true_model.channel_pars, atol=2).all()
+    assert np.isclose(model.submodels[-1].channel_pars, true_model.channel_pars, atol=2).all()
 
     # testing recovery of attributes
     assert isinstance(model.xrlikelihoods, xr.DataArray)
