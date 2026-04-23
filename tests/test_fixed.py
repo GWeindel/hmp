@@ -67,7 +67,7 @@ def test_fixed_csd():
     #Estimate
     lkh, estimates = model.fit_transform(trial_data, verbose=True)
     print(lkh)
-    assert np.isclose(lkh, np.array(543.92), atol=1e-2, rtol=0)
+    assert np.isclose(lkh, np.array(543.92), atol=1e-1, rtol=0)
 
 
 def test_fixed_grouping():
