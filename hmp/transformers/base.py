@@ -222,7 +222,7 @@ class BaseTransformer(ABC):
                 vcov_mat += cov_i
         if count < len(data.trial)/10:
             warn(f"Less than 10% of the trials used to compute covariance for"
-                 f"{data.participant.values}. Covariance matrix might be unreliable")
+                 f"{np.unique(data.participant.values)}. Covariance matrix might be unreliable")
         return vcov_mat/count
 
     def data_format(
