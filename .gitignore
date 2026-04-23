@@ -8,6 +8,8 @@ docs/build
 *.nc
 .ipynb_checkpoints
 *Copy*
+*.fif
+*.npy
 *.pkl
 *.kate-swp
 *.zip
