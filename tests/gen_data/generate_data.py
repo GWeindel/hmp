@@ -25,6 +25,15 @@ def create_data():
         sfreq=sfreq, times=times_a, noise=True, seed=1, path='dataset_a')
     raw_b, event_b = simulations.simulate(sources, n_trials, cpus, 'dataset_b_raw', overwrite=True,
         sfreq=sfreq, times=times_b, noise=False, seed=1, path='dataset_b')
+    
+    # For SVD/CSD test 
+    n_trials = 62
+    sources = []
+    for cur_name in names:
+        sources.append([cur_name, 10., 2.5e-8, gamma(2, scale=50)])
+    raw_b, event_b = simulations.simulate(sources, n_trials, cpus, 'dataset_c_raw', overwrite=True,
+        sfreq=sfreq, noise=False, seed=1, path='dataset_c')
+    
 
 if __name__ == "__main__":
     create_data()

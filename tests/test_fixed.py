@@ -10,7 +10,7 @@ from hmp.distributions import Gamma
 from hmp.trialdata import TrialData
 
 
-from test_io import init_data
+from test_io import init_data, init_data_large
 
 def data():
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
@@ -45,7 +45,6 @@ def test_fixed_simple():
     # test the difference between electrode values at event times
     assert np.isclose(np.sum(np.abs(true_topos.data - test_topos.data)), 0, atol=1e-4, rtol=0)
     # Test whether likelihood is the expected one
-    print(lkh_b)
     assert np.isclose(lkh_b, np.array(109.41), atol=1e-2, rtol=0)
     
     # testing recovery of attributes
@@ -54,6 +53,22 @@ def test_fixed_simple():
     model.xrtime_pars
     model.xrtime_pars_dev
     model.xrtraces
+
+
+def test_fixed_csd():
+    """ test CSD computation"""
+    event_c, epoch_data, info, sfreq, n_events = init_data_large()
+    epoch_data, info = hmp.utils.compute_csd(epoch_data, info)
+    hmp_data = hmp.transformers.ProjPCA(epoch_data, n_comp=5)
+    event_properties = HalfSine.create_expected(sfreq=hmp_data.sfreq)
+    trial_data = TrialData.from_transformer(hmp_data, pattern=event_properties.template)
+    model = EventModel(event_properties, n_events=n_events)
+    
+    #Estimate
+    lkh, estimates = model.fit_transform(trial_data, verbose=True)
+    print(lkh)
+    assert np.isclose(lkh, np.array(543.92), atol=1e-2, rtol=0)
+
 
 def test_fixed_grouping():
     _, event_a, epoch_data, hmp_data, positions, sfreq, n_events = data()

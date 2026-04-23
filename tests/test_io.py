@@ -22,6 +22,7 @@ from hmp.models import EventModel
 DATA_DIR = Path("tests", "gen_data")
 DATA_DIR_A = DATA_DIR / "dataset_a"
 DATA_DIR_B = DATA_DIR / "dataset_b"
+DATA_DIR_C = DATA_DIR / "dataset_c"
 
 def init_data():
     # Also tests data_format 'raw'
@@ -46,6 +47,26 @@ def init_data():
     epoch_data = epoch_data.sel(channel=epoch_data.channel[::3])
     positions = simulations.positions()[::3]
     return event_b, event_a, epoch_data, positions, sfreq, n_events
+
+def init_data_large():
+    # all electrode and more trials
+    """ Initialize all data and model related info."""
+    sfreq = 100
+    n_events = 3
+    events = []
+    event_id = {'stimulus':1}#trigger 1 = stimulus
+    resp_id = {'response':5}
+    raws = [DATA_DIR_C / 'dataset_c_raw_raw.fif']
+    event_files = [DATA_DIR_C / 'dataset_c_raw_raw_generating_events.npy']
+    for file in event_files:
+        events.append(np.load(file))
+    event_c = events[0]
+    # Data reading
+    epoch_data = io.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq, pick_channels='eeg',
+            events_provided=events, verbose=True, subj_name=['c'], tmin=-.01)
+    epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
+    info = simulations.sim_info()
+    return event_c, epoch_data, info, sfreq, n_events
 
 def test_epochs():
     # Declaring path where the EEG data will be stored
