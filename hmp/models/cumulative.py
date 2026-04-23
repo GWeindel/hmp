@@ -188,7 +188,7 @@ class CumulativeMethod(BaseModel):
         """
         self._check_fitted("transform data")
         return self.submodels[-1].transform(*args, **kwargs)
-        
+
     def _propose_fit_params(self, n_events, j, channel_pars, time_pars):
 
         if (
