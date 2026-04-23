@@ -62,8 +62,7 @@ class CumulativeMethod(BaseModel):
         self.end = end
         self.fastforward = fastforward
         self.tolerance = tolerance
-        self.submodels = {}
-        self.final_model = None
+        self.submodels = []
         super().__init__(*args, **kwargs)
 
     def fit(
@@ -134,7 +133,7 @@ class CumulativeMethod(BaseModel):
             # check solution
             if likelihoods - lkh_prev > 0:  # accept solution if likelihood improved
                 lkh_prev = likelihoods
-                self.submodels[n_events] = event_model
+                self.submodels.append(event_model)
 
                 # update channel_pars, params,
                 channel_pars[:n_events] = event_model.channel_pars
@@ -168,29 +167,17 @@ class CumulativeMethod(BaseModel):
 
         # done estimating
         n_events = n_events - 1
-        channel_pars = channel_pars[:n_events, :]
-        time_pars = time_pars[: n_events + 1, :]
-
-        self.final_model = EventModel(
-            self.pattern, self.distribution, tolerance=self.tolerance,
-            n_events=n_events)
         if n_events > 0:
-            self.final_model.fit(
-                trial_data,
-                channel_pars=np.array([[channel_pars]]),
-                time_pars=np.array([[time_pars]]),
-                verbose=verbose,
-                cpus=1,
-            )
+            if verbose:
+                print(f"Found {n_events} events")
             self._fitted = True
-
         else:
             warn("Failed to find more than two stages, returning None")
             self._fitted = False
 
     def transform(self, *args, **kwargs):
         """
-        Transform the input data using the fitted cumulative event model.
+        Transform the input data using the last model fitted in the cumulative method.
 
         This method applies the transformation defined by the final model to the provided data.
 
@@ -200,11 +187,8 @@ class CumulativeMethod(BaseModel):
 
         """
         self._check_fitted("transform data")
-        if self.final_model is not None:
-            return self.final_model.transform(*args, **kwargs)
-        else:
-            raise RuntimeError("No fitted model available to transform data.")
-
+        return self.submodels[-1].transform(*args, **kwargs)
+        
     def _propose_fit_params(self, n_events, j, channel_pars, time_pars):
 
         if (
