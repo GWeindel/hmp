@@ -360,31 +360,28 @@ def simulate(  # noqa  # Might need to be refactored.
     return files
 
 
-def demo(cpus, n_events, seed=123, overwrite=False):
+def demo():
     """Create example data for the tutorials."""
     ## Imports and code specific to the simulation (see tutorial 3 and 4 for real data)
-
-
-    random_gen = np.random.default_rng(seed=seed)
-
+    cpus = 1
+    seed = 123
+    overwrite = True
     ## Parameters for the simulations
     frequency, amplitude = (
         10.0,
-        .0025e-7,
+        .55e-7,
     )  # Frequency of the transition event and its amplitude in nAm
     shape = 2  # shape of the gamma distribution
 
     # Storing electrode position, specific to the simulations
     positions = sim_info()  # Electrode position
     sfreq = 100
-    all_source_names = available_sources()  # all brain sources you can play with
     n_trials = 50  # Number of trials to simulate
 
-    # Randomly specify the transition events
-    name_sources = random_gen.choice(
-        all_source_names, n_events + 1, replace=False
-    )  # randomly pick source without replacement
-    times = np.random.uniform(40, 150, n_events + 1) / shape
+    name_sources = ['caudalanteriorcingulate-rh', 'parsorbitalis-lh', 'superiortemporal-lh',
+         'inferiorparietal-lh', 'bankssts-lh', 'pericalcarine-rh']
+    times = np.array([50,75,100,100,150,200])
+    times = times / shape
 
     sources = []
     for source in range(len(name_sources)):
