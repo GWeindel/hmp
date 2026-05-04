@@ -22,6 +22,9 @@ class Gamma():
         The shape parameter of the gamma distribution.
     pdf : function
         The probability density function from `scipy.stats.gamma`.
+    shift: int
+        An integer by which to shift the distribution so that
+        ``(p(0) <- p(shift), p(1) <- p(1 + shift), ..., p(D) <- p(D + shift)``). Default is 1
 
     Methods
     -------
@@ -34,6 +37,7 @@ class Gamma():
     def __init__(self, shape=2):
         self.shape = shape
         self.pdf = gamma.pdf
+        self.shift = 1
 
     def scale_to_mean(self, scale: float) -> float:
         """
@@ -68,7 +72,7 @@ class Gamma():
         return mean / self.shape
 
 
-class Lognorm():
+class Lognormal():
     """
     Define a Lognormal distribution.
 
@@ -83,6 +87,9 @@ class Lognorm():
         The shape parameter of the distribution.
     pdf : function
         The probability density function from `scipy.stats.lognorm`.
+    shift: int
+        An integer by which to shift the distribution so that
+        ``(p(0) <- p(shift), p(1) <- p(1 + shift), ..., p(D) <- p(D + shift)``). Default is 1
 
     Methods
     -------
@@ -95,6 +102,7 @@ class Lognorm():
     def __init__(self, shape):
         self.shape = shape
         self.pdf = lognorm.pdf
+        self.shift = 1
 
     def scale_to_mean(self, scale: float) -> float:
         """
@@ -110,7 +118,7 @@ class Lognorm():
         float
             The calculated mean value.
         """
-        return np.exp(scale + self.shape**2 / 2)
+        return scale * np.exp(self.shape**2 / 2)
 
     def mean_to_scale(self, mean: float) -> float:
         """
@@ -126,7 +134,7 @@ class Lognorm():
         float
             The calculated scale parameter.
         """
-        return np.exp(np.log(mean) - (self.shape**2 / 2))
+        return mean / np.exp(self.shape**2 / 2)
 
 class Wald():
     """
@@ -143,6 +151,9 @@ class Wald():
         The shape parameter of the distribution.
     pdf : function
         The probability density function from `scipy.stats.invgauss`.
+    shift: int
+        An integer by which to shift the distribution so that
+        ``(p(0) <- p(shift), p(1) <- p(1 + shift), ..., p(D) <- p(D + shift)``). Default is 1
 
     Methods
     -------
@@ -155,6 +166,7 @@ class Wald():
     def __init__(self, shape):
         self.shape = shape
         self.pdf = invgauss.pdf
+        self.shift = 1
 
     def scale_to_mean(self, scale: float) -> float:
         """
@@ -203,6 +215,9 @@ class Weibull():
         The shape parameter of the distribution.
     pdf : function
         The probability density function from `scipy.stats.weibull_min`.
+    shift: int
+        An integer by which to shift the distribution so that
+        ``(p(0) <- p(shift), p(1) <- p(1 + shift), ..., p(D) <- p(D + shift)``). Default is 0
 
     Methods
     -------
@@ -216,6 +231,7 @@ class Weibull():
         self.shape = shape
         self.pdf = weibull_min.pdf
         self.gamma_func = gamma_func
+        self.shift = 0
 
     def scale_to_mean(self, scale: float) -> float:
         """

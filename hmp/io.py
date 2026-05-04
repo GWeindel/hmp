@@ -13,15 +13,17 @@ import json
 import os
 import warnings
 from pathlib import Path
+from typing import Callable, Optional
 
 import mne
 import numpy as np
 import xarray as xr
+from numpy.typing import DTypeLike
 from pandas import DataFrame
 
 
-def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instead.
-    pfiles: str | list,
+def read_mne_data( # noqa: PLR0913,PLR0912
+    pfiles: str | list = [],
     event_id: dict | None = None,
     resp_id: dict | None = None,
     data_format: str = 'raw',
@@ -29,22 +31,16 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
     subj_name: list | None = None,
     metadata: list | None = None,
     events_provided: np.ndarray | None = None,
-    rt_col: str = "rt",
     verbose: bool = True,
     tmin: float = -0.2,
     tmax: float = 5,
-    offset_after_resp: float = 0,
     high_pass: float | None = None,
     low_pass: float | None = None,
     pick_channels: str | list = "eeg",
-    baseline: tuple = (None, 0),
-    upper_limit_rt: float = np.inf,
-    lower_limit_rt: float = 0,
-    reject_threshold: float | None = None,
-    scale: float = 1,
     reference: str | None = None,
-    ignore_rt: bool = False,
-    bids_parameters: dict = {}
+    bids_parameters: dict = {},
+    preprocessing_fn: Optional[Callable] = None,
+    dtype: DTypeLike = np.float32,
 ) -> xr.Dataset:
     """Read EEG/MEG data format (.fif or .bdf) using MNE's integrated function.
 
@@ -70,19 +66,11 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
           Epochs with 'BAD' annotations are removed. Baseline correction is applied from
           ``tmin`` to stimulus onset (time 0).
 
-    Then (or if data is already epoched):
-
-        1. Reaction times (RT) are computed as the time difference between stimulus
-           and response triggers.
-           If no response event occurs after a stimulus in the epoch window, or if
-           ``RT > upper_limit_rt`` or ``RT < lower_limit_rt``, RT is set to 0.
-        2. All non-rejected epochs with positive RTs are cropped from stimulus onset to
-           ``stimulus_onset + RT``.
-
     Parameters
     ----------
     pfiles : str or list of str
         Path(s) to EEG files to read. Can be a single file path or a list of file paths.
+        If empty list, assumes bids format
     event_id : dict, optional
         Dictionary mapping condition names (keys) to event codes (values).
     resp_id : dict, optional
@@ -98,18 +86,12 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
     events_provided : np.ndarray, optional
         Array with 3 columns: [sample of the event, initial value of the channel, event code].
         Used if automated event detection is not suitable.
-    rt_col : str, default="rt"
-        Column name in metadata containing reaction times.
-    rts : np.ndarray, optional
-        Array of reaction times. Used if metadata is not provided.
     verbose : bool, default=True
         Whether to display MNE's messages.
     tmin : float, default=-0.2
         Start time (in seconds) relative to stimulus onset for epoching.
     tmax : float, default=5
         End time (in seconds) relative to stimulus onset for epoching.
-    offset_after_resp : float, default=0
-        Additional time (in seconds) to include after the response onset.
     high_pass : float, optional
         High-pass filter cutoff frequency.
     low_pass : float, optional
@@ -117,21 +99,15 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
     pick_channels : str or list, default="eeg"
         Channels to retain. Use "eeg"/"meg" to keep only EEG/MEG channels
         or provide a list of channel names.
-    baseline : tuple, default=(None, 0)
-        Time range for baseline correction (start, end) in seconds.
-    upper_limit_rt : float, default=np.inf
-        Upper limit for reaction times. Longer RTs are discarded.
-    lower_limit_rt : float, default=0
-        Lower limit for reaction times. Shorter RTs are discarded.
-    reject_threshold : float, optional
-        Threshold for rejecting epochs based on signal amplitude within
-        the stimulus-response interval.
-    scale : float, default=1
-        Scaling factor for reaction times (e.g., 1000 for milliseconds).
     reference : str, optional
         Reference to use for EEG data. If None, the existing reference is kept.
-    ignore_rt : bool, default=False
-        Whether to ignore reaction times and parse epochs up to `tmax`.
+    bids_parameters: dict, optional
+        Bids root path ('root'), datatype ('datatype") to analyze.
+        A filter can also be applied to subjects, tasks and sessions
+    preprocessing_fn: callable, optional
+        A user defined function preprocessing the raw data before epoching
+    dtype: np.DTypeLike
+        Precision, use np.float32 or np.int64
 
     Returns
     -------
@@ -144,7 +120,7 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
     if isinstance(pfiles, (str, Path)):  # only one participant
         pfiles = [pfiles]
     if not subj_name:
-        subj_name = ["S" + str(x) for x in np.arange(len(pfiles))]
+        subj_name = ["sub-" + str(x) for x in np.arange(len(pfiles))]
     if isinstance(subj_name, str):
         subj_name = [subj_name]
     subj_idx = 0
@@ -155,27 +131,30 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
                 f"number of eeg files provided {len(pfiles)}"
             )
 
+    if len(bids_parameters.keys())>0:
+        data_format = 'bids'
+
+
     if data_format == 'bids':
         subj_name = pfiles = [
             d for d in os.listdir(bids_parameters['bids_root'])
             if d.startswith("sub-") and os.path.isdir(os.path.join(bids_parameters['bids_root'], d))
         ]
-        # try:
         event_id, resp_id = _bids_extract_trig(
             bids_parameters['bids_root'],
             bids_parameters['task'],
         )
-        # except:
-        #     raise ValueError(f"Wrong BIDS specification {bids_parameters['bids_root']}")
 
     for participant in pfiles:
         print(f"Processing participant {participant}'s {data_format} {pick_channels}")
         if data_format == 'epochs':
-            epochs = _read_mne_epochs(participant,
+            epochs, tmin, tmax = _read_mne_epochs(participant,
                     sfreq,
                     high_pass,
                     low_pass,
                     pick_channels,
+                    tmin,
+                    tmax,
                     verbose)
 
         elif data_format in ['raw', "bids"]:
@@ -191,9 +170,9 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
                             tmax,
                             high_pass,
                             low_pass,
-                            baseline,
                             pick_channels,
-                            bids_parameters)
+                            bids_parameters,
+                            preprocessing_fn)
         else:
             raise ValueError(f"Unknown data type {data_format}, should be 'epochs', 'raw' or "
                              "'bids'")
@@ -201,22 +180,35 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
         if reference is not None:
             epochs = epochs.set_eeg_reference(reference)
 
-        epoch_data.append(_epoch_selection(
-            epochs,
-            metadata,
-            pfiles,
-            participant,
-            subj_idx,
-            rt_col,
-            scale,
-            offset_after_resp,
-            sfreq,
-            lower_limit_rt,
-            upper_limit_rt,
-            reject_threshold,
-            ignore_rt,
-            verbose
-        ))
+        if metadata is None:
+            try:
+                metadata_i = epochs.metadata  # accounts for dropped epochs
+            except AttributeError:
+                warnings.warn(f'No metadata found for {subj_name[subj_idx]}')
+        elif isinstance(metadata, DataFrame):# TODO handle multiple Dataframes
+            metadata_i = metadata.copy()
+        else:
+            raise ValueError(
+                "Metadata should be a pandas data-frame as generated by mne or be contained "
+                "in the passed epoch data"
+            )
+        sfreq = epochs.info["sfreq"] if sfreq is None else sfreq
+        valid_epoch_index = [x for x, y in enumerate(epochs.drop_log) if len(y) == 0]
+
+        if verbose:
+            print(f"End sampling frequency is {sfreq} Hz")
+
+        epoch_data.append(hmp_data_format(
+                epochs.get_data(copy=False).astype(dtype),
+                epochs.info["sfreq"],
+                epochs.tmin,
+                epochs.tmax,
+                None,
+                epochs=[int(x) for x in valid_epoch_index],
+                channel=epochs.ch_names,
+                metadata=metadata_i,
+            )
+        )
 
         subj_idx += 1
 
@@ -232,10 +224,10 @@ def read_mne_data(  # noqa: PLR0913  # This should probably be refactored instea
     epoch_data = epoch_data.assign_attrs(
         lowpass=epochs.info["lowpass"],
         highpass=epochs.info["highpass"],
-        lower_limit_rt=lower_limit_rt,
-        upper_limit_rt=upper_limit_rt,
-        reject_threshold=reject_threshold,
+        reference=reference,
         n_trials=n_trials,
+        tmin=tmin,
+        tmax=tmax,
     )
     return epoch_data
 
@@ -263,7 +255,9 @@ def _bids_extract_trig(bids_root, task):
 def _bids_extract_events(raw, verbose):
     # Extract events from annotations
     events, event_id = mne.events_from_annotations(raw, verbose=verbose)
-
+    # The two next lines avoid confusion for triggers < 1000
+    event_id = {k:v*1000 for k,v in event_id.items()}
+    events[:,2] *= 1000
     # Replace event codes in events array with the integer at the end of each key in *_id
     for key in event_id:
         try:
@@ -280,6 +274,8 @@ def _read_mne_epochs(
     high_pass,
     low_pass,
     pick_channels,
+    tmin,
+    tmax,
     verbose
 ):
 
@@ -288,17 +284,33 @@ def _read_mne_epochs(
     else:
         raise ValueError("Incorrect file format")
 
+    # Filtering
     if high_pass is not None or low_pass is not None:
         epochs.filter(high_pass, low_pass, fir_design="firwin", verbose=verbose)
 
+    # Resampling
     if sfreq is None:
         sfreq = epochs.info["sfreq"]
     elif sfreq < epochs.info["sfreq"]:
         if verbose:
             print(f"Resampling data at {sfreq}")
         epochs = epochs.resample(sfreq)
+
+    # Cropping
+    if tmin > epochs.tmin:
+        epochs.crop(tmin=tmin)
+        if verbose:
+            print(f"Cropping epochs to {tmin}s before centering events")
+    else:
+        tmin = epochs.tmin
+    if tmax < epochs.tmax:
+        epochs.crop(tmax=tmax)
+        if verbose:
+            print(f"Cropping epochs to {tmax}s after centering events")
+    else:
+        tmax = epochs.tmax
     epochs = epochs.pick(pick_channels)
-    return epochs
+    return epochs, tmin, tmax
 
 
 def read_raw_and_epoch(  # noqa # Should probably be refactored.
@@ -314,9 +326,9 @@ def read_raw_and_epoch(  # noqa # Should probably be refactored.
     tmax,
     high_pass,
     low_pass,
-    baseline,
     pick_channels,
-    bids_parameters
+    bids_parameters,
+    preprocessing_fn
 ):
     if Path(participant).suffix == ".fif":
         data = mne.io.read_raw_fif(participant, preload=True, verbose=verbose)
@@ -379,7 +391,8 @@ def read_raw_and_epoch(  # noqa # Should probably be refactored.
         print(f"Downsampling to {sfreq} Hz")
         decim = np.round(data.info["sfreq"] / sfreq).astype(int)
         obtained_sfreq = data.info["sfreq"] / decim
-        low_pass = obtained_sfreq / 3.1
+        if low_pass is None:
+            low_pass = obtained_sfreq / 3.1
     else:
         decim = 1
         if sfreq > data.info["sfreq"] + 1:
@@ -395,6 +408,9 @@ def read_raw_and_epoch(  # noqa # Should probably be refactored.
     if verbose:
         print(f"Creating epochs based on following event ID :{np.unique(events[:, 2])}")
 
+    if preprocessing_fn is not None:
+        data = preprocessing_fn(data)
+
     if metadata is None:
         metadata_i, meta_events, event_id = mne.epochs.make_metadata(
             events=events,
@@ -405,7 +421,10 @@ def read_raw_and_epoch(  # noqa # Should probably be refactored.
             row_events=stim,
             keep_first=["response"],
         )
-        metadata_i = metadata_i[["event_name", "response"]]  # only keep event_names and rts
+        cols = ["event_name", "response"]
+        if 'first_response' in metadata_i.columns:
+            cols.append('first_response')
+        metadata_i = metadata_i[cols]  # only keep event_names and rts
     else:
         metadata_i = metadata[subj_idx]
     epochs = mne.Epochs(
@@ -415,7 +434,7 @@ def read_raw_and_epoch(  # noqa # Should probably be refactored.
         tmin,
         tmax,
         proj=False,
-        baseline=baseline,
+        baseline=(None, 0),
         preload=True,
         picks=pick_channels,
         decim=decim,
@@ -426,203 +445,16 @@ def read_raw_and_epoch(  # noqa # Should probably be refactored.
         metadata=metadata_i,
         reject_by_annotation=True,
     )
-    epochs.metadata.rename({"response": "rt"}, axis=1, inplace=True)
+    epochs.metadata.rename({"response": "rt", "first_response":"response"}, axis=1, inplace=True)
     return epochs
-
-def _epoch_selection(epochs,  # noqa: PLR0912, PLR0913
-                    metadata,
-                    pfiles,
-                    participant,
-                    subj,
-                    rt_col,
-                    scale,
-                    offset_after_resp,
-                    sfreq,
-                    lower_limit_rt,
-                    upper_limit_rt,
-                    reject_threshold,
-                    ignore_rt,
-                    verbose
-    ):
-    if metadata is None:
-        try:
-            metadata_i = epochs.metadata  # accounts for dropped epochs
-        except AttributeError:
-            raise AttributeError("Missing metadata in the epoched data")
-    elif isinstance(metadata, DataFrame):
-        if len(pfiles) > 1:
-            metadata_i = metadata[
-                subj
-            ].copy()  # TODO, better account for participant's wide provided metadata
-        else:
-            metadata_i = metadata.copy()
-    else:
-        raise ValueError(
-            "Metadata should be a pandas data-frame as generated by mne or be contained "
-            "in the passed epoch data"
-        )
-    sfreq = epochs.info["sfreq"] if sfreq is None else sfreq
-    valid_epoch_index = [x for x, y in enumerate(epochs.drop_log) if len(y) == 0]
-    data_epoch = epochs.get_data(copy=False)  # preserves index
-    try:
-        rts = metadata_i[rt_col]
-    except KeyError:
-        raise KeyError(
-                f"Expected column named {rt_col} in the provided metadata file, alternative "
-                f"names can be passed through the rt_col parameter"
-        )
-    if isinstance(metadata_i, DataFrame):
-        if len(metadata_i) > len(data_epoch):  # assumes metadata contains rejected epochs
-            metadata_i = metadata_i.loc[valid_epoch_index]
-            rts = metadata_i[rt_col]
-        rts = rts / scale
-    elif rts is None:
-        raise ValueError("Expected either a metadata Dataframe or an array of Reaction Times")
-    rts_arr = np.array(rts)
-    triggers = metadata_i.iloc[:, 0].values  # assumes first col is trigger
-    offset_after_resp_samples = np.rint(offset_after_resp * sfreq).astype(int)
-
-
-    cropped_data_epoch, epochs_idx = _cut_at_rt(
-        data_epoch,
-        rts_arr,
-        triggers,
-        offset_after_resp_samples,
-        sfreq,
-        lower_limit_rt,
-        upper_limit_rt,
-        epochs,
-        reject_threshold,
-        valid_epoch_index,
-        ignore_rt,
-        verbose
-    )
-
-    print(f"{len(cropped_data_epoch)} trials were retained for participant {participant}")
-    if verbose:
-        print(f"End sampling frequency is {sfreq} Hz")
-
-    epoch_data = hmp_data_format(
-            cropped_data_epoch,
-            epochs.info["sfreq"],
-            None,
-            offset_after_resp_samples,
-            epochs=[int(x) for x in epochs_idx],
-            channel=epochs.ch_names,
-            metadata=metadata_i,
-        )
-    return epoch_data
-
-def _cut_at_rt(data_epoch, rts, triggers, offset_after_resp_samples, sfreq, lower_limit_rt,  # noqa: PLR0913, PLR0912
-               upper_limit_rt, epochs, reject_threshold, valid_epoch_index, ignore_rt, verbose):  # noqa: PLR0913, PLR0912
-    """
-    Crop each epoch to the reaction time (RT) window and apply optional rejection criteria.
-
-    For each valid epoch, this function trims the epoch data from stimulus onset up to the reaction
-    time, optionally including a fixed offset after the response.
-    Epochs with RTs outside the specified lower and upper limits are rejected,
-    and additional rejection can be applied based on signal amplitude
-    thresholds between stimulus onset and response.
-
-    Parameters
-    ----------
-    data_epoch : np.ndarray
-        Array of epoched EEG/MEG data, shaped (n_epochs, n_channels, n_samples).
-    rts : array-like
-        Reaction times for each epoch, in seconds.
-    triggers : array-like
-        Event trigger information for each epoch.
-    offset_after_resp_samples : int
-        Number of samples to include after the response event.
-    sfreq : float
-        Sampling frequency of the data, in Hz.
-    lower_limit_rt : float
-        Minimum valid reaction time. Epochs with shorter RTs are rejected.
-    upper_limit_rt : float
-        Maximum valid reaction time. Epochs with longer RTs are rejected.
-    epochs : mne.Epochs
-        MNE Epochs object corresponding to the data.
-    reject_threshold : float or None
-        Maximum allowed signal amplitude for an epoch; epochs exceeding this are rejected.
-    valid_epoch_index : array-like
-        Indices of epochs that passed previous selection criteria.
-    ignore_rt: bool
-        If True, do not use RT to trim the data
-    verbose : bool
-        If True, print detailed processing steps.
-
-    Returns
-    -------
-    epoch_data : np.ndarray
-        Array of cropped epoch data that passed all criteria.
-    valid_epoch_index : list
-        Indices of epochs that were retained after all rejection steps.
-    """
-    if upper_limit_rt == np.inf:
-        upper_limit_rt = epochs.tmax - (offset_after_resp_samples + 1) / sfreq
-
-    if upper_limit_rt < 0 or lower_limit_rt < 0:
-        raise ValueError("Limit to RTs cannot be negative")
-    if ignore_rt:
-        rts_arr = np.repeat(upper_limit_rt, len(rts))
-    else:
-        rts_arr = np.array(rts)
-    if verbose:
-        print(
-            f"Applying reaction time trim to keep RTs between {lower_limit_rt} and "
-            f"{upper_limit_rt} seconds"
-        )
-    rts_arr[rts_arr > upper_limit_rt] = 0  # removes RT above x sec
-    rts_arr[rts_arr < lower_limit_rt] = 0  # removes RT below x sec, determines max events
-    rts_arr[np.isnan(rts_arr)] = 0  # too long trial
-    rts_arr = np.rint(rts_arr * sfreq).astype(int)
-    if verbose:
-        print(f"{len(rts_arr[rts_arr > 0])} RTs kept of {len(rts_arr)} clean epochs")
-    cropped_data_epoch = np.empty(
-        [
-            len(rts_arr[rts_arr > 0]),
-            len(epochs.ch_names),
-            max(rts_arr) + offset_after_resp_samples,
-        ]
-    )
-    cropped_data_epoch[:] = np.nan
-    cropped_trigger = []
-    epochs_idx = []
-    j = 0
-    if reject_threshold is None:
-        reject_threshold = np.inf
-    rej = 0
-    time0 = epochs.time_as_index(0)[0]
-    for i in range(len(data_epoch)):
-        if rts_arr[i] > 0:
-            # Crops the epochs to time 0 (stim onset) up to RT
-            if (
-                np.abs(data_epoch[i, :, time0 : time0 + rts_arr[i] + offset_after_resp_samples])
-                < reject_threshold
-            ).all():
-                cropped_data_epoch[j, :, : rts_arr[i] + offset_after_resp_samples] = data_epoch[
-                    i, :, time0 : time0 + rts_arr[i] + offset_after_resp_samples
-                ]
-                epochs_idx.append(valid_epoch_index[i])  # Keeps trial number
-                cropped_trigger.append(triggers[i])
-                j += 1
-            else:
-                rej += 1
-                rts_arr[i] = 0
-    while np.isnan(cropped_data_epoch[-1]).all():  # Remove excluded epochs based on rejection
-        cropped_data_epoch = cropped_data_epoch[:-1]
-
-    if ~np.isinf(reject_threshold):
-        print(f"{rej} trials rejected based on threshold of {reject_threshold}")
-
-    return cropped_data_epoch, epochs_idx
 
 
 def hmp_data_format(
     data: np.ndarray,
     sfreq: float,
+    tmin: float,
+    tmax: float,
     events: np.ndarray | None = None,
-    offset: float = 0,
     participants: list | None = None,
     epochs: list | None = None,
     channel: list | None = None,
@@ -642,10 +474,8 @@ def hmp_data_format(
         Sampling frequency of the data.
     events : np.ndarray, optional
         Description for each epoch and participant that need to be stored (e.g. condition)
-    offset : float, default=0
-        Offset in seconds to apply to the data.
     participants : list, optional
-        List of participant indices.
+        List of participant indices if multiple ones are processed
     epochs : list, optional
         List of epoch indices.
     channel : list, optional
@@ -669,13 +499,15 @@ def hmp_data_format(
         channel = np.arange(n_channels)
     if epochs is None:
         epochs = np.arange(n_epochs)
-    if n_subj < 2:
+    if n_subj == 1:
         data = xr.Dataset(
             {
                 "data": (["epoch", "channel", "sample"], data),
             },
-            coords={"epoch": epochs, "channel": channel, "sample": np.arange(n_samples)},
-            attrs={"sfreq": sfreq, "offset": offset},
+            coords={"epoch": epochs, "channel": channel,
+                    "sample": np.linspace(np.rint(tmin*sfreq),
+                        np.rint(tmax*sfreq), n_samples, dtype=int)},
+            attrs={"sfreq": sfreq},
         )
     else:
         data = xr.Dataset(
@@ -686,9 +518,10 @@ def hmp_data_format(
                 "participant": participants,
                 "epoch": epochs,
                 "channel": channel,
-                "sample": np.arange(n_samples),
+                "sample": np.linspace(int(np.rint(tmin*sfreq)),
+                                      int(np.rint(tmax*sfreq)), n_samples),
             },
-            attrs={"sfreq": sfreq, "offset": offset},
+            attrs={"sfreq": sfreq},
         )
     if metadata is not None:
         metadata = metadata.loc[epochs]

@@ -79,7 +79,14 @@ class EventModel(BaseModel):
         self.grouping_dict = {}
         self.time_map = np.zeros((1, self.n_events + 1))
         self.channel_map = np.zeros((1, self.n_events))
+        self.n_cor = 30
         super().__init__(*args, **kwargs)
+
+        if n_events > 1 and self.pattern.location < self.pattern.width:
+             warn("For n_event > 1, pattern.location must be greater or equal than pattern.width"
+             f" but received pattern.location ({self.pattern.location}) is smaller than"
+             f" but received pattern.width ({self.pattern.width})."
+         )
 
     def fit(  # noqa: PLR0912, PLR0915
         self,
@@ -140,7 +147,7 @@ class EventModel(BaseModel):
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
         infos_to_store["sfreq"] = self.sfreq
-        infos_to_store["event_width_samples"] = self.event_width_samples
+        infos_to_store["event_width"] = self.event_width
         infos_to_store["tolerance"] = self.tolerance
 
         self.n_dims = trial_data.n_dims
@@ -253,6 +260,7 @@ class EventModel(BaseModel):
                 itertools.repeat(time_map),
                 itertools.repeat(groups),
                 itertools.repeat(1),
+                itertools.repeat(self.n_cor),
             )
             with mp.Pool(processes=cpus) as pool:
                 if self.starting_points > 1:
@@ -278,6 +286,7 @@ class EventModel(BaseModel):
                         time_map,
                         groups,
                         1,
+                        self.n_cor,
                     )
                 )
             resetwarnings()
@@ -289,18 +298,18 @@ class EventModel(BaseModel):
             max_lkhs = 0
 
         if np.isneginf(lkhs.sum()):
-            raise ValueError("Fit failed, inspect provided starting points")
-        else:
-            self._fitted = True
-            self.lkhs = lkhs[max_lkhs]
-            self.channel_pars =  np.array(estimates[max_lkhs][1])
-            self.time_pars = np.array(estimates[max_lkhs][2])
-            self.traces = np.array(estimates[max_lkhs][3])
-            self.time_pars_dev = np.array(estimates[max_lkhs][4])
-            self.grouping_dict = grouping_dict
-            self.group = groups
-            self.channel_map = channel_map
-            self.time_map = time_map
+            warn("Fit failed, inspect provided starting points")
+
+        self._fitted = True
+        self.lkhs = lkhs[max_lkhs]
+        self.channel_pars =  np.array(estimates[max_lkhs][1])
+        self.time_pars = np.array(estimates[max_lkhs][2])
+        self.traces = np.array(estimates[max_lkhs][3])
+        self.time_pars_dev = np.array(estimates[max_lkhs][4])
+        self.grouping_dict = grouping_dict
+        self.group = groups
+        self.channel_map = channel_map
+        self.time_map = time_map
 
     def transform(self, trial_data: TrialData) -> tuple[np.ndarray, xr.DataArray]:
         """
@@ -451,6 +460,7 @@ class EventModel(BaseModel):
         time_map: np.ndarray = None,
         groups: np.ndarray = None,
         cpus: int = 1,
+        n_cor: int = 30,
     ) -> tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Fit using expectation maximization.
@@ -484,6 +494,11 @@ class EventModel(BaseModel):
             Array indicating the groups for grouping modeling. Default is None.
         cpus : int, optional
             Number of cores to use in multiprocessing functions. Default is 1.
+        n_cor: int, optional
+            In case the log-likelihood becomes invalid after completing the M step, the parameter
+            update vector will be halved for a maximum of ``n_cor`` times to try and recover
+            a valid update before giving up and falling back to the parameter estimates from the
+            previous iteration.
 
         Returns
         -------
@@ -524,6 +539,10 @@ class EventModel(BaseModel):
             # As long as new run gives better likelihood, go on
             lkh_prev = lkh.copy()
 
+            # Storage for step-length control
+            new_channel_pars = channel_pars.copy()
+            new_time_pars = time_pars.copy()
+
             for cur_group in data_groups:  # get params/c_pars
                 channel_map_group = np.where(channel_map[cur_group, :] >= 0)[0]
                 time_map_group = np.where(time_map[cur_group, :] >= 0)[0]
@@ -536,13 +555,13 @@ class EventModel(BaseModel):
                                           channel_map_group],
                         subset_epochs=epochs_group,
                 )
-                channel_pars[cur_group, channel_map_group, :] = c_par
-                time_pars[cur_group, time_map_group, :] = t_par
+                new_channel_pars[cur_group, channel_map_group, :] = c_par
+                new_time_pars[cur_group, time_map_group, :] = t_par
 
-                channel_pars[cur_group, fixed_channel_pars, :] = initial_channel_pars[
+                new_channel_pars[cur_group, fixed_channel_pars, :] = initial_channel_pars[
                     cur_group, fixed_channel_pars, :
                 ].copy()
-                time_pars[cur_group, fixed_time_pars, :] = initial_time_pars[
+                new_time_pars[cur_group, fixed_time_pars, :] = initial_time_pars[
                     cur_group, fixed_time_pars, :
                 ].copy()
 
@@ -550,22 +569,56 @@ class EventModel(BaseModel):
             for m in range(self.n_events):
                 for m_set in np.unique(channel_map[:, m]):
                     if m_set >= 0:
-                        channel_pars[channel_map[:, m] == m_set, m, :] = np.mean(
-                            channel_pars[channel_map[:, m] == m_set, m, :], axis=0
+                        new_channel_pars[channel_map[:, m] == m_set, m, :] = np.mean(
+                            new_channel_pars[channel_map[:, m] == m_set, m, :], axis=0
                         )
 
             # set param to mean if requested in map
             for p in range(self.n_events + 1):
                 for p_set in np.unique(time_map[:, p]):
                     if p_set >= 0:
-                        time_pars[time_map[:, p] == p_set, p, :] = np.mean(
-                            time_pars[time_map[:, p] == p_set, p, :], axis=0
+                        new_time_pars[time_map[:, p] == p_set, p, :] = np.mean(
+                            new_time_pars[time_map[:, p] == p_set, p, :], axis=0
                         )
 
+            # Step length control to ensure parameter updates result in valid llk
+            for icor in range(n_cor + 1):
 
-            lkh, eventprobs = self._distribute_groups(
-                trial_data, channel_pars, time_pars, channel_map, time_map, groups, cpus=cpus
-            )
+                if icor == n_cor:  # just reset
+                    warn(
+                        (
+                            "M step failed, after step halvings. "
+                            "Falling back to previous parameter estimates."
+                        ),
+                        RuntimeWarning,
+                    )
+
+                    new_channel_pars = channel_pars
+                    new_time_pars = time_pars
+
+                # Compute llk under new parameters
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    lkh, eventprobs = self._distribute_groups(
+                        trial_data, new_channel_pars, new_time_pars,
+                        channel_map, time_map, groups, cpus=cpus
+                    )
+
+                # Stop if no update
+                if np.isclose((new_time_pars - time_pars).sum(), 0):
+                    break
+
+                # Half step in case the llk is ill-defined
+                if np.isneginf(lkh.sum()):
+                    new_channel_pars = (new_channel_pars + channel_pars)/2
+                    new_time_pars = (new_time_pars + time_pars)/2
+                else:
+                    # Accept step
+                    break
+
+            # Accept new parameters
+            time_pars = new_time_pars
+            channel_pars = new_channel_pars
+
             traces.append(lkh)
             time_pars_dev.append(time_pars.copy())
             i += 1
@@ -654,9 +707,7 @@ class EventModel(BaseModel):
             A 2D array where each row contains the shape and scale parameters for a stage.
         """
         rnd_durations = np.zeros(n_events + 1)
-        assert self.event_width_samples*(n_events + 1) < self.max_scale, \
-            f"Max_scale too short, need to be more than {self.event_width_samples*(n_events+1)}"
-        while any(rnd_durations < self.event_width_samples):  # at least event_width
+        while any(rnd_durations < self.location):  # at least equal to the location
             rnd_events = np.random.default_rng().integers(
                 low=0, high=self.max_scale, size=n_events
             )  # n_events between 0 and mean_d
@@ -773,7 +824,7 @@ class EventModel(BaseModel):
         for stage in range(n_stages):
             pmf[:, stage] = np.concatenate(
                 (
-                    np.repeat(1e-15, locations[stage]),
+                    np.repeat(0, locations[stage]),
                     self.distribution_pdf(time_pars[stage, 0], time_pars[stage, 1], max_duration)[
                         locations[stage] :
                     ],
@@ -816,6 +867,7 @@ class EventModel(BaseModel):
             np.log(eventprobs[:, :, 0].sum(axis=0))
         )  # sum over max_samples to avoid 0s in log
         eventprobs = eventprobs / eventprobs.sum(axis=0)
+        eventprobs[np.isnan(eventprobs)] = 0
         eventprobs = eventprobs.transpose((1,0,2))
         return [likelihood, eventprobs]
 
@@ -922,12 +974,17 @@ class EventModel(BaseModel):
             xreventprobs = xreventprobs.assign_coords(trial_x_part)
             xreventprobs = xreventprobs.assign_coords(group=("trial", groups[groups == cur_group],))
             all_xreventprobs.append(xreventprobs)
-        all_xreventprobs = xr.concat(all_xreventprobs, dim="trial")
+        all_xreventprobs = xr.concat(all_xreventprobs, dim="trial", join='outer')
         all_xreventprobs.attrs['sfreq'] = self.sfreq
-        all_xreventprobs.attrs['event_width_samples'] = self.event_width_samples
+        all_xreventprobs.attrs['event_width'] = self.event_width
         return [np.array(likelihood), all_xreventprobs]
 
-    def distribution_pdf(self, shape: float, scale: float, max_duration: int) -> np.ndarray:
+    def distribution_pdf(
+        self,
+        shape: float,
+        scale: float,
+        max_duration: int
+    ) -> np.ndarray:
         """
         Return a discretized probability density function (PDF) for a provided scipy distribution.
 
@@ -949,7 +1006,9 @@ class EventModel(BaseModel):
             A 1D array representing the probability mass function for the distribution
             with the given shape and scale parameters, normalized to sum to 1.
         """
+        shift = self.distribution.shift
         p = self.distribution.pdf(np.arange(max_duration), shape, scale=scale)
+        p[:shift] = 0 # PR-270
         p = p / np.sum(p)
         p[np.isnan(p)] = 0  # remove potential nans
         return p

@@ -4,36 +4,29 @@ from warnings import warn
 
 import numpy as np
 import xarray as xr
+from mne import EpochsArray, Info, pick_info, pick_types
+from mne.io.constants import FIFF
+from mne.preprocessing import compute_current_source_density
 from pandas import MultiIndex
 
-
-def stack_data(data):
-    """Stack the data.
-
-    Going from format [participant * epochs * sample * channel] to
-    [sample * channel] with sample indexes starts and ends to delimitate the epochs.
+from hmp.transformers.custom import ProjCustom
+from hmp.transformers.identity import ProjIdentity
+from hmp.transformers.pca import ProjPCA
 
 
-    Parameters
-    ----------
-    data : xarray
-        unstacked xarray data from transform_data() or anyother source yielding an xarray with
-        dimensions [participant * epochs * sample * channel]
-    subjects_variable : str
-        name of the dimension for subjects ID
-
-    Returns
-    -------
-    data : xarray.Dataset
-        xarray dataset [sample * channel]
-    """
-    if isinstance(data, (xr.DataArray, xr.Dataset)) and "component" not in data.dims:
-        data = data.rename_dims({"channel": "component"})
-    if "participant" not in data.dims:
-        data = data.expand_dims("participant")
-    data = data.stack(all_samples=["participant", "epoch", "sample"]).dropna(dim="all_samples")
+def _check_transformed(transformed):
+    if isinstance(transformed, (ProjPCA, ProjIdentity, ProjCustom)):
+        data = transformed.data
+    elif 'component' in transformed.dims:
+        data = transformed
+    else:
+        raise ValueError("transformed must be an hmp transformed object from a class"
+                             "in hmp.transformers")
     return data
 
+def _check_sf_consistency(epoch_data, estimates):
+    if epoch_data.sfreq != estimates.sfreq:
+        raise ValueError("Inconsistent sampling frequency between epoch data and estimates")
 
 def event_times(  # noqa: PLR0912
     estimates,
@@ -156,7 +149,7 @@ def event_times(  # noqa: PLR0912
 
 def event_channels(
     epoch_data,
-    estimated,
+    estimates,
     mean=True,
     peak=True,
     estimate_method="max",
@@ -168,7 +161,7 @@ def event_channels(
     ----------
         epoch_data: xr.Dataset
             Epoched data
-        estimated: xr.Dataset
+        estimates: xr.Dataset
             estimated model parameters and event probabilities
         mean: bool
             if True mean will be computed instead of single-trial channel activities
@@ -178,9 +171,8 @@ def event_channels(
         estimate_method : string
             'max' or 'mean', either take the max probability of each event on each trial, or the
             weighted average.
-        template: int
-            Length of the pattern in sample (e.g. 5 for a pattern of 50 ms with a 100Hz sampling
-            frequency)
+        template: np.array
+            Expected shape of the event, typically the template attribute from hmp.patterns
 
     Returns
     -------
@@ -188,6 +180,7 @@ def event_channels(
             array containing the values of each electrode at the most likely transition time
             contains nans for missing events
     """
+    _check_sf_consistency(epoch_data, estimates)
     if estimate_method is None:
         estimate_method = "max"
     epoch_data = (
@@ -197,20 +190,19 @@ def event_channels(
     )
 
     common_trial = np.intersect1d(
-        estimated["trial"].values, epoch_data["trial"].values
+        estimates["trial"].values, epoch_data["trial"].values
     )
-    epoch_data = epoch_data.sel(trial=common_trial)
-    estimated = estimated.sel(trial=common_trial)
-
-    n_events = estimated.event.count().values
-    n_trial = estimated.trial.count().values
+    epoch_data = epoch_data.sel(trial=common_trial, sample=estimates.sample)
+    estimates = estimates.sel(trial=common_trial)
+    n_events = estimates.event.count().values
+    n_trial = estimates.trial.count().values
     n_channel = epoch_data.channel.count().values
 
     if not peak:
         normed_template = template / np.sum(template)
 
-    times = event_times(estimated, mean=False, estimate_method=estimate_method,)
-
+    times = event_times(estimates, mean=False, estimate_method=estimate_method,)
+    times = times.sel(trial=common_trial)
     event_values = np.zeros((n_channel, n_trial, n_events))*np.nan
     for ev in range(n_events):
         for tr in range(n_trial):
@@ -220,7 +212,7 @@ def event_channels(
                 if peak:
                     event_values[:, tr, ev] = epoch_data.values[:, samp, tr]
                 else:
-                    vals = epoch_data.values[:, samp : samp + template // 2, tr]
+                    vals = epoch_data.values[:, samp : samp + len(template) // 2, tr]
                     event_values[:, tr, ev] = np.dot(vals, normed_template[: vals.shape[1]])
 
     event_values = xr.DataArray(
@@ -231,8 +223,8 @@ def event_channels(
             "event",
         ],
         coords={
-            "trial": estimated.trial,
-            "event": estimated.event,
+            "trial": estimates.trial,
+            "event": estimates.event,
             "channel": epoch_data.channel,
         },
     )
@@ -264,7 +256,7 @@ def centered_activity(
     data : xr.Dataset
         HMP data (untransformed but with trial and participant stacked)
     times : xr.DataArray
-        Onset times as computed using onset_times()
+        Onset times in sample as computed using event_times()
     channel : list
         channel to pick for the parsing of the signal, must be a list even if only one
     event : int
@@ -288,13 +280,6 @@ def centered_activity(
         Xarray dataset with electrode value (data) and trial event time (time) and with
         trial * sample dimension
     """
-    if event == 0:  # no sample before stim onset
-        baseline = 0
-    elif event == 1:  # no event at stim onset
-        event_width = 0
-    if cut_before_event == 0:  # avoids searching before stim onset
-        cut_before_event = event
-
     if n_samples is None:
         if cut_after_event is None:
             raise ValueError(
@@ -307,13 +292,15 @@ def centered_activity(
 
     n_samples = np.rint(n_samples)
     baseline = np.rint(baseline)
-
     if 'epoch' in data.dims:
         data = (
             data.stack({'trial':['participant','epoch']})
             .data
-            .drop_duplicates("trial")
         )
+    mask = ~data.isel(sample=0, channel=0).squeeze().isnull()
+    data = data.sel(trial=data.trial.values[mask])
+
+
     common_trial = np.intersect1d(
         times["trial"].values, data["trial"].values
     )
@@ -353,7 +340,7 @@ def centered_activity(
                 ]
             )
         else:
-            lower_lim = 0
+            lower_lim = baseline
         if cut_after_event > 0:
             upper_lim = np.max(
                 [
@@ -376,10 +363,13 @@ def centered_activity(
         end_idx = int(times.sel(event=event, trial=trial) + upper_lim)
         trial_elec = trial_dat.sel(channel=channel, sample=slice(start_idx, end_idx))\
             .squeeze("trial")
-        # If center, adjust to always center on the same sample if lower_lim < baseline
-        baseline_adjusted_start = int(abs(baseline - lower_lim))
-        baseline_adjusted_end = baseline_adjusted_start + trial_elec.shape[-1]
-        trial_time_arr = slice(baseline_adjusted_start, baseline_adjusted_end)
+        # If requested bsl or n_samples exceed epoch window
+        offshoot_bsl = start_idx - trial_elec.sample[0].values
+        offshoot_epo = end_idx - trial_elec.sample[-1].values
+        # If center, adjust to always center on the same sample if lower_lim > baseline
+        start_idx_data = int(lower_lim - baseline - offshoot_bsl)
+        end_idx_data = int(upper_lim - baseline + 1 - offshoot_epo)
+        trial_time_arr = slice(start_idx_data, end_idx_data)
 
         centered_data[i, :, trial_time_arr] = trial_elec
         trial_times[i] = times.sel(event=event, trial=trial)
@@ -400,19 +390,19 @@ def centered_activity(
     return centered_data.assign_coords(trial_x_part)
 
 
-def condition_selection(preprocessed_data, condition_string, variable="event", method="equal"):
-    """Select a subset from preprocessed_data.
+def condition_selection(transformed, condition_string, variable="event", method="equal"):
+    """Select a subset from transformed_data.
 
     The function selects epochs for which 'condition_string' is in 'variable' based on 'method'.
 
     Parameters
     ----------
-    preprocessed_data : xr.Dataset
-        transformed EEG data for hmp, from utils.transform_data
+    transformed : xr.Dataset
+        transformed EEG data for hmp from the hmp.preprocessing classes
     condition_string : str | num
         condition indicator for selection
     variable : str
-        variable present in preprocessed_data that is used for condition selection
+        variable present in transformed.data that is used for condition selection
     method : str
         'equal' selects equal trial, 'contains' selects trial in which conditions_string
         appears in variable
@@ -420,20 +410,17 @@ def condition_selection(preprocessed_data, condition_string, variable="event", m
     Returns
     -------
     data : xr.Dataset
-        Subset of preprocessed_data.
+        Subset of transformed_data.
     """
-    unstacked = preprocessed_data.unstack()
-    unstacked[variable] = unstacked[variable].fillna("")
+    data = _check_transformed(transformed).unstack()
+    data[variable] = data[variable].fillna("")
     if method == "equal":
-        unstacked = unstacked.where(unstacked[variable] == condition_string, drop=True)
-        stacked = stack_data(unstacked)
+        data = data.where(data[variable] == condition_string, drop=True)
     elif method == "contains":
-        unstacked = unstacked.where(unstacked[variable].str.contains(condition_string), drop=True)
-        stacked = stack_data(unstacked)
+        data = data.where(data[variable].str.contains(condition_string), drop=True)
     else:
         warn("unknown method, returning original data")
-        stacked = preprocessed_data
-    return stacked
+    return data.stack(trial=['participant','epoch'])
 
 
 def condition_selection_epoch(epoch_data, condition_string, variable="event", method="equal"):
@@ -444,11 +431,11 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
     Parameters
     ----------
     epoch_data : xr.Dataset
-        transformed EEG data for hmp, e.g. from utils.read_mne_data()
+        Epoched EEG data for hmp
     condition_string : str | num
         condition indicator for selection
     variable : str
-        variable present in preprocessed_data that is used for condition selection
+        variable present in transformed_data that is used for condition selection
     method : str
         'equal' selects equal trial, 'contains' selects trial in which conditions_string
         appears in variable
@@ -456,11 +443,16 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
     Returns
     -------
     data : xr.Dataset
-        Subset of preprocessed_data.
+        Subset of transformed_data.
     """
     if len(epoch_data.dims) == 4:
-        stacked_epoch_data = epoch_data.stack(trial=("participant", "epoch")).dropna(
-            "trial", how="all"
+        stacked_epoch_data = epoch_data.stack(trial=("participant", "epoch"))
+        mask = ~stacked_epoch_data.data.isel(sample=0, channel=0).squeeze().isnull()
+        stacked_epoch_data = stacked_epoch_data.sel(trial=stacked_epoch_data.trial.values[mask])
+    else:
+        raise ValueError(
+            "Unexpected data object. Expected an xarray dataset with dimensions:"
+            "participant, epoch, channel, sample"
         )
 
     if method == "equal":
@@ -474,21 +466,60 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
     return stacked_epoch_data.unstack()
 
 
-def participant_selection(preprocessed_data, participant):
-    """Select a participant from preprocessed_data.
+def participant_selection(transformed, participant):
+    """Select a participant from transformed_data.
 
     Parameters
     ----------
-    preprocessed_data : xr.Dataset
-        transformed EEG data for hmp, from utils.transform_data
+    transformed : xr.Dataset or hmp.transformers
+        transformed EEG data for hmp
     participant : str | num
         Name of the participant
 
     Returns
     -------
     data : xr.Dataset
-        Subset of preprocessed_data.
+        Subset of transformed_data.
     """
-    unstacked = preprocessed_data.unstack().sel(participant=participant)
-    stacked = stack_data(unstacked)
-    return stacked
+    data = _check_transformed(transformed).unstack()
+    data = data.sel(participant=participant, drop=False)
+    if 'participant' not in data.dims:
+        data = data.expand_dims('participant')
+    return data.stack(trial=['participant','epoch'])
+
+def compute_csd(epoch_data: xr.Dataset,
+                info: Info):
+    """Compute laplacian using MNE's function.
+
+    Parameters
+    ----------
+    epoch_data : xr.Dataset
+        Data read through the HMP IO module
+    info : Info
+        Info object from MNE
+
+    Returns
+    -------
+    epoch_data : xr.Dataset
+        Updated dataset with CSD values
+    eeg_info: Info
+        Updated info ubject with correct units given CSD transform
+    """
+    eeg_info = pick_info(info, pick_types(info, meg=False, eeg=True))
+    if eeg_info['chs'][0]['unit'] == FIFF.FIFF_UNIT_V:
+        epoch_data = epoch_data.stack(trial=['participant','epoch']).dropna("trial", how="all")
+        for trial in epoch_data.trial:
+            trial_dat = epoch_data.sel(trial=trial).data
+            # Build fake Epoch mne class and use MNE's dedicated function
+            epoch = EpochsArray(np.array([trial_dat.values]), eeg_info)
+            epoch = compute_current_source_density(epoch)
+            epoch_data['data'].loc[dict(trial=trial)] = epoch.get_data()[0]
+        epoch_data = epoch_data.unstack()
+        # Set EEG channels to the correct CSD unit
+
+        for ch in eeg_info['chs']:
+            ch['unit'] = FIFF.FIFF_UNIT_V_M2
+
+    else:
+        raise ValueError(f"Cannot apply CSD on channels with units {info['chs'][0]['unit']}")
+    return epoch_data, eeg_info

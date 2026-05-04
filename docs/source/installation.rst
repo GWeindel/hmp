@@ -20,7 +20,7 @@ Step 3: Install hmp
 
 .. code-block:: bash
 
-    pip install hmp==1.0.0-b1
+    pip install hmp==1.0.0-b3
 
 For the cutting edge version, you can clone the repository using *git* (if git is already installed):
 

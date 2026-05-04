@@ -7,10 +7,18 @@ Models
 -----------
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 2
 
    hmp.models
 
+
+Transformer module
+------------------------
+
+.. toctree::
+   :maxdepth: 2
+
+   hmp.transformers
 
 Input/output module
 -------------
@@ -33,14 +41,6 @@ Patterns module
 -------------
 
 .. automodule:: hmp.patterns
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-Preprocessing module
-------------------------
-
-.. automodule:: hmp.preprocessing
    :members:
    :show-inheritance:
    :undoc-members:
@@ -79,18 +79,3 @@ Simulations module
    :undoc-members:
 
 
-LOOCV module
-----------------
-
-.. automodule:: hmp.loocv
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-MCCA module
----------------
-
-.. automodule:: hmp.mcca
-   :members:
-   :show-inheritance:
-   :undoc-members:

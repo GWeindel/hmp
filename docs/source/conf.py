@@ -25,7 +25,7 @@ author = "Gabriel Weindel, Maarten Schermer, Raoul Schram, Leendert van Maanen, 
 
 
 # The full version, including alpha/beta/rc tags
-release = '1.0.0-b.1'
+release = '1.0.0-b.3'
 
 # -- General configuration ---------------------------------------------------
 
