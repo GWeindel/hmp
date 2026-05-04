@@ -48,6 +48,10 @@ class EliminativeMethod(BaseModel):
         self.tolerance: float = tolerance
         self.max_iteration: int = max_iteration
         self.submodels: dict[int, EventModel] = {}
+        self.semi_parametric = False
+        self.smooth_spmfs = True
+        self.smooth_spmfs_lam = 200
+        self.spmfs = None
         super().__init__(*args, **kwargs)
 
     def fit(
@@ -84,6 +88,10 @@ class EliminativeMethod(BaseModel):
                 f"Estimating all solutions for maximal number of events ({max_events})"
             )
             base_fit = self.get_event_model(n_events=max_events, starting_points=1)
+            if self.semi_parametric:
+                base_fit.semi_parametric = True
+                base_fit.smooth_spmfs = self.smooth_spmfs
+                base_fit.smooth_spmfs_lam = self.smooth_spmfs_lam
             base_fit.fit(trial_data, verbose=False, cpus=cpus)
         else:
             base_fit = self.base_fit
@@ -93,12 +101,21 @@ class EliminativeMethod(BaseModel):
         for n_events in np.arange(max_events - 1, min_events, -1):
             event_model = self.get_event_model(n_events, starting_points=n_events+1)
 
+            if self.semi_parametric:
+                event_model.semi_parametric = True
+                event_model.smooth_spmfs = self.smooth_spmfs
+                event_model.smooth_spmfs_lam = self.smooth_spmfs_lam
+
             print(f"Estimating all solutions for {n_events} events")
 
             time_pars_prev = self.submodels[n_events+1].xrtime_pars.dropna("stage").values
             channel_pars_prev = self.submodels[n_events+1].xrchannel_pars.dropna("event").values
 
             events_temp, pars_temp = [], []
+
+            init_spmfs = None
+            if self.semi_parametric:
+                init_spmfs = []
 
             for event in np.arange(n_events + 1):  # creating all possible starting points
                 events_temp.append(channel_pars_prev[:, np.arange(n_events + 1) != event,])
@@ -109,6 +126,26 @@ class EliminativeMethod(BaseModel):
                 )  # combine two stages into one
                 temp_pars = np.delete(temp_pars, event + 1, axis=1)
                 pars_temp.append(temp_pars)
+
+                if self.semi_parametric:
+                    n_groups = temp_pars.shape[0]
+                    proposal_spmf = np.zeros((n_groups, # Groups
+                                          temp_pars.shape[1], # Intervals
+                                          np.max(trial_data.durations))) # D
+                    
+                    for cur_group in range(n_groups):
+                        time_group = np.where(event_model.time_map[cur_group, :] >= 0)[0]
+
+                        for idx,interval in enumerate(time_group):
+                            proposal_spmf[cur_group,interval,:] = event_model.distribution_pdf(
+                                temp_pars[cur_group][idx][0],
+                                temp_pars[cur_group][idx][1],
+                                np.max(trial_data.durations))
+                    init_spmfs.append(proposal_spmf)
+
+            if self.semi_parametric:
+                event_model.init_spmfs = np.array(init_spmfs)
+                
             event_model.fit(
                             trial_data,
                             channel_pars=np.array(events_temp),

@@ -11,6 +11,7 @@ from itertools import product
 from warnings import resetwarnings, warn
 
 import numpy as np
+from scipy.interpolate import make_smoothing_spline
 import xarray as xr
 from pandas import MultiIndex
 
@@ -80,6 +81,11 @@ class EventModel(BaseModel):
         self.time_map = np.zeros((1, self.n_events + 1))
         self.channel_map = np.zeros((1, self.n_events))
         self.n_cor = 30
+        self.semi_parametric = False
+        self.spmfs = None
+        self.init_spmfs = None
+        self.smooth_spmfs = True
+        self.smooth_spmfs_lam = 200
         super().__init__(*args, **kwargs)
 
         if n_events > 1 and self.pattern.location < self.pattern.width:
@@ -198,19 +204,23 @@ class EventModel(BaseModel):
             time_pars = (
                 np.zeros((n_groups, self.n_events + 1, 2)) * np.nan
             )  # by default nan for missing stages
+
             for cur_group in range(n_groups):
                 time_group = np.where(time_map[cur_group, :] >= 0)[0]
                 n_stage_group = len(time_group)
                 # by default starting point is to split the average duration in equal bins
+                init_shape = self.distribution.shape
+                init_scale = self.distribution.mean_to_scale(
+                            np.mean(trial_data.durations[groups == cur_group]) / (n_stage_group)
+                        )
                 time_pars[cur_group, time_group, :] = np.tile(
                     [
-                        self.distribution.shape,
-                        self.distribution.mean_to_scale(
-                            np.mean(trial_data.durations[groups == cur_group]) / (n_stage_group)
-                        ),
+                        init_shape,
+                        init_scale,
                     ],
                     (n_stage_group, 1),
                 )
+
             initial_p = time_pars
             time_pars = [initial_p]
             if self.starting_points > 1:
@@ -224,16 +234,66 @@ class EventModel(BaseModel):
                     proposal_p = (
                         np.zeros((n_groups, self.n_events + 1, 2)) * np.nan
                     )  # by default nan for missing stages
+
                     for cur_group in range(n_groups):
                         time_group = np.where(time_map[cur_group, :] >= 0)[0]
                         n_stage_group = len(time_group)
-                        proposal_p[cur_group, time_group, :] = self.gen_random_stages(
-                            n_stage_group - 1)
+                        proposal_time_pars = self.gen_random_stages( n_stage_group - 1)
+                        proposal_p[cur_group, time_group, :] = proposal_time_pars
                         proposal_p[cur_group, fixed_time_pars, :] = initial_p[0, fixed_time_pars]
+
                     time_pars.append(proposal_p)
                 time_pars = np.array(time_pars)
         else:
             infos_to_store["sp_time_pars"] = time_pars
+        
+        spmfs = self.init_spmfs
+        if self.semi_parametric and self.init_spmfs is None:
+
+            # Initialize storage for semi-parametric pmf estimates
+            max_durations = np.max(trial_data.durations)
+            spmfs = (
+                np.zeros((n_groups, self.n_events + 1, max_durations))
+            )
+
+            for cur_group in range(n_groups):
+                time_group = np.where(time_map[cur_group, :] >= 0)[0]
+                n_stage_group = len(time_group)
+                # by default starting point is to split the average duration in equal bins
+                init_shape = self.distribution.shape
+                init_scale = self.distribution.mean_to_scale(
+                            np.mean(trial_data.durations[groups == cur_group]) / (n_stage_group)
+                        )
+
+                if self.semi_parametric and self.init_spmfs is None:
+                    # Initialize spmf
+                    spmfs[cur_group,time_group,:] = np.tile(
+                        self.distribution_pdf(init_shape,init_scale,max_durations),
+                        (n_stage_group, 1),
+                    )
+            
+            initial_spmfs = spmfs
+            spmfs = [initial_spmfs]
+            if self.starting_points > 1:
+
+                for _ in np.arange(self.starting_points):
+                    proposal_spmf = (
+                        np.zeros((n_groups, self.n_events + 1, max_durations))
+                        )
+                    for cur_group in range(n_groups):
+                        time_group = np.where(time_map[cur_group, :] >= 0)[0]
+                        n_stage_group = len(time_group)
+                        proposal_time_pars = self.gen_random_stages( n_stage_group - 1)
+
+                        for idx,interval in enumerate(time_group):
+                            proposal_spmf[cur_group,interval,:] = self.distribution_pdf(
+                                proposal_time_pars[idx][0],
+                                proposal_time_pars[idx][1],
+                                max_durations)
+
+
+                    spmfs.append(proposal_spmf)
+                spmfs = np.array(spmfs)
 
         if channel_pars is None:
             # By defaults c_pars are initiated to 0
@@ -246,11 +306,14 @@ class EventModel(BaseModel):
         else:
             infos_to_store["sp_channel_pars"] = channel_pars
 
+        if self.semi_parametric is False:
+            spmfs = itertools.repeat(None)
         if cpus > 1:
             inputs = zip(
                 itertools.repeat(trial_data),
                 channel_pars,
                 time_pars,
+                spmfs,
                 itertools.repeat(fixed_channel_pars),
                 itertools.repeat(fixed_time_pars),
                 itertools.repeat(self.max_iteration),
@@ -271,12 +334,13 @@ class EventModel(BaseModel):
 
         else:  # avoids problems if called in an already parallel function
             estimates = []
-            for t_pars, c_pars in zip(time_pars, channel_pars):
+            for t_pars, c_pars, spmfs_pars in zip(time_pars, channel_pars, spmfs):
                 estimates.append(
                     self.EM(
                         trial_data,
                         c_pars,
                         t_pars,
+                        spmfs_pars,
                         fixed_channel_pars,
                         fixed_time_pars,
                         self.max_iteration,
@@ -306,6 +370,8 @@ class EventModel(BaseModel):
         self.time_pars = np.array(estimates[max_lkhs][2])
         self.traces = np.array(estimates[max_lkhs][3])
         self.time_pars_dev = np.array(estimates[max_lkhs][4])
+        if self.semi_parametric:
+            self.spmfs = np.array(estimates[max_lkhs][5])
         self.grouping_dict = grouping_dict
         self.group = groups
         self.channel_map = channel_map
@@ -331,7 +397,7 @@ class EventModel(BaseModel):
                 trial_data, self.grouping_dict
             )
         likelihoods, xreventprobs = self._distribute_groups(
-            trial_data, self.channel_pars, self.time_pars,
+            trial_data, self.channel_pars, self.time_pars,self.spmfs,
             self.channel_map, self.time_map, groups, False
         )
         return likelihoods, xreventprobs
@@ -451,6 +517,7 @@ class EventModel(BaseModel):
         trial_data: TrialData,
         initial_channel_pars: np.ndarray,
         initial_time_pars: np.ndarray,
+        initial_spmf: np.ndarray | None,
         fixed_channel_pars: list[int] = None,
         fixed_time_pars: list[int] = None,
         max_iteration: int = 1000,
@@ -519,17 +586,24 @@ class EventModel(BaseModel):
 
         lkh, eventprobs = self._distribute_groups(
             trial_data, initial_channel_pars, initial_time_pars,
-            channel_map, time_map, groups, cpus=cpus
+            initial_spmf,channel_map, time_map, groups, cpus=cpus
         )
         data_groups = np.unique(groups)
         channel_pars = initial_channel_pars.copy()
         time_pars = initial_time_pars.copy()
+        spmf = None
+        new_spmf = None
+        if self.semi_parametric:
+            spmf = initial_spmf.copy()
+            prev_spmf = spmf.copy()
         traces = [lkh]
         time_pars_dev = [time_pars.copy()]
         i = 0
 
         lkh_prev = lkh.copy()
+
         while i < max_iteration:  # Expectation-Maximization algorithm
+
             if i >= min_iteration and (
                 np.isneginf(lkh.sum()) or \
                 tolerance > (lkh.sum() - lkh_prev.sum()) / np.abs(lkh_prev.sum())
@@ -538,10 +612,14 @@ class EventModel(BaseModel):
 
             # As long as new run gives better likelihood, go on
             lkh_prev = lkh.copy()
+            if self.semi_parametric:
+                prev_spmf = spmf.copy()
 
             # Storage for step-length control
             new_channel_pars = channel_pars.copy()
             new_time_pars = time_pars.copy()
+            if self.semi_parametric:
+                new_spmf = spmf.copy()
 
             for cur_group in data_groups:  # get params/c_pars
                 channel_map_group = np.where(channel_map[cur_group, :] >= 0)[0]
@@ -564,6 +642,30 @@ class EventModel(BaseModel):
                 new_time_pars[cur_group, fixed_time_pars, :] = initial_time_pars[
                     cur_group, fixed_time_pars, :
                 ].copy()
+
+                if self.semi_parametric:
+                    max_group_durations = np.max(trial_data.durations[epochs_group])
+                    dpmf = self.estim_d_probs(trial_data.durations[epochs_group],
+                                                  eventprobs.values[:, :max_group_durations,
+                                                                    channel_map_group])
+                    
+                    for idx,interval in enumerate(time_map_group):
+                        new_spmf_pars = dpmf[:,:,idx].sum(axis=0)/dpmf[:,:,idx].sum()
+
+                        if self.smooth_spmfs:
+                            spl = make_smoothing_spline(np.arange(max_group_durations),
+                                                        new_spmf_pars,
+                                                        lam=self.smooth_spmfs_lam)
+                            new_spmf_pars = spl(np.arange(max_group_durations))
+                            new_spmf_pars[new_spmf_pars < 0] = 0
+                            new_spmf_pars /= np.sum(new_spmf_pars)
+
+                        new_spmf[cur_group,
+                                 interval,
+                                 :max_group_durations] = new_spmf_pars
+
+                    #print(new_spmf[0,:,:].sum(axis=1))
+
 
             # set c_pars to mean if requested in map
             for m in range(self.n_events):
@@ -600,17 +702,21 @@ class EventModel(BaseModel):
                 with np.errstate(divide='ignore', invalid='ignore'):
                     lkh, eventprobs = self._distribute_groups(
                         trial_data, new_channel_pars, new_time_pars,
-                        channel_map, time_map, groups, cpus=cpus
+                        new_spmf,channel_map, time_map, groups, cpus=cpus
                     )
 
                 # Stop if no update
-                if np.isclose((new_time_pars - time_pars).sum(), 0):
+                if (np.isclose((new_time_pars - time_pars).sum(), 0) and
+                    self.semi_parametric is False):
                     break
 
                 # Half step in case the llk is ill-defined
                 if np.isneginf(lkh.sum()):
                     new_channel_pars = (new_channel_pars + channel_pars)/2
                     new_time_pars = (new_time_pars + time_pars)/2
+
+                    if self.semi_parametric:
+                        new_spmf = (new_spmf + spmf)/2
                 else:
                     # Accept step
                     break
@@ -618,6 +724,8 @@ class EventModel(BaseModel):
             # Accept new parameters
             time_pars = new_time_pars
             channel_pars = new_channel_pars
+            if self.semi_parametric:
+                spmf = new_spmf
 
             traces.append(lkh)
             time_pars_dev.append(time_pars.copy())
@@ -629,7 +737,7 @@ class EventModel(BaseModel):
                 f"({int(max_iteration)})",
                 RuntimeWarning,
             )
-        return lkh, channel_pars, time_pars, np.array(traces), np.array(time_pars_dev)
+        return lkh, channel_pars, time_pars, np.array(traces), np.array(time_pars_dev), spmf
 
     def get_channel_time_parameters_expectation(
         self,
@@ -746,11 +854,103 @@ class EventModel(BaseModel):
         params[:, 1] = self.distribution.mean_to_scale(params[:, 1])
         return params
 
+    def estim_d_probs(
+        self,
+        durations: list[int],
+        eventprobs: np.ndarray,
+        location: bool = True,
+    ) -> np.ndarray:
+        """This method computes the probability of peak-2-peak times for each of the n_events + 1
+        intervals and each trial given data and current parameters.
+
+        Alternative output of the E-step of the EM algorithm.
+
+        Parameters
+        ----------
+        durations : list[int]
+            List of trial durations (in samples).
+        eventprobs : np.ndarray
+            A 3D array of shape (n_trials, max_duration, n_events) containing the event
+            probabilities.
+        location : bool, optional
+            Whether to add a minimum distance between events to avoid event collapse
+            during the expectation-maximization algorithm. Default is True.
+
+        Returns
+        -------
+        np.ndarray
+            A 3D array of shape (n_trials, max_duration, n_events + 1) holding the probability
+            mass function.
+        """
+        max_duration = np.max(durations)
+        n_events = eventprobs.shape[-1]
+        n_intervals = n_events + 1
+        n_trials = len(durations)
+
+        locations = np.zeros(n_intervals, dtype=int)
+        if location:
+            locations[1:-1] = self.location
+
+        pmf_post = np.zeros([n_trials, max_duration, n_intervals], dtype=np.float64)
+
+        # Compute p(tau_n = d | data, theta) where theta are current pars and tau_n is the
+        # peak-2-peak time for interval n, i.e., the posterior over the latent states given data
+        # and current parameters. We need this do define the Q-function to be maximized during the
+        # M step with respect to scale and shape parameters of peak-2-peak time distributions.
+
+        # Loop over intervals
+        for interval in range(n_intervals):
+
+            for trial, T in zip(range(len(durations)), durations):
+
+                # p(o_{n-1} = t | C, theta) or p(o_{1} = t | C, theta) for this trial
+                # where o_{n-1} is peak time for event n-1
+                ponset = eventprobs[trial, :, (interval-1) if interval > 0 else interval]
+
+                # Deal with censoring. Stage duration cannot exceed RT in current
+                # implementation.
+                # This makes edge cases special:
+                # For first interval probability of interval duration d is just probability
+                # of first event happening at t = d.
+                # For last interval probability of interval duration d is just probability of
+                # last event happening at t = T - d (with T = RT for that trial)
+
+                if interval == 0:
+                    didx = np.arange(T)
+                    pmf_post[trial, didx, interval] = ponset[didx]
+
+                elif interval == n_intervals - 1:
+                    didx = np.arange(T)
+                    pmf_post[trial, didx, interval] = ponset[T - didx - 1]
+
+                else:
+                    # Intermediate case, need joint probability of
+                    # \sum_{t=1}^T p(o_{n-1} = t, o_{n} =  t + d | C, theta) =
+                    #   p(tau_n = d| C, theta)
+                    # p(o_{n-1} = t, o_{n} =  t + d | C, theta) =
+                    #   p(o_{n-1} = t | C, theta) * p(o_{n} =  t + d | C, theta)
+                    ponset2 = eventprobs[trial, :, interval]
+
+                    # Loop over possible peaks of next event
+                    for end_idx in range(T):
+
+                        # Deal with censoring at stimulus onset.
+                        didx = np.arange(end_idx, -1, -1)
+
+                        pmf_post[trial, didx, interval] += (ponset2[end_idx] *
+                                                            ponset[:end_idx+1])
+
+                # Normalize again to ensure numerically valid pmf
+                pmf_post[trial, :, interval] /= np.sum(pmf_post[trial, :, interval])
+
+        return pmf_post
+
     def estim_probs(
         self,
         trial_data: TrialData,
         channel_pars: np.ndarray,
         time_pars: np.ndarray,
+        spmf: np.ndarray | None,
         location: bool = True,
         subset_epochs: list[int] | None = None,
     ) -> tuple[float, np.ndarray]:
@@ -825,6 +1025,7 @@ class EventModel(BaseModel):
             pmf[:, stage] = np.concatenate(
                 (
                     np.repeat(0, locations[stage]),
+                    spmf[stage,locations[stage]:] if self.semi_parametric else
                     self.distribution_pdf(time_pars[stage, 0], time_pars[stage, 1], max_duration)[
                         locations[stage] :
                     ],
@@ -876,6 +1077,7 @@ class EventModel(BaseModel):
         trial_data: TrialData,
         channel_pars: np.ndarray,
         time_pars: np.ndarray,
+        spmf: np.ndarray | None,
         channel_map: np.ndarray,
         time_map: np.ndarray,
         groups: np.ndarray,
@@ -933,6 +1135,8 @@ class EventModel(BaseModel):
                          for cur_group in data_groups],
                         [time_pars[cur_group, time_map[cur_group, :] >= 0, :]
                          for cur_group in data_groups],
+                        [spmf[cur_group, time_map[cur_group, :] >= 0, :] if self.semi_parametric else None
+                         for cur_group in data_groups],
                         itertools.repeat(location),
                         [groups == cur_group for cur_group in data_groups],
                         itertools.repeat(False),
@@ -945,11 +1149,15 @@ class EventModel(BaseModel):
                 ]  # select existing magnitudes
                 # select existing params
                 time_pars_group = time_pars[cur_group, time_map[cur_group, :] >= 0, :]
+                spmf_group = None
+                if self.semi_parametric:
+                    spmf_group = spmf[cur_group, time_map[cur_group, :] >= 0, :]
                 likes_events_group.append(
                     self.estim_probs(
                         trial_data,
                         channel_pars_group,
                         time_pars_group,
+                        spmf_group,
                         location,
                         subset_epochs=(groups == cur_group),
                     )

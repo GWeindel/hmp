@@ -63,6 +63,10 @@ class CumulativeMethod(BaseModel):
         self.fastforward = fastforward
         self.tolerance = tolerance
         self.submodels = []
+        self.semi_parametric = False
+        self.smooth_spmfs = True
+        self.smooth_spmfs_lam = 200
+        self.spmfs = None
         super().__init__(*args, **kwargs)
 
     def fit(
@@ -117,10 +121,29 @@ class CumulativeMethod(BaseModel):
             prev_j = j
             event_model = EventModel(self.pattern, self.distribution, tolerance=self.tolerance,
                                      n_events=n_events)
+            
             # get new parameters
             channel_pars_props, time_pars_props = self._propose_fit_params(
                 n_events, j, channel_pars, time_pars
             )
+
+            if self.semi_parametric:
+                event_model.semi_parametric = True
+                event_model.smooth_spmfs = self.smooth_spmfs
+                event_model.smooth_spmfs_lam = self.smooth_spmfs_lam
+
+                proposal_spmf = np.zeros((1, # Single group always?
+                                          time_pars_props.shape[1], # Intervals
+                                          np.max(trial_data.durations))) # D
+                
+                for interval in range(time_pars_props.shape[1]):
+                    proposal_spmf[0,interval,:] = event_model.distribution_pdf(
+                        time_pars_props[0][interval][0],
+                        time_pars_props[0][interval][1],
+                        np.max(trial_data.durations))
+                
+                
+                event_model.init_spmfs = np.array([proposal_spmf])
 
             # Estimate model based on these propositions
             event_model.fit(
@@ -140,6 +163,9 @@ class CumulativeMethod(BaseModel):
                 # update channel_pars, params,
                 channel_pars[:n_events] = event_model.channel_pars
                 time_pars[: n_events + 1] = event_model.time_pars
+
+                if self.semi_parametric:
+                    self.spmfs = event_model.spmfs
 
                 if verbose:
                     # Just to track advancement
