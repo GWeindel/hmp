@@ -6,7 +6,9 @@ import xarray as xr
 from numpy.typing import DTypeLike
 from scipy.signal import correlate
 
+from typing import Any
 from hmp.utils import _check_transformed
+from hmp.patterns import HalfSine
 
 
 @dataclass
@@ -38,11 +40,10 @@ class TrialData:
     sfreq: float
     offset: int
     cross_corr: np.ndarray
-    pattern: np.ndarray
-
+    event_properties: Any
 
     @classmethod
-    def from_transformer(cls, transformed, pattern, dtype = np.float32):
+    def from_transformer(cls, transformed, event_properties = None, dtype = np.float32):
         """
         Create a TrialData instance from transformed data and a given pattern.
 
@@ -51,7 +52,8 @@ class TrialData:
         transformed : BaseTransfromer or xr.DataArray
             The transformed object or xarray DataArray containing the transformed data.
         pattern : np.ndarray
-            The pattern to use for cross-correlation computation.
+            The pattern to use for cross-correlation computation. Default is
+            half sine with 50 ms width.
         dtype: np.DTypeLike
             Precision, use np.float32 or np.int64
 
@@ -84,14 +86,18 @@ class TrialData:
                 durations = durations.assign_coords({name: coord})
         data = data.unstack().stack(all_samples=['participant','epoch','sample']).\
             dropna(dim="all_samples")
+
+        if event_properties == None:
+            event_properties = HalfSine.create_expected(sfreq=data.sfreq)
+
         # Equation 1 in 2024 paper
-        cross_corr = cross_correlation(data.values.T, starts, ends, pattern,
-                                       dtype)
+        cross_corr = cross_correlation(data.values.T, starts, ends, event_properties.template, dtype)
 
         return cls(durations=durations, starts=starts, ends=ends,
-                    cross_corr=cross_corr, pattern=pattern,
+                    cross_corr=cross_corr, event_properties=event_properties,
                    offset=data.offset, sfreq=data.sfreq)
 
+   
 def cross_correlation(
         data: np.ndarray,
         starts: np.ndarray,

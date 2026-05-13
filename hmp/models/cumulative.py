@@ -104,6 +104,9 @@ class CumulativeMethod(BaseModel):
         -------
         None
         """
+
+        self.event_properties = trial_data.event_properties
+
         end = trial_data.durations.values.mean() if self.end is None else self.end
         self.step = self.location if self.step is None else self.step
         max_n_events = self.compute_max_events(trial_data) if self.max_n_events is None\
@@ -133,7 +136,7 @@ class CumulativeMethod(BaseModel):
         # Iterative fit
         while j < end and n_events <= max_n_events:
             prev_j = j
-            event_model = EventModel(self.pattern, self.distribution, tolerance=self.tolerance,
+            event_model = EventModel(self.distribution, tolerance=self.tolerance,
                                      n_events=n_events)
             # get new parameters
             j, channel_pars_props, time_pars_props = self._propose_fit_params(

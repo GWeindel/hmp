@@ -53,7 +53,10 @@ class EventModel(BaseModel):
     """
 
     def __init__(
-        self, *args, n_events: int, fixed_time_pars: list = None, fixed_channel_pars: list = None,
+        self, *args, 
+        n_events: int, 
+        fixed_time_pars: list = None, 
+        fixed_channel_pars: list = None,
         tolerance: float = 1e-4,
         max_iteration: int = 1e3,
         min_iteration: int = 1,
@@ -82,12 +85,7 @@ class EventModel(BaseModel):
         self.n_cor = 30
         super().__init__(*args, **kwargs)
 
-        if n_events > 1 and self.pattern.location < self.pattern.width:
-             warn("For n_event > 1, pattern.location must be greater or equal than pattern.width"
-             f" but received pattern.location ({self.pattern.location}) is smaller than"
-             f" but received pattern.width ({self.pattern.width})."
-         )
-
+        
     def fit(  # noqa: PLR0912, PLR0915
         self,
         trial_data: TrialData,
@@ -144,6 +142,15 @@ class EventModel(BaseModel):
         -------
         None
         """
+
+        self.event_properties = trial_data.event_properties
+        if self.n_events > 1 and self.event_properties.location < self.event_properties.width:
+             warn("For n_event > 1, event_properties.location must be greater or equal than event_properties.width"
+             f" but received event_properties.location ({self.event_properties.location}) is smaller than"
+             f" but received event_properties.width ({self.event_properties.width})."
+         )
+
+
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
         infos_to_store["sfreq"] = self.sfreq
@@ -215,10 +222,7 @@ class EventModel(BaseModel):
             time_pars = [initial_p]
             if self.starting_points > 1:
                 if self.max_scale is None:
-                    raise ValueError(
-                            "If using multiple starting points, a maximum distance between events"
-                            " needs to be provided using the max_scale argument."
-                        )
+                    self.max_scale = trial_data.durations.mean()
                 infos_to_store["starting_points"] = self.starting_points
                 for _ in np.arange(self.starting_points):
                     proposal_p = (

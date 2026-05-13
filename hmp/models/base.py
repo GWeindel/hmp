@@ -9,7 +9,7 @@ from hmp.trialdata import TrialData
 
 
 class BaseModel(ABC):
-    """The model to analyze the raw data.
+    """The model to analyze the cross-correlated data.
 
     Parameters
     ----------
@@ -33,27 +33,19 @@ class BaseModel(ABC):
 
     def __init__(
         self,
-        pattern: Any,
         distribution: Any = None
     ):
-        self.pattern = pattern
         if distribution is None:
             distribution = Gamma()
         self.distribution = distribution
         self._fitted = False
 
-
-    def compute_max_events(self, trial_data: TrialData):
-        """Compute the maximum possible number of events given location and minimum duration."""
-        return int(np.rint(np.min(trial_data.durations.values) // (self.location))) + 1
-
-
     def __getattribute__(self, attr):
-        if attr in ["sfreq", "steps", "location", "template"]:
-            return getattr(self.pattern, attr)
+        if attr in ["sfreq", "steps", "location", "template", "width"]:
+            return getattr(self.event_properties, attr)
 
         if attr == "event_width":
-            return self.pattern.width
+            return self.event_properties.width
 
         return super().__getattribute__(attr)
 
@@ -61,7 +53,10 @@ class BaseModel(ABC):
         if not self._fitted:
             raise ValueError(f"Cannot {op}, because the model has not been fitted yet.")
 
-
+    def compute_max_events(self, trial_data: TrialData ):
+        """Compute the maximum possible number of events given location and minimum duration."""
+        return int(np.rint(np.min(trial_data.durations.values) // (self.location)))
+    
     @abstractmethod
     def fit(self, trial_data: TrialData):
         ...
