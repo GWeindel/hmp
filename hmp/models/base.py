@@ -24,11 +24,6 @@ class BaseModel(ABC):
     shape: float
         shape of the probability distributions of the by-trial stage onset
         (one shape for all stages)
-    template: ndarray
-        Expected shape for the transition event used in the cross-correlation,
-        should be a vector of values capturing the expected shape over the sampling frequency
-        of the data. If None, the template is created as a half-sine shape with a frequency
-        derived from the event_width argument
     location : int
         Minimum duration between events in samples. Default is the event_width.
     distribution : str
@@ -50,7 +45,7 @@ class BaseModel(ABC):
 
     def compute_max_events(self, trial_data: TrialData):
         """Compute the maximum possible number of events given location and minimum duration."""
-        return int(np.rint(np.min(trial_data.durations.values.mean()) // (self.location))) + 1
+        return int(np.rint(np.min(trial_data.durations.values) // (self.location))) + 1
 
 
     def __getattribute__(self, attr):
