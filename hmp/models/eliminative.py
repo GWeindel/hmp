@@ -72,6 +72,9 @@ class EliminativeMethod(BaseModel):
         -------
         None
         """
+
+        self.event_properties = trial_data.event_properties
+
         if self.max_events is None:
             max_events = self.compute_max_events(trial_data)
         else:
@@ -167,7 +170,7 @@ class EliminativeMethod(BaseModel):
 
     def get_event_model(self, n_events, starting_points):
         return EventModel(
-            self.pattern, self.distribution, n_events=n_events,
+            self.distribution, n_events=n_events,
             starting_points=starting_points,
             tolerance=self.tolerance,
             max_iteration=self.max_iteration)
