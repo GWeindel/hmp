@@ -33,7 +33,8 @@ dependencies=["mne >=1.0.0",
 "netcdf4",
 "ipywidgets",
 "nibabel",
-"mne_bids"]
+"mne_bids",
+"joblib"]
 
 dynamic = ["version"]
 
