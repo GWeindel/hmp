@@ -40,15 +40,6 @@ class BaseModel(ABC):
         self.distribution = distribution
         self._fitted = False
 
-    def __getattribute__(self, attr):
-        if attr in ["sfreq", "steps", "location", "template", "width"]:
-            return getattr(self.event_properties, attr)
-
-        if attr == "event_width":
-            return self.event_properties.width
-
-        return super().__getattribute__(attr)
-
     def _check_fitted(self, op):
         if not self._fitted:
             raise ValueError(f"Cannot {op}, because the model has not been fitted yet.")

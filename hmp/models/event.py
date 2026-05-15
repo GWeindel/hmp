@@ -143,11 +143,14 @@ class EventModel(BaseModel):
         None
         """
 
-        self.event_properties = trial_data.event_properties
-        if self.n_events > 1 and self.event_properties.location < self.event_properties.width:
-             warn("For n_event > 1, event_properties.location must be greater or equal than event_properties.width"
-             f" but received event_properties.location ({self.event_properties.location}) is smaller than"
-             f" but received event_properties.width ({self.event_properties.width})."
+        self.location = trial_data.event_properties.location
+        self.sfreq = trial_data.event_properties.sfreq
+        self.event_width = trial_data.event_properties.width
+
+        if self.n_events > 1 and self.location < self.event_width:
+             warn("For n_event > 1, location must be greater or equal than event_properties.width"
+             f" but received location ({self.location}) is smaller than"
+             f" but received event_properties.width ({self.event_width})."
          )
 
 

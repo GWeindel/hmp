@@ -73,8 +73,10 @@ class EliminativeMethod(BaseModel):
         None
         """
 
-        self.event_properties = trial_data.event_properties
-
+        self.location = trial_data.event_properties.location
+        self.sfreq = trial_data.event_properties.sfreq
+        self.event_width = trial_data.event_properties.width
+     
         if self.max_events is None:
             max_events = self.compute_max_events(trial_data)
         else:
