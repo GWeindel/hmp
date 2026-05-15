@@ -7,6 +7,7 @@ import xarray as xr
 from mne import EpochsArray, Info, pick_info, pick_types
 from mne.io.constants import FIFF
 from mne.preprocessing import compute_current_source_density
+from numpy.random import RandomState
 from pandas import MultiIndex
 
 from hmp.transformers.custom import ProjCustom
@@ -526,7 +527,7 @@ def compute_csd(epoch_data: xr.Dataset,
 
 def _define_random_state(seed=None):
     if seed is not None:
-        random_state = np.random.RandomState(seed)
+        random_state = RandomState(seed)
     else:
-        random_state = np.random.RandomState(np.random.randint(low=0, high=3000))
+        random_state = RandomState(np.random.randint(low=0, high=3000))
     return random_state

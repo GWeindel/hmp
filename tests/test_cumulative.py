@@ -36,6 +36,12 @@ def test_cumulative_simple():
     # Cumulative estimation
     model = CumulativeMethod(event_properties)
     model.fit(trial_data_c)
+    
+    #Try k-fold
+    model = CumulativeMethod(event_properties, kfold=2)
+    model.fit(trial_data_c)
+
+    # Testing estimates
     estimates = model.transform(trial_data_c)
     # testing if bacward identifies the 3 real events
     assert np.isclose(model.submodels[-1].channel_pars, true_model.channel_pars, atol=1).all()
