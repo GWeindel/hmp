@@ -87,7 +87,7 @@ class TrialData:
         data = data.unstack().stack(all_samples=['participant','epoch','sample']).\
             dropna(dim="all_samples")
 
-        if event_properties == None:
+        if event_properties is None:
             event_properties = HalfSine.create_expected(sfreq=data.sfreq)
 
         # Equation 1 in 2024 paper

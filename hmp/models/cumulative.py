@@ -109,7 +109,9 @@ class CumulativeMethod(BaseModel):
         None
         """
 
-        self.event_properties = trial_data.event_properties
+        self.location = trial_data.event_properties.location
+        self.sfreq = trial_data.event_properties.sfreq
+        self.event_width = trial_data.event_properties.width
 
         end = trial_data.durations.values.mean() if self.end is None else self.end
         self.step = self.location if self.step is None else self.step
