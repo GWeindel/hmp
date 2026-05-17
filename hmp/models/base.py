@@ -54,7 +54,7 @@ class BaseModel(ABC):
 
 
     def __getattribute__(self, attr):
-        if attr in ["sfreq", "steps", "location", "template"]:
+        if attr in ["sfreq", "steps", "template"]:
             return getattr(self.pattern, attr)
 
         if attr == "event_width":

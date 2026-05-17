@@ -50,6 +50,10 @@ class EventModel(BaseModel):
     max_scale : float, optional
         Maximum mean distance between events, used when generating random starting points.
         Default is None.
+    locations : np.array, optional
+        How much milliseconds should be censored in the EM() step of model fitting.
+        Default is width of the event. Alternatively it is possible to provide an array
+        of length `n_events` with the location for each event.
     """
 
     def __init__(
@@ -59,6 +63,7 @@ class EventModel(BaseModel):
         min_iteration: int = 1,
         starting_points: int = 1,
         max_scale: float = None,
+        locations: np.ndarray | list = None,
         **kwargs
     ):
         assert np.issubdtype(type(n_events), np.integer), \
@@ -82,9 +87,14 @@ class EventModel(BaseModel):
         self.n_cor = 30
         super().__init__(*args, **kwargs)
 
-        if n_events > 1 and self.pattern.location < self.pattern.width:
-             warn("For n_event > 1, pattern.location must be greater or equal than pattern.width"
-             f" but received pattern.location ({self.pattern.location}) is smaller than"
+        if locations is None:
+            self.locations = np.repeat(self.pattern.width, n_events+1)
+            self.locations[0] = 0
+            self.locations[-1] = 0
+
+        if n_events > 1 and any(self.locations[1:-1] < self.pattern.width):
+             warn("For n_event > 1, locations must be greater or equal than pattern.width"
+             f" but received locations ({self.locations}) is smaller than"
              f" but received pattern.width ({self.pattern.width})."
          )
 
@@ -332,7 +342,7 @@ class EventModel(BaseModel):
             )
         likelihoods, xreventprobs = self._distribute_groups(
             trial_data, self.channel_pars, self.time_pars,
-            self.channel_map, self.time_map, groups, True
+            self.channel_map, self.time_map, groups
         )
         return likelihoods, xreventprobs
 
@@ -707,7 +717,7 @@ class EventModel(BaseModel):
             A 2D array where each row contains the shape and scale parameters for a stage.
         """
         rnd_durations = np.zeros(n_events + 1)
-        while any(rnd_durations < self.location):  # at least equal to the location
+        while any(rnd_durations < max(self.locations)):  # at least equal to the location
             rnd_events = np.random.default_rng().integers(
                 low=0, high=self.max_scale, size=n_events
             )  # n_events between 0 and mean_d
@@ -751,7 +761,6 @@ class EventModel(BaseModel):
         trial_data: TrialData,
         channel_pars: np.ndarray,
         time_pars: np.ndarray,
-        location: bool = True,
         subset_epochs: list[int] | None = None,
     ) -> tuple[float, np.ndarray]:
         """
@@ -769,9 +778,6 @@ class EventModel(BaseModel):
             A 2D array of shape (n_stages, n_parameters) or a 3D array of shape
             (iteration, n_stages, n_parameters) containing initial conditions for
             the distribution parameters.
-        location : bool, optional
-            Whether to add a minimum distance between events to avoid event collapse
-            during the expectation-maximization algorithm. Default is True.
         subset_epochs : list[int] or None, optional
             A list of trial indices to consider for the computation. If None, all trials
             are used. Default is None.
@@ -786,9 +792,6 @@ class EventModel(BaseModel):
         """
         n_events = channel_pars.shape[0]
         n_stages = n_events + 1
-        locations = np.zeros(n_stages, dtype=int)
-        if location:
-            locations[1:-1] = self.location
         if subset_epochs is not None:
             if len(subset_epochs) == len(trial_data.starts):  # boolean indices
                 subset_epochs = np.where(subset_epochs)[0]
@@ -829,9 +832,9 @@ class EventModel(BaseModel):
         for stage in range(n_stages):
             pmf[:, stage] = np.concatenate(
                 (
-                    np.repeat(0, locations[stage]),
+                    np.repeat(0, self.locations[stage]),
                     self.distribution_pdf(time_pars[stage, 0], time_pars[stage, 1], max_duration)[
-                        locations[stage] :
+                        self.locations[stage] :
                     ],
                 )
             )
@@ -884,7 +887,6 @@ class EventModel(BaseModel):
         channel_map: np.ndarray,
         time_map: np.ndarray,
         groups: np.ndarray,
-        location: bool = True,
         cpus: int = 1,
     ) -> tuple[np.ndarray, xr.DataArray]:
         """
@@ -911,9 +913,6 @@ class EventModel(BaseModel):
             A 2D array mapping time parameters to groups.
         groups : np.ndarray
             An array indicating the groups for grouping modeling.
-        location : bool, optional
-            Whether to add a minimum distance between events to avoid event collapse
-            during the expectation-maximization algorithm. Default is True.
         cpus : int, optional
             Number of cores to use in multiprocessing functions. Default is 1.
 
@@ -938,7 +937,6 @@ class EventModel(BaseModel):
                          for cur_group in data_groups],
                         [time_pars[cur_group, time_map[cur_group, :] >= 0, :]
                          for cur_group in data_groups],
-                        itertools.repeat(location),
                         [groups == cur_group for cur_group in data_groups],
                         itertools.repeat(False),
                     ),
@@ -955,7 +953,6 @@ class EventModel(BaseModel):
                         trial_data,
                         channel_pars_group,
                         time_pars_group,
-                        location,
                         subset_epochs=(groups == cur_group),
                     )
                 )

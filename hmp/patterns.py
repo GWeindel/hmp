@@ -31,20 +31,17 @@ class HalfSine:
         Sampling frequency in Hz.
     width : int
         Number of samples in the half-sine wave.
-    location : int
-        Number of samples censored in the EM() step of model fitting.
     template : np.ndarray
         The half-sine wave template.
     """
 
     sfreq: float
     width: int
-    location: int
     template: np.ndarray
 
     @classmethod
-    def create_expected(cls, sfreq: float, width: float = 50,
-                        location: float | None = None) -> "HalfSine":
+    def create_expected(cls, sfreq: float,
+                        width: float = 50) -> "HalfSine":
         """
         Create a HalfSine instance with the expected parameters.
 
@@ -57,14 +54,6 @@ class HalfSine:
             Controls for the precision of the estimate. Shorter values will
             model narrower half-sines (i.e. higher frequencies), higher values
             will model wider events (i.e. lower frequencies)
-        location : float, optional
-            How much milliseconds should be censored in the EM() step of model fitting.
-            Default is width of the event.
-            Shorter values than `width` allow overlap of neighboring events
-            but might result in the same event being duplicated in several events.
-            Larger values will prevent duplication at the risk of missing neighboring events
-            Censoring is done on samples lower or equal to the location,
-            thus requesting 50ms at 1000Hz will censor up to 50ms
 
         Returns
         -------
@@ -77,12 +66,8 @@ class HalfSine:
             warn('Using a pattern defined by less than 5 points is not recommended')
         if width < 2:
             raise ValueError("Cannot use pattern with only one data point")
-        if location is None:
-            location = width
-        else:
-            location = int(np.ceil(location / steps))
         template = cls._create_template(width, steps)
-        return cls(sfreq, width, location, template)
+        return cls(sfreq, width, template)
 
     @staticmethod
     def _create_template(width: int, steps: float) -> np.ndarray:
@@ -120,20 +105,17 @@ class Arbitrary:
         Sampling frequency in Hz.
     width : int
         Number of samples in the template.
-    location : int
-        How much samples should be censored in the EM() step of model fitting.
     template : np.ndarray
         The arbitrary template.
     """
 
     sfreq: float
     width: int
-    location: int
     template: np.ndarray
 
     @classmethod
-    def create_expected(cls, sfreq: float, template: np.ndarray,
-                        location: float | None = None) -> "Arbitrary":
+    def create_expected(cls, sfreq: float,
+                        template: np.ndarray) -> "Arbitrary":
         """
         Create an Arbitrary instance with the expected parameters.
 
@@ -143,24 +125,11 @@ class Arbitrary:
             Sampling frequency in Hz.
         template : np.ndarray
             The arbitrary waveform template.
-        location : float, optional
-            How much milliseconds should be censored in the EM() step of model fitting.
-            Default is width of the event.
-            Shorter values than `width` allow overlap of neighboring events
-            but might result in the same event being duplicated in several events.
-            Larger values will prevent duplication at the risk of missing neighboring events
-            Censoring is done on samples lower or equal to the location,
-            thus requesting 50ms at 1000Hz will censor up to 50ms
 
         Returns
         -------
         Arbitrary
             An instance of the Arbitrary class.
         """
-        steps = 1000 / sfreq
         width = len(template)
-        if location is None:
-            location = width
-        else:
-            location = int(np.ceil(location / steps))
-        return cls(sfreq, width, location, template)
+        return cls(sfreq, width, template)
