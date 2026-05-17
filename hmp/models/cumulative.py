@@ -127,13 +127,13 @@ class CumulativeMethod(BaseModel):
         # Initialize last stage of n=1
         time_pars[0, 1] = self.distribution.mean_to_scale(trial_data.durations.values.mean())
         channel_pars = np.zeros((end, trial_data.cross_corr.shape[1]))
-        lkh_prev = -np.inf
+        llk_prev = np.repeat(-np.inf, self.kfold)
 
         if self.base_fit is not None :
             n_events = self.base_fit.n_events+1
             time_pars[:n_events] = self.base_fit.time_pars.copy()
             channel_pars[:n_events-1] = self.base_fit.channel_pars.copy()
-            lkh_prev = self.base_fit.transform(trial_data)[0]
+            llk_prev = self.base_fit.transform(trial_data)[0]
 
         # Iterative fit
         while j < end and n_events <= max_n_events:
@@ -143,12 +143,16 @@ class CumulativeMethod(BaseModel):
                 n_events, j, channel_pars, time_pars
             )
             # Estimate model based on these propositions
-            channel_pars_res, time_pars_res, loglik, max_scale = self._fit_proposition(
+            channel_pars_res, time_pars_res, llk, max_scale = self._fit_proposition(
                  trial_data, n_events, channel_pars_props, time_pars_props, cpus
             )
             # check solution
-            if loglik - lkh_prev > 0:  # accept solution if likelihood improved
-                lkh_prev = loglik
+            diff_llk = llk - llk_prev
+            if all(llk_prev != -np.inf):
+                diff_llk /= np.abs(llk_prev)
+
+            if np.median(diff_llk) > self.tolerance:  # accept solution if likelihood improved
+                llk_prev = llk
 
                 # update channel_pars, params,
                 channel_pars[:n_events] = channel_pars_res
@@ -222,12 +226,11 @@ class CumulativeMethod(BaseModel):
                                        channel_pars_props, time_pars_props)
                 for train_td, test_td in folds
             )
-            logliks, channel_pars_res, time_pars_res, max_scale = zip(*results)
-
-            loglik = np.mean(logliks)
-            channel_pars_res = np.mean(np.array(channel_pars_res), axis=0)
-            time_pars_res = np.mean(np.array(time_pars_res), axis=0)
-            max_scale = np.mean(max_scale)
+            llk, channel_pars_res, time_pars_res, max_scale = zip(*results)
+            llk = np.array(llk)
+            channel_pars_res = np.median(np.array(channel_pars_res), axis=0)
+            time_pars_res = np.median(np.array(time_pars_res), axis=0)
+            max_scale = np.median(max_scale)
         else:
             event_model.fit(
                 trial_data,
@@ -238,11 +241,11 @@ class CumulativeMethod(BaseModel):
             )
             channel_pars_res = event_model.channel_pars
             time_pars_res = event_model.time_pars
-            loglik = event_model.lkhs.sum()
+            llk = event_model.lkhs
             max_scale = np.max(
                 [np.sum(x[0, :n_events-1, 1]) for x in event_model.time_pars_dev]
             )
-        return channel_pars_res, time_pars_res, loglik, max_scale
+        return channel_pars_res, time_pars_res, llk, max_scale
 
     def _propose_fit_params(self, n_events, j, channel_pars, time_pars):
 
@@ -325,8 +328,8 @@ class CumulativeMethod(BaseModel):
             cpus=1,
         )
 
-        loglik = event_model.transform(test_td)[0].sum()
+        llk = event_model.transform(test_td)[0].sum()
         max_scale = np.max(
                     [np.sum(x[0, :n_events-1, 1]) for x in event_model.time_pars_dev]
                 )
-        return loglik, event_model.channel_pars, event_model.time_pars, max_scale
+        return llk, event_model.channel_pars, event_model.time_pars, max_scale
