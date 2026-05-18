@@ -1,13 +1,15 @@
 """Classes for generating and representing templates for HMP event detection.
 
-including a half-sine wave template (`HalfSine`) and an arbitrary waveform template (`Arbitrary`).
+Main class Pattern and including a half-sine wave template (`HalfSine`) and an arbitrary waveform template (`Arbitrary`).
 
 Classes
 -------
-HalfSine
-    Generates a normalized half-sine wave template for use in signal processing or event detection.
-Arbitrary
-    Allows the use of any arbitrary pattern as a template.
+Pattern - Main class
+    HalfSine
+        Generates a normalized half-sine wave template for use in 
+        signal processing or event detection.
+    Arbitrary
+        Allows the use of any arbitrary pattern as a template.
 
 Both classes provide methods to create expected templates based on sampling frequency and other
 parameters,
@@ -19,12 +21,9 @@ from warnings import warn
 
 import numpy as np
 
-
 @dataclass
-class HalfSine:
+class Pattern:
     """
-    Represents a half-sine wave template.
-
     Attributes
     ----------
     sfreq : float
@@ -41,6 +40,14 @@ class HalfSine:
     width: int
     location: int
     template: np.ndarray
+
+
+@dataclass
+class HalfSine(Pattern):
+    """
+    Represents a half-sine wave template.
+
+    """
 
     @classmethod
     def create_expected(cls, sfreq: float, width: float = 50,
@@ -110,26 +117,10 @@ class HalfSine:
         return template
 
 @dataclass
-class Arbitrary:
+class Arbitrary(Pattern):
     """
     Represents an arbitrary template.
-
-    Attributes
-    ----------
-    sfreq : float
-        Sampling frequency in Hz.
-    width : int
-        Number of samples in the template.
-    location : int
-        How much samples should be censored in the EM() step of model fitting.
-    template : np.ndarray
-        The arbitrary template.
     """
-
-    sfreq: float
-    width: int
-    location: int
-    template: np.ndarray
 
     @classmethod
     def create_expected(cls, sfreq: float, template: np.ndarray,

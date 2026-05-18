@@ -3,10 +3,11 @@
 from warnings import warn
 
 import numpy as np
+from typing import Any
 
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
-from hmp.trialdata import TrialData
+from hmp.patterns import Pattern
 
 try:
     __IPYTHON__
@@ -26,9 +27,15 @@ class CumulativeMethod(BaseModel):
 
     Parameters
     ----------
-    args : tuple
-        Extra arguments to be passed to the BaseModel, including at least events and
-        distribution objects.
+
+    data : Data to fit the model on. One of two options:
+            1. data from BaseTransformer or xr.DataArray containing transformed data.
+            2. TrialData object.
+            In case of option 1, data is cross-correlated with the pattern in event_properties.
+            If event_properties is None, a half sine with 50 ms width is used.
+    event_properties :
+        The pattern and properties to use for cross-correlation. Default is
+        half sine with 50 ms width.   
     step : float, optional
         The size of the step from 0 to the mean RT. Defaults to the location defined in the pattern.
         Small values ensure a complete exploration of the parameter space but can be slow.
@@ -51,13 +58,15 @@ class CumulativeMethod(BaseModel):
     max_n_events: int
         Maximum number of events to be estimated. If None (default) uses the minim RT to estimated
         the maximim possible number of events.
-    kwargs : dict
-        Additional keyword arguments to be passed to the BaseModel.
+    distribution : str
+        Probability distribution for the by-trial onset of stages can be
+        one of 'gamma','lognormal','wald', or 'weibull'
     """
 
     def __init__(
         self,
-        *args,
+        data: Any,
+        event_properties: Pattern = None, 
         step: float = None,
         end: int = None,
         sequential: bool = True,
@@ -65,8 +74,9 @@ class CumulativeMethod(BaseModel):
         tolerance: float = 1e-4,
         base_fit: EventModel | None = None,
         max_n_events: int | None = None,
-        **kwargs,
+        distribution: Any = None 
     ):
+        super().__init__(data, event_properties, distribution)
         self.step = step
         self.end = end
         self.sequential = sequential
@@ -75,11 +85,9 @@ class CumulativeMethod(BaseModel):
         self.base_fit = base_fit
         self.max_n_events = max_n_events
         self.submodels = []
-        super().__init__(*args, **kwargs)
 
     def fit(
         self,
-        trial_data: TrialData,
         verbose: bool = True,
         cpus: int = 1,
     ) -> None:
@@ -93,8 +101,7 @@ class CumulativeMethod(BaseModel):
 
         Parameters
         ----------
-        trial_data : TrialData
-            The trial data to fit the model on.
+
         verbose : bool, optional
             If True, provides detailed output about the fitting process. Defaults to True.
         cpus : int, optional
@@ -105,13 +112,9 @@ class CumulativeMethod(BaseModel):
         None
         """
 
-        self.location = trial_data.event_properties.location
-        self.sfreq = trial_data.event_properties.sfreq
-        self.event_width = trial_data.event_properties.width
-
-        end = trial_data.durations.values.mean() if self.end is None else self.end
+        end = self.trial_data.durations.values.mean() if self.end is None else self.end
         self.step = self.location if self.step is None else self.step
-        max_n_events = self.compute_max_events(trial_data) if self.max_n_events is None\
+        max_n_events = self.compute_max_events() if self.max_n_events is None\
             else self.max_n_events
         #stop when not possible to insert event
         end = int(np.rint((end - self.location)/self.step))
@@ -122,35 +125,33 @@ class CumulativeMethod(BaseModel):
         # final time/chan parameters
         time_pars = np.zeros((end, 2))
         time_pars[:, 0] = self.distribution.shape
-        channel_pars = np.zeros((end, trial_data.cross_corr.shape[1]))
+        channel_pars = np.zeros((end, self.trial_data.cross_corr.shape[1]))
 
         if self.base_fit is None:
             # Initialize last stage of n=1
-            time_pars[0, 1] = self.distribution.mean_to_scale(trial_data.durations.values.mean())
-            channel_pars = np.zeros((end, trial_data.cross_corr.shape[1]))
+            time_pars[0, 1] = self.distribution.mean_to_scale(self.trial_data.durations.values.mean())
+            channel_pars = np.zeros((end, self.trial_data.cross_corr.shape[1]))
             lkh_prev = -np.inf
         else:
             n_events = self.base_fit.n_events+1
             time_pars[:n_events] = self.base_fit.time_pars.copy()
             channel_pars[:n_events-1] = self.base_fit.channel_pars.copy()
-            lkh_prev, _ = self.base_fit.transform(trial_data)
+            lkh_prev, _ = self.base_fit.transform()
 
         # Iterative fit
         while j < end and n_events <= max_n_events:
             prev_j = j
-            event_model = EventModel(self.distribution, tolerance=self.tolerance,
-                                     n_events=n_events)
+            event_model = EventModel(n_events=n_events, data=self.trial_data, tolerance=self.tolerance,distribution=self.distribution)
             # get new parameters
             j, channel_pars_props, time_pars_props = self._propose_fit_params(
                 n_events, j, channel_pars, time_pars
             )
             # Estimate model based on these propositions
             event_model.fit(
-                trial_data,
                 np.array([channel_pars_props]),
                 np.array([time_pars_props]),
                 verbose=False,
-                cpus=cpus,
+                cpus=cpus
             )
 
             loglik = event_model.lkhs.sum()

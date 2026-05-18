@@ -7,6 +7,7 @@ from numpy.typing import DTypeLike
 from scipy.signal import correlate
 
 from typing import Any
+from hmp.patterns import Pattern
 from hmp.utils import _check_transformed
 from hmp.patterns import HalfSine
 
@@ -40,10 +41,10 @@ class TrialData:
     sfreq: float
     offset: int
     cross_corr: np.ndarray
-    event_properties: Any
+    event_properties: Pattern
 
     @classmethod
-    def from_transformer(cls, transformed, event_properties = None, dtype = np.float32):
+    def from_transformer(cls, transformed, event_properties: Pattern = None, dtype = np.float32):
         """
         Create a TrialData instance from transformed data and a given pattern.
 
@@ -51,8 +52,8 @@ class TrialData:
         ----------
         transformed : BaseTransfromer or xr.DataArray
             The transformed object or xarray DataArray containing the transformed data.
-        pattern : np.ndarray
-            The pattern to use for cross-correlation computation. Default is
+        event_properties : Pattern
+            The properties of the event to use for cross-correlation computation. Default is
             half sine with 50 ms width.
         dtype: np.DTypeLike
             Precision, use np.float32 or np.int64
@@ -102,7 +103,7 @@ def cross_correlation(
         data: np.ndarray,
         starts: np.ndarray,
         ends: np.ndarray,
-        pattern: np.ndarray,
+        template: np.ndarray,
         dtype: DTypeLike,
     ) -> np.ndarray:
     """Compute the cross-correlation between the data and a given pattern.
@@ -136,7 +137,7 @@ def cross_correlation(
         for dim in np.arange(data.shape[1]):
             events[starts[trial] : ends[trial] + 1, dim] = correlate(
                 data[starts[trial] : ends[trial] + 1, dim],
-                pattern,
+                template,
                 mode="same",
                 method="direct",
             )
