@@ -10,8 +10,9 @@ LOOCV
 from typing import Any
 import inspect
 
-import hmp
 from hmp.trialdata import TrialData
+import hmp
+
 import numpy as np
 import itertools
 import multiprocessing as mp
