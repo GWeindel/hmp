@@ -12,6 +12,7 @@ from pandas import MultiIndex
 from hmp.transformers.custom import ProjCustom
 from hmp.transformers.identity import ProjIdentity
 from hmp.transformers.pca import ProjPCA
+from hmp.trialdata import TrialData
 
 
 def _check_transformed(transformed):
@@ -486,6 +487,39 @@ def participant_selection(transformed, participant):
     if 'participant' not in data.dims:
         data = data.expand_dims('participant')
     return data.stack(trial=['participant','epoch'])
+
+def participants_selection_trial_data(
+    self,
+    trial_data: TrialData,
+    participants: np.array):
+    """
+    UPDATE
+
+    Parameters
+    ----------
+    trial_data : TrialData
+        The trial data containing trial-group information.
+    UPDATE
+
+    Returns
+    -------
+    n_groups : int
+        The number of unique groups.
+    groups : np.ndarray
+        An array indicating the group assignment for each trial.
+    glabels : dict
+        A dictionary containing group names and their corresponding modalities.
+    """
+
+    participants = np.array(participants, dtype=object)
+    participants_trials = trial_data.durations.coords['participant']
+    participants_trials = np.vstack(participants_trials).T
+    participants_selection = np.isin(participants_trials, participants).flatten()
+
+    #make subset trial data based on participants selection       
+    trial_data_new = trial_data.copy()
+    
+
 
 def compute_csd(epoch_data: xr.Dataset,
                 info: Info):

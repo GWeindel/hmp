@@ -91,8 +91,6 @@ class EventModel(BaseModel):
         trial_data: TrialData,
         channel_pars: np.ndarray = None,
         time_pars: np.ndarray = None,
-        fixed_time_pars: list = None,
-        fixed_channel_pars: list = None,
         verbose: bool = True,
         cpus: int = 1,
         channel_map: np.ndarray = None,
