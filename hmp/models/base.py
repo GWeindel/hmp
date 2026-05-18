@@ -6,6 +6,7 @@ import numpy as np
 
 from hmp.distributions import Gamma
 from hmp.trialdata import TrialData
+from hmp.patterns import Pattern
 
 
 class BaseModel(ABC):
@@ -18,7 +19,7 @@ class BaseModel(ABC):
             2. TrialData object.
             In case of option 1, data is cross-correlated with the pattern in event_properties.
             If event_properties is None, a half sine with 50 ms width is used.
-    event_properties :
+    event_properties : Pattern
         The pattern and properties to use for cross-correlation. Default is
         half sine with 50 ms width.
     distribution : str
@@ -29,7 +30,7 @@ class BaseModel(ABC):
     def __init__(
         self,
         data: Any,
-        event_properties = None, 
+        event_properties: Pattern = None, 
         distribution: Any = None
     ):
         

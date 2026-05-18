@@ -4,11 +4,12 @@ from warnings import warn
 
 import numpy as np
 from joblib import Parallel, delayed
+from typing import Any
 
 from hmp.crossvalidation import pseudo_kfold
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
-from hmp.trialdata import TrialData
+from hmp.patterns import Pattern
 
 try:
     __IPYTHON__
@@ -25,9 +26,15 @@ class CumulativeMethod(BaseModel):
 
     Parameters
     ----------
-    args : tuple
-        Extra arguments to be passed to the BaseModel, including at least events and
-        distribution objects.
+
+    data : Data to fit the model on. One of two options:
+            1. data from BaseTransformer or xr.DataArray containing transformed data.
+            2. TrialData object.
+            In case of option 1, data is cross-correlated with the pattern in event_properties.
+            If event_properties is None, a half sine with 50 ms width is used.
+    event_properties :
+        The pattern and properties to use for cross-correlation. Default is
+        half sine with 50 ms width.   
     step : float, optional
         The size of the step from 0 to the mean RT. Defaults to the location defined in the pattern.
         Small values ensure a complete exploration of the parameter space but can be slow.
@@ -50,13 +57,15 @@ class CumulativeMethod(BaseModel):
     max_n_events: int
         Maximum number of events to be estimated. If None (default) uses the minim RT to estimated
         the maximim possible number of events.
-    kwargs : dict
-        Additional keyword arguments to be passed to the BaseModel.
+    distribution : str
+        Probability distribution for the by-trial onset of stages can be
+        one of 'gamma','lognormal','wald', or 'weibull'
     """
 
     def __init__(
         self,
-        *args,
+        data: Any,
+        event_properties: Pattern = None, 
         step: float = None,
         end: int = None,
         sequential: bool = True,
@@ -64,8 +73,9 @@ class CumulativeMethod(BaseModel):
         tolerance: float = 1e-4,
         base_fit: EventModel | None = None,
         max_n_events: int | None = None,
-        **kwargs,
+        distribution: Any = None 
     ):
+        super().__init__(data, event_properties, distribution)
         self.step = step
         self.end = end
         self.sequential = sequential
@@ -74,11 +84,9 @@ class CumulativeMethod(BaseModel):
         self.base_fit = base_fit
         self.max_n_events = max_n_events
         self.submodels = []
-        super().__init__(*args, **kwargs)
 
     def fit(
         self,
-        trial_data: TrialData,
         verbose: bool = True,
         kfold: int = 1,
         cpus: int = 1,
@@ -94,8 +102,7 @@ class CumulativeMethod(BaseModel):
 
         Parameters
         ----------
-        trial_data : TrialData
-            The trial data to fit the model on.
+
         verbose : bool, optional
             If True, provides detailed output about the fitting process. Defaults to True.
         cpus : int, optional
@@ -109,13 +116,9 @@ class CumulativeMethod(BaseModel):
         None
         """
 
-        self.location = trial_data.event_properties.location
-        self.sfreq = trial_data.event_properties.sfreq
-        self.event_width = trial_data.event_properties.width
-
-        end = trial_data.durations.values.mean() if self.end is None else self.end
+        end = self.trial_data.durations.values.mean() if self.end is None else self.end
         self.step = self.location if self.step is None else self.step
-        max_n_events = self.compute_max_events(trial_data) if self.max_n_events is None\
+        max_n_events = self.compute_max_events() if self.max_n_events is None\
             else self.max_n_events
         #stop when not possible to insert event
         end = int(np.rint((end - self.location)/self.step))
@@ -136,7 +139,7 @@ class CumulativeMethod(BaseModel):
             time_pars[:n_events] = self.base_fit.time_pars.copy()
             channel_pars[:n_events-1] = self.base_fit.channel_pars.copy()
             llk_prev = self.base_fit.transform(trial_data)[0]
-
+            
         # Iterative fit
         while j < end and n_events <= max_n_events:
             prev_j = j

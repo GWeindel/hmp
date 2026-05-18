@@ -16,7 +16,7 @@ import xarray as xr
 from pandas import MultiIndex
 
 from hmp.models.base import BaseModel
-from hmp.trialdata import TrialData
+from hmp.patterns import Pattern
 
 try:
     __IPYTHON__
@@ -68,7 +68,7 @@ class EventModel(BaseModel):
         self, 
         n_events: int,
         data: Any,
-        event_properties = None, 
+        event_properties: Pattern = None, 
         fixed_time_pars: list = None, 
         fixed_channel_pars: list = None,
         tolerance: float = 1e-4,
@@ -454,8 +454,8 @@ class EventModel(BaseModel):
             },
         )
 
-    def _EM_star(self, *args):  # for tqdm usage  #noqa
-        return self.EM(args)
+    def _EM_star(self, args):  # for tqdm usage  #noqa
+        return self.EM(*args)
 
     def EM(  # noqa
         self,
