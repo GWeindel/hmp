@@ -17,6 +17,7 @@ from pandas import MultiIndex
 
 from hmp.models.base import BaseModel
 from hmp.patterns import Pattern
+from hmp.trialdata import TrialData
 
 try:
     __IPYTHON__
@@ -34,12 +35,7 @@ class EventModel(BaseModel):
     ----------
     n_events : int
         The number of HMP events to estimate.
-    data : Data to fit the model on. One of two options:
-            1. data from BaseTransformer or xr.DataArray containing transformed data.
-            2. TrialData object.
-            In case of option 1, data is cross-correlated with the pattern in event_properties.
-            If event_properties is None, a half sine with 50 ms width is used.
-    event_properties :
+    pattern :
         The pattern and properties to use for cross-correlation. Default is
         half sine with 50 ms width.
     fixed_time_pars : list, optional
@@ -67,8 +63,7 @@ class EventModel(BaseModel):
     def __init__(
         self, 
         n_events: int,
-        data: Any,
-        event_properties: Pattern = None, 
+        pattern: Pattern = None,
         fixed_time_pars: list = None, 
         fixed_channel_pars: list = None,
         tolerance: float = 1e-4,
@@ -84,7 +79,7 @@ class EventModel(BaseModel):
              f" is expected, got {type(n_events).__name__} instead"
          )
         
-        super().__init__(data, event_properties, distribution)
+        super().__init__(pattern, distribution)
         self.n_events = n_events
         self.n_dims = None
         self.fixed_time_pars = fixed_time_pars
@@ -102,6 +97,7 @@ class EventModel(BaseModel):
         
     def fit(  # noqa: PLR0912, PLR0915
         self,
+        data: Any,
         channel_pars: np.ndarray = None,
         time_pars: np.ndarray = None,
         fixed_time_pars: list = None,
@@ -117,6 +113,10 @@ class EventModel(BaseModel):
 
         Parameters
         ----------
+        data : Data to fit the model on. One of two options:
+            1. data from BaseTransformer or xr.DataArray containing transformed data.
+            2. TrialData object.
+            In case of option 1, data is cross-correlated with the pattern in self.pattern.
         channel_pars : ndarray, optional
             2D ndarray (n_groups * n_events * n_channels) or
             4D (starting_points * n_groups * n_groups * n_events * n_channels),
@@ -154,13 +154,19 @@ class EventModel(BaseModel):
         None
         """
 
+        if isinstance(data, TrialData):
+            self.trial_data = data
+            self.pattern = data.pattern
+        else: #assume transformed (is checked later)
+            if self.pattern.sfreq is None:
+                self.pattern.create_template(data.sfreq)
+            self.trial_data = TrialData.from_transformer(data, self.pattern)
+
         if self.n_events > 1 and self.location < self.event_width:
              warn("For n_event > 1, location must be greater or equal than event_properties.width"
              f" but received location ({self.location}) is smaller than"
              f" but received event_properties.width ({self.event_width})."
          )
-
-
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
         infos_to_store["sfreq"] = self.sfreq
@@ -323,13 +329,19 @@ class EventModel(BaseModel):
         self.channel_map = channel_map
         self.time_map = time_map
 
-    def transform(self) -> tuple[np.ndarray, xr.DataArray]:
+        del self.trial_data
+
+
+    def transform(self, data: Any) -> tuple[np.ndarray, xr.DataArray]:
         """
         Transform the trial data using the fitted model.
 
         Parameters
         ----------
-
+        data : Data to fit the model on. One of two options:
+            1. data from BaseTransformer or xr.DataArray containing transformed data.
+            2. TrialData object.
+            In case of option 1, data is cross-correlated with the pattern in self.pattern.
 
         Returns
         -------
@@ -338,6 +350,15 @@ class EventModel(BaseModel):
         xr_eventprobs : xr.DataArray
             Concatenated event probability arrays for all submodels, indexed by number of events.
         """
+
+        if isinstance(data, TrialData):
+            self.trial_data = data
+            if data.pattern != self.pattern:
+                warn(f"Cross-correlation pattern {data.pattern} is different in provided data than in model {self.pattern}. Data pattern is used.")
+            self.pattern = data.pattern
+        else: #assume transformed (is checked later)
+            self.trial_data = TrialData.from_transformer(data, self.pattern)
+
         _, groups, glabels = self.group_constructor(
                 self.grouping_dict
             )
@@ -345,6 +366,9 @@ class EventModel(BaseModel):
             self.channel_pars, self.time_pars,
             self.channel_map, self.time_map, groups, True
         )
+
+        del self.trial_data
+
         return likelihoods, xreventprobs
 
 

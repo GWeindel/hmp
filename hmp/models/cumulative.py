@@ -8,6 +8,7 @@ from typing import Any
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
 from hmp.patterns import Pattern
+from hmp.trialdata import TrialData, compute_max_events
 
 try:
     __IPYTHON__
@@ -28,12 +29,7 @@ class CumulativeMethod(BaseModel):
     Parameters
     ----------
 
-    data : Data to fit the model on. One of two options:
-            1. data from BaseTransformer or xr.DataArray containing transformed data.
-            2. TrialData object.
-            In case of option 1, data is cross-correlated with the pattern in event_properties.
-            If event_properties is None, a half sine with 50 ms width is used.
-    event_properties :
+    pattern :
         The pattern and properties to use for cross-correlation. Default is
         half sine with 50 ms width.   
     step : float, optional
@@ -65,8 +61,7 @@ class CumulativeMethod(BaseModel):
 
     def __init__(
         self,
-        data: Any,
-        event_properties: Pattern = None, 
+        pattern: Pattern = None, 
         step: float = None,
         end: int = None,
         sequential: bool = True,
@@ -76,7 +71,7 @@ class CumulativeMethod(BaseModel):
         max_n_events: int | None = None,
         distribution: Any = None 
     ):
-        super().__init__(data, event_properties, distribution)
+        super().__init__(pattern, distribution)
         self.step = step
         self.end = end
         self.sequential = sequential
@@ -88,6 +83,7 @@ class CumulativeMethod(BaseModel):
 
     def fit(
         self,
+        data: Any,
         verbose: bool = True,
         cpus: int = 1,
     ) -> None:
@@ -101,7 +97,10 @@ class CumulativeMethod(BaseModel):
 
         Parameters
         ----------
-
+        data : Data to fit the model on. One of two options:
+            1. data from BaseTransformer or xr.DataArray containing transformed data.
+            2. TrialData object.
+            In case of option 1, data is cross-correlated with the pattern in self.pattern.
         verbose : bool, optional
             If True, provides detailed output about the fitting process. Defaults to True.
         cpus : int, optional
@@ -112,9 +111,17 @@ class CumulativeMethod(BaseModel):
         None
         """
 
+        if isinstance(data, TrialData):
+            self.trial_data = data
+            self.pattern = data.pattern
+        else: #assume transformed (is checked later)
+            if self.pattern.sfreq is None:
+                self.pattern.create_template(data.sfreq)
+            self.trial_data = TrialData.from_transformer(data, self.pattern)
+
         end = self.trial_data.durations.values.mean() if self.end is None else self.end
         self.step = self.location if self.step is None else self.step
-        max_n_events = self.compute_max_events() if self.max_n_events is None\
+        max_n_events = compute_max_events(self.trial_data,self.location) if self.max_n_events is None\
             else self.max_n_events
         #stop when not possible to insert event
         end = int(np.rint((end - self.location)/self.step))
@@ -141,13 +148,14 @@ class CumulativeMethod(BaseModel):
         # Iterative fit
         while j < end and n_events <= max_n_events:
             prev_j = j
-            event_model = EventModel(n_events=n_events, data=self.trial_data, tolerance=self.tolerance,distribution=self.distribution)
+            event_model = EventModel(n_events=n_events, pattern=self.pattern, tolerance=self.tolerance,distribution=self.distribution)
             # get new parameters
             j, channel_pars_props, time_pars_props = self._propose_fit_params(
                 n_events, j, channel_pars, time_pars
             )
             # Estimate model based on these propositions
             event_model.fit(
+                self.trial_data,
                 np.array([channel_pars_props]),
                 np.array([time_pars_props]),
                 verbose=False,
@@ -198,6 +206,8 @@ class CumulativeMethod(BaseModel):
         else:
             warn("Failed to find more than two stages, returning None")
             self._fitted = False
+        
+        del self.trial_data
 
     def transform(self, *args, **kwargs):
         """

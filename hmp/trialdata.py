@@ -41,10 +41,10 @@ class TrialData:
     sfreq: float
     offset: int
     cross_corr: np.ndarray
-    event_properties: Pattern
+    pattern: Pattern
 
     @classmethod
-    def from_transformer(cls, transformed, event_properties: Pattern = None, dtype = np.float32):
+    def from_transformer(cls, transformed, pattern: Pattern = None, dtype = np.float32):
         """
         Create a TrialData instance from transformed data and a given pattern.
 
@@ -52,7 +52,7 @@ class TrialData:
         ----------
         transformed : BaseTransfromer or xr.DataArray
             The transformed object or xarray DataArray containing the transformed data.
-        event_properties : Pattern
+        pattern : Pattern
             The properties of the event to use for cross-correlation computation. Default is
             half sine with 50 ms width.
         dtype: np.DTypeLike
@@ -88,14 +88,15 @@ class TrialData:
         data = data.unstack().stack(all_samples=['participant','epoch','sample']).\
             dropna(dim="all_samples")
 
-        if event_properties is None:
-            event_properties = HalfSine.create_expected(sfreq=data.sfreq)
+        if pattern is None:
+            pattern = HalfSine()
+            pattern.create_template(sfreq=data.sfreq)
 
         # Equation 1 in 2024 paper
-        cross_corr = cross_correlation(data.values.T, starts, ends, event_properties.template, dtype)
+        cross_corr = cross_correlation(data.values.T, starts, ends, pattern.template, dtype)
 
         return cls(durations=durations, starts=starts, ends=ends,
-                    cross_corr=cross_corr, event_properties=event_properties,
+                    cross_corr=cross_corr, pattern=pattern,
                    offset=data.offset, sfreq=data.sfreq)
 
    
@@ -142,3 +143,8 @@ def cross_correlation(
                 method="direct",
             )
     return events
+
+def compute_max_events(trial_data: TrialData, location):
+    """Compute the maximum possible number of events given location and minimum duration."""
+    return int(np.rint(np.min(trial_data.durations.values) // (location)))
+    
