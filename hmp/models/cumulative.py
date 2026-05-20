@@ -16,9 +16,6 @@ try:
 except NameError:
     from tqdm import tqdm
 
-default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
-
-
 class CumulativeMethod(BaseModel):
     """Initialize the CumulativeMethod.
 
@@ -53,9 +50,6 @@ class CumulativeMethod(BaseModel):
     max_n_events: int
         Maximum number of events to be estimated. If None (default) uses the minim RT to estimated
         the maximim possible number of events.
-    kfold: float
-        Number of folds in a k-fold scheme to use for the estimation of new events. If kfold > 1
-        performs crossvalidation on deterministically shuffled data.
     kwargs : dict
         Additional keyword arguments to be passed to the BaseModel.
     """
@@ -70,7 +64,6 @@ class CumulativeMethod(BaseModel):
         tolerance: float = 1e-4,
         base_fit: EventModel | None = None,
         max_n_events: int | None = None,
-        kfold: int = 1,
         **kwargs,
     ):
         self.step = step
@@ -80,7 +73,6 @@ class CumulativeMethod(BaseModel):
         self.tolerance = tolerance
         self.base_fit = base_fit
         self.max_n_events = max_n_events
-        self.kfold = kfold
         self.submodels = []
         super().__init__(*args, **kwargs)
 
@@ -88,7 +80,9 @@ class CumulativeMethod(BaseModel):
         self,
         trial_data: TrialData,
         verbose: bool = True,
+        kfold: int = 1,
         cpus: int = 1,
+
     ) -> None:
         """
         Fit the model starting with a 1-event model and iteratively add events.
@@ -106,6 +100,9 @@ class CumulativeMethod(BaseModel):
             If True, provides detailed output about the fitting process. Defaults to True.
         cpus : int, optional
             The number of CPU cores to use for computation. Defaults to 1.
+        kfold: float
+            Number of folds in a k-fold scheme to use for the estimation of new events. If kfold > 1
+            performs crossvalidation on deterministically shuffled data.
 
         Returns
         -------
@@ -127,7 +124,7 @@ class CumulativeMethod(BaseModel):
         # Initialize last stage of n=1
         time_pars[0, 1] = self.distribution.mean_to_scale(trial_data.durations.values.mean())
         channel_pars = np.zeros((end, trial_data.cross_corr.shape[1]))
-        llk_prev = np.repeat(-np.inf, self.kfold)
+        llk_prev = np.repeat(-np.inf, kfold)
 
         if self.base_fit is not None :
             n_events = self.base_fit.n_events+1
@@ -144,7 +141,7 @@ class CumulativeMethod(BaseModel):
             )
             # Estimate model based on these propositions
             channel_pars_res, time_pars_res, llk, max_scale = self._fit_proposition(
-                 trial_data, n_events, channel_pars_props, time_pars_props, cpus
+                 trial_data, n_events, channel_pars_props, time_pars_props, cpus, kfold
             )
             # check solution
             diff_llk = llk - llk_prev
@@ -214,12 +211,14 @@ class CumulativeMethod(BaseModel):
         self._check_fitted("transform data")
         return self.submodels[-1].transform(*args, **kwargs)
 
-    def _fit_proposition(self, trial_data, n_events, channel_pars_props, time_pars_props, cpus):
+    def _fit_proposition(self, trial_data, n_events,
+                         channel_pars_props, time_pars_props,
+                         cpus, kfold):
 
         event_model = EventModel(self.pattern, self.distribution, tolerance=self.tolerance,
                                  n_events=n_events)
-        if self.kfold > 1:
-            folds = list(pseudo_kfold(trial_data, self.kfold))
+        if kfold > 1:
+            folds = list(pseudo_kfold(trial_data, kfold))
 
             results = Parallel(n_jobs=cpus)(
                 delayed(self.run_fold)(n_events, train_td, test_td,

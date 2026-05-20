@@ -34,8 +34,8 @@ def test_cumulative_simple():
     true_loglikelihood, true_estimates = true_model.transform(trial_data_c)
     
     #Try k-fold 
-    model = CumulativeMethod(event_properties, kfold=3)
-    model.fit(trial_data_c)
+    model = CumulativeMethod(event_properties)
+    model.fit(trial_data_c, kfold=2)
 
     # Cumulative estimation
     model = CumulativeMethod(event_properties)
