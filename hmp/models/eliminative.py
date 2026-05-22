@@ -12,7 +12,7 @@ from warnings import resetwarnings, warn
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
 from hmp.patterns import Pattern
-from hmp.trialdata import TrialData, compute_max_events
+from hmp.trialdata import compute_max_events
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
@@ -25,6 +25,15 @@ class EliminativeMethod(BaseModel):
     pattern :
         The pattern and properties to use for cross-correlation. Default is
         half sine with 50 ms width.
+    location_ms : float, optional
+        How much milliseconds should be censored in the EM() step of model fitting.
+        Default is width of the event.
+        Shorter values than `width` allow overlap of neighboring events
+        but might result in the same event being duplicated in several events.
+        Larger values will prevent duplication at the risk of missing neighboring events
+        Censoring is done on samples lower or equal to the location,
+        thus requesting 50ms at 1000Hz will censor up to 50ms
+        Defaults to width of pattern, which is by default 50 ms.
     max_events : int, optional
         Maximum number of events to be estimated. By default, it is inferred using
         `compute_max_events()` if not provided.
@@ -45,6 +54,7 @@ class EliminativeMethod(BaseModel):
     def __init__(
         self,
         pattern: Pattern = None, 
+        location_ms: float = None,
         max_events: int | None = None,
         min_events: int = 0,
         base_fit: EventModel | None = None,
@@ -52,7 +62,7 @@ class EliminativeMethod(BaseModel):
         max_iteration: int = 1000,
         distribution: Any = None 
     ):
-        super().__init__(pattern, distribution)
+        super().__init__(pattern, location_ms, distribution)
         self.max_events: int = max_events
         self.min_events: int = min_events
         self.base_fit: EventModel | None = base_fit
@@ -83,13 +93,7 @@ class EliminativeMethod(BaseModel):
         None
         """
 
-        if isinstance(data, TrialData):
-            self.trial_data = data
-            self.pattern = data.pattern
-        else: #assume transformed (is checked later)
-            if self.pattern.sfreq is None:
-                self.pattern.create_template(data.sfreq)
-            self.trial_data = TrialData.from_transformer(data, self.pattern)
+        self.instantiate_data_pattern_location(data)
 
         if self.max_events is None:
             max_events = compute_max_events(self.trial_data, self.location)
@@ -146,7 +150,11 @@ class EliminativeMethod(BaseModel):
 
         Parameters
         ----------
-
+        data : Data to fit the model on. One of two options:
+            1. data from BaseTransformer or xr.DataArray containing transformed data.
+            2. TrialData object.
+            In case of option 1, data is cross-correlated with the pattern in self.pattern.
+            
         Returns
         -------
         likelihoods : list
@@ -155,13 +163,7 @@ class EliminativeMethod(BaseModel):
             Concatenated event probability arrays for all submodels, indexed by number of events.
         """
 
-        if isinstance(data, TrialData):
-            self.trial_data = data
-            if data.pattern != self.pattern:
-                warn(f"Cross-correlation pattern {data.pattern} is different in provided data than in model {self.pattern}. Data pattern is used.")
-            self.pattern = data.pattern
-        else: #assume transformed (is checked later)
-            self.trial_data = TrialData.from_transformer(data, self.pattern)
+        self.instantiate_data_pattern_location(data)
         
         if len(self.submodels) == 0:
             raise ValueError("Model has not been (succesfully) fitted yet, no fixed models.")
@@ -196,6 +198,7 @@ class EliminativeMethod(BaseModel):
         return EventModel(
             n_events=n_events,
             pattern=self.pattern,
+            location_ms=self.location_ms,
             starting_points=starting_points,
             tolerance=self.tolerance,
             max_iteration=self.max_iteration,
