@@ -109,8 +109,6 @@ class EventModel(BaseModel):
         data: Any,
         channel_pars: np.ndarray = None,
         time_pars: np.ndarray = None,
-        fixed_time_pars: list = None,
-        fixed_channel_pars: list = None,
         verbose: bool = True,
         cpus: int = 1,
         channel_map: np.ndarray = None,
@@ -133,10 +131,6 @@ class EventModel(BaseModel):
         time_pars : ndarray, optional
             3D ndarray (n_groups * n_stages * 2) or 4D (starting_points * n_groups * n_stages * 2),
             initial conditions for time distribution parameters. Default is None.
-        fixed_time_pars : list, optional
-            Indices of time parameters to fix during estimation. Default is None.
-        fixed_channel_pars : list, optional
-            Indices of channel parameters to fix during estimation. Default is None.
         tolerance : float, optional
             Convergence tolerance for the expectation maximization algorithm. Default is 1e-4.
         max_iteration : int, optional
