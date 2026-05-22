@@ -27,15 +27,6 @@ class Pattern(ABC):
     ----------
     width_ms: float
         Width of pattern in ms. 
-    location_ms : float, optional
-        How much milliseconds should be censored in the EM() step of model fitting.
-        Default is width of the event.
-        Shorter values than `width` allow overlap of neighboring events
-        but might result in the same event being duplicated in several events.
-        Larger values will prevent duplication at the risk of missing neighboring events
-        Censoring is done on samples lower or equal to the location,
-        thus requesting 50ms at 1000Hz will censor up to 50ms
-        Defaults to width_ms
     sfreq : float
         Sampling frequency in Hz.
     width_samples : int
@@ -47,23 +38,17 @@ class Pattern(ABC):
     def __init__(
         self,
         width_ms: float,
-        location_ms: float = None,
         sfreq: float = None,
         template: np.ndarray = None
     ):
         self.width_ms = width_ms
-        self.location_ms = location_ms
-        if location_ms is None:
-            self.location_ms = width_ms
         self.sfreq = sfreq
 
         if sfreq is not None:
             steps = 1000 / sfreq
             self.width_samples = int(np.rint(self.width_ms / steps))
-            self.location = int(np.ceil(self.location_ms / steps))
         else:
             self.width_samples = None
-            self.location = None
 
         self.template = template
 
@@ -98,10 +83,9 @@ class HalfSine(Pattern):
     def __init__(
         self,
         width_ms: float = 50,
-        location_ms: float = None,
-        sfreq: float = None,
+        sfreq: float = None
     ):
-        super().__init__(width_ms, sfreq, location_ms, template=None)
+        super().__init__(width_ms, sfreq, template=None)
 
         if sfreq is not None:
             self.create_template(sfreq)
@@ -123,7 +107,6 @@ class HalfSine(Pattern):
         self.sfreq = sfreq
         steps = 1000 / sfreq
         self.width_samples = int(np.rint(self.width_ms / steps))
-        self.location = int(np.ceil(self.location_ms / steps))
         if self.width_samples < 5:
             warn('Using a pattern defined by less than 5 points is not recommended')
         if self.width_samples < 2:

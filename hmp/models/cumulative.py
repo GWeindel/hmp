@@ -8,7 +8,7 @@ from typing import Any
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
 from hmp.patterns import Pattern
-from hmp.trialdata import TrialData, compute_max_events
+from hmp.trialdata import compute_max_events
 
 try:
     __IPYTHON__
@@ -31,7 +31,16 @@ class CumulativeMethod(BaseModel):
 
     pattern :
         The pattern and properties to use for cross-correlation. Default is
-        half sine with 50 ms width.   
+        half sine with 50 ms width.
+    location_ms : float, optional
+        How much milliseconds should be censored in the EM() step of model fitting.
+        Default is width of the event.
+        Shorter values than `width` allow overlap of neighboring events
+        but might result in the same event being duplicated in several events.
+        Larger values will prevent duplication at the risk of missing neighboring events
+        Censoring is done on samples lower or equal to the location,
+        thus requesting 50ms at 1000Hz will censor up to 50ms
+        Defaults to width of pattern, which is by default 50 ms.   
     step : float, optional
         The size of the step from 0 to the mean RT. Defaults to the location defined in the pattern.
         Small values ensure a complete exploration of the parameter space but can be slow.
@@ -61,7 +70,8 @@ class CumulativeMethod(BaseModel):
 
     def __init__(
         self,
-        pattern: Pattern = None, 
+        pattern: Pattern = None,
+        location_ms: float = None,
         step: float = None,
         end: int = None,
         sequential: bool = True,
@@ -71,7 +81,7 @@ class CumulativeMethod(BaseModel):
         max_n_events: int | None = None,
         distribution: Any = None 
     ):
-        super().__init__(pattern, distribution)
+        super().__init__(pattern, location_ms, distribution)
         self.step = step
         self.end = end
         self.sequential = sequential
@@ -111,13 +121,7 @@ class CumulativeMethod(BaseModel):
         None
         """
 
-        if isinstance(data, TrialData):
-            self.trial_data = data
-            self.pattern = data.pattern
-        else: #assume transformed (is checked later)
-            if self.pattern.sfreq is None:
-                self.pattern.create_template(data.sfreq)
-            self.trial_data = TrialData.from_transformer(data, self.pattern)
+        self.instantiate_data_pattern_location(data)
 
         end = self.trial_data.durations.values.mean() if self.end is None else self.end
         self.step = self.location if self.step is None else self.step
@@ -148,7 +152,7 @@ class CumulativeMethod(BaseModel):
         # Iterative fit
         while j < end and n_events <= max_n_events:
             prev_j = j
-            event_model = EventModel(n_events=n_events, pattern=self.pattern, tolerance=self.tolerance,distribution=self.distribution)
+            event_model = EventModel(n_events=n_events, pattern=self.pattern, location_ms=self.location_ms, tolerance=self.tolerance,distribution=self.distribution)
             # get new parameters
             j, channel_pars_props, time_pars_props = self._propose_fit_params(
                 n_events, j, channel_pars, time_pars

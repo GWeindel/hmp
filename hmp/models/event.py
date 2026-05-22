@@ -17,7 +17,6 @@ from pandas import MultiIndex
 
 from hmp.models.base import BaseModel
 from hmp.patterns import Pattern
-from hmp.trialdata import TrialData
 
 try:
     __IPYTHON__
@@ -38,6 +37,15 @@ class EventModel(BaseModel):
     pattern :
         The pattern and properties to use for cross-correlation. Default is
         half sine with 50 ms width.
+    location_ms : float, optional
+        How much milliseconds should be censored in the EM() step of model fitting.
+        Default is width of the event.
+        Shorter values than `width` allow overlap of neighboring events
+        but might result in the same event being duplicated in several events.
+        Larger values will prevent duplication at the risk of missing neighboring events
+        Censoring is done on samples lower or equal to the location,
+        thus requesting 50ms at 1000Hz will censor up to 50ms
+        Defaults to width of pattern, which is by default 50 ms.
     fixed_time_pars : list, optional
         List of time parameters to fix during estimation.
         If None, all time parameters are estimated.
@@ -64,6 +72,7 @@ class EventModel(BaseModel):
         self, 
         n_events: int,
         pattern: Pattern = None,
+        location_ms: float = None,
         fixed_time_pars: list = None, 
         fixed_channel_pars: list = None,
         tolerance: float = 1e-4,
@@ -79,7 +88,7 @@ class EventModel(BaseModel):
              f" is expected, got {type(n_events).__name__} instead"
          )
         
-        super().__init__(pattern, distribution)
+        super().__init__(pattern, location_ms, distribution)
         self.n_events = n_events
         self.n_dims = None
         self.fixed_time_pars = fixed_time_pars
@@ -154,13 +163,7 @@ class EventModel(BaseModel):
         None
         """
 
-        if isinstance(data, TrialData):
-            self.trial_data = data
-            self.pattern = data.pattern
-        else: #assume transformed (is checked later)
-            if self.pattern.sfreq is None:
-                self.pattern.create_template(data.sfreq)
-            self.trial_data = TrialData.from_transformer(data, self.pattern)
+        self.instantiate_data_pattern_location(data)
 
         if self.n_events > 1 and self.location < self.event_width:
              warn("For n_event > 1, location must be greater or equal than event_properties.width"
@@ -351,13 +354,7 @@ class EventModel(BaseModel):
             Concatenated event probability arrays for all submodels, indexed by number of events.
         """
 
-        if isinstance(data, TrialData):
-            self.trial_data = data
-            if data.pattern != self.pattern:
-                warn(f"Cross-correlation pattern {data.pattern} is different in provided data than in model {self.pattern}. Data pattern is used.")
-            self.pattern = data.pattern
-        else: #assume transformed (is checked later)
-            self.trial_data = TrialData.from_transformer(data, self.pattern)
+        self.instantiate_data_pattern_location(data)
 
         _, groups, glabels = self.group_constructor(
                 self.grouping_dict
