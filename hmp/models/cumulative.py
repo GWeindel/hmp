@@ -8,7 +8,7 @@ from typing import Any
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
 from hmp.patterns import Pattern
-from hmp.trialdata import compute_max_events
+from hmp.patterndata import compute_max_events
 
 try:
     __IPYTHON__
@@ -100,7 +100,7 @@ class CumulativeMethod(BaseModel):
         """
         Fit the model starting with a 1-event model and iteratively add events.
 
-        This method fits the cumulative event model to the provided trial data. It begins with a
+        This method fits the cumulative event model to the provided pattern data. It begins with a
         single-event model and incrementally adds events based on the convergence of the expectation
         maximization algorithm. The process continues until the maximum number of events (given the
         minimum duration) is reached or the likelihood no longer improves.
@@ -109,7 +109,7 @@ class CumulativeMethod(BaseModel):
         ----------
         data : Data to fit the model on. One of two options:
             1. data from BaseTransformer or xr.DataArray containing transformed data.
-            2. TrialData object.
+            2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
         verbose : bool, optional
             If True, provides detailed output about the fitting process. Defaults to True.
@@ -123,9 +123,9 @@ class CumulativeMethod(BaseModel):
 
         self.instantiate_data_pattern_location(data)
 
-        end = self.trial_data.durations.values.mean() if self.end is None else self.end
+        end = self.pattern_data.durations.values.mean() if self.end is None else self.end
         self.step = self.location if self.step is None else self.step
-        max_n_events = compute_max_events(self.trial_data,self.location) if self.max_n_events is None\
+        max_n_events = compute_max_events(self.pattern_data,self.location) if self.max_n_events is None\
             else self.max_n_events
         #stop when not possible to insert event
         end = int(np.rint((end - self.location)/self.step))
@@ -136,12 +136,12 @@ class CumulativeMethod(BaseModel):
         # final time/chan parameters
         time_pars = np.zeros((end, 2))
         time_pars[:, 0] = self.distribution.shape
-        channel_pars = np.zeros((end, self.trial_data.cross_corr.shape[1]))
+        channel_pars = np.zeros((end, self.pattern_data.cross_corr.shape[1]))
 
         if self.base_fit is None:
             # Initialize last stage of n=1
-            time_pars[0, 1] = self.distribution.mean_to_scale(self.trial_data.durations.values.mean())
-            channel_pars = np.zeros((end, self.trial_data.cross_corr.shape[1]))
+            time_pars[0, 1] = self.distribution.mean_to_scale(self.pattern_data.durations.values.mean())
+            channel_pars = np.zeros((end, self.pattern_data.cross_corr.shape[1]))
             lkh_prev = -np.inf
         else:
             n_events = self.base_fit.n_events+1
@@ -159,7 +159,7 @@ class CumulativeMethod(BaseModel):
             )
             # Estimate model based on these propositions
             event_model.fit(
-                self.trial_data,
+                self.pattern_data,
                 np.array([channel_pars_props]),
                 np.array([time_pars_props]),
                 verbose=False,
@@ -211,7 +211,7 @@ class CumulativeMethod(BaseModel):
             warn("Failed to find more than two stages, returning None")
             self._fitted = False
         
-        del self.trial_data
+        del self.pattern_data
 
     def transform(self, *args, **kwargs):
         """

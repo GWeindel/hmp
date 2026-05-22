@@ -12,7 +12,7 @@ from warnings import resetwarnings, warn
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
 from hmp.patterns import Pattern
-from hmp.trialdata import compute_max_events
+from hmp.patterndata import compute_max_events
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
@@ -83,8 +83,10 @@ class EliminativeMethod(BaseModel):
 
         Parameters
         ----------
-        trial_data : TrialData
-            The dataset containing the crosscorrelated data and infos on durations and trials.
+        data : Data to fit the model on. One of two options:
+            1. data from BaseTransformer or xr.DataArray containing transformed data.
+            2. PatternData object.
+            In case of option 1, data is cross-correlated with the pattern in self.pattern.
         cpus : int, optional
             Number of CPUs to use for parallel processing. Defaults to 1.
 
@@ -96,7 +98,7 @@ class EliminativeMethod(BaseModel):
         self.instantiate_data_pattern_location(data)
 
         if self.max_events is None:
-            max_events = compute_max_events(self.trial_data, self.location)
+            max_events = compute_max_events(self.pattern_data, self.location)
         else:
             max_events = self.max_events
 
@@ -107,7 +109,7 @@ class EliminativeMethod(BaseModel):
                 f"Estimating all solutions for maximal number of events ({max_events})"
             )
             base_fit = self.get_event_model(n_events=max_events, starting_points=1)
-            base_fit.fit(self.trial_data, verbose=False, cpus=cpus)
+            base_fit.fit(self.pattern_data, verbose=False, cpus=cpus)
         else:
             base_fit = self.base_fit
         max_events = base_fit.n_events
@@ -132,7 +134,7 @@ class EliminativeMethod(BaseModel):
                 )  # combine two stages into one
                 temp_pars = np.delete(temp_pars, event + 1, axis=1)
                 pars_temp.append(temp_pars)
-            event_model.fit(data=self.trial_data,
+            event_model.fit(data=self.pattern_data,
                             channel_pars=np.array(events_temp),
                             time_pars=np.array(pars_temp),
                             verbose=False,
@@ -142,19 +144,19 @@ class EliminativeMethod(BaseModel):
             gc.collect()
             self.submodels[n_events] = event_model
         self._fitted = True
-        del self.trial_data
+        del self.pattern_data
 
     def transform(self, data):
         """
-        Apply all fitted submodels to the provided trial data.
+        Apply all fitted submodels to the provided data.
 
         Parameters
         ----------
         data : Data to fit the model on. One of two options:
             1. data from BaseTransformer or xr.DataArray containing transformed data.
-            2. TrialData object.
+            2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
-            
+
         Returns
         -------
         likelihoods : list
@@ -170,11 +172,11 @@ class EliminativeMethod(BaseModel):
         likelihoods = []
         event_probs = []
         for n_events, event_model in self.submodels.items():
-            lkh, prob = event_model.transform(self.trial_data)
+            lkh, prob = event_model.transform(self.pattern_data)
             likelihoods.append(lkh)
             event_probs.append(prob)
         xr_eventprobs = xr.concat(event_probs, dim=pd.Index(list(self.submodels), name="n_events"))
-        del self.trial_data
+        del self.pattern_data
         return likelihoods, xr_eventprobs
 
     def _concatted_attr(self, attr_name):
