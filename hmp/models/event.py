@@ -124,7 +124,7 @@ class EventModel(BaseModel):
         ----------
         data : Data to fit the model on. One of two options:
             1. data from BaseTransformer or xr.DataArray containing transformed data.
-            2. TrialData object.
+            2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
         channel_pars : ndarray, optional
             2D ndarray (n_groups * n_events * n_channels) or
@@ -176,7 +176,7 @@ class EventModel(BaseModel):
         infos_to_store["event_width"] = self.event_width
         infos_to_store["tolerance"] = self.tolerance
 
-        self.n_dims = self.trial_data.cross_corr.shape[1]
+        self.n_dims = self.pattern_data.cross_corr.shape[1]
 
         if grouping_dict is None:
             grouping_dict = self.grouping_dict
@@ -232,7 +232,7 @@ class EventModel(BaseModel):
                     [
                         self.distribution.shape,
                         self.distribution.mean_to_scale(
-                        np.mean(self.trial_data.durations.values[groups == cur_group]) / (n_stage_group)
+                        np.mean(self.pattern_data.durations.values[groups == cur_group]) / (n_stage_group)
                         ),
                     ],
                     (n_stage_group, 1),
@@ -241,7 +241,7 @@ class EventModel(BaseModel):
             time_pars = [initial_p]
             if self.starting_points > 1:
                 if self.max_scale is None:
-                    self.max_scale = self.trial_data.durations.mean()
+                    self.max_scale = self.pattern_data.durations.mean()
                 infos_to_store["starting_points"] = self.starting_points
                 for _ in np.arange(self.starting_points):
                     proposal_p = (
@@ -332,7 +332,7 @@ class EventModel(BaseModel):
         self.channel_map = channel_map
         self.time_map = time_map
 
-        del self.trial_data
+        del self.pattern_data
 
 
     def transform(self, data: Any) -> tuple[np.ndarray, xr.DataArray]:
@@ -343,7 +343,7 @@ class EventModel(BaseModel):
         ----------
         data : Data to fit the model on. One of two options:
             1. data from BaseTransformer or xr.DataArray containing transformed data.
-            2. TrialData object.
+            2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
 
         Returns
@@ -364,7 +364,7 @@ class EventModel(BaseModel):
             self.channel_map, self.time_map, groups, True
         )
 
-        del self.trial_data
+        del self.pattern_data
 
         return likelihoods, xreventprobs
 
@@ -579,7 +579,7 @@ class EventModel(BaseModel):
 
                 # get c_pars/t_pars by group
                 c_par, t_par = self.get_channel_time_parameters_expectation(
-                                eventprobs.values[:, :np.max(self.trial_data.durations.values[epochs_group]),
+                                eventprobs.values[:, :np.max(self.pattern_data.durations.values[epochs_group]),
                                           channel_map_group],
                         subset_epochs=epochs_group,
                 )
@@ -687,11 +687,11 @@ class EventModel(BaseModel):
         for event in range(eventprobs.shape[2]):
             for comp in range(self.n_dims):
                 event_data = np.zeros((len(subset_epochs),
-                                       np.max(self.trial_data.durations.values[subset_epochs])))
+                                       np.max(self.pattern_data.durations.values[subset_epochs])))
                 for trial_idx, trial in enumerate(subset_epochs):
-                    start, end = self.trial_data.starts[trial], self.trial_data.ends[trial]
+                    start, end = self.pattern_data.starts[trial], self.pattern_data.ends[trial]
                     duration = end - start + 1
-                    event_data[trial_idx, :duration] = self.trial_data.cross_corr[start : end + 1, comp]
+                    event_data[trial_idx, :duration] = self.pattern_data.cross_corr[start : end + 1, comp]
                 channel_pars[event, comp] = np.mean(
                     np.sum(eventprobs[subset_epochs, :, event] * event_data, axis=1)
                 )
@@ -704,9 +704,9 @@ class EventModel(BaseModel):
         # it's general
         event_times_mean = np.concatenate(
             [
-                np.arange(np.max(self.trial_data.durations.values[subset_epochs])) @ eventprobs[
+                np.arange(np.max(self.pattern_data.durations.values[subset_epochs])) @ eventprobs[
                     subset_epochs].mean(axis=0),
-                [np.mean(self.trial_data.durations.values[subset_epochs]) - 1],
+                [np.mean(self.pattern_data.durations.values[subset_epochs]) - 1],
             ]
         )
         time_pars = self.scale_parameters(averagepos=event_times_mean)
@@ -812,16 +812,16 @@ class EventModel(BaseModel):
         if location:
             locations[1:-1] = self.location
         if subset_epochs is not None:
-            if len(subset_epochs) == len(self.trial_data.starts):  # boolean indices
+            if len(subset_epochs) == len(self.pattern_data.starts):  # boolean indices
                 subset_epochs = np.where(subset_epochs)[0]
         n_trials = len(subset_epochs)
-        starts = self.trial_data.starts[subset_epochs]
-        ends = self.trial_data.ends[subset_epochs]
+        starts = self.pattern_data.starts[subset_epochs]
+        ends = self.pattern_data.ends[subset_epochs]
         durations = ends - starts + 1
         cross_corr = np.vstack(
-                [self.trial_data.cross_corr[s:e+1] for s, e in zip(starts, ends)]
+                [self.pattern_data.cross_corr[s:e+1] for s, e in zip(starts, ends)]
         )
-        dtype = self.trial_data.cross_corr.dtype
+        dtype = self.pattern_data.cross_corr.dtype
         max_duration = np.max(durations)
         gains = np.zeros((cross_corr.shape[0], n_events), dtype=dtype)
         for i in range(cross_corr.shape[1]):
@@ -980,8 +980,8 @@ class EventModel(BaseModel):
         likelihood = np.array([x[0] for x in likes_events_group])
 
         for i, cur_group in enumerate(data_groups):
-            part = self.trial_data.durations.coords["participant"].values[(groups == cur_group)]
-            epoch =self.trial_data.durations.coords["epoch"].values[(groups == cur_group)]
+            part = self.pattern_data.durations.coords["participant"].values[(groups == cur_group)]
+            epoch =self.pattern_data.durations.coords["epoch"].values[(groups == cur_group)]
             data_events =  channel_map[cur_group, :] >= 0
             trial_x_part = xr.Coordinates.from_pandas_multiindex(
                 MultiIndex.from_arrays([part, epoch], names=("participant", "epoch")),
@@ -1078,7 +1078,7 @@ class EventModel(BaseModel):
         for group, mod in grouping_dict.items():
             group_names.append(group)
             group_mods.append(mod)
-            group_trials.append(self.trial_data.durations.coords[group])
+            group_trials.append(self.pattern_data.durations.coords[group])
             if verbose:
                 print('group "' + group_names[-1] + '" analyzed, with groups:', group_mods[-1])
 
@@ -1100,7 +1100,7 @@ class EventModel(BaseModel):
                 if verbose:
                     print(str(i) + ": " + str(mod))
         else:
-            groups = np.zeros(len(self.trial_data.starts))
+            groups = np.zeros(len(self.pattern_data.starts))
         groups = np.int8(groups)
         glabels = {"group " + str(group_names): group_mods}
 

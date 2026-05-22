@@ -10,7 +10,7 @@ from hmp.crossvalidation import pseudo_kfold
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
 from hmp.patterns import Pattern
-from hmp.trialdata import compute_max_events
+from hmp.patterndata import compute_max_events
 
 try:
     __IPYTHON__
@@ -101,7 +101,7 @@ class CumulativeMethod(BaseModel):
         """
         Fit the model starting with a 1-event model and iteratively add events.
 
-        This method fits the cumulative event model to the provided trial data. It begins with a
+        This method fits the cumulative event model to the provided pattern data. It begins with a
         single-event model and incrementally adds events based on the convergence of the expectation
         maximization algorithm. The process continues until the maximum number of events (given the
         minimum duration) is reached or the likelihood no longer improves.
@@ -110,7 +110,7 @@ class CumulativeMethod(BaseModel):
         ----------
         data : Data to fit the model on. One of two options:
             1. data from BaseTransformer or xr.DataArray containing transformed data.
-            2. TrialData object.
+            2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
         verbose : bool, optional
             If True, provides detailed output about the fitting process. Defaults to True.
@@ -127,9 +127,9 @@ class CumulativeMethod(BaseModel):
 
         self.instantiate_data_pattern_location(data)
 
-        end = self.trial_data.durations.values.mean() if self.end is None else self.end
+        end = self.pattern_data.durations.values.mean() if self.end is None else self.end
         self.step = self.location if self.step is None else self.step
-        max_n_events = compute_max_events(self.trial_data,self.location) if self.max_n_events is None\
+        max_n_events = compute_max_events(self.pattern_data,self.location) if self.max_n_events is None\
             else self.max_n_events
         #stop when not possible to insert event
         end = int(np.rint((end - self.location)/self.step))
@@ -217,7 +217,7 @@ class CumulativeMethod(BaseModel):
             warn("Failed to find more than two stages, returning None")
             self._fitted = False
         
-        del self.trial_data
+        del self.pattern_data
 
     def transform(self, *args, **kwargs):
         """

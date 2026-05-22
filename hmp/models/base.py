@@ -7,7 +7,7 @@ from warnings import resetwarnings, warn
 
 from hmp.distributions import Gamma
 from hmp.patterns import Pattern, HalfSine
-from hmp.trialdata import TrialData
+from hmp.patterndata import PatternData
 
 class BaseModel(ABC):
     """The model to analyze the cross-correlated data.
@@ -64,7 +64,7 @@ class BaseModel(ABC):
 
     def instantiate_data_pattern_location(self, data):
         """ 
-        If data is TrialData object, use directly. Otherwise
+        If data is PatternData object, use directly. Otherwise
         create pattern template based on data sfreq, and do
         cross correlation.
 
@@ -73,27 +73,20 @@ class BaseModel(ABC):
         If previously fitted (ie transform()), use existing pattern and location.
 
         """
-        if isinstance(data, TrialData):
-            self.trial_data = data
+        if isinstance(data, PatternData):
+            self.pattern_data = data
             if self._fitted and data.pattern != self.pattern:
                 warn(f"Cross-correlation pattern {data.pattern} is different in provided data than in model {self.pattern}. Data pattern is used.")
             self.pattern = data.pattern
         else: #assume transformed (is checked later)
             if self.pattern.sfreq is None:
                 self.pattern.create_template(data.sfreq)
-            self.trial_data = TrialData.from_transformer(data, self.pattern)
+            self.pattern_data = PatternData.from_transformer(data, self.pattern)
 
         #instantiate location in samples based on data frequency
         if not hasattr(self,'location') or self.location is None:
             steps = 1000 / self.sfreq
             self.location = int(np.ceil(self.location_ms / steps))
-
-
-
-
-
-
-
 
 
     @abstractmethod
