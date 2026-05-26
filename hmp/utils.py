@@ -14,7 +14,6 @@ from hmp.transformers.identity import ProjIdentity
 from hmp.transformers.pca import ProjPCA
 #from hmp.trialdata import TrialData
 
-
 def _check_transformed(transformed):
     if isinstance(transformed, (ProjPCA, ProjIdentity, ProjCustom)):
         data = transformed.data
@@ -564,3 +563,5 @@ def _define_random_state(seed=None):
     else:
         random_state = np.random.RandomState(np.random.randint(low=0, high=3000))
     return random_state
+
+

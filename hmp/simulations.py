@@ -12,7 +12,7 @@ from scipy.stats import gamma
 
 from hmp.io import read_mne_data
 from hmp.models.event import EventModel
-from hmp.trialdata import TrialData
+from hmp.patterndata import PatternData
 from hmp.utils import _define_random_state
 
 root = os.path.dirname(os.path.abspath(__file__))
@@ -482,7 +482,7 @@ def classification_true(
 def simulated_times_and_parameters(
     generating_events: np.ndarray,
     model: EventModel,
-    trial_data: TrialData,
+    pattern_data: PatternData,
     resampling_freq: float = None,
     data: np.ndarray = None,
 ) -> tuple[np.ndarray, list, np.ndarray, np.ndarray]:
@@ -495,13 +495,13 @@ def simulated_times_and_parameters(
         Times of the simulated events created by the function simulate().
     model : hmp
         Initialized EventModel.
-    trial_data : TrialData
+    pattern_data : PatternData
         Object containing trial-specific data such as starts, ends, and cross-correlation.
     resampling_freq : float, optional
         Value of the new sampling frequency if there is a difference between the initialized HMP
         object and the generating_events. Default is None.
     data : np.ndarray, optional
-        Alternative data to use instead of cross-correlation contained in trial_data.crosscorr.
+        Alternative data to use instead of cross-correlation contained in pattern_data.crosscorr.
         Default is None.
 
     Returns
@@ -537,16 +537,16 @@ def simulated_times_and_parameters(
     true_time_pars[true_time_pars[:, 1] <= 0, 1] = 1e-3  # Can happen in corner cases
     random_source_times = random_source_times * (1000 / sfreq) / (1000 / resampling_freq)
     ## Recover magnitudes
-    sample_times = np.zeros((len(trial_data.starts), n_events), dtype=int)
+    sample_times = np.zeros((len(pattern_data.starts), n_events), dtype=int)
     for event in range(n_events):
-        for trial in range(len(trial_data.starts)):
-            trial_time = trial_data.starts[trial] + np.sum(random_source_times[trial, : event + 1])
-            if trial_data.ends[trial] >= trial_time:  # exceeds RT
+        for trial in range(len(pattern_data.starts)):
+            trial_time = pattern_data.starts[trial] + np.sum(random_source_times[trial, : event + 1])
+            if pattern_data.ends[trial] >= trial_time:  # exceeds RT
                 sample_times[trial, event] = trial_time
             else:
-                sample_times[trial, event] = trial_data.ends[trial]
+                sample_times[trial, event] = pattern_data.ends[trial]
     if data is None:  # use crosscorrelated data
-        true_activities = trial_data.cross_corr[sample_times[:, :]]
+        true_activities = pattern_data.cross_corr[sample_times[:, :]]
     else:
         true_activities = data[sample_times[:, :]]
     true_channel_pars = np.mean(true_activities, axis=0)
