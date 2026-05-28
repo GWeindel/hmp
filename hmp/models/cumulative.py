@@ -150,7 +150,7 @@ class CumulativeMethod(BaseModel):
             time_pars[:n_events] = self.base_fit.time_pars.copy()
             channel_pars[:n_events-1] = self.base_fit.channel_pars.copy()
             llk_prev = self.base_fit.transform(trial_data)[0]
-            
+
         # Iterative fit
         while j < end and n_events <= max_n_events:
             prev_j = j
