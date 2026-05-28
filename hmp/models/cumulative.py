@@ -10,7 +10,6 @@ from hmp.crossvalidation import pseudo_kfold
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
 from hmp.patterns import Pattern
-from hmp.patterndata import compute_max_events
 
 try:
     __IPYTHON__
@@ -129,8 +128,10 @@ class CumulativeMethod(BaseModel):
 
         end = self.pattern_data.durations.values.mean() if self.end is None else self.end
         self.step = self.location if self.step is None else self.step
-        max_n_events = compute_max_events(self.pattern_data,self.location) if self.max_n_events is None\
-            else self.max_n_events
+        if self.max_events is None:
+            max_events = int(np.rint(np.min(self.pattern_data.durations.values) // (self.location))) + 1
+        else:
+            max_events = self.max_events
         #stop when not possible to insert event
         end = int(np.rint((end - self.location)/self.step))
 

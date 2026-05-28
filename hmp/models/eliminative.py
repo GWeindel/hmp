@@ -12,7 +12,6 @@ from warnings import resetwarnings, warn
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
 from hmp.patterns import Pattern
-from hmp.patterndata import compute_max_events
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
@@ -98,7 +97,7 @@ class EliminativeMethod(BaseModel):
         self.instantiate_data_pattern_location(data)
 
         if self.max_events is None:
-            max_events = compute_max_events(self.pattern_data, self.location)
+            max_events = int(np.rint(np.min(self.pattern_data.durations.values) // (self.location))) + 1 
         else:
             max_events = self.max_events
 
