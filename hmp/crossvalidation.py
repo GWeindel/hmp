@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from hmp.trialdata import TrialData
+from hmp.patterndata import PatternData
 from hmp.utils import _define_random_state
 
 
@@ -17,7 +17,7 @@ def _recut_data(rand_idx, trial_data):
     splitted_cross_corr = np.vstack(
         [trial_data.cross_corr[trial_data.starts[i]:trial_data.ends[i]+1, :] for i in rand_idx]
     )
-    splitted_trial_data = TrialData(trial_data.durations.sel(trial = rand_named_idx),
+    splitted_trial_data = PatternData(trial_data.durations.sel(trial = rand_named_idx),
                                              starts = starts,
                                              ends = ends,
                                              sfreq = trial_data.sfreq,
@@ -29,11 +29,11 @@ def _recut_data(rand_idx, trial_data):
 def pseudo_cv_split(trial_data,
              test_frac: float = 1,
              seed: int | None = None):
-    """Split the TrialData object into train and test sets.
+    """Split the PatternData object into train and test sets.
 
     Parameters
     ----------
-    trial_data : TrialData
+    trial_data : PatternData
         The trial data to perform the split on.
     test_frac: float
         Fraction of the data to use for the test of the model
@@ -42,9 +42,9 @@ def pseudo_cv_split(trial_data,
 
     Returns
     -------
-    train_set: TrialData
+    train_set: PatternData
         The trial data used for training the model
-    test_set: TrialData
+    test_set: PatternData
         The trial data used for testing the model
 
     Notes
@@ -66,7 +66,7 @@ def pseudo_cv_split(trial_data,
 
     return train_trial_data, test_trial_data
 
-def pseudo_kfold(trial_data: TrialData,
+def pseudo_kfold(trial_data: PatternData,
                  n_splits: int = 5,
                  seed: int = 1):
     """Create kfold partition of trial data.
@@ -77,7 +77,7 @@ def pseudo_kfold(trial_data: TrialData,
 
     Parameters
     ----------
-    trial_data : TrialData
+    trial_data : PatternData
         The trial data to perform the split on.
     n_splits: float
         Number of split to perform on the data
@@ -86,9 +86,9 @@ def pseudo_kfold(trial_data: TrialData,
 
     Returns
     -------
-    train_set: TrialData
+    train_set: PatternData
         The trial data used for training the model
-    test_set: TrialData
+    test_set: PatternData
         The trial data used for testing the model
 
     Notes
