@@ -515,7 +515,7 @@ def simulated_times_and_parameters(
     true_activities : np.ndarray
         Actual values at simulated event times.
     """
-    sfreq = model.sfreq
+    sfreq = pattern_data.sfreq
     n_stages = len(np.unique(generating_events[:, 2])[1:])  # one trigger = one source
     n_events = n_stages - 1
     if resampling_freq is None:

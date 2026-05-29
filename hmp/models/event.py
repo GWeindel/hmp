@@ -164,18 +164,19 @@ class EventModel(BaseModel):
         self._instantiate_data_pattern(data)
 
         if locations is None:
-            self.locations = np.repeat(self.pattern.width, n_events+1)
+            self.locations = np.repeat(len(self.pattern_data.template), self.n_events+1)
             self.locations[0] = 0
             self.locations[-1] = 0
-
-        if n_events > 1 and any(self.locations[1:-1] < self.pattern.width):
-             warn("For n_event > 1, locations must be greater or equal than pattern.width"
-             f" but received locations ({self.locations}) is smaller than  ({self.pattern.width}).")
+        else:
+            self.locations = locations
+            if self.n_events > 1 and any(self.locations[1:-1] < len(self.pattern_data.template)):
+                 warn("For n_event > 1, locations must be greater or equal than pattern.width"
+                 f" but received locations ({self.locations}) is smaller than  ({self.pattern.width}).")
 
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
-        infos_to_store["sfreq"] = self.sfreq
-        infos_to_store["event_width"] = self.event_width
+        infos_to_store["sfreq"] = self.pattern_data.sfreq
+        infos_to_store["event_width"] = self.pattern.width
         infos_to_store["tolerance"] = self.tolerance
 
         self.n_dims = self.pattern_data.cross_corr.shape[1]
@@ -337,7 +338,7 @@ class EventModel(BaseModel):
         del self.pattern_data
 
 
-    def transform(self, data: Any) -> tuple[np.ndarray, xr.DataArray]:
+    def transform(self, data: Any, locations=None) -> tuple[np.ndarray, xr.DataArray]:
         """
         Transform the trial data using the fitted model.
 
@@ -357,7 +358,12 @@ class EventModel(BaseModel):
         """
 
         self._instantiate_data_pattern(data)
-
+        if locations is None:
+            self.locations = np.repeat(len(self.pattern_data.template), self.n_events+1)
+            self.locations[0] = 0
+            self.locations[-1] = 0
+        else:
+            self.locations = locations
         _, groups, glabels = self.group_constructor(
                 self.grouping_dict
             )
@@ -986,8 +992,8 @@ class EventModel(BaseModel):
             xreventprobs = xreventprobs.assign_coords(group=("trial", groups[groups == cur_group],))
             all_xreventprobs.append(xreventprobs)
         all_xreventprobs = xr.concat(all_xreventprobs, dim="trial", join='outer')
-        all_xreventprobs.attrs['sfreq'] = self.sfreq
-        all_xreventprobs.attrs['event_width'] = self.event_width
+        all_xreventprobs.attrs['sfreq'] = self.pattern_data.sfreq
+        all_xreventprobs.attrs['event_width'] = len(self.pattern_data.template)
         return [np.array(likelihood), all_xreventprobs]
 
     def distribution_pdf(

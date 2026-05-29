@@ -40,7 +40,8 @@ class PatternData:
     ends: np.ndarray
     sfreq: float
     offset: int
-    pattern: Any
+    pattern: Pattern
+    template: np.ndarray
     cross_corr: np.ndarray
     
     @classmethod
@@ -94,16 +95,30 @@ class PatternData:
             dropna(dim="all_samples")
 
         if pattern is None:
-            pattern = HalfSine(sfreq=data.sfreq)
+            pattern = HalfSine()
+
+        if data.sfreq > 1000:
+            raise NotImplementedError('Cannot use sfreq > 1000Hz')
+        
+        template = _norm_template(data.sfreq, pattern.template)
+        if len(template) < 5:
+            if len(template) < 2:
+                raise ValueError("Cannot use pattern with only one data point")
+            warn('Using a pattern defined by less than 5 points is not recommended')
 
         # Equation 1 in 2024 paper
-        cross_corr = cross_correlation(data.values.T, starts, ends, pattern.template, dtype)
+        cross_corr = cross_correlation(data.values.T, starts, ends, template, dtype)
 
         return cls(durations=durations, starts=starts, ends=ends,
-                    cross_corr=cross_corr, pattern=pattern,
+                    cross_corr=cross_corr, pattern=pattern, template=template,
                    offset=data.offset, sfreq=data.sfreq)
 
-   
+def _norm_template(sfreq, template):
+    tstep = int(np.rint(1000/sfreq)) 
+    template = template[::tstep]
+    template = template / np.sum(template**2)
+    return template
+    
 def cross_correlation(
         data: np.ndarray,
         starts: np.ndarray,
