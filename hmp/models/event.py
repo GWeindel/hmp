@@ -165,18 +165,8 @@ class EventModel(BaseModel):
 
         pattern_data = self._instantiate_data_pattern(data)
 
-        if locations is None:
-            self.locations = np.zeros(self.n_events+1, dtype=int)  
-            self.locations[1:-1] = len(pattern_data.template)
-        else:
-            if isinstance(locations, int):
-                locations = np.zeros(self.n_events+1, dtype=int)
-                locations[1:-1] = locations
-            self.locations = locations
-            if self.n_events > 1 and any(self.locations[1:-1] < len(pattern_data.template)):
-                 warn("For n_event > 1, locations must be greater or equal than pattern.width"
-                 f" but received locations ({self.locations}) is smaller than  ({len(pattern_data.template)}).")
-        print(self.locations)
+        self._set_locations(locations, len(pattern_data.template))
+        
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
         infos_to_store["sfreq"] = pattern_data.sfreq
@@ -362,12 +352,8 @@ class EventModel(BaseModel):
         """
 
         pattern_data = self._instantiate_data_pattern(data)
-        if locations is None:
-            self.locations = np.repeat(len(pattern_data.template), self.n_events+1)
-            self.locations[0] = 0
-            self.locations[-1] = 0
-        else:
-            self.locations = locations
+        self._set_locations(locations, len(pattern_data.template))
+
         _, groups, glabels = self.group_constructor(
                 pattern_data.durations,
                 self.grouping_dict
@@ -380,7 +366,25 @@ class EventModel(BaseModel):
 
         return likelihoods, xreventprobs
 
-
+    def _set_locations(self, locations, pattern_width):
+        """
+        Sets minimum distance between successive events.
+        
+        """
+        if locations is None:
+            self.locations = np.zeros(self.n_events+1, dtype=int)
+            if self.n_events > 1:
+                self.locations[1:-1] = pattern_width
+        else:
+            if isinstance(locations, int):
+                self.locations = np.zeros(self.n_events+1, dtype=int)
+                if self.n_events > 1:
+                    self.locations[1:-1] = locations
+            else:
+                self.locations = locations
+            if self.n_events > 1 and any(self.locations[1:-1] < pattern_width):
+                 warn("For n_event > 1, locations must be greater or equal than pattern.width"
+                 f" but received locations ({self.locations}) is smaller than  ({pattern_width}).")
 
     @property
     def xrtraces(self):
