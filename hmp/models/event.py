@@ -72,7 +72,6 @@ class EventModel(BaseModel):
         self, 
         n_events: int,
         pattern: Pattern = None,
-        location_ms: float = None,
         fixed_time_pars: list = None, 
         fixed_channel_pars: list = None,
         tolerance: float = 1e-4,
@@ -88,7 +87,7 @@ class EventModel(BaseModel):
              f" is expected, got {type(n_events).__name__} instead"
          )
         
-        super().__init__(pattern, location_ms, distribution)
+        super().__init__(pattern, distribution)
         self.n_events = n_events
         self.n_dims = None
         self.fixed_time_pars = fixed_time_pars
@@ -107,6 +106,7 @@ class EventModel(BaseModel):
     def fit(  # noqa: PLR0912, PLR0915
         self,
         data: Any,
+        locations: np.ndarray = None,
         channel_pars: np.ndarray = None,
         time_pars: np.ndarray = None,
         verbose: bool = True,
@@ -124,6 +124,10 @@ class EventModel(BaseModel):
             1. data from BaseTransformer or xr.DataArray containing transformed data.
             2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
+        locations : np.array, optional
+            How much milliseconds should be censored in the EM() step of model fitting.
+            Default is width of the event. Alternatively it is possible to provide an array
+            of length `n_events` with the location for each event.
         channel_pars : ndarray, optional
             2D ndarray (n_groups * n_events * n_channels) or
             4D (starting_points * n_groups * n_groups * n_events * n_channels),
@@ -157,13 +161,17 @@ class EventModel(BaseModel):
         None
         """
 
-        self.instantiate_data_pattern_location(data)
+        self._instantiate_data_pattern(data)
 
-        if self.n_events > 1 and self.location < self.event_width:
-             warn("For n_event > 1, location must be greater or equal than event_properties.width"
-             f" but received location ({self.location}) is smaller than"
-             f" but received event_properties.width ({self.event_width})."
-         )
+        if locations is None:
+            self.locations = np.repeat(self.pattern.width, n_events+1)
+            self.locations[0] = 0
+            self.locations[-1] = 0
+
+        if n_events > 1 and any(self.locations[1:-1] < self.pattern.width):
+             warn("For n_event > 1, locations must be greater or equal than pattern.width"
+             f" but received locations ({self.locations}) is smaller than  ({self.pattern.width}).")
+
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
         infos_to_store["sfreq"] = self.sfreq
@@ -348,14 +356,14 @@ class EventModel(BaseModel):
             Concatenated event probability arrays for all submodels, indexed by number of events.
         """
 
-        self.instantiate_data_pattern_location(data)
+        self._instantiate_data_pattern(data)
 
         _, groups, glabels = self.group_constructor(
                 self.grouping_dict
             )
         likelihoods, xreventprobs = self._distribute_groups(
             self.channel_pars, self.time_pars,
-            self.channel_map, self.time_map, groups, True
+            self.channel_map, self.time_map, groups
         )
 
         del self.pattern_data
@@ -726,7 +734,7 @@ class EventModel(BaseModel):
             A 2D array where each row contains the shape and scale parameters for a stage.
         """
         rnd_durations = np.zeros(n_events + 1)
-        while any(rnd_durations < self.location):  # at least equal to the location
+        while any(rnd_durations < max(self.locations)):  # at least equal to the location
             rnd_events = np.random.default_rng().integers(
                 low=0, high=self.max_scale, size=n_events
             )  # n_events between 0 and mean_d
@@ -769,7 +777,6 @@ class EventModel(BaseModel):
         self,
         channel_pars: np.ndarray,
         time_pars: np.ndarray,
-        location: bool = True,
         subset_epochs: list[int] | None = None,
     ) -> tuple[float, np.ndarray]:
         """
@@ -785,9 +792,6 @@ class EventModel(BaseModel):
             A 2D array of shape (n_stages, n_parameters) or a 3D array of shape
             (iteration, n_stages, n_parameters) containing initial conditions for
             the distribution parameters.
-        location : bool, optional
-            Whether to add a minimum distance between events to avoid event collapse
-            during the expectation-maximization algorithm. Default is True.
         subset_epochs : list[int] or None, optional
             A list of trial indices to consider for the computation. If None, all trials
             are used. Default is None.
@@ -802,9 +806,6 @@ class EventModel(BaseModel):
         """
         n_events = channel_pars.shape[0]
         n_stages = n_events + 1
-        locations = np.zeros(n_stages, dtype=int)
-        if location:
-            locations[1:-1] = self.location
         if subset_epochs is not None:
             if len(subset_epochs) == len(self.pattern_data.starts):  # boolean indices
                 subset_epochs = np.where(subset_epochs)[0]
@@ -845,9 +846,9 @@ class EventModel(BaseModel):
         for stage in range(n_stages):
             pmf[:, stage] = np.concatenate(
                 (
-                    np.repeat(0, locations[stage]),
+                    np.repeat(0, self.locations[stage]),
                     self.distribution_pdf(time_pars[stage, 0], time_pars[stage, 1], max_duration)[
-                        locations[stage] :
+                        self.locations[stage] :
                     ],
                 )
             )
@@ -899,7 +900,6 @@ class EventModel(BaseModel):
         channel_map: np.ndarray,
         time_map: np.ndarray,
         groups: np.ndarray,
-        location: bool = True,
         cpus: int = 1,
     ) -> tuple[np.ndarray, xr.DataArray]:
         """
@@ -924,9 +924,6 @@ class EventModel(BaseModel):
             A 2D array mapping time parameters to groups.
         groups : np.ndarray
             An array indicating the groups for grouping modeling.
-        location : bool, optional
-            Whether to add a minimum distance between events to avoid event collapse
-            during the expectation-maximization algorithm. Default is True.
         cpus : int, optional
             Number of cores to use in multiprocessing functions. Default is 1.
 
@@ -950,7 +947,6 @@ class EventModel(BaseModel):
                          for cur_group in data_groups],
                         [time_pars[cur_group, time_map[cur_group, :] >= 0, :]
                          for cur_group in data_groups],
-                        itertools.repeat(location),
                         [groups == cur_group for cur_group in data_groups],
                         itertools.repeat(False),
                     ),
@@ -966,7 +962,6 @@ class EventModel(BaseModel):
                     self.estim_probs(
                         channel_pars_group,
                         time_pars_group,
-                        location,
                         subset_epochs=(groups == cur_group),
                     )
                 )

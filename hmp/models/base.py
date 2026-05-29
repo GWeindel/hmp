@@ -17,15 +17,6 @@ class BaseModel(ABC):
     pattern : Pattern
         The pattern and properties to use for cross-correlation. Default is
         half sine with 50 ms width.
-    location_ms : float, optional
-        How much milliseconds should be censored in the EM() step of model fitting.
-        Default is width of the event.
-        Shorter values than `width` allow overlap of neighboring events
-        but might result in the same event being duplicated in several events.
-        Larger values will prevent duplication at the risk of missing neighboring events
-        Censoring is done on samples lower or equal to the location,
-        thus requesting 50ms at 1000Hz will censor up to 50ms
-        Defaults to width of pattern, which is by default 50 ms.
     distribution : str
         Probability distribution for the by-trial onset of stages can be
         one of 'gamma','lognormal','wald', or 'weibull'
@@ -34,16 +25,12 @@ class BaseModel(ABC):
     def __init__(
         self,
         pattern: Pattern = None,
-        location_ms: float = None,
         distribution: Any = None
     ):
         self.pattern = pattern
         # default pattern is HalfSine, 50 ms width
         if pattern is None:
             self.pattern = HalfSine()
-        self.location_ms = location_ms
-        if location_ms is None:
-            self.location_ms = self.pattern.width_ms
         if distribution is None:
             distribution = Gamma()
         self.distribution = distribution
@@ -53,8 +40,8 @@ class BaseModel(ABC):
         if attr in ["sfreq", "steps", "template"]:
             return getattr(self.pattern, attr)
 
-        if attr in ["width", "event_width", "width_samples"]:
-            return self.pattern.width_samples
+        if attr == "event_width":
+            return self.pattern.width
 
         return super().__getattribute__(attr)
     
@@ -62,15 +49,13 @@ class BaseModel(ABC):
         if not self._fitted:
             raise ValueError(f"Cannot {op}, because the model has not been fitted yet.")
 
-    def instantiate_data_pattern_location(self, data):
+    def _instantiate_data_pattern(self, data):
         """ 
         If data is PatternData object, use directly. Otherwise
         create pattern template based on data sfreq, and do
         cross correlation.
 
-        Next, set location based on sfreq of data.
-
-        If previously fitted (ie transform()), use existing pattern and location.
+        If previously fitted (ie transform()), use existing pattern
 
         """
         if isinstance(data, PatternData):
@@ -82,12 +67,6 @@ class BaseModel(ABC):
             if self.pattern.sfreq is None:
                 self.pattern.create_template(data.sfreq)
             self.pattern_data = PatternData.from_transformer(data, self.pattern)
-
-        #instantiate location in samples based on data frequency
-        if not hasattr(self,'location') or self.location is None:
-            steps = 1000 / self.sfreq
-            self.location = int(np.ceil(self.location_ms / steps))
-
 
     @abstractmethod
     def fit(self):
