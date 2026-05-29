@@ -107,7 +107,7 @@ class EventModel(BaseModel):
     def fit(  # noqa: PLR0912, PLR0915
         self,
         data: Any,
-        locations: np.ndarray = None,
+        locations: int | np.ndarray = None,
         channel_pars: np.ndarray = None,
         time_pars: np.ndarray = None,
         verbose: bool = True,
@@ -125,10 +125,11 @@ class EventModel(BaseModel):
             1. data from BaseTransformer or xr.DataArray containing transformed data.
             2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
-        locations : np.array, optional
-            How much milliseconds should be censored in the EM() step of model fitting.
+        locations : int, np.array, optional
+            How much samples should be censored in the EM() step of model fitting.
             Default is width of the event. Alternatively it is possible to provide an array
-            of length `n_events` with the location for each event.
+            of length `n_events` with the location for each event or an integer that will
+            be repeated across events.
         channel_pars : ndarray, optional
             2D ndarray (n_groups * n_events * n_channels) or
             4D (starting_points * n_groups * n_groups * n_events * n_channels),
@@ -165,15 +166,17 @@ class EventModel(BaseModel):
         pattern_data = self._instantiate_data_pattern(data)
 
         if locations is None:
-            self.locations = np.repeat(len(pattern_data.template), self.n_events+1)
-            self.locations[0] = 0
-            self.locations[-1] = 0
+            self.locations = np.zeros(self.n_events+1, dtype=int)  
+            self.locations[1:-1] = len(pattern_data.template)
         else:
+            if isinstance(locations, int):
+                locations = np.zeros(self.n_events+1, dtype=int)
+                locations[1:-1] = locations
             self.locations = locations
             if self.n_events > 1 and any(self.locations[1:-1] < len(pattern_data.template)):
                  warn("For n_event > 1, locations must be greater or equal than pattern.width"
                  f" but received locations ({self.locations}) is smaller than  ({len(pattern_data.template)}).")
-
+        print(self.locations)
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
         infos_to_store["sfreq"] = pattern_data.sfreq
