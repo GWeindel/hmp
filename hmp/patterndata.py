@@ -8,7 +8,8 @@ from scipy.signal import correlate
 
 from typing import Any
 from hmp.utils import _check_transformed
-from hmp.patterns import HalfSine
+from hmp.patterns import HalfSine, Pattern
+from hmp.transformers import BaseTransformer
 
 
 @dataclass
@@ -43,7 +44,10 @@ class PatternData:
     cross_corr: np.ndarray
     
     @classmethod
-    def from_transformer(cls, transformed, pattern = None, dtype = None):
+    def from_transformer(cls,
+                         transformed: xr.DataArray | BaseTransformer ,
+                         pattern: Pattern | None = None,
+                         dtype: DTypeLike | None = None):
         """
         Create a TrialData instance from transformed data and a given pattern.
 
@@ -51,16 +55,16 @@ class PatternData:
         ----------
         transformed : BaseTransfromer or xr.DataArray
             The transformed object or xarray DataArray containing the transformed data.
-        pattern : np.ndarray
+        pattern : Pattern
             The pattern to use for cross-correlation computation. Default is
             half sine with 50 ms width.
         dtype: np.DTypeLike
-            Precision, use np.float32 or np.int64
+            Precision, use np.float32 or np.int64. By default inherits from data.
 
         Returns
         -------
-        TrialData
-            An instance of TrialData with computed durations, cross-correlation, and metadata.
+        PatternData
+            An instance of PatternData with computed durations, cross-correlation, and metadata.
         """
         data = _check_transformed(transformed)
         if dtype is None:
