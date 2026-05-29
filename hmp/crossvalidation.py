@@ -23,6 +23,7 @@ def _recut_data(rand_idx, trial_data):
                                              sfreq = trial_data.sfreq,
                                              offset = trial_data.offset,
                                              pattern = trial_data.pattern,
+                                             template = trial_data.template,
                                              cross_corr = splitted_cross_corr)
     return splitted_trial_data
 
