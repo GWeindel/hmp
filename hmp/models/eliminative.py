@@ -1,20 +1,17 @@
 """Estimate all possible number events starting from a base model or the maximum possible."""
 
 import gc
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import xarray as xr
-from typing import Any
-from warnings import resetwarnings, warn
-
 
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
-from hmp.patterns import Pattern
 from hmp.patterndata import PatternData
+from hmp.patterns import Pattern
 from hmp.transformers import BaseTransformer
-
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
@@ -46,13 +43,13 @@ class EliminativeMethod(BaseModel):
 
     def __init__(
         self,
-        pattern: Pattern = None, 
+        pattern: Pattern = None,
         max_events: int | None = None,
         min_events: int = 0,
         base_fit: EventModel | None = None,
         tolerance: float = 1e-4,
         max_iteration: int = 1000,
-        distribution: Any = None 
+        distribution: Any = None
     ):
         super().__init__(pattern, distribution)
         self.max_events: int = max_events
@@ -91,7 +88,6 @@ class EliminativeMethod(BaseModel):
         -------
         None
         """
-
         pattern_data = self._instantiate_data_pattern(data)
 
         if location is None:
@@ -99,7 +95,7 @@ class EliminativeMethod(BaseModel):
 
         if self.max_events is None:
             max_events = int(np.rint(np.min(pattern_data.durations.values) //\
-                                     (location))) + 1 
+                                     (location))) + 1
         else:
             max_events = self.max_events
 
@@ -172,7 +168,6 @@ class EliminativeMethod(BaseModel):
         xr_eventprobs : xarray.DataArray
             Concatenated event probability arrays for all submodels, indexed by number of events.
         """
-
         pattern_data = self._instantiate_data_pattern(data)
 
         if location is None:

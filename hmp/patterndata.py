@@ -1,15 +1,15 @@
 """Builds the data to be used in HMP model estimation."""
 from dataclasses import dataclass
+from warnings import warn
 
 import numpy as np
 import xarray as xr
 from numpy.typing import DTypeLike
 from scipy.signal import correlate
 
-from typing import Any
-from hmp.utils import _check_transformed
 from hmp.patterns import HalfSine, Pattern
 from hmp.transformers import BaseTransformer
+from hmp.utils import _check_transformed
 
 
 @dataclass
@@ -43,7 +43,7 @@ class PatternData:
     pattern: Pattern
     template: np.ndarray
     cross_corr: np.ndarray
-    
+
     @classmethod
     def from_transformer(cls,
                          transformed: xr.DataArray | BaseTransformer ,
@@ -99,7 +99,7 @@ class PatternData:
 
         if data.sfreq > 1000:
             raise NotImplementedError('Cannot use sfreq > 1000Hz')
-        
+
         template = _norm_template(data.sfreq, pattern.template)
         if len(template) < 5:
             if len(template) < 2:
@@ -114,11 +114,11 @@ class PatternData:
                    offset=data.offset, sfreq=data.sfreq)
 
 def _norm_template(sfreq, template):
-    tstep = int(np.rint(1000/sfreq)) 
+    tstep = int(np.rint(1000/sfreq))
     template = template[::tstep]
     template = template / np.sum(template**2)
     return template
-    
+
 def cross_correlation(
         data: np.ndarray,
         starts: np.ndarray,

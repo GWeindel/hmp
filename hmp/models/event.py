@@ -8,16 +8,16 @@ hidden multivariate pattern models.
 import itertools
 import multiprocessing as mp
 from itertools import product
-from warnings import resetwarnings, warn
 from typing import Any
+from warnings import resetwarnings, warn
 
 import numpy as np
 import xarray as xr
 from pandas import MultiIndex
 
 from hmp.models.base import BaseModel
-from hmp.patterns import Pattern
 from hmp.patterndata import PatternData
+from hmp.patterns import Pattern
 
 try:
     __IPYTHON__
@@ -70,24 +70,24 @@ class EventModel(BaseModel):
     """
 
     def __init__(
-        self, 
+        self,
         n_events: int,
         pattern: Pattern = None,
-        fixed_time_pars: list = None, 
+        fixed_time_pars: list = None,
         fixed_channel_pars: list = None,
         tolerance: float = 1e-4,
         max_iteration: int = 1e3,
         min_iteration: int = 1,
         starting_points: int = 1,
         max_scale: float = None,
-        distribution: Any = None 
+        distribution: Any = None
         ):
         assert np.issubdtype(type(n_events), np.integer), \
          (
              f"An integer for the number of expected transition events"
              f" is expected, got {type(n_events).__name__} instead"
          )
-        
+
         super().__init__(pattern, distribution)
         self.n_events = n_events
         self.n_dims = None
@@ -103,7 +103,7 @@ class EventModel(BaseModel):
         self.channel_map = np.zeros((1, self.n_events))
         self.n_cor = 30
 
-        
+
     def fit(  # noqa: PLR0912, PLR0915
         self,
         data: Any,
@@ -162,11 +162,10 @@ class EventModel(BaseModel):
         -------
         None
         """
-
         pattern_data = self._instantiate_data_pattern(data)
 
         self._set_locations(locations, len(pattern_data.template))
-        
+
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
         infos_to_store["sfreq"] = pattern_data.sfreq
@@ -229,7 +228,8 @@ class EventModel(BaseModel):
                     [
                         self.distribution.shape,
                         self.distribution.mean_to_scale(
-                        np.mean(pattern_data.durations.values[groups == cur_group]) / (n_stage_group)
+                        np.mean(pattern_data.durations.values[groups == cur_group])\
+                            / (n_stage_group)
                         ),
                     ],
                     (n_stage_group, 1),
@@ -350,7 +350,6 @@ class EventModel(BaseModel):
         xr_eventprobs : xr.DataArray
             Concatenated event probability arrays for all submodels, indexed by number of events.
         """
-
         pattern_data = self._instantiate_data_pattern(data)
         self._set_locations(locations, len(pattern_data.template))
 
@@ -367,10 +366,7 @@ class EventModel(BaseModel):
         return likelihoods, xreventprobs
 
     def _set_locations(self, locations, pattern_width):
-        """
-        Sets minimum distance between successive events.
-        
-        """
+        """Set minimum distance between successive events."""
         if locations is None:
             self.locations = np.zeros(self.n_events+1, dtype=int)
             if self.n_events > 1:
@@ -599,7 +595,7 @@ class EventModel(BaseModel):
 
                 # get c_pars/t_pars by group
                 c_par, t_par = self.get_channel_time_parameters_expectation(pattern_data,
-                                eventprobs.values[:, :np.max(pattern_data.durations.values[epochs_group]),
+                        eventprobs.values[:, :np.max(pattern_data.durations.values[epochs_group]),
                                           channel_map_group],
                         subset_epochs=epochs_group,
                 )
@@ -715,7 +711,8 @@ class EventModel(BaseModel):
                 for trial_idx, trial in enumerate(subset_epochs):
                     start, end = pattern_data.starts[trial], pattern_data.ends[trial]
                     duration = end - start + 1
-                    event_data[trial_idx, :duration] = pattern_data.cross_corr[start : end + 1, comp]
+                    event_data[trial_idx, :duration] =\
+                        pattern_data.cross_corr[start : end + 1, comp]
                 channel_pars[event, comp] = np.mean(
                     np.sum(eventprobs[subset_epochs, :, event] * event_data, axis=1)
                 )

@@ -1,17 +1,17 @@
 """Models to estimate cumulative event models."""
 
+from typing import Any
 from warnings import warn
 
 import numpy as np
 import xarray as xr
 from joblib import Parallel, delayed
-from typing import Any
 
 from hmp.crossvalidation import pseudo_kfold
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
-from hmp.patterns import Pattern
 from hmp.patterndata import PatternData
+from hmp.patterns import Pattern
 from hmp.transformers import BaseTransformer
 
 try:
@@ -29,10 +29,9 @@ class CumulativeMethod(BaseModel):
 
     Parameters
     ----------
-
     pattern :
         The pattern and properties to use for cross-correlation. Default is
-        half sine with 50 ms width.   
+        half sine with 50 ms width.
     step : float, optional
         The size of the step from 0 to the mean RT. Defaults to the location defined in the pattern.
         Small values ensure a complete exploration of the parameter space but can be slow.
@@ -70,7 +69,7 @@ class CumulativeMethod(BaseModel):
         tolerance: float = 1e-4,
         base_fit: EventModel | None = None,
         max_n_events: int | None = None,
-        distribution: Any = None 
+        distribution: Any = None
     ):
         super().__init__(pattern, distribution)
         self.step = step
@@ -82,7 +81,7 @@ class CumulativeMethod(BaseModel):
         self.max_n_events = max_n_events
         self.submodels = []
 
-    def fit(
+    def fit(# noqa: PLR0912, PLR0915
         self,
         data: PatternData | BaseTransformer | xr.DataArray,
         location: int | None = None,
@@ -121,7 +120,6 @@ class CumulativeMethod(BaseModel):
         -------
         None
         """
-
         pattern_data = self._instantiate_data_pattern(data)
 
         if location is None:
@@ -156,7 +154,8 @@ class CumulativeMethod(BaseModel):
         # Iterative fit
         while j < end and n_events <= max_n_events:
             prev_j = j
-            event_model = EventModel(n_events=n_events, pattern=self.pattern,  tolerance=self.tolerance,distribution=self.distribution)
+            event_model = EventModel(n_events=n_events, pattern=self.pattern,
+                                     tolerance=self.tolerance,distribution=self.distribution)
             # get new parameters
             j, channel_pars_props, time_pars_props = self._propose_fit_params(
                 n_events, j, channel_pars, time_pars
@@ -205,7 +204,7 @@ class CumulativeMethod(BaseModel):
         n_events = n_events - 1
         if n_events > 0:
             self._fitted = True
-            event_model = EventModel(pattern=self.pattern, distribution=self.distribution, 
+            event_model = EventModel(pattern=self.pattern, distribution=self.distribution,
                                      tolerance=self.tolerance, n_events=n_events)
             event_model.fit(
                 pattern_data,
@@ -219,7 +218,7 @@ class CumulativeMethod(BaseModel):
         else:
             warn("Failed to find more than two stages, returning None")
             self._fitted = False
-        
+
     def transform(self, *args, **kwargs):
         """
         Transform the input data using the last model fitted in the cumulative method.
@@ -238,8 +237,8 @@ class CumulativeMethod(BaseModel):
                          channel_pars_props, time_pars_props,
                          cpus, kfold):
 
-        event_model = EventModel(pattern=self.pattern, distribution=self.distribution, tolerance=self.tolerance,
-                                 n_events=n_events)
+        event_model = EventModel(pattern=self.pattern, distribution=self.distribution,
+                                 tolerance=self.tolerance, n_events=n_events)
         if kfold > 1:
             folds = list(pseudo_kfold(pattern_data, kfold))
 
@@ -340,8 +339,8 @@ class CumulativeMethod(BaseModel):
         return super().__getattribute__(attr)
 
     def run_fold(self, n_events, location, train_td, test_td, channel_pars_props, time_pars_props):
-        event_model = EventModel(pattern=self.pattern, distribution=self.distribution, tolerance=self.tolerance,
-                                         n_events=n_events)
+        event_model = EventModel(pattern=self.pattern, distribution=self.distribution,
+                                 tolerance=self.tolerance, n_events=n_events)
 
         event_model.fit(
             train_td,

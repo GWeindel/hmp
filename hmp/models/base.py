@@ -1,13 +1,12 @@
 """Models to estimate event probabilities."""
 from abc import ABC, abstractmethod
 from typing import Any
-
-import numpy as np
-from warnings import resetwarnings, warn
+from warnings import warn
 
 from hmp.distributions import Gamma
-from hmp.patterns import Pattern, HalfSine
 from hmp.patterndata import PatternData
+from hmp.patterns import HalfSine, Pattern
+
 
 class BaseModel(ABC):
     """The model to analyze the cross-correlated data.
@@ -31,28 +30,29 @@ class BaseModel(ABC):
         if pattern is None:
             pattern = HalfSine(width=50)
         self.pattern = pattern
-        
+
         if distribution is None:
             distribution = Gamma()
         self.distribution = distribution
         self._fitted = False
-    
+
     def _check_fitted(self, op):
         if not self._fitted:
             raise ValueError(f"Cannot {op}, because the model has not been fitted yet.")
 
     def _instantiate_data_pattern(self, data):
-        """ 
+        """Load data pattern, cross-correlate if needed.
+
         If data is PatternData object, use directly. Otherwise
         create pattern template and do cross correlation.
-
         If previously fitted (ie transform()), use existing pattern
 
         """
         if isinstance(data, PatternData):
             pattern_data = data
             if self._fitted and data.pattern != self.pattern:
-                warn(f"Cross-correlation pattern {data.pattern} is different in provided data than in model {self.pattern}. Data pattern is used.")
+                warn(f"Cross-correlation pattern {data.pattern}is different in provided data "
+                     f"than in model {self.pattern}. Data pattern is used.")
             self.pattern = data.pattern
         else: #assume transformed (is checked later)
             pattern_data = PatternData.from_transformer(data, self.pattern)

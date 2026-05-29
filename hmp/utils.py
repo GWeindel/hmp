@@ -14,6 +14,7 @@ from hmp.transformers.custom import ProjCustom
 from hmp.transformers.identity import ProjIdentity
 from hmp.transformers.pca import ProjPCA
 
+
 def _check_transformed(transformed):
     if isinstance(transformed, (ProjPCA, ProjIdentity, ProjCustom)):
         data = transformed.data
