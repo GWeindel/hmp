@@ -17,6 +17,7 @@ from pandas import MultiIndex
 
 from hmp.models.base import BaseModel
 from hmp.patterns import Pattern
+from hmp.patterndata import PatternData
 
 try:
     __IPYTHON__
@@ -161,32 +162,32 @@ class EventModel(BaseModel):
         None
         """
 
-        self._instantiate_data_pattern(data)
+        pattern_data = self._instantiate_data_pattern(data)
 
         if locations is None:
-            self.locations = np.repeat(len(self.pattern_data.template), self.n_events+1)
+            self.locations = np.repeat(len(pattern_data.template), self.n_events+1)
             self.locations[0] = 0
             self.locations[-1] = 0
         else:
             self.locations = locations
-            if self.n_events > 1 and any(self.locations[1:-1] < len(self.pattern_data.template)):
+            if self.n_events > 1 and any(self.locations[1:-1] < len(pattern_data.template)):
                  warn("For n_event > 1, locations must be greater or equal than pattern.width"
-                 f" but received locations ({self.locations}) is smaller than  ({self.pattern.width}).")
+                 f" but received locations ({self.locations}) is smaller than  ({len(pattern_data.template)}).")
 
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
-        infos_to_store["sfreq"] = self.pattern_data.sfreq
-        infos_to_store["event_width"] = self.pattern.width
+        infos_to_store["sfreq"] = pattern_data.sfreq
+        infos_to_store["event_width"] = len(pattern_data.template)
         infos_to_store["tolerance"] = self.tolerance
 
-        self.n_dims = self.pattern_data.cross_corr.shape[1]
+        self.n_dims = pattern_data.cross_corr.shape[1]
 
         if grouping_dict is None:
             grouping_dict = self.grouping_dict
             channel_map = self.channel_map
             time_map = self.time_map
         n_groups, groups, glabels = self.group_constructor(
-            grouping_dict, channel_map, time_map, verbose
+            pattern_data.durations, grouping_dict, channel_map, time_map, verbose
         )
         infos_to_store["channel_map"] = channel_map
         infos_to_store["time_map"] = time_map
@@ -235,7 +236,7 @@ class EventModel(BaseModel):
                     [
                         self.distribution.shape,
                         self.distribution.mean_to_scale(
-                        np.mean(self.pattern_data.durations.values[groups == cur_group]) / (n_stage_group)
+                        np.mean(pattern_data.durations.values[groups == cur_group]) / (n_stage_group)
                         ),
                     ],
                     (n_stage_group, 1),
@@ -244,7 +245,7 @@ class EventModel(BaseModel):
             time_pars = [initial_p]
             if self.starting_points > 1:
                 if self.max_scale is None:
-                    self.max_scale = self.pattern_data.durations.mean()
+                    self.max_scale = pattern_data.durations.mean()
                 infos_to_store["starting_points"] = self.starting_points
                 for _ in np.arange(self.starting_points):
                     proposal_p = (
@@ -274,6 +275,7 @@ class EventModel(BaseModel):
 
         if cpus > 1:
             inputs = zip(
+                pattern_data,
                 channel_pars,
                 time_pars,
                 itertools.repeat(fixed_channel_pars),
@@ -299,6 +301,7 @@ class EventModel(BaseModel):
             for t_pars, c_pars in zip(time_pars, channel_pars):
                 estimates.append(
                     self.EM(
+                        pattern_data,
                         c_pars,
                         t_pars,
                         fixed_channel_pars,
@@ -335,8 +338,6 @@ class EventModel(BaseModel):
         self.channel_map = channel_map
         self.time_map = time_map
 
-        del self.pattern_data
-
 
     def transform(self, data: Any, locations=None) -> tuple[np.ndarray, xr.DataArray]:
         """
@@ -357,22 +358,22 @@ class EventModel(BaseModel):
             Concatenated event probability arrays for all submodels, indexed by number of events.
         """
 
-        self._instantiate_data_pattern(data)
+        pattern_data = self._instantiate_data_pattern(data)
         if locations is None:
-            self.locations = np.repeat(len(self.pattern_data.template), self.n_events+1)
+            self.locations = np.repeat(len(pattern_data.template), self.n_events+1)
             self.locations[0] = 0
             self.locations[-1] = 0
         else:
             self.locations = locations
         _, groups, glabels = self.group_constructor(
+                pattern_data.durations,
                 self.grouping_dict
             )
         likelihoods, xreventprobs = self._distribute_groups(
+            pattern_data,
             self.channel_pars, self.time_pars,
             self.channel_map, self.time_map, groups
         )
-
-        del self.pattern_data
 
         return likelihoods, xreventprobs
 
@@ -488,6 +489,7 @@ class EventModel(BaseModel):
 
     def EM(  # noqa
         self,
+        pattern_data: PatternData,
         initial_channel_pars: np.ndarray,
         initial_time_pars: np.ndarray,
         fixed_channel_pars: list[int] = None,
@@ -506,6 +508,8 @@ class EventModel(BaseModel):
 
         Parameters
         ----------
+        pattern_data : PatternData
+            Preprocessed data cross-correlated with the pattern of the model
         initial_channel_pars : np.ndarray
             2D ndarray (n_events * n_channels) or 3D (iteration * n_events * n_channels),
             initial conditions for event channel contributions.
@@ -555,6 +559,7 @@ class EventModel(BaseModel):
         )
 
         lkh, eventprobs = self._distribute_groups(
+            pattern_data,
             initial_channel_pars, initial_time_pars,
             channel_map, time_map, groups, cpus=cpus
         )
@@ -586,8 +591,8 @@ class EventModel(BaseModel):
                 epochs_group = np.where(groups == cur_group)[0]
 
                 # get c_pars/t_pars by group
-                c_par, t_par = self.get_channel_time_parameters_expectation(
-                                eventprobs.values[:, :np.max(self.pattern_data.durations.values[epochs_group]),
+                c_par, t_par = self.get_channel_time_parameters_expectation(pattern_data,
+                                eventprobs.values[:, :np.max(pattern_data.durations.values[epochs_group]),
                                           channel_map_group],
                         subset_epochs=epochs_group,
                 )
@@ -635,6 +640,7 @@ class EventModel(BaseModel):
                 # Compute llk under new parameters
                 with np.errstate(divide='ignore', invalid='ignore'):
                     lkh, eventprobs = self._distribute_groups(
+                        pattern_data,
                         new_channel_pars, new_time_pars,
                         channel_map, time_map, groups, cpus=cpus
                     )
@@ -669,6 +675,7 @@ class EventModel(BaseModel):
 
     def get_channel_time_parameters_expectation(
         self,
+        pattern_data: PatternData,
         eventprobs: np.ndarray,
         subset_epochs: list[int] = None
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -677,6 +684,8 @@ class EventModel(BaseModel):
 
         Parameters
         ----------
+        pattern_data : PatternData
+            Preprocessed data cross-correlated with the pattern of the model
         eventprobs : np.ndarray
             A 3D array of shape (n_trials, max_duration, n_events) containing the event
             probabilities.
@@ -695,11 +704,11 @@ class EventModel(BaseModel):
         for event in range(eventprobs.shape[2]):
             for comp in range(self.n_dims):
                 event_data = np.zeros((len(subset_epochs),
-                                       np.max(self.pattern_data.durations.values[subset_epochs])))
+                                       np.max(pattern_data.durations.values[subset_epochs])))
                 for trial_idx, trial in enumerate(subset_epochs):
-                    start, end = self.pattern_data.starts[trial], self.pattern_data.ends[trial]
+                    start, end = pattern_data.starts[trial], pattern_data.ends[trial]
                     duration = end - start + 1
-                    event_data[trial_idx, :duration] = self.pattern_data.cross_corr[start : end + 1, comp]
+                    event_data[trial_idx, :duration] = pattern_data.cross_corr[start : end + 1, comp]
                 channel_pars[event, comp] = np.mean(
                     np.sum(eventprobs[subset_epochs, :, event] * event_data, axis=1)
                 )
@@ -712,9 +721,9 @@ class EventModel(BaseModel):
         # it's general
         event_times_mean = np.concatenate(
             [
-                np.arange(np.max(self.pattern_data.durations.values[subset_epochs])) @ eventprobs[
+                np.arange(np.max(pattern_data.durations.values[subset_epochs])) @ eventprobs[
                     subset_epochs].mean(axis=0),
-                [np.mean(self.pattern_data.durations.values[subset_epochs]) - 1],
+                [np.mean(pattern_data.durations.values[subset_epochs]) - 1],
             ]
         )
         time_pars = self.scale_parameters(averagepos=event_times_mean)
@@ -781,6 +790,7 @@ class EventModel(BaseModel):
 
     def estim_probs(
         self,
+        pattern_data : PatternData,
         channel_pars: np.ndarray,
         time_pars: np.ndarray,
         subset_epochs: list[int] | None = None,
@@ -790,6 +800,8 @@ class EventModel(BaseModel):
 
         Parameters
         ----------
+        pattern_data : PatternData
+            Preprocessed data cross-correlated with the pattern of the model
         channel_pars : np.ndarray
             A 2D array of shape (n_events, n_channels) or a 3D array of shape
             (iteration, n_events, n_channels) containing initial conditions for
@@ -813,16 +825,16 @@ class EventModel(BaseModel):
         n_events = channel_pars.shape[0]
         n_stages = n_events + 1
         if subset_epochs is not None:
-            if len(subset_epochs) == len(self.pattern_data.starts):  # boolean indices
+            if len(subset_epochs) == len(pattern_data.starts):  # boolean indices
                 subset_epochs = np.where(subset_epochs)[0]
         n_trials = len(subset_epochs)
-        starts = self.pattern_data.starts[subset_epochs]
-        ends = self.pattern_data.ends[subset_epochs]
+        starts = pattern_data.starts[subset_epochs]
+        ends = pattern_data.ends[subset_epochs]
         durations = ends - starts + 1
         cross_corr = np.vstack(
-                [self.pattern_data.cross_corr[s:e+1] for s, e in zip(starts, ends)]
+                [pattern_data.cross_corr[s:e+1] for s, e in zip(starts, ends)]
         )
-        dtype = self.pattern_data.cross_corr.dtype
+        dtype = pattern_data.cross_corr.dtype
         max_duration = np.max(durations)
         gains = np.zeros((cross_corr.shape[0], n_events), dtype=dtype)
         for i in range(cross_corr.shape[1]):
@@ -901,6 +913,7 @@ class EventModel(BaseModel):
 
     def _distribute_groups(
         self,
+        pattern_data: PatternData,
         channel_pars: np.ndarray,
         time_pars: np.ndarray,
         channel_map: np.ndarray,
@@ -916,6 +929,8 @@ class EventModel(BaseModel):
 
         Parameters
         ----------
+        pattern_data : PatternData
+            Preprocessed data cross-correlated with the pattern of the model
         channel_pars : np.ndarray
             A 2D array of shape (n_events, n_channels) or a 3D array of shape
             (iteration, n_events, n_channels) containing initial conditions for
@@ -966,6 +981,7 @@ class EventModel(BaseModel):
                 time_pars_group = time_pars[cur_group, time_map[cur_group, :] >= 0, :]
                 likes_events_group.append(
                     self.estim_probs(
+                        pattern_data,
                         channel_pars_group,
                         time_pars_group,
                         subset_epochs=(groups == cur_group),
@@ -975,8 +991,8 @@ class EventModel(BaseModel):
         likelihood = np.array([x[0] for x in likes_events_group])
 
         for i, cur_group in enumerate(data_groups):
-            part = self.pattern_data.durations.coords["participant"].values[(groups == cur_group)]
-            epoch =self.pattern_data.durations.coords["epoch"].values[(groups == cur_group)]
+            part = pattern_data.durations.coords["participant"].values[(groups == cur_group)]
+            epoch =pattern_data.durations.coords["epoch"].values[(groups == cur_group)]
             data_events =  channel_map[cur_group, :] >= 0
             trial_x_part = xr.Coordinates.from_pandas_multiindex(
                 MultiIndex.from_arrays([part, epoch], names=("participant", "epoch")),
@@ -992,8 +1008,8 @@ class EventModel(BaseModel):
             xreventprobs = xreventprobs.assign_coords(group=("trial", groups[groups == cur_group],))
             all_xreventprobs.append(xreventprobs)
         all_xreventprobs = xr.concat(all_xreventprobs, dim="trial", join='outer')
-        all_xreventprobs.attrs['sfreq'] = self.pattern_data.sfreq
-        all_xreventprobs.attrs['event_width'] = len(self.pattern_data.template)
+        all_xreventprobs.attrs['sfreq'] = pattern_data.sfreq
+        all_xreventprobs.attrs['event_width'] = len(pattern_data.template)
         return [np.array(likelihood), all_xreventprobs]
 
     def distribution_pdf(
@@ -1032,6 +1048,7 @@ class EventModel(BaseModel):
 
     def group_constructor(  # noqa: PLR0912
         self,
+        durations: xr.DataArray,
         grouping_dict: dict,
         channel_map: np.ndarray = None,
         time_map: np.ndarray = None,
@@ -1042,6 +1059,8 @@ class EventModel(BaseModel):
 
         Parameters
         ----------
+        durations : xr.DataArray
+            By-trial durations as obtained with PatternData.durations
         grouping_dict : dict
             A dictionary defining groups for grouping modeling. Keys are group names,
             and values are lists of groups.
@@ -1073,7 +1092,7 @@ class EventModel(BaseModel):
         for group, mod in grouping_dict.items():
             group_names.append(group)
             group_mods.append(mod)
-            group_trials.append(self.pattern_data.durations.coords[group])
+            group_trials.append(durations.coords[group])
             if verbose:
                 print('group "' + group_names[-1] + '" analyzed, with groups:', group_mods[-1])
 
@@ -1095,7 +1114,7 @@ class EventModel(BaseModel):
                 if verbose:
                     print(str(i) + ": " + str(mod))
         else:
-            groups = np.zeros(len(self.pattern_data.starts))
+            groups = np.zeros(len(durations.values))
         groups = np.int8(groups)
         glabels = {"group " + str(group_names): group_mods}
 

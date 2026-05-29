@@ -50,12 +50,13 @@ class BaseModel(ABC):
 
         """
         if isinstance(data, PatternData):
-            self.pattern_data = data
+            pattern_data = data
             if self._fitted and data.pattern != self.pattern:
                 warn(f"Cross-correlation pattern {data.pattern} is different in provided data than in model {self.pattern}. Data pattern is used.")
             self.pattern = data.pattern
         else: #assume transformed (is checked later)
-            self.pattern_data = PatternData.from_transformer(data, self.pattern)
+            pattern_data = PatternData.from_transformer(data, self.pattern)
+        return pattern_data
 
     @abstractmethod
     def fit(self):
