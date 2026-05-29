@@ -43,7 +43,7 @@ class PatternData:
     cross_corr: np.ndarray
     
     @classmethod
-    def from_transformer(cls, transformed, pattern = None, dtype = np.float32):
+    def from_transformer(cls, transformed, pattern = None, dtype = None):
         """
         Create a TrialData instance from transformed data and a given pattern.
 
@@ -63,6 +63,8 @@ class PatternData:
             An instance of TrialData with computed durations, cross-correlation, and metadata.
         """
         data = _check_transformed(transformed)
+        if dtype is None:
+            dtype = transformed.data.dtype
         # compute sequence durations based on number of samples
         durations = (
             data
@@ -87,8 +89,8 @@ class PatternData:
         data = data.unstack().stack(all_samples=['participant','epoch','sample']).\
             dropna(dim="all_samples")
 
-        if pattern == None:
-            pattern = HalfSine.create_expected(sfreq=data.sfreq)
+        if pattern is None:
+            pattern = HalfSine(sfreq=data.sfreq)
 
         # Equation 1 in 2024 paper
         cross_corr = cross_correlation(data.values.T, starts, ends, pattern.template, dtype)
