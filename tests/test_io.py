@@ -12,10 +12,8 @@ from zipfile import ZipFile
 from hmp import io
 from hmp import simulations
 from hmp import utils
-from hmp.patterns import HalfSine
-from hmp.distributions import Gamma
 from hmp import transformers
-from hmp.trialdata import TrialData
+from hmp.patterndata import PatternData
 from hmp.models import EventModel
 
 
@@ -157,10 +155,8 @@ def test_save_dat():
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
     hmp_data = transformers.ProjPCA(epoch_data, n_comp=2,)
     data_b = utils.participant_selection(hmp_data.data, 'b')
-    event_properties = HalfSine.create_expected(sfreq=epoch_data.sfreq)
-    trial_data_b = TrialData.from_transformer(data_b, pattern=event_properties.template)
-    model = EventModel(event_properties, n_events=n_events)
-    _, estimates = model.fit_transform(trial_data_b)
+    model = EventModel(n_events=n_events)
+    _, estimates = model.fit_transform(data_b)
 
     io.save_eventprobs_csv(estimates, 'test')
     

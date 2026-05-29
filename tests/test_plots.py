@@ -1,8 +1,7 @@
 import numpy as np
 import hmp
 from hmp.models import EventModel
-from hmp.patterns import HalfSine
-from hmp.trialdata import TrialData
+from hmp.patterndata import PatternData
 from hmp.visu import plot_topo_timecourse
 from hmp import transformers
 
@@ -20,22 +19,18 @@ def test_plot():
                          [0, 0, 0, 0],])
     group_dict = {'condition': ['a', 'b']}
     
-    event_properties = HalfSine.create_expected(sfreq=epoch_data.sfreq)
-    hmp_data_b = hmp.utils.participant_selection(hmp_data.data, 'a')
-    trial_data = TrialData.from_transformer(hmp_data.data, pattern=event_properties.template)
-    trial_data_b = TrialData.from_transformer(hmp_data_b, pattern=event_properties.template)
-
-    model = EventModel(event_properties, n_events=n_events)
+    hmp_data_a = hmp.utils.participant_selection(hmp_data.data, 'a')
+    
+    model = EventModel(n_events=n_events)
     
     # Perform a fit on a (should be too noisy)
-    lkh_b, estimates_b = model.fit_transform(trial_data_b)
+    lkh_a, estimates_a = model.fit_transform(hmp_data_a)
 
     # Fit model on both conditions (noiseless b should help estimate a)
 
-    trial_data = TrialData.from_transformer(hmp_data.data, pattern=event_properties.template)
-    lkh_comb, estimates_comb = model.fit_transform(trial_data, time_map=time_map, channel_map=channel_map, grouping_dict=group_dict)
-    lkh_b_group, estimates_b_group = model.transform(trial_data_b)
+    lkh_comb, estimates_comb = model.fit_transform(hmp_data, time_map=time_map, channel_map=channel_map, grouping_dict=group_dict)
+    lkh_a_group, estimates_a_group = model.transform(hmp_data_a)
 
     plot_topo_timecourse(epoch_data, estimates_comb, positions, as_time=True, colorbar=False, )
-    plot_topo_timecourse(epoch_data, estimates_b, positions, as_time=True, 
+    plot_topo_timecourse(epoch_data, estimates_a, positions, as_time=True, 
                        max_time=500, colorbar=False, )
