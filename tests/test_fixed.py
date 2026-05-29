@@ -7,7 +7,7 @@ from hmp import simulations
 from hmp.models import EventModel
 from hmp.patterns import HalfSine
 from hmp.distributions import Gamma
-from hmp.trialdata import TrialData
+from hmp.patterndata import TrialData
 
 
 from test_io import init_data, init_data_large, init_data_short

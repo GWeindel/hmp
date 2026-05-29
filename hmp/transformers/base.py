@@ -32,7 +32,7 @@ from warnings import warn
 
 import numpy as np
 import xarray as xr
-
+import copy
 
 class BaseTransformer(ABC):
     """Base class for HMP transformer pipelines.
@@ -251,3 +251,22 @@ class BaseTransformer(ABC):
         data.attrs["offset"] = self.offset_end
         self.data = data
         self.weights = weights
+
+    def remove_participant(data, participant):
+        """Remove data from participant"""
+        data = copy.deepcopy(data)
+        actual_data = data.data.unstack()
+        actual_data = actual_data.drop_sel(participant=participant)
+        if 'participant' not in actual_data.dims:
+            actual_data = actual_data.expand_dims('participant')
+        return actual_data.stack(trial=['participant','epoch'])
+
+    def get_participants(data, participants):
+        data = copy.deepcopy(data)
+        """Get data from specified participants"""
+        actual_data = data.data.unstack()
+        actual_data = actual_data.sel(participant=participants, drop=False)
+        if 'participant' not in actual_data.dims:
+            actual_data = actual_data.expand_dims('participant')
+        return actual_data.stack(trial=['participant','epoch'])
+   

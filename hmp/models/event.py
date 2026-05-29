@@ -125,8 +125,8 @@ class EventModel(BaseModel):
             2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
         channel_pars : ndarray, optional
-            2D ndarray (n_groups * n_events * n_channels) or
-            4D (starting_points * n_groups * n_groups * n_events * n_channels),
+            3D ndarray (n_groups * n_events * n_channels) or
+            4D (starting_points * n_groups * n_events * n_channels),
             initial conditions for event channel contributions. Default is None.
         time_pars : ndarray, optional
             3D ndarray (n_groups * n_stages * 2) or 4D (starting_points * n_groups * n_stages * 2),
@@ -251,6 +251,7 @@ class EventModel(BaseModel):
                 time_pars = np.array(time_pars)
         else:
             infos_to_store["sp_time_pars"] = time_pars
+            time_pars = np.array([time_pars])
 
         if channel_pars is None:
             # By defaults c_pars are initiated to 0
@@ -262,6 +263,7 @@ class EventModel(BaseModel):
             channel_pars = np.tile(initial_m, (self.starting_points + 1, 1, 1, 1))
         else:
             infos_to_store["sp_channel_pars"] = channel_pars
+            channel_pars = np.array([channel_pars])
 
         if cpus > 1:
             inputs = zip(
@@ -329,7 +331,7 @@ class EventModel(BaseModel):
         del self.pattern_data
 
 
-    def transform(self, data: Any) -> tuple[np.ndarray, xr.DataArray]:
+    def transform(self, data: Any, cpus=1) -> tuple[np.ndarray, xr.DataArray]:
         """
         Transform the trial data using the fitted model.
 
@@ -355,7 +357,7 @@ class EventModel(BaseModel):
             )
         likelihoods, xreventprobs = self._distribute_groups(
             self.channel_pars, self.time_pars,
-            self.channel_map, self.time_map, groups, True
+            self.channel_map, self.time_map, groups, True, cpus=cpus
         )
 
         del self.pattern_data

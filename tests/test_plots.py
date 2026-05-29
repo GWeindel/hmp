@@ -2,7 +2,7 @@ import numpy as np
 import hmp
 from hmp.models import EventModel
 from hmp.patterns import HalfSine
-from hmp.trialdata import TrialData
+from hmp.patterndata import TrialData
 from hmp.visu import plot_topo_timecourse
 from hmp import transformers
 

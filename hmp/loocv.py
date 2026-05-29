@@ -10,13 +10,14 @@ LOOCV
 from typing import Any
 import inspect
 
-from hmp.trialdata import TrialData
+from hmp.patterndata import PatternData
 import hmp
 
 import numpy as np
+import xarray as xr
 import itertools
 import multiprocessing as mp
-
+import copy
 
 class LOOCV():
     """LOOCV class. Can be initialized with a (fitted) model or a self-defined function.
@@ -24,7 +25,8 @@ class LOOCV():
     Parameters TO BE UPDATED
     ----------
     model : Any 
-        either a (fitted) model or a self-defined function
+        either a (fitted) model or a self-defined function to be applied to provided data
+    model_args :
     quick : bool, optional
         Toggle for quick LOOCV using parameters of fitted model. 
         Typically incorrect, see info message. Requires fitted model.
@@ -33,20 +35,6 @@ class LOOCV():
         Default = True
     print_warning : bool, optional
         print warning when using 'quick' LOOCV the loocv 'incorrectness' warning
-
-
-    sfreq : float
-        (optional) Sampling frequency of the signal if not provided, inferred from the epoch_data
-    event_width : int
-        Width of the pattern defining events in samples.
-    shape: float
-        shape of the probability distributions of the by-trial stage onset
-        (one shape for all stages)
-    location : int
-        Minimum duration between events in samples. Default is the event_width.
-    distribution : str
-        Probability distribution for the by-trial onset of stages can be
-        one of 'gamma','lognormal','wald', or 'weibull'
     """
 
     def __init__(
@@ -56,10 +44,12 @@ class LOOCV():
         verbose: bool = True,
         print_warning: bool = True
     ):
+
+        self.model = model
+
         #instance of an hmp model
         if isinstance(model, hmp.models.base.BaseModel):
             self.model_class = type(model)
-            self.model = model
 
             if quick:
                 assert self.model._fitted, "For quick estimation, a fitted HMP model is required, but not provided."
@@ -82,6 +72,8 @@ class LOOCV():
         
         #assume it's a function that will return a fitted hmp model
         elif inspect.isfunction(model): 
+            if verbose and quick:
+                print("NB: quick estimation is not possible in combination with a function.")
             self.model_class = "function"
         
         #unknown
@@ -90,28 +82,26 @@ class LOOCV():
 
         self.quick = quick
 
-        #EventModel
-        #if self.model_class == hmp.models.EventModel:
-        #    if self.parametrized:
-        #        self.n_events = model.n_events
-
 
     def fit(
         self,
-        trial_data: TrialData,
+        data: Any,
         cpus_cv: int = 1,
         cpus_model: int = 1,
-        verbose = False):
+        verbose: bool = True):
 
         """Calculate LOOCV by first fitting n-1 models and then calculating the 
         loglikelihood of the nth subject, rotating over subjects.
 
         ...
         
-        Parameters TO BE UPDATED
+        Parameters
         ----------
-        trial_data : TrialData
-            Cross-correlated TrialData object of all participants.
+        data : Data to fit the model on. One of two options:
+            1. data from BaseTransformer
+            2. PatternData object.
+            In case of option 1, data is cross-correlated with the pattern in self.model.pattern.
+            If using a 'function' for LOOCV (see init), it is recommended to provide PatternData to reduce RAM requirements.
         cpus_cv : int, optional
             Nr of cpus to use for cross validation. Defaul = 1.
             We recommend using 1 CPU for CV on a laptop or normal PC. 
@@ -122,184 +112,115 @@ class LOOCV():
             fitting. cpus_cv takes precedence. Default = 1.
         verbose: bool, optional
             Default = True
-       
-
         """
 
-#process all paramters that can be provided to fit or function, probably give a an extra args parameter
-#move map parameters to model definition
+        # Only one parallel loop, cv takes precedence:
+        if cpus_cv > 1:
+            cpus_model = 1
+
+        # Prep data
+        if isinstance(data, PatternData): #easiest, just use as-is
+            pass
+        else: #assume transformed (is checked later)
+            if self.model_class != "function":
+                if self.model.pattern.sfreq is None:
+                    self.model.pattern.create_template(data.sfreq)
+                data = PatternData.from_transformer(data, self.model.pattern)
+            else: #function: cannot create PatternData as template is unknown
+                if verbose:
+                    print("NOTE: 'function' provided for LOOCV without PatternData")
+                    print("While this is possible, it roughly doubles RAM usage. If")
+                    print("using a function, it is recommended to provide PatternData.")
+
+        # Get participants here to be able to split for multithreading
+        if isinstance(data, PatternData):
+            self.participants_idx = np.unique(data.durations.participant.values)
+        else:
+            self.participants_idx = np.unique(data.data.participant.values)
+
+
+        # Step 1, fit models on n-1 subjects for all folds
+        if verbose:
+            print(f"Fitting models for n-1 subjects for all folds.")
 
         estimates = []
-        #simple EventModel - might be possible for all
-        if self.model_class == hmp.models.EventModel:
+        if cpus_cv == 1:  # not mp at cv level
+            for participant in self.participants_idx:
+                estimates.append(
+                    self.loocv_estimate(
+                        data, 
+                        participant, 
+                        cpus_model=cpus_model, 
+                        verbose=verbose))
+        else:  # mp at cv level
+            with mp.Pool(processes=cpus_cv) as pool:
+                estimates = pool.starmap(
+                    self.loocv_estimate,
+                    zip(
+                        itertools.repeat(data),
+                        self.participants_idx,
+                        itertools.repeat(1), #cpus_model has to be 1
+                        itertools.repeat(verbose)
+                    ),
+                )
 
-            # Get participants here to be able to split for multithreading
-            participants_idx = np.unique(trial_data.durations.participant.values)
+        # if multiple estimates are returned per subject, rearrange data
+        if isinstance(estimates[0], list):
+            all_estimates = []
+            for est_idx in range(len(estimates[0])):
+                all_estimates.append([estimate[est_idx] for estimate in estimates])
+        else:  # only one model estimate given per participant
+            all_estimates = [estimates]
 
-            # Step 1, fit models on n-1 subjects for all folds
-            if verbose:
-                print(f"Fit models for n-1 subjects for all folds.")
 
-            estimates = []
-            if cpus_cv == 1:  # not mp at cv level
-                for participant in participants_idx:
-                    estimates.append(
-                        loocv_estimate(
-                            trial_data, 
-                            participant, 
-                            cpus=cpus_model, 
-                            verbose=verbose))
-            else:  # mp at cv level
-                with mp.Pool(processes=cpus_cv) as pool:
-                    estimates = pool.starmap(
-                        loocv_estimate,
-                        zip(
-                            itertools.repeat(trial_data),
-                            #itertools.repeat(self.model),
-                            participants_idx,
-                            #itertools.repeat(func_estimate),
-                            #itertools.repeat(func_args),
-                            itertools.repeat(1), #cpus_model has to be 1
-                            itertools.repeat(verbose)
-                        ),
+        # Step 2, get loglikelihood from left out subjects
+        print()
+        all_likelihoods = []
+
+        for estimates in all_estimates:
+            # option 1 and 2: single model and single model with levels. In fact, aren't they all eventmodels?
+            if self.model_class == hmp.models.EventModel:
+                if verbose:
+                    mod_type = "multilevel" if estimates[0].time_pars.shape[0] > 1 else "single"
+                    print(
+                        f"Calculating likelihood for {mod_type} with "
+                        f"{estimates[0].n_events} event(s)"
                     )
 
+                loocv = []
+                if cpus_cv == 1:  # no mp for cross validation
+                    for pidx, participant in enumerate(self.participants_idx):
+                        loocv.append(
+                            self.loocv_loglikelihood(
+                                data, 
+                                participant, 
+                                estimates[pidx], 
+                                cpus=cpus_model,
+                                verbose=verbose
+                            )
+                        )
+                else:  # mp
+                    with mp.Pool(processes=cpus_cv) as pool:
+                        loocv = pool.starmap(
+                            self.loocv_loglikelihood,
+                            zip(
+                                itertools.repeat(data),
+                                self.participants_idx,
+                                estimates,
+                                itertools.repeat(1), #cpus
+                                itertools.repeat(verbose),
+                            ),
+                        )
 
-            # Step 2, get loglikelihood from left out subjects
+            likelihoods = xr.DataArray(
+                np.array(loocv).astype(np.float64),
+                dims="participant",
+                coords={"participant": self.participants_idx},
+                name="loo_likelihood",
+            )
+                
+            all_likelihoods.append(likelihoods)
 
-
-        else:
-            print("don't know what to do yet :)")
-            lkh_3ev = None
-
-        return estimates
-    
-
-def loocv_estimate(trial_data, participant, cpus=1, verbose=True):
-    """Apply loocv estimation using either the provided model or function.
-
-    UPDATE
-    Applies func_estimate with func_args to data of n - 1 (participant) participants.
-    func_estimate should return an estimated hmp model; either a single model,
-    a level model, or a backward estimation model. This model is then used
-    to calculate the fit on the left out participant with loocv_loglikelihood.
-
-    Parameters TO BE UPDATED
-    ----------
-    data : xarray.Dataset
-        xarray data from transform_data()
-    init : hmp object
-        original hmp object used for the fit, all settings are copied to the left out models
-    participant : str
-        name of the participant to leave out
-    func_estimate : function that returns a hmp model estimate
-        this can be backward_estimation, fit, or your own function.
-        It should take an initialized hmp model as its first argument,
-        other arguments are passed on from func_args.
-        See also loocv_func(..)
-    func_args : list
-        List of arguments that need to be passed on to func_estimate.
-        See also loocv_func(..)
-    cpus : int
-        number of cpus to use
-    verbose : bool
-
-    Returns
-    -------
-    hmp model
-        estimated hmp_model with func_estimate on n-1 participants
-    """
-
-    if verbose:
-        print(f"\tEstimating model for all participants except {participant}")
-
-    participants_idx = trial_data.durations.participant.values
-
-    # Extract data without left out participant
-    data_without_pp = hmp.utils.stack_data(
-        data.sel(participant=participants_idx[participants_idx != participant], drop=False)
-    )
-
-    # Building model
-    model_without_pp = hmp.models.HMP(
-        data_without_pp,
-        sfreq=init.sfreq,
-        event_width=init.event_width,
-        cpus=cpus,
-        shape=init.shape,
-        template=init.template,
-        location=init.location,
-        distribution=init.distribution,
-    )
-
-    # Apply function and return
-    estimates = func_estimate(model_without_pp, *func_args)
-    if isinstance(estimates, list):
-        for i in range(len(estimates)):
-            estimates[i] = estimates[i].drop_vars(["eventprobs"])
-    else:
-        estimates = estimates.drop_vars(["eventprobs"])
-
-    return estimates
-
-
-
-#below should go in general method
-    # # if multiple estimates are returned per subject, rearrange data
-    # if isinstance(estimates[0], list):
-    #     all_estimates = []
-    #     for est_idx in range(len(estimates[0])):
-    #         all_estimates.append([estimate[est_idx] for estimate in estimates])
-    # else:  # only one model estimate given
-    #     all_estimates = [estimates]
-
-    # # second, calculate likelihood of left out subject for all folds
-    # print()
-
-    # all_likelihoods = []
-    # for estimates in all_estimates:
-    #     # option 1 and 2: single model and single model with levels
-    #     if "n_events" not in estimates[0].dims:
-    #         if verbose:
-    #             if "level" in estimates[0].dims:
-    #                 print(
-    #                     f"Calculating likelihood for multilevel model with "
-    #                     f"{np.max(estimates[0].event).values + 1} event(s)"
-    #                 )
-    #             else:
-    #                 print(
-    #                     f"Calculating likelihood for single model with "
-    #                     f"{np.max(estimates[0].event).values + 1} event(s)"
-    #                 )
-
-    #         loocv = []
-    #         if cpus == 1:  # not mp
-    #             for pidx, participant in enumerate(participants_idx):
-    #                 loocv.append(
-    #                     loocv_loglikelihood(
-    #                         data, init, participant, estimates[pidx], verbose=verbose
-    #                     )
-    #                 )
-    #         else:  # mp
-    #             with mp.Pool(processes=cpus) as pool:
-    #                 loocv = pool.starmap(
-    #                     loocv_loglikelihood,
-    #                     zip(
-    #                         itertools.repeat(data),
-    #                         itertools.repeat(init),
-    #                         participants_idx,
-    #                         estimates,
-    #                         itertools.repeat(1),
-    #                         itertools.repeat(verbose),
-    #                     ),
-    #                 )
-
-    #         likelihoods = xr.DataArray(
-    #             np.array(loocv).astype(np.float64),
-    #             dims="participant",
-    #             coords={"participant": participants_idx},
-    #             name="loo_likelihood",
-    #         )
 
     #     # option 3: backward
     #     if "n_events" in estimates[0].dims:
@@ -361,13 +282,178 @@ def loocv_estimate(trial_data, participant, cpus=1, verbose=True):
 
     #         likelihoods = xr.concat(loocv_back, dim="n_event")
 
-    #     all_likelihoods.append(likelihoods)
 
-    # if len(all_likelihoods) == 1:
-    #     all_likelihoods = all_likelihoods[0]
-    #     all_estimates = all_estimates[0]
 
-    # return all_likelihoods, all_estimates
+
+
+        #admin
+        if len(all_likelihoods) == 1:
+            all_likelihoods = all_likelihoods[0]
+            all_estimates = all_estimates[0]
+        
+        return all_likelihoods, all_estimates
+    
+
+    def loocv_estimate(self, data, participant, cpus_model=1, verbose=True):
+        """Apply loocv estimation using either the provided model or function, while
+        leaving out participant 'participant'
+
+        Parameters 
+        ----------
+        data : Data to fit the model on. One of two options:
+            1. data from BaseTransformer
+            2. PatternData object.
+            In case of option 1, data is cross-correlated with the pattern in self.model.pattern.
+            If using a 'function' for LOOCV (see init), it is recommended to provide PatternData to reduce RAM requirements.
+        participant : str
+            name of the participant to leave out
+        cpus_model : int
+            nr of cpus to use for model estimation (nr of cpus for cross validation specified 
+            above)
+        verbose : bool
+
+        Returns
+        -------
+        hmp model
+            estimated hmp_model(s) on n-1 participants
+        """
+
+        if verbose:
+            print(f"\tEstimating model for all participants except {participant}")
+
+        # Extract data without left-out participant
+        if isinstance(data, PatternData):
+            data = hmp.patterndata.remove_participant(data, participant)
+        else:
+            data = hmp.transformers.BaseTransformer.remove_participant(data, participant)
+
+        # Fit model on data
+        if self.model_class == "function":
+            print("don't know what to do yet!")
+        else:    
+            estimated_model = copy.deepcopy(self.model)
+            if self.quick:
+                estimated_model.fit(data=data, channel_pars=estimated_model.channel_pars, time_pars=estimated_model.time_pars, cpus=cpus_model, verbose= False)
+            else:
+                estimated_model.fit(data=data, cpus=cpus_model, verbose= False)
+            return estimated_model
+
+
+    #estimates = []
+    #simple EventModel - might be possible for all
+    #if self.model_class == hmp.models.EventModel:
+    #    pass
+
+    # Apply function and return
+    #estimates = func_estimate(model_without_pp, *func_args)
+    #if isinstance(estimates, list):
+    #    for i in range(len(estimates)):
+    #        estimates[i] = estimates[i].drop_vars(["eventprobs"])
+    #else:
+    #    estimates = estimates.drop_vars(["eventprobs"])
+
+    #return estimates
+
+    def loocv_loglikelihood(self, data,participant, estimate, cpus_model=1, verbose=False):
+        """Compute the log-likelihood of the fit.
+
+        Calculate loglikelihood of fit on participant using parameters from estimate,
+        either using single model or level based model.
+
+        Parameters
+        ----------
+        data : Data to fit the model on. One of two options:
+            1. data from BaseTransformer
+            2. PatternData object.
+            In case of option 1, data is cross-correlated with the pattern in self.model.pattern.
+            If using a 'function' for LOOCV (see init), it is recommended to provide PatternData to reduce RAM requirements.
+        participant : str
+            name of the participant to estimate likelihood
+        estimate : xarray.Dataset
+            estimate that has parameters to apply.
+        cpus_model : int
+            Number of cpus to use to fit the models.
+        verbose : bool
+
+        Returns
+        -------
+        likelihood : float
+            likelihood computed for the left-out participant
+        """
+        if verbose:
+            print(f"\tCalculating likelihood for participant {participant}")
+
+        # Extract data of left-out participant
+        if isinstance(data, PatternData):
+            data = hmp.patterndata.get_participants(data, participant)
+        else:
+            data = hmp.transformers.BaseTransformer.get_participants(data, participant)
+
+        # Calculate loglikelihood of model applied on data of participant
+        likelihood, _ = estimate.transform(data, cpus=cpus_model)
+
+        
+        # if "level" in estimate.dims:
+        #     locations = np.tile(locations, (estimate.parameters.shape[0], 1))  # Fix this
+        #     from itertools import product
+
+        #     # create levels for this participant based on estimate.levels_dict and model_pp
+        #     # description of level for this participant, which is not available
+        #     levels = estimate.levels_dict
+        #     level_names = []
+        #     level_levels = []
+        #     level_trials = []
+        #     for level in levels:
+        #         level_names.append(list(level.keys())[0])
+        #         level_levels.append(level[level_names[-1]])
+        #         level_trials.append(model_pp.trial_coords[level_names[-1]].data.copy())
+
+        #     level_levels = list(product(*level_levels))
+        #     level_levels = np.array(level_levels, dtype=object)  # otherwise comparison below can fail
+
+        #     # build level array with digit indicating the combined levels
+        #     level_trials = np.vstack(level_trials).T
+        #     levels = np.zeros((level_trials.shape[0])) * np.nan
+        #     for i, level in enumerate(level_levels):
+        #         levels[np.where((level_trials == level).all(axis=1))] = i
+        #     levels = np.int8(levels)
+
+        #     # adjust parameters based on average RT
+        #     parameters = estimate.parameters.values
+        #     parameters[:, :, 1] = parameters[:, :, 1] * dur_ratio
+
+        #     likelihood = model_pp.estim_probs_levels(
+        #         estimate.magnitudes.values,
+        #         parameters,
+        #         locations,
+        #         estimate.mags_map,
+        #         estimate.pars_map,
+        #         levels,
+        #         lkh_only=True,
+        #     )
+        # else:
+        #     n_eve = np.max(estimate.event.dropna("event").values) + 1
+        #     print(n_eve)
+        #     # adjust parameters based on average RT
+        #     parameters = estimate.parameters.dropna("stage").values
+        #     parameters[:, 1] = parameters[:, 1] * dur_ratio
+
+        #     likelihood = model_pp.estim_probs(
+        #         estimate.magnitudes.dropna("event", how="all").values,
+        #         parameters,
+        #         locations,
+        #         n_eve,
+        #         None,
+        #         True,
+        #     )
+
+        if len(likelihood) == 1:
+            return likelihood[0]
+        else:
+            return likelihood
+
+
+
 
 
 

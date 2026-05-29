@@ -15,7 +15,7 @@ from hmp import utils
 from hmp.patterns import HalfSine
 from hmp.distributions import Gamma
 from hmp import transformers
-from hmp.trialdata import TrialData
+from hmp.patterndata import TrialData
 from hmp.models import EventModel
 
 

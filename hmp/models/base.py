@@ -75,7 +75,7 @@ class BaseModel(ABC):
         """
         if isinstance(data, PatternData):
             self.pattern_data = data
-            if self._fitted and data.pattern != self.pattern:
+            if self._fitted and not (data.pattern.template == self.pattern.template).all():
                 warn(f"Cross-correlation pattern {data.pattern} is different in provided data than in model {self.pattern}. Data pattern is used.")
             self.pattern = data.pattern
         else: #assume transformed (is checked later)

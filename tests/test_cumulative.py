@@ -6,7 +6,7 @@ from hmp import simulations
 from hmp.models import CumulativeMethod, EventModel
 from hmp.patterns import HalfSine
 from hmp.distributions import Gamma
-from hmp.trialdata import TrialData
+from hmp.patterndata import TrialData
 
 from test_fixed import init_data_large
 

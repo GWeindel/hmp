@@ -12,7 +12,7 @@ import hmp
 from hmp import simulations
 from hmp.models import FixedEventModel, CumulativeEstimationModel, BackwardEstimationModel
 from hmp.models.base import EventProperties
-from hmp.trialdata import TrialData
+from hmp.patterndata import TrialData
 
 
 real_data = os.path.join("tutorials", "sample_data", "eeg", "processed_0022_epo.fif")

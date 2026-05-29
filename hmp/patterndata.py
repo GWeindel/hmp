@@ -10,7 +10,7 @@ from typing import Any
 from hmp.patterns import Pattern
 from hmp.utils import _check_transformed
 from hmp.patterns import HalfSine
-
+import copy
 
 @dataclass
 class PatternData:
@@ -148,3 +148,25 @@ def compute_max_events(pattern_data: PatternData, location):
     """Compute the maximum possible number of events given location and minimum duration."""
     return int(np.rint(np.min(pattern_data.durations.values) // (location)))
     
+def remove_participant(pattern_data: PatternData, participant):
+    """Remove data from participant"""
+    participants_to_keep = np.unique(pattern_data.durations.participant.values)
+    participants_to_keep = participants_to_keep[participants_to_keep != participant]
+    return get_participants(pattern_data, participants_to_keep)
+
+def get_participants(pattern_data: PatternData, participants):
+    """Get data from specified participants"""
+    pattern_data = copy.deepcopy(pattern_data)
+    to_remove = ~np.isin(pattern_data.durations.participant.values, participants)
+    to_remove_starts = pattern_data.starts[to_remove]
+    to_remove_ends = pattern_data.ends[to_remove]
+    
+    for start, end in zip(to_remove_starts, to_remove_ends):
+        pattern_data.cross_corr[start:end+1,:] = np.nan
+    pattern_data.cross_corr = pattern_data.cross_corr[~np.isnan(pattern_data.cross_corr[:,0]),:]
+    pattern_data.durations = pattern_data.durations.sel(trial=~to_remove)
+    pattern_data.starts = np.roll(np.cumsum(pattern_data.durations),1)
+    pattern_data.starts[0] = 0
+    pattern_data.ends = np.cumsum(pattern_data.durations).data - 1
+
+    return pattern_data
