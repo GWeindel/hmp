@@ -123,4 +123,4 @@ def test_starting_points():
     pdata = PatternData.from_transformer(hmp_data, pattern=pattern)
     # Testing starting points
     model_sp = EventModel(pattern=pattern, n_events=n_events, starting_points=2, max_scale=21)
-    model_sp.fit(pdata, verbose=True)
+    model_sp.fit(pdata, verbose=True, cpus=2)

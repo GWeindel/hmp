@@ -268,7 +268,7 @@ class EventModel(BaseModel):
 
         if cpus > 1:
             inputs = zip(
-                pattern_data,
+                itertools.repeat(pattern_data),
                 channel_pars,
                 time_pars,
                 itertools.repeat(fixed_channel_pars),
