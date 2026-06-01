@@ -82,3 +82,6 @@ max-locals=35
 
 [tool.ruff.lint.pydocstyle]
 convention="numpy"
+
+[tool.coverage.run]
+source = ["hmp"]
