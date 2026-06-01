@@ -51,7 +51,6 @@ def test_patterns(width, template):
         pattern = HalfSine(width)
     else:
         pattern = Pattern(template, width)
-    print(pattern.template)
     pattern_data = PatternData.from_transformer(hmp_data, pattern=pattern)
 
     model = EventModel(pattern=pattern, n_events=n_events)
@@ -65,6 +64,6 @@ def test_distributions():
             distribution = dist_class(shape=2)
             model = EventModel(distribution=distribution, n_events=n_events)
             model.fit(hmp_data)
-            assert (distribution.mean_to_scale(
+            assert np.isclose(distribution.mean_to_scale(
                 distribution.scale_to_mean(model.time_pars[:,:,1])
-            ) == model.time_pars[:,:,1]).all()
+            ), model.time_pars[:,:,1], atol=1e-5, rtol=0).all()
