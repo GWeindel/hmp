@@ -48,10 +48,11 @@ def test_fixed_simple():
     assert np.isclose(lkh_b, np.array(101.31), atol=1e-2, rtol=0)
 
     #locations
-    model = EventModel(n_events=n_events)
     locations = np.zeros(n_events+1, dtype=int)
-    noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b, locations=locations)
-    noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b, locations=0)
+    model = EventModel(n_events=n_events, location=locations)
+    noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b)
+    model = EventModel(n_events=n_events, location=25)
+    noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b,)
     assert np.isclose(noloc_loglikelihood, np.array(101.31), atol=1e-2, rtol=0)
 
     # testing recovery of attributes
@@ -127,5 +128,5 @@ def test_starting_points():
     pattern = HalfSine()
     pdata = PatternData.from_transformer(hmp_data, pattern=pattern)
     # Testing starting points
-    model_sp = EventModel(pattern=pattern, n_events=n_events, starting_points=2, max_scale=21)
+    model_sp = EventModel(pattern=pattern, n_events=n_events, starting_points=2, max_duration=1000)
     model_sp.fit(pdata, verbose=True, cpus=2)

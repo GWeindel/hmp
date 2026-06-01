@@ -24,6 +24,13 @@ class EliminativeMethod(BaseModel):
     pattern : PatternData
         The pattern and properties to use for cross-correlation. Default is
         half sine with 50 ms width.
+    location : float, optional
+        How much milliseconds should be censored in the EM() step of model fitting.
+        Default is width of the event.
+        Shorter values than the width of a pattern allow overlap of neighboring events
+        but might result in the same event being duplicated in several events.
+        Larger values will prevent duplication at the risk of missing neighboring events
+        Defaults to width of pattern, which is by default 50 ms.
     max_events : int, optional
         Maximum number of events to be estimated. By default, it is inferred using
         `compute_max_events()` if not provided.
@@ -44,6 +51,7 @@ class EliminativeMethod(BaseModel):
     def __init__(
         self,
         pattern: Pattern = None,
+        location: float = None,
         max_events: int | None = None,
         min_events: int = 0,
         base_fit: EventModel | None = None,
@@ -52,6 +60,9 @@ class EliminativeMethod(BaseModel):
         distribution: Any = None
     ):
         super().__init__(pattern, distribution)
+        if location is None:
+            location = self.pattern.width
+        self.location = location
         self.max_events: int = max_events
         self.min_events: int = min_events
         self.base_fit: EventModel | None = base_fit
@@ -62,7 +73,6 @@ class EliminativeMethod(BaseModel):
     def fit(
         self,
         data: PatternData | BaseTransformer | xr.DataArray,
-        location: int | None = None,
         cpus: int = 1,
     ) -> None:
         """Perform the eliminative estimation.
@@ -77,10 +87,6 @@ class EliminativeMethod(BaseModel):
             1. data from BaseTransformer or xr.DataArray containing transformed data.
             2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
-        location : int, optional
-            The minimum distance in samples to add between events to avoid event collapse
-            during the expectation-maximization algorithm.
-            By default adds the length of the choosen pattern.
         cpus : int, optional
             Number of CPUs to use for parallel processing. Defaults to 1.
 
@@ -90,15 +96,12 @@ class EliminativeMethod(BaseModel):
         """
         pattern_data = self._instantiate_data_pattern(data)
 
-        if location is None:
-            location = len(pattern_data.template)
-
         if self.max_events is None:
             max_events = int(np.rint(np.min(pattern_data.durations.values) //\
-                                     (location))) + 1
+                                     (self.location*pattern_data.sfreq/1000))) + 1
         else:
             max_events = self.max_events
-
+        print(max_events)
         min_events = self.min_events
 
         if not self.base_fit:
@@ -132,7 +135,6 @@ class EliminativeMethod(BaseModel):
                 temp_pars = np.delete(temp_pars, event + 1, axis=1)
                 pars_temp.append(temp_pars)
             event_model.fit(data=pattern_data,
-                            locations=location,
                             channel_pars=np.array(events_temp),
                             time_pars=np.array(pars_temp),
                             verbose=False,
@@ -145,7 +147,6 @@ class EliminativeMethod(BaseModel):
 
     def transform(self,
                   data: PatternData | BaseTransformer | xr.DataArray,
-                  location: int = None
                   ):
         """
         Apply all fitted submodels to the provided data.
@@ -156,10 +157,6 @@ class EliminativeMethod(BaseModel):
             1. data from BaseTransformer or xr.DataArray containing transformed data.
             2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
-        location : int, optional
-            The minimum distance in samples to add between events to avoid event collapse
-            during the expectation-maximization algorithm.
-            By default adds the length of the choosen pattern.
 
         Returns
         -------
@@ -170,15 +167,12 @@ class EliminativeMethod(BaseModel):
         """
         pattern_data = self._instantiate_data_pattern(data)
 
-        if location is None:
-            location = len(pattern_data.template)
-
         if len(self.submodels) == 0:
             raise ValueError("Model has not been (succesfully) fitted yet, no fixed models.")
         likelihoods = []
         event_probs = []
         for n_events, event_model in self.submodels.items():
-            lkh, prob = event_model.transform(pattern_data, locations=location)
+            lkh, prob = event_model.transform(pattern_data)
             likelihoods.append(lkh)
             event_probs.append(prob)
         xr_eventprobs = xr.concat(event_probs, dim=pd.Index(list(self.submodels), name="n_events"))
@@ -205,6 +199,7 @@ class EliminativeMethod(BaseModel):
         return EventModel(
             n_events=n_events,
             pattern=self.pattern,
+            location=self.location,
             starting_points=starting_points,
             tolerance=self.tolerance,
             max_iteration=self.max_iteration,

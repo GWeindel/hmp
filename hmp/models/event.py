@@ -38,14 +38,12 @@ class EventModel(BaseModel):
     pattern :
         The pattern and properties to use for cross-correlation. Default is
         half sine with 50 ms width.
-    location_ms : float, optional
+    location : np.ndarray | float, optional
         How much milliseconds should be censored in the EM() step of model fitting.
         Default is width of the event.
-        Shorter values than `width` allow overlap of neighboring events
+        Shorter values than the width of a pattern allow overlap of neighboring events
         but might result in the same event being duplicated in several events.
         Larger values will prevent duplication at the risk of missing neighboring events
-        Censoring is done on samples lower or equal to the location,
-        thus requesting 50ms at 1000Hz will censor up to 50ms
         Defaults to width of pattern, which is by default 50 ms.
     fixed_time_pars : list, optional
         List of time parameters to fix during estimation.
@@ -61,7 +59,7 @@ class EventModel(BaseModel):
         Minimum number of iterations for the expectation maximization algorithm. Default is 1.
     starting_points : int, optional
         Number of random starting points to use for initialization. Default is 1.
-    max_scale : float, optional
+    max_duration : float, optional
         Maximum mean distance between events, used when generating random starting points.
         Default is None.
     distribution : str
@@ -73,14 +71,15 @@ class EventModel(BaseModel):
         self,
         n_events: int,
         pattern: Pattern = None,
+        distribution: Any = None,
+        location: int | np.ndarray = None,
         fixed_time_pars: list = None,
         fixed_channel_pars: list = None,
         tolerance: float = 1e-4,
         max_iteration: int = 1e3,
         min_iteration: int = 1,
         starting_points: int = 1,
-        max_scale: float = None,
-        distribution: Any = None
+        max_duration: float = None,
         ):
         assert np.issubdtype(type(n_events), np.integer), \
          (
@@ -90,6 +89,7 @@ class EventModel(BaseModel):
 
         super().__init__(pattern, distribution)
         self.n_events = n_events
+        self._set_locations(location, self.pattern.width)
         self.n_dims = None
         self.fixed_time_pars = fixed_time_pars
         self.fixed_channel_pars = fixed_channel_pars
@@ -97,17 +97,32 @@ class EventModel(BaseModel):
         self.max_iteration = max_iteration
         self.min_iteration = min_iteration
         self.starting_points = starting_points
-        self.max_scale = max_scale
+        self.max_duration = max_duration
         self.grouping_dict = {}
         self.time_map = np.zeros((1, self.n_events + 1))
         self.channel_map = np.zeros((1, self.n_events))
         self.n_cor = 30
 
+    def _set_locations(self, locations, pattern_width):
+        """Set minimum distance between successive events."""
+        if locations is None:
+            self.locations = np.zeros(self.n_events+1, dtype=int)
+            if self.n_events > 1:
+                self.locations[1:-1] = pattern_width
+        else:
+            if isinstance(locations, int):
+                self.locations = np.zeros(self.n_events+1, dtype=int)
+                if self.n_events > 1:
+                    self.locations[1:-1] = locations
+            else:
+                self.locations = locations
+            if self.n_events > 1 and any(self.locations[1:-1] < pattern_width):
+                 warn("For n_event > 1, locations must be greater or equal than pattern.width"
+                 f" but received locations ({self.locations}) is smaller than  ({pattern_width}).")
 
     def fit(  # noqa: PLR0912, PLR0915
         self,
         data: Any,
-        locations: int | np.ndarray = None,
         channel_pars: np.ndarray = None,
         time_pars: np.ndarray = None,
         verbose: bool = True,
@@ -125,11 +140,6 @@ class EventModel(BaseModel):
             1. data from BaseTransformer or xr.DataArray containing transformed data.
             2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
-        locations : int, np.array, optional
-            How much samples should be censored in the EM() step of model fitting.
-            Default is width of the event. Alternatively it is possible to provide an array
-            of length `n_events` with the location for each event or an integer that will
-            be repeated across events.
         channel_pars : ndarray, optional
             2D ndarray (n_groups * n_events * n_channels) or
             4D (starting_points * n_groups * n_groups * n_events * n_channels),
@@ -163,9 +173,6 @@ class EventModel(BaseModel):
         None
         """
         pattern_data = self._instantiate_data_pattern(data)
-
-        self._set_locations(locations, len(pattern_data.template))
-
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
         infos_to_store["sfreq"] = pattern_data.sfreq
@@ -237,8 +244,8 @@ class EventModel(BaseModel):
             initial_p = time_pars
             time_pars = [initial_p]
             if self.starting_points > 1:
-                if self.max_scale is None:
-                    self.max_scale = pattern_data.durations.mean()
+                if self.max_duration is None:
+                    self.max_duration = pattern_data.durations.mean()
                 infos_to_store["starting_points"] = self.starting_points
                 for _ in np.arange(self.starting_points):
                     proposal_p = (
@@ -332,7 +339,8 @@ class EventModel(BaseModel):
         self.time_map = time_map
 
 
-    def transform(self, data: Any, locations=None) -> tuple[np.ndarray, xr.DataArray]:
+
+    def transform(self, data: Any) -> tuple[np.ndarray, xr.DataArray]:
         """
         Transform the trial data using the fitted model.
 
@@ -351,7 +359,6 @@ class EventModel(BaseModel):
             Concatenated event probability arrays for all submodels, indexed by number of events.
         """
         pattern_data = self._instantiate_data_pattern(data)
-        self._set_locations(locations, len(pattern_data.template))
 
         _, groups, glabels = self.group_constructor(
                 pattern_data.durations,
@@ -364,23 +371,6 @@ class EventModel(BaseModel):
         )
 
         return likelihoods, xreventprobs
-
-    def _set_locations(self, locations, pattern_width):
-        """Set minimum distance between successive events."""
-        if locations is None:
-            self.locations = np.zeros(self.n_events+1, dtype=int)
-            if self.n_events > 1:
-                self.locations[1:-1] = pattern_width
-        else:
-            if isinstance(locations, int):
-                self.locations = np.zeros(self.n_events+1, dtype=int)
-                if self.n_events > 1:
-                    self.locations[1:-1] = locations
-            else:
-                self.locations = locations
-            if self.n_events > 1 and any(self.locations[1:-1] < pattern_width):
-                 warn("For n_event > 1, locations must be greater or equal than pattern.width"
-                 f" but received locations ({self.locations}) is smaller than  ({pattern_width}).")
 
     @property
     def xrtraces(self):
@@ -755,10 +745,10 @@ class EventModel(BaseModel):
         rnd_durations = np.zeros(n_events + 1)
         while any(rnd_durations < max(self.locations)):  # at least equal to the location
             rnd_events = np.random.default_rng().integers(
-                low=0, high=self.max_scale, size=n_events
+                low=0, high=self.max_duration, size=n_events
             )  # n_events between 0 and mean_d
             rnd_events = np.sort(rnd_events)
-            rnd_durations = np.hstack((rnd_events, self.max_scale)) - np.hstack(
+            rnd_durations = np.hstack((rnd_events, self.max_duration)) - np.hstack(
                 (0, rnd_events)
             )  # associated durations
         random_stages = np.array(
@@ -864,13 +854,14 @@ class EventModel(BaseModel):
             # fwd and bwd in the same way in the following steps
             probs_b[: durations[trial], trial, :] = probs[: durations[trial], trial, :][::-1, ::-1]
 
+        locations = np.rint(self.locations/1000 * pattern_data.sfreq).astype(int)
         pmf = np.zeros([max_duration, n_stages], dtype=dtype)  # Gamma pmf for each stage scale
         for stage in range(n_stages):
             pmf[:, stage] = np.concatenate(
                 (
-                    np.repeat(0, self.locations[stage]),
+                    np.repeat(0, locations[stage]),
                     self.distribution_pdf(time_pars[stage, 0], time_pars[stage, 1], max_duration)[
-                        self.locations[stage] :
+                        locations[stage] :
                     ],
                 )
             )
