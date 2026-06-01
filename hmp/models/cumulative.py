@@ -343,7 +343,8 @@ class CumulativeMethod(BaseModel):
         return super().__getattribute__(attr)
 
     def run_fold(self, n_events, train_td, test_td, channel_pars_props, time_pars_props):
-        event_model = EventModel(pattern=self.pattern, distribution=self.distribution, location=self.location,
+        event_model = EventModel(pattern=self.pattern, distribution=self.distribution,
+                                 location=self.location,
                                  tolerance=self.tolerance, n_events=n_events)
 
         event_model.fit(
