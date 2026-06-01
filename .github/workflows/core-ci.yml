@@ -53,7 +53,7 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install ".[test]"
     - name: Test with pytest
-    - run: pytest --cov=hmp --cov-fail-under=70
+      run: pytest --cov=hmp --cov-fail-under=70
 
   # build-docs:
   #   name: Build documentation
