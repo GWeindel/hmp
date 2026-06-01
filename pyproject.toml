@@ -48,7 +48,7 @@ keywords = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "ruff"]
+test = ["pytest","pytest-cov", "ruff"]
 docs = [
     "sphinx<9.0.0", "sphinx-rtd-theme", "sphinxcontrib-napoleon","nbsphinx",
     "sphinx-autodoc-typehints", "sphinx_inline_tabs", "sphinx_copybutton",
