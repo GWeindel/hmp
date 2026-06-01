@@ -46,7 +46,14 @@ def test_fixed_simple():
     assert np.isclose(np.sum(np.abs(true_topos.data - test_topos.data)), 0, atol=1e-4, rtol=0)
     # Test whether likelihood is the expected one
     assert np.isclose(lkh_b, np.array(101.31), atol=1e-2, rtol=0)
-    
+
+    #locations
+    model = EventModel(n_events=n_events)
+    locations = np.zeros(n_events+1, dtype=int)
+    noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b, locations=locations)
+    noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b, locations=0)
+    assert np.isclose(noloc_loglikelihood, np.array(101.31), atol=1e-2, rtol=0)
+
     # testing recovery of attributes
     model.xrlikelihoods
     model.xrchannel_pars
@@ -54,12 +61,10 @@ def test_fixed_simple():
     model.xrtime_pars_dev
     model.xrtraces
 
-
 def test_fixed_csd():
     """ test CSD computation"""
     event_c, epoch_data, info, sfreq, n_events = init_data_large()
     epoch_data, info = hmp.utils.compute_csd(epoch_data, info)
-
 
 def test_fixed_short():
     """ test very short latencies """
