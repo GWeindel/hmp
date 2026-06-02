@@ -212,14 +212,14 @@ class LOOCV():
                             ),
                         )
 
-            likelihoods = xr.DataArray(
-                np.array(loocv).astype(np.float64),
-                dims="participant",
-                coords={"participant": self.participants_idx},
-                name="loo_likelihood",
-            )
-                
-            all_likelihoods.append(likelihoods)
+                likelihoods = xr.DataArray(
+                    np.array(loocv).astype(np.float64),
+                    dims="participant",
+                    coords={"participant": self.participants_idx},
+                    name="loo_likelihood",
+                )
+                    
+                all_likelihoods.append(likelihoods)
 
 
     #     # option 3: backward

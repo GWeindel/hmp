@@ -160,8 +160,8 @@ class CumulativeMethod(BaseModel):
             # Estimate model based on these propositions
             event_model.fit(
                 self.pattern_data,
-                np.array([channel_pars_props]),
-                np.array([time_pars_props]),
+                channel_pars_props,
+                time_pars_props,
                 verbose=False,
                 cpus=cpus
             )

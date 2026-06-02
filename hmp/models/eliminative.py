@@ -74,6 +74,7 @@ class EliminativeMethod(BaseModel):
         self,
         data: Any,
         cpus: int = 1,
+        verbose: bool = True
     ) -> None:
         """Perform the eliminative estimation.
 
@@ -105,9 +106,10 @@ class EliminativeMethod(BaseModel):
         min_events = self.min_events
 
         if not self.base_fit:
-            print(
-                f"Estimating all solutions for maximal number of events ({max_events})"
-            )
+            if verbose:
+                print(
+                    f"Estimating all solutions for maximal number of events ({max_events})"
+                )
             base_fit = self.get_event_model(n_events=max_events, starting_points=1)
             base_fit.fit(self.pattern_data, verbose=False, cpus=cpus)
         else:
@@ -118,7 +120,8 @@ class EliminativeMethod(BaseModel):
         for n_events in np.arange(max_events - 1, min_events, -1):
             event_model = self.get_event_model(n_events, starting_points=n_events+1)
 
-            print(f"Estimating all solutions for {n_events} events")
+            if verbose:
+                print(f"Estimating all solutions for {n_events} events")
 
             time_pars_prev = self.submodels[n_events+1].xrtime_pars.dropna("stage").values
             channel_pars_prev = self.submodels[n_events+1].xrchannel_pars.dropna("event").values
@@ -146,7 +149,7 @@ class EliminativeMethod(BaseModel):
         self._fitted = True
         del self.pattern_data
 
-    def transform(self, data):
+    def transform(self, data, cpus=1):
         """
         Apply all fitted submodels to the provided data.
 
@@ -172,7 +175,7 @@ class EliminativeMethod(BaseModel):
         likelihoods = []
         event_probs = []
         for n_events, event_model in self.submodels.items():
-            lkh, prob = event_model.transform(self.pattern_data)
+            lkh, prob = event_model.transform(self.pattern_data,cpus=cpus)
             likelihoods.append(lkh)
             event_probs.append(prob)
         xr_eventprobs = xr.concat(event_probs, dim=pd.Index(list(self.submodels), name="n_events"))

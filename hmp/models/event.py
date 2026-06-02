@@ -251,7 +251,7 @@ class EventModel(BaseModel):
                 time_pars = np.array(time_pars)
         else:
             infos_to_store["sp_time_pars"] = time_pars
-            time_pars = np.array([time_pars])
+            time_pars = np.array([time_pars]) #check nr of dims, if 2 wrap
 
         if channel_pars is None:
             # By defaults c_pars are initiated to 0
