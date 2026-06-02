@@ -515,7 +515,7 @@ def simulated_times_and_parameters(
     true_activities : np.ndarray
         Actual values at simulated event times.
     """
-    sfreq = model.sfreq
+    sfreq = pattern_data.sfreq
     n_stages = len(np.unique(generating_events[:, 2])[1:])  # one trigger = one source
     n_events = n_stages - 1
     if resampling_freq is None:
@@ -540,7 +540,8 @@ def simulated_times_and_parameters(
     sample_times = np.zeros((len(pattern_data.starts), n_events), dtype=int)
     for event in range(n_events):
         for trial in range(len(pattern_data.starts)):
-            trial_time = pattern_data.starts[trial] + np.sum(random_source_times[trial, : event + 1])
+            trial_time = pattern_data.starts[trial] +\
+                np.sum(random_source_times[trial, : event + 1])
             if pattern_data.ends[trial] >= trial_time:  # exceeds RT
                 sample_times[trial, event] = trial_time
             else:

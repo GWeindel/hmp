@@ -1,65 +1,40 @@
 """Classes for generating and representing templates for HMP event detection.
 
-Main class Pattern and including a half-sine wave template (`HalfSine`) and an arbitrary waveform template (`Arbitrary`).
+Main class Pattern and including a half-sine wave template (`HalfSine`)
 
 Classes
 -------
 Pattern - Main class
     HalfSine
-        Generates a normalized half-sine wave template for use in 
+        Generates a normalized half-sine wave template for use in
         signal processing or event detection.
-    Arbitrary
-        Allows the use of any arbitrary pattern as a template.
 
-Both classes provide methods to create expected templates based on sampling frequency and other
-parameters,
-and store relevant metadata such as template width and censoring location for model fitting
-procedures.
 """
-from abc import ABC, abstractmethod
-from warnings import warn
+from abc import ABC
+
 import numpy as np
 
 
 class Pattern(ABC):
-    """
+    """General class to be passed to models.
+
     Parameters
     ----------
-    width_ms: float
-        Width of pattern in ms. 
-    sfreq : float
-        Sampling frequency in Hz.
-    width_samples : int
-        Number of samples in the half-sine wave. 
     template : np.ndarray
         The pattern template.
+    width : int, optional
+        Length of the pattern (at 1000Hz).
     """
 
     def __init__(
         self,
-        width_ms: float,
-        sfreq: float = None,
-        template: np.ndarray = None
+        template: np.ndarray,
+        width: int | None = None,
     ):
-        self.width_ms = width_ms
-        self.sfreq = sfreq
-
-        if sfreq is not None:
-            steps = 1000 / sfreq
-            self.width_samples = int(np.rint(self.width_ms / steps))
-        else:
-            self.width_samples = None
-
+        if width is None:
+            width = len(template)
+        self.width = width
         self.template = template
-
-    @abstractmethod
-    def create_template(self):
-        """
-        This methods needs to fill sfreq, width_samples, location, and template.
-        This requires parameters from the data that you fit, might not be availble at
-        the moment the pattern itself is defined.
-        """
-        ...
 
 class HalfSine(Pattern):
     """
@@ -67,113 +42,24 @@ class HalfSine(Pattern):
 
     Parameters
     ----------
-
-    width_ms : float, optional
-        Width of the half-sine wave in milliseconds, by default 50 ms (10H).
+    width : float, optional
+        Width of the half-sine wave in milliseconds, by default 50 ms (10Hz).
         Controls for the precision of the estimate. Shorter values will
         model narrower half-sines (i.e. higher frequencies), higher values
         will model wider events (i.e. lower frequencies)
-        Default is 50 ms
-    sfreq : float
-        Sampling frequency of the modelled signal in Hz. If None, required to be filled
-        by calling create_template later.
-
     """
 
     def __init__(
         self,
-        width_ms: float = 50,
-        sfreq: float = None
+        width: float = 50,
     ):
-        super().__init__(width_ms, sfreq, template=None)
+        template = self.create_template(width)
+        super().__init__(template=template, width=width)
 
-        if sfreq is not None:
-            self.create_template(sfreq)
-
-    def create_template(self, sfreq: float):
-        """
-        Create a HalfSine template with the expected parameters.
-
-        Parameters
-        ----------
-        sfreq : float
-            Sampling frequency of the modelled signal in Hz.
-        
-        Returns
-        -------
-        HalfSine
-            An instance of the HalfSine class.
-        """
-        self.sfreq = sfreq
-        steps = 1000 / sfreq
-        self.width_samples = int(np.rint(self.width_ms / steps))
-        if self.width_samples < 5:
-            warn('Using a pattern defined by less than 5 points is not recommended')
-        if self.width_samples < 2:
-            raise ValueError("Cannot use pattern with only one data point")
-       
-        self.template = self._create_template(steps)
-
-    def _create_template(self,steps: float) -> np.ndarray:
-        """
-        Compute the event shape as a half-sine wave.
-
-        Parameters
-        ----------
-        steps : float
-            Time step in milliseconds between samples.
-      
-        Returns
-        -------
-        np.ndarray
-            The normalized half-sine wave template.
-        """
-        event_idx = np.arange(self.width_samples) * steps + steps / 2
-        event_frequency = 1000 / (self.width_samples * steps * 2)  # Event frequency for half-sine
+    @staticmethod
+    def create_template(width: float):
+        """Create a HalfSine template with the expected parameters."""
+        event_idx = np.arange(width) + .5
+        event_frequency = 1000 / (width * 2)  # Event frequency for half-sine
         template = np.sin(2 * np.pi * event_idx / 1000 * event_frequency)
-        template = template / np.sum(template**2)  # Weight normalized
         return template
-
-"""
-NOTE Arbitrary seems no longer necessary since you can just create a BasePattern
-    with the arbitrary template.
-"""
-
-# class Arbitrary(Pattern):
-#     """
-
-#     Represents an arbitrary template.
-#     """
-
-#     def create_expected(self, sfreq: float, template: np.ndarray,
-#                         location: float | None = None) -> "Arbitrary":
-#         """
-#         Create an Arbitrary instance with the expected parameters.
-
-#         Parameters
-#         ----------
-#         sfreq : float
-#             Sampling frequency in Hz.
-#         template : np.ndarray
-#             The arbitrary waveform template.
-#         location : float, optional
-#             How much milliseconds should be censored in the EM() step of model fitting.
-#             Default is width of the event.
-#             Shorter values than `width` allow overlap of neighboring events
-#             but might result in the same event being duplicated in several events.
-#             Larger values will prevent duplication at the risk of missing neighboring events
-#             Censoring is done on samples lower or equal to the location,
-#             thus requesting 50ms at 1000Hz will censor up to 50ms
-
-#         Returns
-#         -------
-#         Arbitrary
-#             An instance of the Arbitrary class.
-#         """
-#         steps = 1000 / sfreq
-#         width = len(template)
-#         if location is None:
-#             location = width
-#         else:
-#             location = int(np.ceil(location / steps))
-#         return cls(sfreq, width, location, template)

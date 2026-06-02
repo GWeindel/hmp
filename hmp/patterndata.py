@@ -1,13 +1,14 @@
 """Builds the data to be used in HMP model estimation."""
 from dataclasses import dataclass
+from warnings import warn
 
 import numpy as np
 import xarray as xr
 from numpy.typing import DTypeLike
 from scipy.signal import correlate
 
-from typing import Any
-from hmp.patterns import Pattern
+from hmp.patterns import HalfSine, Pattern
+from hmp.transformers import BaseTransformer
 from hmp.utils import _check_transformed
 from hmp.patterns import HalfSine
 import copy
@@ -40,11 +41,15 @@ class PatternData:
     ends: np.ndarray
     sfreq: float
     offset: int
-    cross_corr: np.ndarray
     pattern: Pattern
+    template: np.ndarray
+    cross_corr: np.ndarray
 
     @classmethod
-    def from_transformer(cls, transformed, pattern: Pattern = None, dtype = np.float32):
+    def from_transformer(cls,
+                         transformed: xr.DataArray | BaseTransformer ,
+                         pattern: Pattern | None = None,
+                         dtype: DTypeLike | None = None):
         """
         Create a PatternData instance from transformed data and a given pattern.
 
@@ -53,17 +58,19 @@ class PatternData:
         transformed : BaseTransfromer or xr.DataArray
             The transformed object or xarray DataArray containing the transformed data.
         pattern : Pattern
-            The properties of the event to use for cross-correlation computation. Default is
+            The pattern to use for cross-correlation computation. Default is
             half sine with 50 ms width.
         dtype: np.DTypeLike
-            Precision, use np.float32 or np.int64
+            Precision, use np.float32 or np.int64. By default inherits from data.
 
         Returns
         -------
-        TrialData
-            An instance of TrialData with computed durations, cross-correlation, and metadata.
+        PatternData
+            An instance of PatternData with computed durations, cross-correlation, and metadata.
         """
         data = _check_transformed(transformed)
+        if dtype is None:
+            dtype = transformed.data.dtype
         # compute sequence durations based on number of samples
         durations = (
             data
@@ -90,16 +97,29 @@ class PatternData:
 
         if pattern is None:
             pattern = HalfSine()
-            pattern.create_template(sfreq=data.sfreq)
+
+        if data.sfreq > 1000:
+            raise NotImplementedError('Cannot use sfreq > 1000Hz')
+
+        template = _norm_template(data.sfreq, pattern.template)
+        if len(template) < 5:
+            if len(template) < 2:
+                raise ValueError("Cannot use pattern with only one data point")
+            warn('Using a pattern defined by less than 5 points is not recommended')
 
         # Equation 1 in 2024 paper
-        cross_corr = cross_correlation(data.values.T, starts, ends, pattern.template, dtype)
+        cross_corr = cross_correlation(data.values.T, starts, ends, template, dtype)
 
         return cls(durations=durations, starts=starts, ends=ends,
-                    cross_corr=cross_corr, pattern=pattern,
+                    cross_corr=cross_corr, pattern=pattern, template=template,
                    offset=data.offset, sfreq=data.sfreq)
 
-   
+def _norm_template(sfreq, template):
+    tstep = int(np.rint(1000/sfreq))
+    template = template[::tstep]
+    template = template / np.sum(template**2)
+    return template
+
 def cross_correlation(
         data: np.ndarray,
         starts: np.ndarray,
