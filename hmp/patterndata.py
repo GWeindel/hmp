@@ -123,7 +123,7 @@ def cross_correlation(
         data: np.ndarray,
         starts: np.ndarray,
         ends: np.ndarray,
-        pattern: np.ndarray,
+        template: np.ndarray,
         dtype: DTypeLike,
     ) -> np.ndarray:
     """Compute the cross-correlation between the data and a given pattern.
@@ -141,7 +141,7 @@ def cross_correlation(
         Array of start indices for each trial.
     ends : np.ndarray
         Array of end indices for each trial.
-    pattern : np.ndarray
+    template : np.ndarray
         1D array representing the pattern to correlate with.
     dtype: np.DTypeLike
         Precision, use np.float32 or np.int64
@@ -157,7 +157,7 @@ def cross_correlation(
         for dim in np.arange(data.shape[1]):
             events[starts[trial] : ends[trial] + 1, dim] = correlate(
                 data[starts[trial] : ends[trial] + 1, dim],
-                pattern,
+                template,
                 mode="same",
                 method="direct",
             )
