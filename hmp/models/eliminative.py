@@ -50,7 +50,7 @@ class EliminativeMethod(BaseModel):
     def __init__(
         self,
         pattern: Pattern = None,
-        location: int = None,
+        location: float = None,
         max_events: int | None = None,
         min_events: int = 0,
         base_fit: EventModel | None = None,
