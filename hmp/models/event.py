@@ -71,7 +71,7 @@ class EventModel(BaseModel):
         self,
         n_events: int,
         pattern: Pattern = None,
-        location: int | np.ndarray = None,
+        location: float | np.ndarray = None,
         fixed_time_pars: list = None,
         fixed_channel_pars: list = None,
         tolerance: float = 1e-4,
@@ -105,8 +105,10 @@ class EventModel(BaseModel):
 
     def _set_locations(self, location):
         """Set minimum distance between successive events."""
-        if location is not None and isinstance(location,np.ndarray) and len(location) > 0: #array, must be array of length n_events + 1
-            assert len(location) == self.n_events + 1, "If location is np:array, should have length n_events + 1."
+        #array, must be array of length n_events + 1
+        if location is not None and isinstance(location,np.ndarray) and len(location) > 0:
+            assert len(location) == self.n_events + 1, \
+                "If location is np:array, should have length n_events + 1."
             self.locations = location
         else:
             self.locations = np.zeros(self.n_events+1, dtype=int)
@@ -359,6 +361,7 @@ class EventModel(BaseModel):
             Concatenated event probability arrays for all submodels, indexed by number of events.
         """
         pattern_data = self._instantiate_data_pattern(data)
+        self.locations_samples = np.rint(self.locations/1000 * pattern_data.sfreq).astype(int)
 
         _, groups, glabels = self.group_constructor(
                 pattern_data.durations,

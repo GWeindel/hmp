@@ -68,7 +68,7 @@ class CumulativeMethod(BaseModel):
     def __init__(
         self,
         pattern: Pattern = None,
-        location: int = None,
+        location: float = None,
         step: float = None,
         end: int = None,
         sequential: bool = True,
@@ -157,8 +157,7 @@ class CumulativeMethod(BaseModel):
         # Iterative fit
         while j < end and n_events <= max_n_events:
             prev_j = j
-            #event_model = EventModel(n_events=n_events, pattern=self.pattern, location=self.location,
-            #                         tolerance=self.tolerance,distribution=self.distribution)
+
             # get new parameters
             j, channel_pars_props, time_pars_props = self._propose_fit_params(
                 n_events, j, channel_pars, time_pars
@@ -207,8 +206,9 @@ class CumulativeMethod(BaseModel):
         n_events = n_events - 1
         if n_events > 0:
             self._fitted = True
-            event_model = EventModel(n_events=n_events, pattern=self.pattern, location=self.location,
-                                     tolerance=self.tolerance, distribution=self.distribution)
+            event_model = EventModel(n_events=n_events, pattern=self.pattern,
+                                     location=self.location, tolerance=self.tolerance,
+                                     distribution=self.distribution)
             event_model.fit(
                 pattern_data,
                 channel_pars=np.array([[channel_pars[:n_events, :]]]),
@@ -239,7 +239,7 @@ class CumulativeMethod(BaseModel):
                          channel_pars_props, time_pars_props,
                          cpus, kfold):
 
-        event_model = EventModel(n_events=n_events, pattern=self.pattern, location=self.location,            
+        event_model = EventModel(n_events=n_events, pattern=self.pattern, location=self.location,
                                  tolerance=self.tolerance, distribution=self.distribution)
         if kfold > 1:
             folds = list(pseudo_kfold(pattern_data, kfold))
