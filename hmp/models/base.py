@@ -3,6 +3,8 @@ from abc import ABC, abstractmethod
 from typing import Any
 from warnings import warn
 
+import numpy as np
+
 from hmp.distributions import Gamma
 from hmp.patterndata import PatternData
 from hmp.patterns import HalfSine, Pattern
@@ -57,6 +59,35 @@ class BaseModel(ABC):
         else: #assume transformed (is checked later)
             pattern_data = PatternData.from_transformer(data, self.pattern)
         return pattern_data
+
+    def _time_to_samples(self, time, sfreq):
+        """Calculate samples (int) based on time(s).
+
+        Parameters
+        ----------
+        time : float | ndarray
+            Time or times that need to be converted to samples.
+        sfreq : sample frequency of data
+        """
+        return np.rint(time * sfreq / 1000).astype(int)
+
+    def _compute_max_events(self, pattern_data : PatternData, location : float):
+        """Compute max nr of events that fit in trial.
+
+        Parameters
+        ----------
+        pattern_data : Pattern
+            PatternData object
+        location : float
+            Location in ms.
+        """
+        min_dur = np.min(pattern_data.durations.values)
+        location_samples = self._time_to_samples(location, pattern_data.sfreq)
+        if self.pattern.width < location:
+            return int(np.floor((min_dur - self.pattern.width)/ \
+                            location_samples)) + 1
+        else:
+            return int(np.floor(min_dur / location_samples))
 
     @abstractmethod
     def fit(self):

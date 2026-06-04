@@ -173,7 +173,6 @@ class EventModel(BaseModel):
         None
         """
         pattern_data = self._instantiate_data_pattern(data)
-        self.locations_samples = np.rint(self.locations/1000 * pattern_data.sfreq).astype(int)
 
         # A dict containing all the info we want to keep, populated along the func
         infos_to_store = {}
@@ -257,7 +256,7 @@ class EventModel(BaseModel):
                         time_group = np.where(time_map[cur_group, :] >= 0)[0]
                         n_stage_group = len(time_group)
                         proposal_p[cur_group, time_group, :] = self.gen_random_stages(
-                            n_stage_group - 1)
+                            n_stage_group - 1, pattern_data.sfreq)
                         proposal_p[cur_group, fixed_time_pars, :] = initial_p[0, fixed_time_pars]
                     time_pars.append(proposal_p)
                 time_pars = np.array(time_pars)
@@ -361,7 +360,6 @@ class EventModel(BaseModel):
             Concatenated event probability arrays for all submodels, indexed by number of events.
         """
         pattern_data = self._instantiate_data_pattern(data)
-        self.locations_samples = np.rint(self.locations/1000 * pattern_data.sfreq).astype(int)
 
         _, groups, glabels = self.group_constructor(
                 pattern_data.durations,
@@ -726,7 +724,7 @@ class EventModel(BaseModel):
         time_pars = self.scale_parameters(averagepos=event_times_mean)
         return channel_pars, time_pars
 
-    def gen_random_stages(self, n_events: int) -> np.ndarray:
+    def gen_random_stages(self, n_events: int, sfreq) -> np.ndarray:
         """
         Compute random stage durations.
 
@@ -746,7 +744,7 @@ class EventModel(BaseModel):
             A 2D array where each row contains the shape and scale parameters for a stage.
         """
         rnd_durations = np.zeros(n_events + 1)
-        while any(rnd_durations < max(self.locations_samples)):  # at least equal to the location
+        while any(rnd_durations < max(self._time_to_samples(self.locations,sfreq))):
             rnd_events = np.random.default_rng().integers(
                 low=0, high=self.max_duration, size=n_events
             )  # n_events between 0 and mean_d
@@ -858,12 +856,13 @@ class EventModel(BaseModel):
             probs_b[: durations[trial], trial, :] = probs[: durations[trial], trial, :][::-1, ::-1]
 
         pmf = np.zeros([max_duration, n_stages], dtype=dtype)  # Gamma pmf for each stage scale
+        locations_samples = self._time_to_samples(self.locations, pattern_data.sfreq)
         for stage in range(n_stages):
             pmf[:, stage] = np.concatenate(
                 (
-                    np.repeat(0, self.locations_samples[stage]),
-                    self.distribution_pdf(time_pars[stage, 0], time_pars[stage, 1], max_duration)[
-                        self.locations_samples[stage] :
+                    np.repeat(0, locations_samples[stage]),
+                    self.distribution_pdf(time_pars[stage, 0], time_pars[stage, 1], \
+                        max_duration)[locations_samples[stage] :
                     ],
                 )
             )

@@ -128,14 +128,15 @@ class CumulativeMethod(BaseModel):
         pattern_data = self._instantiate_data_pattern(data)
 
         end = pattern_data.durations.values.mean() if self.end is None else self.end
-        self.step = self.location*pattern_data.sfreq/1000 if self.step is None else self.step
+        if self.step is None:
+            self.step = self._time_to_samples(self.location, pattern_data.sfreq)
         if self.max_n_events is None:
-            max_n_events = int(np.floor(np.min(pattern_data.durations.values) /\
-                                        (self.location*pattern_data.sfreq/1000)))
+            max_n_events = self._compute_max_events(pattern_data, self.location)
         else:
             max_n_events = self.max_n_events
         #stop when not possible to insert event
-        end = int(np.rint((end - self.location*pattern_data.sfreq/1000 - 1)/self.step))
+        end = int(np.rint((end - self._time_to_samples(self.location,pattern_data.sfreq) \
+                - 1) / self.step))
 
         pbar = tqdm(total=end)  # progress bar
         n_events, j = 1, 1 # j = sample after last placed event

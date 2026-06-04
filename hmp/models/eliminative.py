@@ -96,8 +96,7 @@ class EliminativeMethod(BaseModel):
         pattern_data = self._instantiate_data_pattern(data)
 
         if self.max_events is None:
-            max_events = int(np.rint(np.min(pattern_data.durations.values) //\
-                                     (self.location*pattern_data.sfreq/1000)))
+            max_events = self._compute_max_events(pattern_data, self.location)
         else:
             max_events = self.max_events
         print(max_events)
