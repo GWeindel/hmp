@@ -129,7 +129,7 @@ class CumulativeMethod(BaseModel):
 
         end = pattern_data.durations.values.mean() if self.end is None else self.end
         if self.step is None:
-            self.step = self._time_to_samples(self.location, pattern_data.sfreq)
+            self.step = self._time_to_samples(self.location, pattern_data.sfreq)/2
         if self.max_n_events is None:
             max_n_events = self._compute_max_events(pattern_data, self.location)
         else:
