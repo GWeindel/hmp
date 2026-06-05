@@ -27,10 +27,12 @@ def test_plot():
     lkh_a, estimates_a = model.fit_transform(hmp_data_a)
 
     # Fit model on both conditions (noiseless b should help estimate a)
-
-    lkh_comb, estimates_comb = model.fit_transform(hmp_data, time_map=time_map, channel_map=channel_map, grouping_dict=group_dict)
+    model = EventModel(n_events=n_events, \
+        channel_map=channel_map, time_map=time_map, grouping_dict=group_dict)
+    
+    lkh_comb, estimates_comb = model.fit_transform(hmp_data)
     lkh_a_group, estimates_a_group = model.transform(hmp_data_a)
 
-    plot_topo_timecourse(epoch_data, estimates_comb, positions, as_time=True, colorbar=False, )
+    plot_topo_timecourse(epoch_data, estimates_comb, positions, as_time=False, colorbar=False, )
     plot_topo_timecourse(epoch_data, estimates_a, positions, as_time=True, 
                        max_time=500, colorbar=False, )

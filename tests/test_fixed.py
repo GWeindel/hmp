@@ -108,7 +108,14 @@ def test_fixed_grouping():
     lkh_a, estimates_a = model.fit_transform(pdata_a)
 
     # Fit model on both conditions (noiseless b should help estimate a)
-    lkh_comb, estimates_comb = model.fit_transform(pdata, time_map=time_map, channel_map=channel_map, grouping_dict=grouping_dict)
+    model = EventModel(n_events=n_events,time_map=time_map, \
+                channel_map=channel_map, grouping_dict=grouping_dict)
+
+    # Fixing true parameter in model
+    model.time_pars = np.array([true_pars])
+    model.channel_pars = np.array([true_magnitudes])
+
+    lkh_comb, estimates_comb = model.fit_transform(pdata)
     lkh_a_group, estimates_a_group = model.transform(pdata_a)
 
     # a_group should be closer to ground truth 
@@ -121,7 +128,14 @@ def test_fixed_grouping():
                          [0, 0, -1]])
     time_map = np.array([[0, 0, 0, 0],
                          [0, 0, -1, 0],])
-    lkh_comb, estimates_comb = model.fit_transform(pdata, time_map=time_map, channel_map=channel_map, grouping_dict=grouping_dict)
+    model = EventModel(n_events=n_events,time_map=time_map, \
+        channel_map=channel_map, grouping_dict=grouping_dict)
+
+    # Fixing true parameter in model
+    model.time_pars = np.array([true_pars])
+    model.channel_pars = np.array([true_magnitudes])
+
+    lkh_comb, estimates_comb = model.fit_transform(pdata)
     
 def test_starting_points():
     _, _, epoch_data, hmp_data, positions, sfreq, n_events = data()

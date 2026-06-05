@@ -23,7 +23,7 @@ class Pattern(ABC):
     template : np.ndarray
         The pattern template.
     width : int, optional
-        Length of the pattern (at 1000Hz).
+        Length of the pattern in ms (= samples at 1000Hz).
     """
 
     def __init__(
@@ -43,7 +43,7 @@ class HalfSine(Pattern):
     Parameters
     ----------
     width : float, optional
-        Width of the half-sine wave in milliseconds, by default 50 ms (10Hz).
+        Width of the half-sine wave in milliseconds, by default 50 ms (1000Hz).
         Controls for the precision of the estimate. Shorter values will
         model narrower half-sines (i.e. higher frequencies), higher values
         will model wider events (i.e. lower frequencies)

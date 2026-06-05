@@ -142,7 +142,7 @@ def cross_correlation(
         Array of start indices for each trial.
     ends : np.ndarray
         Array of end indices for each trial.
-    pattern : np.ndarray
+    template : np.ndarray
         1D array representing the pattern to correlate with.
     dtype: np.DTypeLike
         Precision, use np.float32 or np.int64

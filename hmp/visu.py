@@ -40,7 +40,7 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
     event_lines: str | bool = "tab:orange",
     colorbar: bool = True,
     topo_size_scaling: bool = False,
-    as_time: bool = False,
+    as_time: bool = True,
     estimate_method: str = None,
     combined: bool = False,
     group_plot: bool = False,
