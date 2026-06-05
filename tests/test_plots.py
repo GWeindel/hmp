@@ -33,6 +33,6 @@ def test_plot():
     lkh_comb, estimates_comb = model.fit_transform(hmp_data)
     lkh_a_group, estimates_a_group = model.transform(hmp_data_a)
 
-    plot_topo_timecourse(epoch_data, estimates_comb, positions, as_time=True, colorbar=False, )
+    plot_topo_timecourse(epoch_data, estimates_comb, positions, as_time=False, colorbar=False, )
     plot_topo_timecourse(epoch_data, estimates_a, positions, as_time=True, 
                        max_time=500, colorbar=False, )
