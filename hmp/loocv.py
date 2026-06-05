@@ -22,11 +22,11 @@ import copy
 class LOOCV():
     """LOOCV class. Can be initialized with a (fitted) model or a self-defined function.
 
-    Parameters TO BE UPDATED
+    Parameters
     ----------
     model : Any 
         either a (fitted) model or a self-defined function to be applied to provided data
-    model_args :
+    function_args :
     quick : bool, optional
         Toggle for quick LOOCV using parameters of fitted model. 
         Typically incorrect, see info message. Requires fitted model.
@@ -57,7 +57,7 @@ class LOOCV():
                 if verbose:
                     if print_warning:
                         print()
-                        print("IMPORTANT: 'quick' set to true, requestion a faster LOOCV procedure.")
+                        print("IMPORTANT: 'quick' set to true, requesting a faster LOOCV procedure.")
                         print()
                         print("Note that the quick procedure is typically incorrect in the sense that")
                         print("an initial estimate is used to inform both the fit of the left-out")
@@ -123,14 +123,18 @@ class LOOCV():
             pass
         else: #assume transformed (is checked later)
             if self.model_class != "function":
-                if self.model.pattern.sfreq is None:
-                    self.model.pattern.create_template(data.sfreq)
                 data = PatternData.from_transformer(data, self.model.pattern)
             else: #function: cannot create PatternData as template is unknown
                 if verbose:
                     print("NOTE: 'function' provided for LOOCV without PatternData")
                     print("While this is possible, it roughly doubles RAM usage. If")
                     print("using a function, it is recommended to provide PatternData.")
+
+        #if Eliminative, set max_events based on all data
+        if self.model_class == hmp.models.EliminativeMethod:
+            if self.model.max_events is None:
+                self.model.max_events = \
+                    self.model._compute_max_events(data, self.model.location)
 
         # Get participants here to be able to split for multithreading
         if isinstance(data, PatternData):
@@ -164,131 +168,75 @@ class LOOCV():
                     ),
                 )
 
-        # if multiple estimates are returned per subject, rearrange data
-        if isinstance(estimates[0], list):
+        # if multiple estimates are returned per subject, rearrange data so
+        # each item of all_estimates will contain one estimate for each subject.
+        # So for eliminative, all_estimates[0] will have all n-stage subject
+        # models.
+        if isinstance(estimates[0], list): #from a function or quick elim
             all_estimates = []
             for est_idx in range(len(estimates[0])):
                 all_estimates.append([estimate[est_idx] for estimate in estimates])
-        else:  # only one model estimate given per participant
+        elif isinstance(estimates[0], hmp.models.EliminativeMethod):
+            all_estimates = []
+            for est_idx in range(estimates[0].max_events):
+                all_estimates.append([estimate.submodels[est_idx+1] for estimate in estimates])
+        elif isinstance(estimates[0], hmp.models.EventModel):                       
             all_estimates = [estimates]
-
 
         # Step 2, get loglikelihood from left out subjects
         print()
         all_likelihoods = []
 
         for estimates in all_estimates:
-            # option 1 and 2: single model and single model with levels. In fact, aren't they all eventmodels?
-            if self.model_class == hmp.models.EventModel:
-                if verbose:
-                    mod_type = "multilevel" if estimates[0].time_pars.shape[0] > 1 else "single"
-                    print(
-                        f"Calculating likelihood for {mod_type} with "
-                        f"{estimates[0].n_events} event(s)"
+            if verbose:
+                mod_type = "multilevel" if estimates[0].time_pars.shape[0] > 1 else "single"
+                print(
+                    f"Calculating likelihood for {mod_type} with "
+                    f"{estimates[0].n_events} event(s)"
+                )
+
+            loocv = []
+            if cpus_cv == 1:  # no mp for cross validation
+                for pidx, participant in enumerate(self.participants_idx):
+                    loocv.append(
+                        self.loocv_loglikelihood(
+                            data, 
+                            participant, 
+                            estimates[pidx], 
+                            cpus=cpus_model,
+                            verbose=verbose
+                        )
+                    )
+            else:  # mp
+                with mp.Pool(processes=cpus_cv) as pool:
+                    loocv = pool.starmap(
+                        self.loocv_loglikelihood,
+                        zip(
+                            itertools.repeat(data),
+                            self.participants_idx,
+                            estimates,
+                            itertools.repeat(1), #cpus
+                            itertools.repeat(verbose),
+                        ),
                     )
 
-                loocv = []
-                if cpus_cv == 1:  # no mp for cross validation
-                    for pidx, participant in enumerate(self.participants_idx):
-                        loocv.append(
-                            self.loocv_loglikelihood(
-                                data, 
-                                participant, 
-                                estimates[pidx], 
-                                cpus=cpus_model,
-                                verbose=verbose
-                            )
-                        )
-                else:  # mp
-                    with mp.Pool(processes=cpus_cv) as pool:
-                        loocv = pool.starmap(
-                            self.loocv_loglikelihood,
-                            zip(
-                                itertools.repeat(data),
-                                self.participants_idx,
-                                estimates,
-                                itertools.repeat(1), #cpus
-                                itertools.repeat(verbose),
-                            ),
-                        )
+            likelihoods = xr.DataArray(
+                np.expand_dims(np.array(loocv).astype(np.float64), axis=0),
+                dims=("n_event", "participant"),
+                coords={"n_event": np.array([estimates[0].n_events]),
+                    "participant": self.participants_idx},
+                name="loo_likelihood"
+            )
 
-                likelihoods = xr.DataArray(
-                    np.array(loocv).astype(np.float64),
-                    dims="participant",
-                    coords={"participant": self.participants_idx},
-                    name="loo_likelihood",
-                )
-                    
-                all_likelihoods.append(likelihoods)
+            all_likelihoods.append(likelihoods)
 
-
-    #     # option 3: backward
-    #     if "n_events" in estimates[0].dims:
-    #         # check max n_events (might differ by subject if fit function used)
-    #         n_events_by_subject = [np.max(x.n_events.values) for x in estimates]
-    #         max_n_events_over_subjects = np.min(n_events_by_subject)
-    #         min_n_events = np.min(estimates[0].n_events.values)
-
-    #         if verbose:
-    #             print(
-    #                 f"Calculating likelihood for backward estimation models with "
-    #                 f"{max_n_events_over_subjects} to {min_n_events} event(s)"
-    #             )
-
-    #         loocv_back = []
-    #         for n_eve in np.arange(max_n_events_over_subjects, min_n_events - 1, -1):
-    #             if verbose:
-    #                 print(
-    #                     f"  Calculating likelihood for backward estimation model with {n_eve} "
-    #                     "event(s)"
-    #                 )
-    #             loocv = []
-    #             if cpus == 1:  # not mp
-    #                 for pidx, participant in enumerate(participants_idx):
-    #                     loocv.append(
-    #                         loocv_loglikelihood(
-    #                             data,
-    #                             init,
-    #                             participant,
-    #                             estimates[pidx].sel(n_events=n_eve).dropna("event", how="all"),
-    #                             verbose=verbose,
-    #                         )
-    #                     )
-    #             else:  # mp
-    #                 with mp.Pool(processes=cpus) as pool:
-    #                     loocv = pool.starmap(
-    #                         loocv_loglikelihood,
-    #                         zip(
-    #                             itertools.repeat(data),
-    #                             itertools.repeat(init),
-    #                             participants_idx,
-    #                             [
-    #                                 estimates[x].sel(n_events=n_eve).dropna("event", how="all")
-    #                                 for x in range(len(participants_idx))
-    #                             ],
-    #                             itertools.repeat(1),
-    #                             itertools.repeat(verbose),
-    #                         ),
-    #                     )
-
-    #             loocv_back.append(
-    #                 xr.DataArray(
-    #                     np.expand_dims(np.array(loocv).astype(np.float64), axis=0),
-    #                     dims=("n_event", "participant"),
-    #                     coords={"n_event": np.array([n_eve]), "participant": participants_idx},
-    #                     name="loo_likelihood",
-    #                 )
-    #             )
-
-    #         likelihoods = xr.concat(loocv_back, dim="n_event")
-
-
-
-
-
-        #admin
-        if len(all_likelihoods) == 1:
+        #In case of eliminative, we can concat likelihoods
+        if self.model_class == hmp.models.EliminativeMethod:
+            all_likelihoods = xr.concat(all_likelihoods, dim="n_event")
+            all_likelihoods = all_likelihoods.sortby("n_event")
+        elif len(all_likelihoods) == 1:
             all_likelihoods = all_likelihoods[0]
+        if len(all_estimates) == 1:
             all_estimates = all_estimates[0]
         
         return all_likelihoods, all_estimates
@@ -330,13 +278,27 @@ class LOOCV():
         # Fit model on data
         if self.model_class == "function":
             print("don't know what to do yet!")
-        else:    
-            estimated_model = copy.deepcopy(self.model)
-            if self.quick:
-                estimated_model.fit(data=data, channel_pars=estimated_model.channel_pars, time_pars=estimated_model.time_pars, cpus=cpus_model, verbose= False)
-            else:
+        else:
+            if not self.quick: #same for Event and Eliminative
+                estimated_model = copy.deepcopy(self.model)
                 estimated_model.fit(data=data, cpus=cpus_model, verbose= False)
-            return estimated_model
+            else: #quick
+                if self.model_class == hmp.models.EventModel: #use prev params
+                    estimated_model = copy.deepcopy(self.model)
+                    estimated_model.fit(data=data, channel_pars=estimated_model.channel_pars,\
+                         time_pars=estimated_model.time_pars, cpus=cpus_model, verbose= False)
+                elif self.model_class == hmp.models.EliminativeMethod: #use prev params per model
+                    estimated_models = []
+                    for submod in self.model.submodels:
+                        estimated_model = copy.deepcopy(self.model.submodels[submod])
+                        estimated_model.fit(data=data, \
+                            channel_pars=estimated_model.channel_pars, \
+                            time_pars=estimated_model.time_pars, cpus=cpus_model, \
+                            verbose= False)
+                        estimated_models.append(estimated_model)
+                    estimated_model = estimated_models
+
+        return estimated_model
 
 
     #estimates = []

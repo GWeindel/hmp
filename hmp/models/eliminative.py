@@ -103,7 +103,7 @@ class EliminativeMethod(BaseModel):
             max_events = self._compute_max_events(pattern_data, self.location)
         else:
             max_events = self.max_events
-        print(max_events)
+        
         min_events = self.min_events
 
         if not self.base_fit:
@@ -148,7 +148,6 @@ class EliminativeMethod(BaseModel):
             gc.collect()
             self.submodels[n_events] = event_model
         self._fitted = True
-        del self.pattern_data
 
     def transform(self,
                   data: PatternData | BaseTransformer | xr.DataArray,
@@ -184,7 +183,6 @@ class EliminativeMethod(BaseModel):
             likelihoods.append(lkh)
             event_probs.append(prob)
         xr_eventprobs = xr.concat(event_probs, dim=pd.Index(list(self.submodels), name="n_events"))
-        del self.pattern_data
         return likelihoods, xr_eventprobs
 
     def _concatted_attr(self, attr_name):

@@ -164,10 +164,6 @@ def cross_correlation(
             )
     return events
 
-def compute_max_events(pattern_data: PatternData, location):
-    """Compute the maximum possible number of events given location and minimum duration."""
-    return int(np.rint(np.min(pattern_data.durations.values) // (location)))
-    
 def remove_participant(pattern_data: PatternData, participant):
     """Remove data from participant"""
     participants_to_keep = np.unique(pattern_data.durations.participant.values)
