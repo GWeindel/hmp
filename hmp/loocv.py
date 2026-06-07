@@ -30,7 +30,15 @@ class LOOCV():
     quick : bool, optional
         Toggle for quick LOOCV using parameters of fitted model. 
         Typically incorrect, see info message. Requires fitted model.
+        Not possible for function or CumulativeMethods, as params
+        cannot be provided (unless through function_params).
         Default = False.
+    pattern : hmp.patterns.Pattern
+        The pattern and properties to use for cross-correlation. This can be used 
+        when providing a function as model in combination with preprocessed data.
+        If model or PatternData is provided, Pattern in model or PatternData takes 
+        precedence in fit.
+        pattern is required when PCA_cv = True in combination with function. If not, defaults to halfsine 50 ms.
     verbose: bool, optional
         Default = True
     print_warning : bool, optional
@@ -41,11 +49,13 @@ class LOOCV():
         self,
         model: Any,
         quick: bool = False,
+        pattern: hmp.patterns.Pattern = None,
         verbose: bool = True,
         print_warning: bool = True
     ):
 
         self.model = model
+        self.quick = quick
 
         #instance of an hmp model
         if isinstance(model, hmp.models.base.BaseModel):
@@ -70,18 +80,38 @@ class LOOCV():
                         print()
                         print("Set 'print_warning to False to suppress this info.")
         
+                if self.model_class == hmp.models.CumulativeMethod:
+                    if verbose and quick:
+                        print("NB: quick estimation is not possible with CumulativeMethod")
+                        print("    Continuing slowly.")
+                    self.quick = False
+
         #assume it's a function that will return a fitted hmp model
         elif inspect.isfunction(model): 
             if verbose and quick:
                 print("NB: quick estimation is not possible in combination with a function.")
+                print("    Continuing slowly.")
+            self.quick = False
             self.model_class = "function"
         
         #unknown
         else:
             raise ValueError(f"Unknown model definition {model}, aborting.")  
 
-        self.quick = quick
-
+        if pattern is None: #no pattern given
+            if self.model_class != "function":
+                self.pattern = self.model.pattern
+            else:
+                #need assert pca here, then pattern required maybe warn and make default halfsine
+                self.pattern = None
+        else: #pattern provided
+            if self.model_class != "function":
+                if not np.array_equal(pattern.template, self.model.pattern.template):
+                    print("Different pattern provided for loocv than in model.")
+                    print("Proceeding with model Pattern.")
+                self.pattern = self.model.pattern
+            else:
+                self.pattern = pattern
 
     def fit(
         self,
@@ -120,21 +150,28 @@ class LOOCV():
 
         # Prep data
         if isinstance(data, PatternData): #easiest, just use as-is
+            #add assert for pca_cv
             pass
-        else: #assume transformed (is checked later)
-            if self.model_class != "function":
-                data = PatternData.from_transformer(data, self.model.pattern)
-            else: #function: cannot create PatternData as template is unknown
+        else: #assume transformed (is checked later) - rehthink for pca
+            if self.pattern is not None:
+                data = PatternData.from_transformer(data, self.pattern)
+            else: # must be function: cannot create PatternData as template is unknown
                 if verbose:
-                    print("NOTE: 'function' provided for LOOCV without PatternData")
+                    print("NOTE: 'function' provided for LOOCV without PatternData or Pattern")
                     print("While this is possible, it roughly doubles RAM usage. If")
-                    print("using a function, it is recommended to provide PatternData.")
+                    print("using a function, it is recommended to provide PatternData or pattern.")
 
         #if Eliminative, set max_events based on all data
         if self.model_class == hmp.models.EliminativeMethod:
             if self.model.max_events is None:
                 self.model.max_events = \
                     self.model._compute_max_events(data, self.model.location)
+
+         #if Cumulative, set max_events based on all data
+        if self.model_class == hmp.models.CumulativeMethod:
+            if self.model.max_n_events is None:
+                self.model.max_n_events = \
+                    self.model._compute_max_events(data, self.model.location)              
 
         # Get participants here to be able to split for multithreading
         if isinstance(data, PatternData):
@@ -180,6 +217,8 @@ class LOOCV():
             all_estimates = []
             for est_idx in range(estimates[0].max_events):
                 all_estimates.append([estimate.submodels[est_idx+1] for estimate in estimates])
+        elif isinstance(estimates[0], hmp.models.CumulativeMethod):
+            all_estimates = [[estimate.submodels[-1] for estimate in estimates]]
         elif isinstance(estimates[0], hmp.models.EventModel):                       
             all_estimates = [estimates]
 
@@ -187,7 +226,7 @@ class LOOCV():
         print()
         all_likelihoods = []
 
-        for estimates in all_estimates:
+        for est, estimates in enumerate(all_estimates):
             if verbose:
                 mod_type = "multilevel" if estimates[0].time_pars.shape[0] > 1 else "single"
                 print(
@@ -227,13 +266,29 @@ class LOOCV():
                     "participant": self.participants_idx},
                 name="loo_likelihood"
             )
-
+            likelihoods.attrs['model_class'] = self.model_class
+            likelihoods.attrs['model'] = self.model
+            likelihoods.attrs['n_events'] = np.array([estimate.n_events for estimate in estimates])
+            if not np.all(likelihoods.n_events==likelihoods.n_events[0]):
+                likelihoods['n_event'] = 'variable'
+            likelihoods.attrs['quick'] = self.quick
+            
+            estimates_xr = likelihoods.copy()
+            estimates_xr.data = np.expand_dims(np.array(estimates), axis=0)
+            all_estimates[est] = estimates_xr
+            
             all_likelihoods.append(likelihoods)
+
+
 
         #In case of eliminative, we can concat likelihoods
         if self.model_class == hmp.models.EliminativeMethod:
             all_likelihoods = xr.concat(all_likelihoods, dim="n_event")
-            all_likelihoods = all_likelihoods.sortby("n_event")
+            all_likelihoods.attrs['n_event'] = np.zeros(all_likelihoods.data.shape).astype(int)
+            for ev in range(all_likelihoods.data.shape[0]):
+                all_likelihoods.attrs['n_event'][ev,:] = [estimate.n_events for estimate in all_estimates[ev].data[0,:]]
+            all_estimates = xr.concat(all_estimates, dim="n_event")
+            all_estimates.attrs['n_event'] = all_likelihoods.attrs['n_event']
         elif len(all_likelihoods) == 1:
             all_likelihoods = all_likelihoods[0]
         if len(all_estimates) == 1:
@@ -288,18 +343,15 @@ class LOOCV():
                     estimated_model.fit(data=data, channel_pars=estimated_model.channel_pars,\
                          time_pars=estimated_model.time_pars, cpus=cpus_model, verbose= False)
                 elif self.model_class == hmp.models.EliminativeMethod: #use prev params per model
-                    estimated_models = []
-                    for submod in self.model.submodels:
-                        estimated_model = copy.deepcopy(self.model.submodels[submod])
-                        estimated_model.fit(data=data, \
-                            channel_pars=estimated_model.channel_pars, \
-                            time_pars=estimated_model.time_pars, cpus=cpus_model, \
+                    estimated_model = []
+                    for n_events in range(1, self.model.max_events + 1):
+                        estimated_model.append(copy.deepcopy(self.model.submodels[n_events]))
+                        estimated_model[-1].fit(data=data, \
+                            channel_pars=estimated_model[-1].channel_pars, \
+                            time_pars=estimated_model[-1].time_pars, cpus=cpus_model, \
                             verbose= False)
-                        estimated_models.append(estimated_model)
-                    estimated_model = estimated_models
 
         return estimated_model
-
 
     #estimates = []
     #simple EventModel - might be possible for all

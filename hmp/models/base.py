@@ -52,8 +52,7 @@ class BaseModel(ABC):
         """
         if isinstance(data, PatternData):
             pattern_data = data
-            if self._fitted and not \
-                np.array_equal(data.pattern.template, self.pattern.template):
+            if not np.array_equal(data.pattern.template, self.pattern.template):
                 warn(f"Cross-correlation pattern {data.pattern.template}is different in provided data "
                      f"than in model {self.pattern.template}. Data pattern is used.")
             self.pattern = data.pattern

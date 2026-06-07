@@ -39,7 +39,7 @@ class EliminativeMethod(BaseModel):
     min_events : int, optional
         The minimum number of events to be estimated. Defaults to 1.
     base_fit : EventModel, optional
-        To start the elimination from a specfic model this argument can
+        To start the elimination from a specific model this argument can
         be provided with a fitted EventModel. Defaults to None.
     tolerance : float, optional
         Tolerance for the expectation maximization algorithm. Defaults to 1e-4.
@@ -80,9 +80,9 @@ class EliminativeMethod(BaseModel):
     ) -> None:
         """Perform the eliminative estimation.
 
-        First, read or estimate the max_event solution, then estimate the max_event - 1 solution
-        by iteratively removing one of the events and picking the one with the highest
-        log-likelihood.
+        First, read or estimate the max_event solution, then estimate the 
+        max_event - 1 solution by iteratively removing one of the events 
+        and picking the one with the highest log-likelihood.
 
         Parameters
         ----------
