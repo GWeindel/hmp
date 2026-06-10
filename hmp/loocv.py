@@ -184,14 +184,8 @@ class LOOCV():
                     print("While this is possible, it roughly doubles RAM usage. If")
                     print("using a function, it is recommended to provide PatternData or pattern.")
 
-        #if Eliminative, set max_events based on all data
-        if self.model_class == hmp.models.EliminativeMethod:
-            if self.model.max_events is None:
-                self.model.max_events = \
-                    self.model._compute_max_events(data, self.model.location)
-
-         #if Cumulative, set max_events based on all data
-        if self.model_class == hmp.models.CumulativeMethod:
+        #if Eliminative/Cumulative, set max_events based on all data
+        if self.model_class in [hmp.models.EliminativeMethod, hmp.models.CumulativeMethod]:
             if self.model.max_n_events is None:
                 self.model.max_n_events = \
                     self.model._compute_max_events(data, self.model.location)              
@@ -251,11 +245,7 @@ class LOOCV():
 
         for est, estimates in enumerate(all_estimates):
             if verbose:
-                mod_type = "multilevel" if estimates[0].time_pars.shape[0] > 1 else "single"
-                print(
-                    f"Calculating likelihood for {mod_type} with "
-                    f"{estimates[0].n_events} event(s)"
-                )
+                print("Calculating likelihood.")
 
             loocv = []
             if cpus_cv == 1:  # no mp for cross validation
