@@ -57,7 +57,7 @@ class CumulativeMethod(BaseModel):
     base_fit: EventModel
         To start adding events from a specfic model, this argument can
         be provided with a fitted EventModel. Defaults to None.
-    max_n_events: int
+    max_events: int
         Maximum number of events to be estimated. If None (default) uses the minim RT to estimated
         the maximim possible number of events.
     distribution : str
@@ -75,7 +75,7 @@ class CumulativeMethod(BaseModel):
         fastforward: bool = True,
         tolerance: float = 1e-4,
         base_fit: EventModel | None = None,
-        max_n_events: int | None = None,
+        max_events: int | None = None,
         distribution: Any = None
     ):
         super().__init__(pattern, distribution)
@@ -88,7 +88,7 @@ class CumulativeMethod(BaseModel):
         self.fastforward = fastforward
         self.tolerance = tolerance
         self.base_fit = base_fit
-        self.max_n_events = max_n_events
+        self.max_events = max_events
         self.submodels = []
 
     def fit(# noqa: PLR0912, PLR0915
@@ -130,10 +130,10 @@ class CumulativeMethod(BaseModel):
         end = pattern_data.durations.values.mean() if self.end is None else self.end
         if self.step is None:
             self.step = self._time_to_samples(self.location, pattern_data.sfreq)/2
-        if self.max_n_events is None:
-            max_n_events = self._compute_max_events(pattern_data, self.location)
+        if self.max_events is None:
+            max_events = self._compute_max_events(pattern_data, self.location)
         else:
-            max_n_events = self.max_n_events
+            max_events = self.max_events
         #stop when not possible to insert event
         end = int(np.rint((end - self._time_to_samples(self.location,pattern_data.sfreq) \
                 - 1) / self.step))
@@ -156,7 +156,7 @@ class CumulativeMethod(BaseModel):
             llk_prev = self.base_fit.transform(pattern_data)[0]
 
         # Iterative fit
-        while j < end and n_events <= max_n_events:
+        while j < end and n_events <= max_events:
             prev_j = j
 
             # get new parameters

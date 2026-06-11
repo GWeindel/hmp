@@ -13,6 +13,7 @@ from warnings import resetwarnings, warn
 
 import numpy as np
 import xarray as xr
+import copy
 from pandas import MultiIndex
 
 from hmp.models.base import BaseModel
@@ -53,7 +54,14 @@ class EventModel(BaseModel):
         If None, all channel parameters are estimated.
     grouping_dict : dict, optional
         Dictionary defining groups for grouping modeling. Keys are group names,
-        and values are lists of groups.
+        and values are lists of groups. If grouping_dict is provided, a channel_map
+        and/or a time_map is also required, and vice versa.
+        If one group, use a dict with the name in the metadata and a list of the 
+        levels in the same order as the rows of the maps. E.g., {'cue': ['SP', 'AC']}
+        If multiple gropus need to be crossed, specify them as separate entries in
+        the dictionary. E.g., {'cue': ['SP', 'AC',], 'resp': ['left', 'right']}. 
+        These are crossed by repeating the first condition as many times as there are 
+        levels in the second condition. E.g., SP-left, SP-right, AC-left, AC-right.
         Default is {}.
     channel_map : ndarray, optional
         2D ndarray (n_groups * n_events) indicating which channel contributions
@@ -99,6 +107,19 @@ class EventModel(BaseModel):
              f"An integer for the number of expected transition events"
              f" is expected, got {type(n_events).__name__} instead"
          )
+        if grouping_dict != {} or channel_map is not None or time_map is not None:
+            assert isinstance(grouping_dict, dict), "groups have to be specified as a dictionary"
+            assert grouping_dict != {}, \
+                (
+                    f"If time_map or channel_map is provided,"
+                    f"a grouping_dict is required."
+                )
+            assert channel_map is not None or time_map is not None, \
+                (
+                    f"If grouping_dict is provided, time_map or channel_map is required."
+                )
+            assert n_events == (time_map.shape[-1] - 1) or n_events == channel_map.shape[-1], \
+                ("n_events, time_map and channel_map must indicate same number of max events")
 
         super().__init__(pattern, distribution)
         self.n_events = n_events
@@ -168,20 +189,8 @@ class EventModel(BaseModel):
         """
         pattern_data = self._instantiate_data_pattern(data)
         self.n_dims = pattern_data.cross_corr.shape[1]
-        n_groups, groups, glabels = self.group_constructor(
+        n_groups, groups, _ = self.group_constructor(
             pattern_data.durations, verbose)
-
-        # A dict containing all the info we want to keep, populated along the func
-        infos_to_store = {}
-        infos_to_store["sfreq"] = pattern_data.sfreq
-        infos_to_store["event_width"] = len(pattern_data.template)
-        infos_to_store["tolerance"] = self.tolerance
-        infos_to_store["channel_map"] = self.channel_map
-        infos_to_store["time_map"] = self.time_map
-        infos_to_store["glabels"] = glabels
-        infos_to_store["grouping_dict"] = self.grouping_dict
-        infos_to_store["fixed_time_pars"] = self.fixed_time_pars
-        infos_to_store["fixed_channel_pars"] = self.fixed_channel_pars
 
         if verbose:
             if time_pars is None:
@@ -220,11 +229,13 @@ class EventModel(BaseModel):
                             / (n_stage_group)
                         ),
                     ],
-                    (n_stage_group, 1),
+                    (n_stage_group, 1)
                 )
 
             initial_p = time_pars
             time_pars = [initial_p]
+
+            #deal with multiple random starting pionts
             if self.starting_points > 1:
                 if self.max_duration is None:
                     self.max_duration = pattern_data.durations.mean()
@@ -241,29 +252,31 @@ class EventModel(BaseModel):
                             initial_p[0, self.fixed_time_pars]
                     time_pars.append(proposal_p)
                 time_pars = np.array(time_pars)
+
         elif time_pars.ndim == 3: #provided, doesn't include starting points
             time_pars = np.array([time_pars])
         elif time_pars.ndim == 2: #provided, doesn't include starting points and groups
-            time_pars = np.array([[time_pars]])
-        infos_to_store["starting_points"] = self.starting_points
-        infos_to_store["sp_time_pars"] = time_pars
+            time_pars = np.array([np.tile(time_pars, (n_groups, 1, 1))])
+            #set params missing stages to nan to make it obvious in the results
+            if (self.time_map < 0).any():
+                for c in range(n_groups):
+                    time_pars[c, np.where(self.time_map[c,:]<0)[0],:] = np.nan
 
         if channel_pars is None:
             # By defaults c_pars are initiated to 0
             channel_pars = np.zeros((n_groups, self.n_events, self.n_dims), dtype=np.float32)
+        elif channel_pars.ndim == 2: #no groups provided
+            channel_pars = np.tile(channel_pars, (n_groups, 1, 1))
+        
+        if channel_pars.ndim == 3: #if 3 at this point, deal with mapping and add starting points
             if (self.channel_map < 0).any():  # set missing c_pars to nan
                 for cur_group in range(n_groups):
                     channel_pars[cur_group, \
                         np.where(self.channel_map[cur_group, :] < 0)[0], :] = np.nan
+            
             initial_m = channel_pars
-            channel_pars = np.tile(initial_m, (self.starting_points + 1, 1, 1, 1))
-        elif channel_pars.ndim == 3: #provided, doesn't include starting points
-            channel_pars = np.array([channel_pars])
-        elif channel_pars.ndim == 2: #provided, doesn't include starting points
-            channel_pars = np.array([[channel_pars]])
-
-        infos_to_store["sp_channel_pars"] = channel_pars
-
+            channel_pars = np.tile(initial_m, (self.starting_points, 1, 1, 1))
+        
         if cpus > 1:
             inputs = zip(
                 itertools.repeat(pattern_data),
@@ -333,7 +346,7 @@ class EventModel(BaseModel):
         pattern_data = self._instantiate_data_pattern(data)
 
         _, groups, _ = self.group_constructor(pattern_data.durations)
-        likelihoods, xreventprobs = self._distribute_groups(
+        likelihoods, xreventprobs = self._estim_probs_groups(
             pattern_data,
             self.channel_pars, self.time_pars, groups, cpus=cpus
         )
@@ -487,11 +500,7 @@ class EventModel(BaseModel):
         time_pars_dev : np.ndarray
             Time parameters for each iteration of the EM algorithm.
         """
-        assert self.channel_map.shape[0] == self.time_map.shape[0], (
-            "Both maps need to indicate the same number of groups."
-        )
-
-        lkh, eventprobs = self._distribute_groups(
+        lkh, eventprobs = self._estim_probs_groups(
             pattern_data,
             initial_channel_pars, initial_time_pars,
             groups, cpus=cpus
@@ -527,7 +536,7 @@ class EventModel(BaseModel):
                 c_par, t_par = self.get_channel_time_parameters_expectation(pattern_data,
                         eventprobs.values[:, :np.max(pattern_data.durations.values[epochs_group]),
                                           channel_map_group],
-                        subset_epochs=epochs_group,
+                        subset_epochs=epochs_group
                 )
                 new_channel_pars[cur_group, channel_map_group, :] = c_par
                 new_time_pars[cur_group, time_map_group, :] = t_par
@@ -572,7 +581,7 @@ class EventModel(BaseModel):
 
                 # Compute llk under new parameters
                 with np.errstate(divide='ignore', invalid='ignore'):
-                    lkh, eventprobs = self._distribute_groups(
+                    lkh, eventprobs = self._estim_probs_groups(
                         pattern_data,
                         new_channel_pars, new_time_pars,
                         groups, cpus=cpus
@@ -846,7 +855,7 @@ class EventModel(BaseModel):
         eventprobs = eventprobs.transpose((1,0,2))
         return [likelihood, eventprobs]
 
-    def _distribute_groups(
+    def _estim_probs_groups(
         self,
         pattern_data: PatternData,
         channel_pars: np.ndarray,
@@ -865,13 +874,11 @@ class EventModel(BaseModel):
         pattern_data : PatternData
             Preprocessed data cross-correlated with the pattern of the model
         channel_pars : np.ndarray
-            A 2D array of shape (n_events, n_channels) or a 3D array of shape
-            (iteration, n_events, n_channels) containing initial conditions for
-            channel contributions to events.
+            A 3D array of shape (groups, n_events, n_channels) containing 
+            initial channel contributions to events.
         time_pars : np.ndarray
-            A 2D array of shape (n_stages, n_parameters) or a 3D array of shape
-            (iteration, n_stages, n_parameters) containing initial conditions for
-            the distribution parameters.
+            A 3D array of shape (n_groups, n_stages, n_parameters) containing
+            initial distribution parameters.
         groups : np.ndarray
             An array indicating the groups for grouping modeling.
         cpus : int, optional
@@ -887,7 +894,6 @@ class EventModel(BaseModel):
         """
         data_groups = np.unique(groups)
         likes_events_group = []
-        all_xreventprobs = []
         if cpus > 1:
             with mp.Pool(processes=cpus) as pool:
                 likes_events_group = pool.starmap(
@@ -919,24 +925,20 @@ class EventModel(BaseModel):
 
         likelihood = np.array([x[0] for x in likes_events_group])
 
-        for i, cur_group in enumerate(data_groups):
-            part = pattern_data.durations.coords["participant"].values[(groups == cur_group)]
-            epoch =pattern_data.durations.coords["epoch"].values[(groups == cur_group)]
-            data_events =  self.channel_map[cur_group, :] >= 0
-            trial_x_part = xr.Coordinates.from_pandas_multiindex(
-                MultiIndex.from_arrays([part, epoch], names=("participant", "epoch")),
-                "trial",
-            )
-            xreventprobs = xr.DataArray(likes_events_group[i][1], dims=("trial", "sample", "event"),
-                coords={
-                    "event": ("event", np.arange(self.n_events)[data_events]),
-                    "sample": ("sample", range(np.shape(likes_events_group[i][1])[1])),
-                },
-            )
-            xreventprobs = xreventprobs.assign_coords(trial_x_part)
-            xreventprobs = xreventprobs.assign_coords(group=("trial", groups[groups == cur_group],))
-            all_xreventprobs.append(xreventprobs)
-        all_xreventprobs = xr.concat(all_xreventprobs, dim="trial", join='outer')
+        # all_xreventprobs must have same order as pattern_data because
+        # subset_epochs is used later on eventprobs!
+        all_xreventprobs = xr.DataArray(np.zeros((len(pattern_data.durations), \
+                                          np.max(pattern_data.durations.values), \
+                                          self.n_events)),
+                                          dims=('trial', 'sample', 'event'),
+                                          coords=pattern_data.durations.coords)
+        all_xreventprobs = all_xreventprobs.assign_coords( \
+                                    group=("trial", groups), \
+                                    event=("event", np.arange(self.n_events)),
+                                    sample=("sample", range(np.max(pattern_data.durations.values))))
+        for cur_group in data_groups:
+            all_xreventprobs.data[np.ix_(groups == cur_group, range(likes_events_group[cur_group][1].shape[1]), self.channel_map[cur_group, :] >= 0)] = likes_events_group[cur_group][1]
+
         all_xreventprobs.attrs['sfreq'] = pattern_data.sfreq
         all_xreventprobs.attrs['event_width'] = len(pattern_data.template)
         return [np.array(likelihood), all_xreventprobs]
@@ -986,7 +988,8 @@ class EventModel(BaseModel):
         Parameters
         ----------
         durations : xr.DataArray
-            By-trial durations as obtained with PatternData.durations
+            By-trial durations as obtained with PatternData.durations, which include
+            condition information
         verbose : bool, optional
             If True, prints detailed information about the group construction process.
             Default is False.
@@ -1000,10 +1003,11 @@ class EventModel(BaseModel):
         glabels : dict
             A dictionary containing group names and their corresponding modalities.
         """
-        ## groups
-        assert isinstance(self.grouping_dict, dict), "groups have to be specified as a dictionary"
+        ## if no groups, directly return
         if len(self.grouping_dict.keys()) == 0:
-            verbose = False
+            return 1, np.zeros(len(durations.values),dtype=np.int8), \
+                {"group all": np.array([['']],dtype=object)}
+        
         # collect group names, groups, and trial coding
         group_names = []
         group_mods = []
@@ -1026,65 +1030,73 @@ class EventModel(BaseModel):
             if verbose:
                 print("\nCoded as follows: ")
             for i, mod in enumerate(group_mods):
-                # assert len(np.where((group_trials == mod).all(axis=1))[0]) > 0, (
-                #     f"Modality {mod} of group does not occur in the data"
-                # )
+                assert len(np.where((group_trials == mod).all(axis=1))[0]) > 0, (
+                    f"Group {mod} does not occur in the data."
+                )
                 groups[np.where((group_trials == mod).all(axis=1))] = i
                 if verbose:
                     print(str(i) + ": " + str(mod))
-        else:
+        else: #in case dict provided but only one group
             groups = np.zeros(len(durations.values))
         groups = np.int8(groups)
         glabels = {"group " + str(group_names): group_mods}
 
-        # check maps if provided
-        if self.channel_map is not None and self.time_map is not None:
-            n_groups_mags = 0 if self.channel_map is None else self.channel_map.shape[0]
-            n_groups_pars = 0 if self.time_map is None else self.time_map.shape[0]
-            if (
-                n_groups_mags > 0 and n_groups_pars > 0
-            ):  # either both maps should have the same number of groups, or 0
-                assert n_groups_mags == n_groups_pars, (
-                    "Channel and time parameter maps have to indicate the same number of groups"
+        # check maps 
+        n_groups_channel = 0 if self.channel_map is None else self.channel_map.shape[0]
+        n_groups_time = 0 if self.time_map is None else self.time_map.shape[0]
+        #either both maps should have the same number of groups, or 0
+        if n_groups_channel > 0 and n_groups_time > 0:
+            assert n_groups_channel == n_groups_time, (
+                "Channel and time parameter maps have to indicate the same number of groups."
+            )
+            # make sure nr of events correspond per row
+            for cur_group in range(n_groups):
+                assert (sum(self.channel_map[cur_group, :] >= 0) + 1
+                        == sum(self.time_map[cur_group, :] >= 0)), (
+                    "Nr of events in channel map and time map do not correspond on row "
+                    + str(cur_group)
                 )
-                # make sure nr of events correspond per row
+        elif n_groups_channel == 0:
+            assert not (self.time_map < 0).any(), (
+                "If negative time parameter are provided, channel map is required."
+            )
+            self.channel_map = np.zeros((n_groups, self.time_map.shape[1] - 1), dtype=int)
+        else: #n_groups_time == 0
+            self.time_map = np.zeros((n_groups, self.channel_map.shape[1] + 1), dtype=int)
+            if (self.channel_map < 0).any():
                 for cur_group in range(n_groups):
-                    assert (sum(self.channel_map[cur_group, :] >= 0) + 1
-                            == sum(self.time_map[cur_group, :] >= 0)), (
-                        "nr of events in channel map and time map do not correspond on row "
-                        + str(cur_group)
-                    )
-            elif n_groups_mags == 0:
-                assert not (self.time_map < 0).any(), (
-                    "If negative time parameter are provided, channel map is required."
-                )
-                self.channel_map = np.zeros((n_groups, self.time_map.shape[1] - 1), dtype=int)
-            else:
-                self.time_map = np.zeros((n_groups, self.channel_map.shape[1] + 1), dtype=int)
-                if (self.channel_map < 0).any():
-                    for cur_group in range(n_groups):
-                        self.time_map[cur_group, \
-                            np.where(self.channel_map[cur_group, :] < 0)[0]] = -1
-                        self.time_map[cur_group, \
-                            np.where(self.channel_map[cur_group, :] < 0)[0] + 1] = 1
+                    self.time_map[cur_group, \
+                        np.where(self.channel_map[cur_group, :] < 0)[0]] = -1
+                    self.time_map[cur_group, \
+                        np.where(self.channel_map[cur_group, :] < 0)[0] + 1] = 1
 
-            # at this point, all should indicate the same number of groups
-            assert n_groups == self.channel_map.shape[0] == self.time_map.shape[0], (
-                "number of unique groups should correspond to number of rows in map(s)"
-            )
+        # at this point, all should indicate the same number of groups
+        assert n_groups == self.channel_map.shape[0] == self.time_map.shape[0], (
+            "number of unique groups should correspond to number of rows in map(s)"
+        )
 
-            if verbose:
-                print("\nChannel map:")
-                for cnt in range(n_groups):
-                    print(str(cnt) + ": ", self.channel_map[cnt, :])
+        if verbose:
+            print("\nChannel map:")
+            for cnt in range(n_groups):
+                print(str(cnt) + ": ", self.channel_map[cnt, :])
 
-                print("\nTime map:")
-                for cnt in range(n_groups):
-                    print(str(cnt) + ": ", self.time_map[cnt, :])
+            print("\nTime map:")
+            for cnt in range(n_groups):
+                print(str(cnt) + ": ", self.time_map[cnt, :])
 
-            # at this point, all should indicate the same number of groups
-            assert n_groups == self.channel_map.shape[0] == self.time_map.shape[0], (
-                "number of unique groups should correspond to number of rows in map(s)"
-            )
+            #give explanation if negative parameters:
+            if (self.time_map < 0).any():
+                print('\n-----')
+                print('Negative stages provided. Note that this stage is left out, while the parameters')
+                print('of the other stages are compared column by column. In this time_map example:')
+                print(np.array([[0, 0, 0, 0],
+                                [0, -1, 0, 0]]))
+                print('the parameters of stages 1, 3 and 4 are shared between groups.')
+                print('Given that event 2 is probably absent in group 2, it would typically')
+                print('make more sense to let both stages around event 2 in group 1 vary as')
+                print('compared to group 2:')
+                print(np.array([[0, 0, 0, 0],
+                                [0, -1, 1, 0]]))
+                print('-----')
 
         return n_groups, groups, glabels

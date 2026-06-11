@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.signal as ssignal
 import xarray as xr
+import hmp
 from mne import Info
 from mne.viz import plot_brain_colorbar, plot_topomap
 from scipy import stats
@@ -18,6 +19,62 @@ unit_map = {
     'FIFF_UNIT_V': "Voltage (V)",
     'FIFF_UNIT_V_M2': "V/m²",
 }
+
+def plot_model(epoch_data, estimates, channel_position, *args, **kwargs):
+    """
+    Plot the event topographies at the average time of the onset of the next stage.
+    Either from an EventModel or Eliminative model, based on the number of 
+    dimensions of the estimates.
+
+    Parameters
+    ----------
+    epoch_data : xr.DataArray
+        The original EEG data in HMP format.
+    estimates : xr.DataArray
+        The result from a fitted HMP model.
+    channel_position : np.ndarray
+        Either a 2D array with dimensions (channel, [x, y]) storing channel
+        locations in meters or an MNE info object containing digit points for channel locations.
+    *args and **kwargs: arguments for plot_topo_time_course
+    """
+
+    if estimates.ndim == 3:
+        ax = plot_topo_timecourse(epoch_data, estimates, channel_position, *args, **kwargs)
+    elif estimates.ndim == 4:
+        estimates = estimates.copy()
+        estimate_method = kwargs['estimate_method'] if 'estimate_method' in kwargs else None
+        vmax = kwargs['vmax'] if 'vmax' in kwargs else None
+
+        #get max vmax
+        if vmax is None:
+            vmax = 0
+            for estimate in estimates:
+                # Stacking is necessary to retain the common indices, otherwise absent trial are just Nan'd out
+                if "trial" not in epoch_data.dims:
+                    epoch_data = epoch_data.stack(
+                    trial=["participant", "epoch"]
+                )
+                common_trial = np.intersect1d(
+                    estimate["trial"].values, epoch_data["trial"].values
+                )
+                estimate = estimate.sel(trial=common_trial)
+                epoch_data = (
+                    epoch_data.sel(trial=common_trial).unstack()
+                )
+                channel_data = event_channels(
+                    epoch_data, estimate,
+                    estimate_method=estimate_method
+                    ).data  # compute topographies
+                
+                vmax = np.max((np.nanmax(np.abs(channel_data[:])),vmax))
+                vmin = -vmax
+
+        fig, axes = plt.subplots(len(estimates.n_events), 1, figsize=(8, len(estimates.n_events)), sharex=True)
+        for ax, n_event in zip(axes, estimates.n_events):
+            cbar = True if n_event ==  estimates.n_events[-1] else False
+            hmp.visu.plot_topo_timecourse(epoch_data, estimates.sel(n_events=n_event), channel_position, *args, ax = ax, vmax=vmax, vmin=vmin, colorbar=cbar, **kwargs)
+            ax.set_ylabel(f"N = {n_event.values}")
+        plt.tight_layout()
 
 def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
     epoch_data: xr.DataArray,
