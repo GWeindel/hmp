@@ -118,7 +118,7 @@ class EventModel(BaseModel):
                 )
             assert n_events == (time_map.shape[-1] - 1) or n_events == channel_map.shape[-1], \
                 ("n_events, time_map and channel_map must indicate same number of max events")
-            
+
             #already add group names
             group_names = []
             group_mods = []
