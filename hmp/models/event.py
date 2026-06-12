@@ -189,7 +189,7 @@ class EventModel(BaseModel):
         """
         pattern_data = self._instantiate_data_pattern(data)
         self.n_dims = pattern_data.cross_corr.shape[1]
-        n_groups, groups, _ = self.group_constructor(
+        n_groups, groups, self.group_labels = self.group_constructor(
             pattern_data.durations, verbose)
 
         if verbose:
@@ -253,29 +253,38 @@ class EventModel(BaseModel):
                     time_pars.append(proposal_p)
                 time_pars = np.array(time_pars)
 
-        elif time_pars.ndim == 3: #provided, doesn't include starting points
-            time_pars = np.array([time_pars])
-        elif time_pars.ndim == 2: #provided, doesn't include starting points and groups
-            time_pars = np.array([np.tile(time_pars, (n_groups, 1, 1))])
+        elif time_pars.ndim < 4:
+            #if 3 dims, and first dim is empty, might be groups
+            #or starting points. Add groups to make sure and wrap
+            #again for starting points.
+            time_pars = np.squeeze(time_pars)
+            if time_pars.ndim == 2:
+                time_pars = np.array([np.tile(time_pars, (n_groups, 1, 1))])
+            else:
+                time_pars = np.array([time_pars])
+
             #set params missing stages to nan to make it obvious in the results
             if (self.time_map < 0).any():
                 for c in range(n_groups):
-                    time_pars[c, np.where(self.time_map[c,:]<0)[0],:] = np.nan
-
+                    time_pars[0, c, np.where(self.time_map[c,:]<0)[0],:] = np.nan
+        
         if channel_pars is None:
             # By defaults c_pars are initiated to 0
             channel_pars = np.zeros((n_groups, self.n_events, self.n_dims), dtype=np.float32)
-        elif channel_pars.ndim == 2: #no groups provided
-            channel_pars = np.tile(channel_pars, (n_groups, 1, 1))
         
-        if channel_pars.ndim == 3: #if 3 at this point, deal with mapping and add starting points
+        if channel_pars.ndim < 4:
+            channel_pars = np.squeeze(channel_pars)
+            if channel_pars.ndim == 2:
+                channel_pars = np.tile(channel_pars, (n_groups, 1, 1))
+        
             if (self.channel_map < 0).any():  # set missing c_pars to nan
                 for cur_group in range(n_groups):
                     channel_pars[cur_group, \
                         np.where(self.channel_map[cur_group, :] < 0)[0], :] = np.nan
-            
+                        
             initial_m = channel_pars
             channel_pars = np.tile(initial_m, (self.starting_points, 1, 1, 1))
+
         
         if cpus > 1:
             inputs = zip(
@@ -535,18 +544,15 @@ class EventModel(BaseModel):
                 # get c_pars/t_pars by group
                 c_par, t_par = self.get_channel_time_parameters_expectation(pattern_data,
                         eventprobs.values[:, :np.max(pattern_data.durations.values[epochs_group]),
-                                          channel_map_group],
-                        subset_epochs=epochs_group
-                )
+                                        channel_map_group],
+                                        subset_epochs=epochs_group)
                 new_channel_pars[cur_group, channel_map_group, :] = c_par
                 new_time_pars[cur_group, time_map_group, :] = t_par
 
-                new_channel_pars[cur_group, self.fixed_channel_pars, :] = initial_channel_pars[
-                    cur_group, self.fixed_channel_pars, :
-                ].copy()
-                new_time_pars[cur_group, self.fixed_time_pars, :] = initial_time_pars[
-                    cur_group, self.fixed_time_pars, :
-                ].copy()
+                new_channel_pars[cur_group, self.fixed_channel_pars, :] = \
+                    initial_channel_pars[cur_group, self.fixed_channel_pars, :].copy()
+                new_time_pars[cur_group, self.fixed_time_pars, :] = \
+                    initial_time_pars[cur_group, self.fixed_time_pars, :].copy()
 
             # set c_pars to mean if requested in map
             for m in range(self.n_events):
@@ -566,7 +572,6 @@ class EventModel(BaseModel):
 
             # Step length control to ensure parameter updates result in valid llk
             for icor in range(self.n_cor + 1):
-
                 if icor == self.n_cor:  # just reset
                     warn(
                         (
@@ -575,7 +580,6 @@ class EventModel(BaseModel):
                         ),
                         RuntimeWarning,
                     )
-
                     new_channel_pars = channel_pars
                     new_time_pars = time_pars
 
@@ -941,6 +945,10 @@ class EventModel(BaseModel):
 
         all_xreventprobs.attrs['sfreq'] = pattern_data.sfreq
         all_xreventprobs.attrs['event_width'] = len(pattern_data.template)
+        all_xreventprobs.attrs['likelihood'] = np.sum(np.array(likelihood))
+        all_xreventprobs.attrs['group_lkh'] = np.array(likelihood)
+        all_xreventprobs.attrs['group_labels'] = self.group_labels
+
         return [np.array(likelihood), all_xreventprobs]
 
     def distribution_pdf(
@@ -1006,7 +1014,7 @@ class EventModel(BaseModel):
         ## if no groups, directly return
         if len(self.grouping_dict.keys()) == 0:
             return 1, np.zeros(len(durations.values),dtype=np.int8), \
-                {"group all": np.array([['']],dtype=object)}
+                ("group all", np.array([['']],dtype=object))
         
         # collect group names, groups, and trial coding
         group_names = []
@@ -1039,7 +1047,7 @@ class EventModel(BaseModel):
         else: #in case dict provided but only one group
             groups = np.zeros(len(durations.values))
         groups = np.int8(groups)
-        glabels = {"group " + str(group_names): group_mods}
+        glabels = (str(group_names), group_mods)
 
         # check maps 
         n_groups_channel = 0 if self.channel_map is None else self.channel_map.shape[0]

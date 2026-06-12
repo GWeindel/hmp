@@ -38,9 +38,9 @@ def plot_model(epoch_data, estimates, channel_position, *args, **kwargs):
     *args and **kwargs: arguments for plot_topo_time_course
     """
 
-    if estimates.ndim == 3:
+    if estimates.ndim == 3: #EventModels, including group
         ax = plot_topo_timecourse(epoch_data, estimates, channel_position, *args, **kwargs)
-    elif estimates.ndim == 4:
+    elif estimates.ndim == 4: #Eliminative or other 4-dim structure
         estimates = estimates.copy()
         estimate_method = kwargs['estimate_method'] if 'estimate_method' in kwargs else None
         vmax = kwargs['vmax'] if 'vmax' in kwargs else None
@@ -49,7 +49,6 @@ def plot_model(epoch_data, estimates, channel_position, *args, **kwargs):
         if vmax is None:
             vmax = 0
             for estimate in estimates:
-                # Stacking is necessary to retain the common indices, otherwise absent trial are just Nan'd out
                 if "trial" not in epoch_data.dims:
                     epoch_data = epoch_data.stack(
                     trial=["participant", "epoch"]
@@ -126,8 +125,8 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
         in the time unit of the fitted data. If 'all', plots the times of all events.
     cmap : str, optional
         Colormap of matplotlib, used to change the colors on topographies
-    ylabels : dict | list, optional
-        Dictionary with {label_name: label_values}, e.g., {'Condition': ['Speed', 'Accuracy']}.
+    ylabels : tuple | list, optional
+        tuple with (label_name, label_values), e.g., ('Condition', ['Speed', 'Accuracy']).
     xlabel : str, optional
         Label of the x-axis. Default is None, which gives "Time (sample)"
         or "Time (ms)" if `as_time` is True.
@@ -221,6 +220,8 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
     else:
         group = np.unique(estimates.group)
     n_group = len(np.unique(group))
+    if n_group > 1:
+        group_plot = True
 
     # reverse order, to make correspond to group maps
     channel_data = np.flip(channel_data, axis=1)
@@ -259,7 +260,8 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
 
     # set ylabels to group
     if ylabels == []:
-        ylabels = np.arange(n_group)#estimates.glabels
+        if n_group > 1:
+            ylabels = estimates.group_labels
     return_ax = True
 
     # make axis
@@ -277,9 +279,9 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
     for i, group in enumerate(group):
         times_group = times[i]
         missing_evts = np.where(np.isnan(times_group))[0]
-        times_group = np.delete(times_group, missing_evts)
+        #times_group = np.delete(times_group, missing_evts)
         channel_data_ = channel_data[:, i, :]
-        channel_data_ = np.delete(channel_data_, missing_evts, axis=1)
+        #channel_data_ = np.delete(channel_data_, missing_evts, axis=1)
         ylow = i * rowheight
         # plot topography per event
         for event in np.arange(n_event):
@@ -399,12 +401,12 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
             max_time if max_time else (np.nanmax(times_to_display) * 1.05)
         ))
     # plot ylabels
-    if isinstance(ylabels, dict):
-        tick_labels = [str(x) for x in list(ylabels.values())[0]]
+    if len(ylabels) > 0:
+        tick_labels = [str(x) for x in ylabels[1]]
         if group_plot:
             tick_labels.reverse()
-        ax.set_yticks(np.arange(len(list(ylabels.values())[0])) + 0.5, tick_labels)
-        ax.set_ylabel(str(list(ylabels.keys())[0]))
+        ax.set_yticks(np.arange(n_group) + 0.5, tick_labels)
+        ax.set_ylabel(str(ylabels[0]))
     else:
         ax.set_yticks([])
         ax.spines["left"].set_visible(False)
