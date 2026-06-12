@@ -110,13 +110,16 @@ def test_fixed_grouping():
     # Fit model on both conditions (noiseless b should help estimate a)
     model = EventModel(n_events=n_events,time_map=time_map, \
                 channel_map=channel_map, grouping_dict=grouping_dict)
+    model_a = EventModel(n_events=n_events)
 
     # Fixing true parameter in model
     model.time_pars = np.array([true_pars])
     model.channel_pars = np.array([true_magnitudes])
+    model_a.time_pars = np.array([true_pars])
+    model_a.channel_pars = np.array([true_magnitudes])
 
     lkh_comb, estimates_comb = model.fit_transform(pdata)
-    lkh_a_group, estimates_a_group = model.transform(pdata_a)
+    lkh_a_group, estimates_a_group = model_a.transform(pdata_a)
 
     # a_group should be closer to ground truth 
     test_topos_a = hmp.utils.event_channels(epoch_data, estimates_a, mean=True)

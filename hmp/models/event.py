@@ -118,6 +118,18 @@ class EventModel(BaseModel):
                 )
             assert n_events == (time_map.shape[-1] - 1) or n_events == channel_map.shape[-1], \
                 ("n_events, time_map and channel_map must indicate same number of max events")
+            
+            #already add group names
+            group_names = []
+            group_mods = []
+            for group, mod in grouping_dict.items():
+                group_names.append(group)
+                group_mods.append(mod)
+            group_mods = list(product(*group_mods))
+            group_mods = np.array(group_mods, dtype=object)
+            self.group_labels = (str(group_names), group_mods)
+        else:
+            self.group_labels = ("group all", np.array([['']],dtype=object))
 
         super().__init__(pattern, distribution)
         self.n_events = n_events
