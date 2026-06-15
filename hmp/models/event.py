@@ -163,53 +163,9 @@ class EventModel(BaseModel):
             warn("For n_event > 1, locations must be greater or equal than pattern.width"
             f" but received locations ({self.locations}) is smaller than  ({self.pattern.width}).")
 
-
-    def fit(  # noqa: PLR0912, PLR0915
-        self,
-        data: Any,
-        channel_pars: np.ndarray = None,
-        time_pars: np.ndarray = None,
-        verbose: bool = True,
-        cpus: int = 1
-    ):
-        """
-        Fit HMP for a single n_events model.
-
-        Parameters
-        ----------
-        data : Data to fit the model on. One of two options:
-            1. data from BasePreprocessor or xr.DataArray containing preprocessed data.
-            2. PatternData object.
-            In case of option 1, data is cross-correlated with the pattern in self.pattern.
-        channel_pars : ndarray, optional
-            3D ndarray (n_groups * n_events * n_channels) or
-            4D (starting_points * n_groups * n_groups * n_events * n_channels)
-            initial conditions for event channel contributions. Default is None.
-        time_pars : ndarray, optional
-            3D ndarray (n_groups * n_stages * 2) or 4D (starting_points * n_groups * n_stages * 2)
-            initial conditions for time distribution parameters. Default is None.
-        verbose : bool, optional
-            If True, displays output useful for debugging. Default is True.
-        cpus : int, optional
-            Number of cores to use in multiprocessing functions. Default is 1.
-
-        Returns
-        -------
-        None
-        """
-        pattern_data = self._instantiate_data_pattern(data)
-        self.n_dims = pattern_data.cross_corr.shape[1]
-        n_groups, groups, self.group_labels = self.group_constructor(
-            pattern_data.durations, verbose)
-
-        if verbose:
-            if time_pars is None:
-                print(
-                    f"Estimating {self.n_events} events model with {self.starting_points} "
-                    "starting point(s)"
-                )
-            else:
-                print(f"Estimating {self.n_events} events model")
+    def _format_parameters(# noqa: PLR0912, PLR0915
+        self, channel_pars, time_pars, groups, n_groups,
+                          durations, sfreq):
 
         # Formatting parameters
         if isinstance(time_pars, (xr.DataArray, xr.Dataset)):
@@ -235,7 +191,7 @@ class EventModel(BaseModel):
                     [
                         self.distribution.shape,
                         self.distribution.mean_to_scale(
-                        np.mean(pattern_data.durations.values[groups == cur_group])\
+                        np.mean(durations.values[groups == cur_group])\
                             / (n_stage_group)
                         ),
                     ],
@@ -248,7 +204,7 @@ class EventModel(BaseModel):
             #deal with multiple random starting pionts
             if self.starting_points > 1:
                 if self.max_duration is None:
-                    self.max_duration = pattern_data.durations.mean()
+                    self.max_duration = durations.mean()
                 for _ in np.arange(self.starting_points):
                     proposal_p = (
                         np.zeros((n_groups, self.n_events + 1, 2)) * np.nan
@@ -257,7 +213,7 @@ class EventModel(BaseModel):
                         time_group = np.where(self.time_map[cur_group, :] >= 0)[0]
                         n_stage_group = len(time_group)
                         proposal_p[cur_group, time_group, :] = self.gen_random_stages(
-                            n_stage_group - 1, pattern_data.sfreq)
+                            n_stage_group - 1, sfreq)
                         proposal_p[cur_group, self.fixed_time_pars, :] = \
                             initial_p[0, self.fixed_time_pars]
                     time_pars.append(proposal_p)
@@ -294,6 +250,58 @@ class EventModel(BaseModel):
 
             initial_m = channel_pars
             channel_pars = np.tile(initial_m, (self.starting_points, 1, 1, 1))
+
+        return channel_pars, time_pars
+
+    def fit(
+        self,
+        data: Any,
+        channel_pars: np.ndarray = None,
+        time_pars: np.ndarray = None,
+        verbose: bool = True,
+        cpus: int = 1
+    ):
+        """
+        Fit HMP for a single n_events model.
+
+        Parameters
+        ----------
+        data : Data to fit the model on. One of two options:
+            1. data from BasePreprocessor or xr.DataArray containing preprocessed data.
+            2. PatternData object.
+            In case of option 1, data is cross-correlated with the pattern in self.pattern.
+        channel_pars : ndarray, optional
+            3D ndarray (n_groups * n_events * n_channels) or
+            4D (starting_points * n_groups * n_events * n_channels)
+            initial conditions for event channel contributions. Default is None.
+        time_pars : ndarray, optional
+            3D ndarray (n_groups * n_stages * 2) or 4D (starting_points * n_groups * n_stages * 2)
+            initial conditions for time distribution parameters. Default is None.
+        verbose : bool, optional
+            If True, displays output useful for debugging. Default is True.
+        cpus : int, optional
+            Number of cores to use in multiprocessing functions. Default is 1.
+
+        Returns
+        -------
+        None
+        """
+        pattern_data = self._instantiate_data_pattern(data)
+        self.n_dims = pattern_data.cross_corr.shape[1]
+        n_groups, groups, self.group_labels = self.group_constructor(
+            pattern_data.durations, verbose)
+
+        channel_pars, time_pars = self._format_parameters(channel_pars, time_pars, groups,
+                                            n_groups, pattern_data.durations, pattern_data.sfreq)
+
+        if verbose:
+            if time_pars is None:
+                print(
+                    f"Estimating {self.n_events} events model with {self.starting_points} "
+                    "starting point(s)"
+                )
+            else:
+                print(f"Estimating {self.n_events} events model")
 
 
         if cpus > 1:
