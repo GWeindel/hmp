@@ -3,7 +3,7 @@ from pathlib import Path
 from hmp import io
 from hmp import simulations
 import numpy as np
-from hmp.transformers import ProjPCA, ProjIdentity, ProjCustom
+from hmp.preprocessors import ProjPCA, ProjIdentity, ProjCustom
 
 DATA_DIR = Path("tests", "gen_data")
 DATA_DIR_A = DATA_DIR / "dataset_a"
@@ -45,7 +45,7 @@ def test_proj_pca_custom_variants(init_data, n_comp, center, whiten, reject_thre
     assert pca.data.shape[1] == n_comp
     if whiten:
         assert np.allclose(pca.data.var(dim=['trial','sample']), 1, atol=0.05)
-        
+
     custom = ProjCustom(epoch_data, weights=pca.weights, center=center, whiten=whiten)
     assert custom.data.shape[1] == n_comp
     if whiten:

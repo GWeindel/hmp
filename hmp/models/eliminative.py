@@ -14,7 +14,7 @@ from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
 from hmp.patterndata import PatternData
 from hmp.patterns import Pattern
-from hmp.transformers import BaseTransformer
+from hmp.preprocessors import BasePreprocessor
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
@@ -74,7 +74,7 @@ class EliminativeMethod(BaseModel):
 
     def fit(
         self,
-        data: PatternData | BaseTransformer | xr.DataArray,
+        data: PatternData | BasePreprocessor | xr.DataArray,
         cpus: int = 1,
         verbose: bool = True
     ) -> None:
@@ -87,7 +87,7 @@ class EliminativeMethod(BaseModel):
         Parameters
         ----------
         data : Data to fit the model on. One of two options:
-            1. data from BaseTransformer or xr.DataArray containing transformed data.
+            1. data from BasePreprocessor or xr.DataArray containing preprocessed data.
             2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
         cpus : int, optional
@@ -150,7 +150,7 @@ class EliminativeMethod(BaseModel):
         self._fitted = True
 
     def transform(self,
-                  data: PatternData | BaseTransformer | xr.DataArray,
+                  data: PatternData | BasePreprocessor | xr.DataArray,
                   cpus: int = 1
                   ):
         """
@@ -159,7 +159,7 @@ class EliminativeMethod(BaseModel):
         Parameters
         ----------
         data : Data to fit the model on. One of two options:
-            1. data from BaseTransformer or xr.DataArray containing transformed data.
+            1. data from BasePreprocessor or xr.DataArray containing preprocessed data.
             2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
         cpus : int

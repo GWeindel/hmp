@@ -14,7 +14,7 @@ from test_io import init_data, init_data_large, init_data_short
 
 def data():
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
-    hmp_data = hmp.transformers.ProjPCA(epoch_data, n_comp=5)
+    hmp_data = hmp.preprocessors.ProjPCA(epoch_data, n_comp=5)
     return event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events
 
 def test_fixed_simple():
@@ -23,7 +23,7 @@ def test_fixed_simple():
     # Data b is without noise, recovery should be perfect
     data_b = hmp.utils.participant_selection(hmp_data.data, 'b')
     pattern = HalfSine()
-    pdata_b = PatternData.from_transformer(data_b, pattern=pattern)
+    pdata_b = PatternData.from_preprocessor(data_b, pattern=pattern)
     time_distribution = Gamma()
     model = EventModel(distribution=time_distribution, pattern=pattern, n_events=n_events)
     # Recover generating parameters
@@ -70,7 +70,7 @@ def test_fixed_csd():
 def test_fixed_short():
     """ test very short latencies """
     event_d, epoch_data, positions, sfreq, n_events = init_data_short()
-    hmp_data = hmp.transformers.ProjIdentity(epoch_data)
+    hmp_data = hmp.preprocessors.ProjIdentity(epoch_data)
     model = EventModel(n_events=n_events)
 
     #Estimate
@@ -89,9 +89,9 @@ def test_fixed_grouping():
     
     hmp_data_a = hmp.utils.participant_selection(hmp_data.data, 'a')
     hmp_data_b = hmp.utils.participant_selection(hmp_data.data, 'b')
-    pdata = PatternData.from_transformer(hmp_data)
-    pdata_a = PatternData.from_transformer(hmp_data_a)
-    pdata_b = PatternData.from_transformer(hmp_data_b)
+    pdata = PatternData.from_preprocessor(hmp_data)
+    pdata_a = PatternData.from_preprocessor(hmp_data_a)
+    pdata_b = PatternData.from_preprocessor(hmp_data_b)
 
     model = EventModel(n_events=n_events)
     # Recover generating parameters
@@ -110,13 +110,16 @@ def test_fixed_grouping():
     # Fit model on both conditions (noiseless b should help estimate a)
     model = EventModel(n_events=n_events,time_map=time_map, \
                 channel_map=channel_map, grouping_dict=grouping_dict)
+    model_a = EventModel(n_events=n_events)
 
     # Fixing true parameter in model
     model.time_pars = np.array([true_pars])
     model.channel_pars = np.array([true_magnitudes])
+    model_a.time_pars = np.array([true_pars])
+    model_a.channel_pars = np.array([true_magnitudes])
 
     lkh_comb, estimates_comb = model.fit_transform(pdata)
-    lkh_a_group, estimates_a_group = model.transform(pdata_a)
+    lkh_a_group, estimates_a_group = model_a.transform(pdata_a)
 
     # a_group should be closer to ground truth 
     test_topos_a = hmp.utils.event_channels(epoch_data, estimates_a, mean=True)
@@ -140,7 +143,7 @@ def test_fixed_grouping():
 def test_starting_points():
     _, _, epoch_data, hmp_data, positions, sfreq, n_events = data()
     pattern = HalfSine()
-    pdata = PatternData.from_transformer(hmp_data, pattern=pattern)
+    pdata = PatternData.from_preprocessor(hmp_data, pattern=pattern)
     # Testing starting points
     model_sp = EventModel(pattern=pattern, n_events=n_events, starting_points=2, max_duration=1000)
     model_sp.fit(pdata, verbose=True, cpus=2)

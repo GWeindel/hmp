@@ -7,10 +7,10 @@ from typing import Optional
 
 import xarray as xr
 
-from hmp.transformers.base import BaseTransformer
+from hmp.preprocessors.base import BasePreprocessor
 
 
-class ProjCustom(BaseTransformer):
+class ProjCustom(BasePreprocessor):
     """Transforms epoched data using a a custom linear combination for HMP analysis.
 
     Projects channels into a custom space given by a n_chan x n_component matrix.

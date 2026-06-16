@@ -56,8 +56,8 @@ class BaseModel(ABC):
                 warn(f"Cross-correlation pattern {data.pattern.template}is different in provided data "
                      f"than in model {self.pattern.template}. Data pattern is used.")
             self.pattern = data.pattern
-        else: #assume transformed (is checked later)
-            pattern_data = PatternData.from_transformer(data, self.pattern)
+        else: #assume preprocessed (is checked later)
+            pattern_data = PatternData.from_preprocessor(data, self.pattern)
         return pattern_data
 
     def _time_to_samples(self, time, sfreq):

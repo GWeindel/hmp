@@ -12,7 +12,7 @@ from zipfile import ZipFile
 from hmp import io
 from hmp import simulations
 from hmp import utils
-from hmp import transformers
+from hmp import preprocessors
 from hmp.patterndata import PatternData
 from hmp.models import EventModel
 
@@ -153,7 +153,7 @@ def test_epochs():
 
 def test_save_dat():
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
-    hmp_data = transformers.ProjPCA(epoch_data, n_comp=2,)
+    hmp_data = preprocessors.ProjPCA(epoch_data, n_comp=2,)
     data_b = utils.participant_selection(hmp_data.data, 'b')
     model = EventModel(n_events=n_events)
     _, estimates = model.fit_transform(data_b)

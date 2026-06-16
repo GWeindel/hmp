@@ -8,10 +8,9 @@ from numpy.typing import DTypeLike
 from scipy.signal import correlate
 
 from hmp.patterns import HalfSine, Pattern
-from hmp.transformers import BaseTransformer
-from hmp.utils import _check_transformed
-from hmp.patterns import HalfSine
-import copy
+from hmp.preprocessors import BasePreprocessor
+from hmp.utils import _check_preprocessed
+
 
 @dataclass
 class PatternData:
@@ -46,17 +45,17 @@ class PatternData:
     cross_corr: np.ndarray
 
     @classmethod
-    def from_transformer(cls,
-                         transformed: xr.DataArray | BaseTransformer ,
+    def from_preprocessor(cls,
+                         preprocessed: xr.DataArray | BasePreprocessor ,
                          pattern: Pattern | None = None,
                          dtype: DTypeLike | None = None):
         """
-        Create a PatternData instance from transformed data and a given pattern.
+        Create a PatternData instance from preprocessed data and a given pattern.
 
         Parameters
         ----------
-        transformed : BaseTransfromer or xr.DataArray
-            The transformed object or xarray DataArray containing the transformed data.
+        preprocessed : BasePreprocessor or xr.DataArray
+            The preprocessed object or xarray DataArray containing the preprocessed data.
         pattern : Pattern
             The pattern to use for cross-correlation computation. Default is
             half sine with 50 ms width.
@@ -68,9 +67,9 @@ class PatternData:
         PatternData
             An instance of PatternData with computed durations, cross-correlation, and metadata.
         """
-        data = _check_transformed(transformed)
+        data = _check_preprocessed(preprocessed)
         if dtype is None:
-            dtype = transformed.data.dtype
+            dtype = preprocessed.data.dtype
         # compute sequence durations based on number of samples
         durations = (
             data

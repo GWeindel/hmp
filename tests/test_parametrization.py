@@ -5,7 +5,7 @@ from hmp import io
 from hmp.patterndata import PatternData
 from hmp.patterns import Pattern, HalfSine
 from hmp import distributions
-from hmp.transformers import ProjPCA
+from hmp.preprocessors import ProjPCA
 from hmp.models import EventModel
 import numpy as np
 from test_io import init_data
@@ -33,7 +33,7 @@ def test_patterns(width, template):
     else:
         pattern = Pattern(template, width)
     print(pattern.template)
-    pattern_data = PatternData.from_transformer(hmp_data, pattern=pattern)
+    pattern_data = PatternData.from_preprocessor(hmp_data, pattern=pattern)
 
     model = EventModel(pattern=pattern, n_events=n_events)
     model.fit_transform(pattern_data)
@@ -51,7 +51,7 @@ def test_patterns(width, template):
         pattern = HalfSine(width)
     else:
         pattern = Pattern(template, width)
-    pattern_data = PatternData.from_transformer(hmp_data, pattern=pattern)
+    pattern_data = PatternData.from_preprocessor(hmp_data, pattern=pattern)
 
     model = EventModel(pattern=pattern, n_events=n_events)
     model.fit_transform(pattern_data)

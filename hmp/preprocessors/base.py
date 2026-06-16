@@ -34,15 +34,15 @@ import numpy as np
 import xarray as xr
 import copy
 
-class BaseTransformer(ABC):
-    """Base class for HMP transformer pipelines.
+class BasePreprocessor(ABC):
+    """Base class for HMP preprocessing pipelines.
 
-    This class provides common transformer steps.
+    This class provides common preprocessing steps.
 
     Methods
     -------
     common_preprocess(data)
-        Apply core transformer steps including rejection, variance standardization, and centering.
+        Apply core preprocessing steps including rejection, variance standardization, and centering.
 
     reject_crop_epochs(data)
         Crop each epoch from time 0 of the epoch to its interval with optional rejection criteria.
@@ -52,7 +52,7 @@ class BaseTransformer(ABC):
         Epochs whose interval exceeds specified lower and upper limits are rejected.
         Additional rejection can be applied based on signal amplitude thresholds in the interval.
 
-    data_format(data, weights, transformer_model, ori_coords, sfreq, offset)
+    data_format(data, weights, preprocessor_model, ori_coords, sfreq, offset)
         Finalize the transformation by formatting the data.
 
     """

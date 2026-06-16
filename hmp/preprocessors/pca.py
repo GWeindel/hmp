@@ -12,10 +12,10 @@ import numpy as np
 import xarray as xr
 from scipy.linalg import eigh
 
-from hmp.transformers.base import BaseTransformer
+from hmp.preprocessors.base import BasePreprocessor
 
 
-class ProjPCA(BaseTransformer):
+class ProjPCA(BasePreprocessor):
     """Transforms epoched data using a PCA for HMP analysis.
 
     Project channels to principal components space.

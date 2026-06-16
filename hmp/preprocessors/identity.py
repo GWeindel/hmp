@@ -10,10 +10,10 @@ from warnings import warn
 import numpy as np
 import xarray as xr
 
-from hmp.transformers.base import BaseTransformer
+from hmp.preprocessors.base import BasePreprocessor
 
 
-class ProjIdentity(BaseTransformer):
+class ProjIdentity(BasePreprocessor):
     """Transforms epoched data using a the ProjIdentity matrix for HMP analysis.
 
     Returns electrode values after performing transformation steps without the projection.

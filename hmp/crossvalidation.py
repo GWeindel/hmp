@@ -51,7 +51,7 @@ def pseudo_cv_split(trial_data,
     Notes
     -----
     This is not a proper train/test split as the train and test data share
-    the same projection from hmp.transformers
+    the same projection from hmp.preprocessors
     """
     random_state = _define_random_state(seed=seed)
     indices = np.arange(len(trial_data.durations))
@@ -95,7 +95,7 @@ def pseudo_kfold(trial_data: PatternData,
     Notes
     -----
     This is not a proper train/test split as the train and test data share
-    the same projection from hmp.transformers.
+    the same projection from hmp.preprocessors.
     """
     n_trials = len(trial_data.durations)
 
