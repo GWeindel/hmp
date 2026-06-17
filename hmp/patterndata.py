@@ -4,6 +4,7 @@ from warnings import warn
 
 import numpy as np
 import xarray as xr
+import copy
 from numpy.typing import DTypeLike
 from scipy.signal import correlate
 

@@ -59,18 +59,17 @@ class BasePreprocessor(ABC):
 
     def __init__( # noqa: PLR0913
             self,
-            interval_id: str,
-            offset_end: float,
-            offset_start: float,
-            min_duration: Optional[float],
-            max_duration: Optional[float],
-            reject_threshold: Optional[float],
-            verbose: bool,
-            common_variance: bool,
-            subject_zscore: bool,
-            whiten: bool,
-            center: bool,
-
+            interval_id: str = 'rt',
+            offset_end: float = 0,
+            offset_start: float = 0,
+            min_duration: float = 0,
+            max_duration: float = float('Inf'),
+            reject_threshold: Optional[float] = None, 
+            verbose: bool = True,
+            common_variance: bool = True,
+            subject_zscore: bool = True,
+            whiten: bool = True,
+            center: bool = True
     ):
         self.interval_id = interval_id
         self.offset_end = offset_end

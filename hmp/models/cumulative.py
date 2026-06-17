@@ -169,7 +169,7 @@ class CumulativeMethod(BaseModel):
             )
             # check solution
             diff_llk = llk - llk_prev
-            if all(llk_prev != -np.inf):
+            if llk_prev != -np.inf:
                 diff_llk /= np.abs(llk_prev)
 
             if np.median(diff_llk) > self.tolerance:  # accept solution if likelihood improved

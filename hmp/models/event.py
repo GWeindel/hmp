@@ -379,7 +379,7 @@ class EventModel(BaseModel):
             self.channel_pars, self.time_pars, groups, cpus=cpus
         )
 
-        return likelihoods, xreventprobs
+        return [likelihoods.sum()], xreventprobs
 
     @property
     def xrtraces(self):
@@ -636,7 +636,7 @@ class EventModel(BaseModel):
                 f"({int(self.max_iteration)})",
                 RuntimeWarning,
             )
-        return lkh, channel_pars, time_pars, np.array(traces), np.array(time_pars_dev)
+        return lkh.sum(), channel_pars, time_pars, np.array(traces), np.array(time_pars_dev)
 
     def get_channel_time_parameters_expectation(
         self,
