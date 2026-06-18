@@ -156,7 +156,14 @@ def _raw_filtering_resampling(data, preprocessing_kwargs, events, verbose):
 def _epoching_raw(data, events, stimulus_id, response_id, verbose, epoching_kwargs):
     event_id = {**stimulus_id, **response_id}
     stim = list(stimulus_id.keys())
-    
+
+    if len(response_id) > 0:
+        keep_first=["response"]
+        cols = ["event_name", "response"]
+    else:
+        keep_first=[]
+        cols = ["event_name"]
+        
     metadata_i, meta_events, stimulus_id = make_metadata(
         events=events,
         event_id=event_id,
@@ -164,9 +171,8 @@ def _epoching_raw(data, events, stimulus_id, response_id, verbose, epoching_kwar
         tmax=epoching_kwargs['tmax'],
         sfreq=data.info["sfreq"],
         row_events=stim,
-        keep_first=["response"],
+        keep_first=keep_first,
     )
-    cols = ["event_name", "response"]
     if 'first_response' in metadata_i.columns:
         cols.append('first_response')
     metadata_i = metadata_i[cols]  # only keep event_names and rts
@@ -179,8 +185,8 @@ def _epoching_raw(data, events, stimulus_id, response_id, verbose, epoching_kwar
         metadata=metadata_i,
         **epoching_kwargs
     )
-    epochs.metadata.rename({"response": "rt", "first_response":"response"}, axis=1, inplace=True)
-    
+    epochs.metadata.rename({"response": "rt", "first_response":"response"}, axis=1, inplace=True, errors='ignore')
+
     valid_epoch_index = [x for x, y in enumerate(epochs.drop_log) if len(y) == 0]
     return epochs, valid_epoch_index
 
