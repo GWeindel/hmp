@@ -126,7 +126,7 @@ def read_bids_raw(
     preprocessing_kwargs = utils._defaults_check_prep(preprocessing_kwargs, preprocessing_fn)
 
     # Trigger definition and check
-    centering_id, response_id = utils.format_trigger_description(centering_id, response_id)
+    centering_id, response_id = utils._format_trigger_description(centering_id, response_id)
 
     # Checking montage
     if montage is None:
@@ -176,7 +176,7 @@ def read_bids_raw(
         for epochs, valid_epoch_index in epochs_list
     ]
 
-    epoch_data, info = utils._concat_recordings(epoch_data, recordings, montage,
+    epoch_data, info = utils._concat_recordings(epoch_data, recordings, montage, bids_kwargs['datatypes'],
                       bids_kwargs, epoching_kwargs, preprocessing_kwargs)
     bids_info = [_parse_bids_name(r) for r in epoch_data.recording.values]
 

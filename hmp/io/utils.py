@@ -6,7 +6,7 @@ import xarray as xr
 from mne import Epochs, create_info
 from mne.io import Raw
 from mne.epochs import make_metadata
-from mne.channels import DigMontage, make_standard_montage
+from mne.channels import DigMontage, make_standard_montage, make_dig_montage
 from warnings import warn
     
 def _defaults_check_epoching(kwargs):
@@ -44,7 +44,7 @@ def _defaults_check_prep(kwargs, preprocessing_fn):
             "use 'prepocessing_fn' is further preprocessing steps are needed")
     return kwargs
 
-def format_trigger_description(stimulus_id, response_id):
+def _format_trigger_description(stimulus_id, response_id):
     if len(stimulus_id.keys()) == 0:
         raise ValueError('At lease one centering event needs to be provided')
     if any(not k.startswith("stimulus/") for k in stimulus_id.keys()):
@@ -105,12 +105,13 @@ def preprocess_raw(data: Raw,
     """
     # Load data for filtering/resampling
     data.load_data()
-    
+    data.rename_channels({'FP1': 'Fp1', 'FP2': 'Fp2'}, on_missing='ignore')
     # Select channels
     data = data.pick(preprocessing_kwargs["pick_channels"])
 
     # Apply the desired montage
-    data = _apply_montage(data, montage)
+    if montage is not None:
+        data = _apply_montage(data, montage)
 
     # Set the reference
     if preprocessing_kwargs["reference"] is not None:
@@ -124,20 +125,29 @@ def preprocess_raw(data: Raw,
     data, events = _raw_filtering_resampling(data, preprocessing_kwargs, events, verbose)
     return data, events
     
+def _create_montage(ch_names, montage):
+    if isinstance(montage, str):
+        montage = make_standard_montage(montage)
+    elif not isinstance(montage, DigMontage):
+        raise ValueError("Unrecognized montage object, should either be a string"
+                        "from one of the list in mne.channels.get_builtin_montages()"
+                        "or a mne.DigMontage")
+    montage
+    pos = montage.get_positions()['ch_pos']
+    
+    montage = make_dig_montage(
+        ch_pos={ch: pos[ch] for ch in ch_names},
+        coord_frame='head'
+    )
+    return montage
+
 def _apply_montage(data, montage):
-    if montage is not None:
-        if isinstance(montage, str):
-            montage = make_standard_montage(montage)
-        elif not isinstance(montage, DigMontage):
-            raise ValueError("Unrecognized montage object, should either be a string"
-                            "from one of the list in mne.channels.get_builtin_montages()"
-                            "or a mne.DigMontage")
-        # Correct for eventual capitalization differences
-        data.rename_channels({c:n for c,n in zip(data.ch_names,
-            [ch for ch in montage.ch_names if ch.lower() in\
-             [x.lower() for x in data.info["ch_names"]]])})
-        # Deall with different electrode sets?
-        data.set_montage(montage)
+    montage = _create_montage(data.ch_names, montage)
+    # Correct for eventual capitalization differences
+    data.rename_channels({c:n for c,n in zip(data.ch_names,
+        [ch for ch in montage.ch_names if ch.lower() in\
+         [x.lower() for x in data.info["ch_names"]]])})
+    data.set_montage(montage)
     return data
 
 def _raw_filtering_resampling(data, preprocessing_kwargs, events, verbose):
@@ -253,17 +263,32 @@ def hmp_data_format(
         data = data.set_coords(list(metadata.data_vars))
     return data
 
-def create_info_hmp(montage, ch_names, sfreq, datatype):
+def create_info_hmp(ch_names: list[str],
+                    montage: str | DigMontage,
+                    sfreq: float,
+                    datatype:str):
     '''Create minimal info object for plotting in hmp.visu
+    
+    Parameters
+    ----------
+    ch_names: list of str
+        List of channels in the data
+    montage: str or mne.channels.DigMontage
+        Either an MNE DigMontage or a string for a bulit-in MNE montage (see 
+        mne.channels.get_builtin_montages()) that is applied to all recordings.
+    sfreq: float
+        Sampling frequency of the signal in the data
+    datatype: str
+        MNE compatible data type in the data (e.g. 'eeg' or 'meg')
     '''
-    info = create_info(ch_names=ch_names, sfreq=sfreq, ch_types=datatype)
+    info = create_info(ch_names=ch_names, sfreq=sfreq,
+                       ch_types=np.repeat(datatype, len(ch_names)))
     if montage is not None:
-        if isinstance(montage, str):
-            montage = make_standard_montage(montage)
+        montage = _create_montage(ch_names, montage)
         info.set_montage(montage)
     return info
 
-def _concat_recordings(epoch_data, recordings, montage,
+def _concat_recordings(epoch_data, recordings, montage, datatype,
                       bids_kwargs, epoching_kwargs, preprocessing_kwargs):
     '''Concatenate list of xr.Datasets into a common xr.Dataset
     '''
@@ -280,8 +305,9 @@ def _concat_recordings(epoch_data, recordings, montage,
         (~np.isnan(epoch_data.data[:, :, :, 0].data)).sum(axis=1)[:, 0].sum()
     )  # Compute number of trial based on trial where first sample is nan
     # Use info frm last epoch object, should all be shared
-    info = create_info_hmp(montage, list(epoch_data.channel.values),
-                preprocessing_kwargs['sfreq'], preprocessing_kwargs['pick_channels'])
+    info = create_info_hmp(list(epoch_data.channel.values),
+                           montage, preprocessing_kwargs['sfreq'],
+                           datatype)
 
     epoch_data = epoch_data.assign_attrs(
         **bids_kwargs,
