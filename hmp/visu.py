@@ -52,7 +52,7 @@ def plot_model(epoch_data, estimates, channel_position, *args, **kwargs):
             for estimate in estimates:
                 if "trial" not in epoch_data.dims:
                     epoch_data = epoch_data.stack(
-                    trial=["participant", "epoch"]
+                    trial=["recording", "epoch"]
                 )
                 common_trial = np.intersect1d(
                     estimate["trial"].values, epoch_data["trial"].values
@@ -184,7 +184,7 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
     # Stacking is necessary to retain the common indices, otherwise absent trial are just Nan'd out
     if "trial" not in epoch_data.dims:
         epoch_data = epoch_data.stack(
-            trial=["participant", "epoch"]
+            trial=["recording", "epoch"]
         )
     common_trial = np.intersect1d(
         estimates["trial"].values, epoch_data["trial"].values
@@ -539,7 +539,7 @@ def plot_loocv(  # noqa # Refactor?
         marker_indiv = "."
         means = np.nanmean(loocv_estimates.data, axis=1)[::-1]
         errs = (
-            np.nanstd(loocv_estimates.data, axis=1) / np.sqrt(len(loocv_estimates.participant))
+            np.nanstd(loocv_estimates.data, axis=1) / np.sqrt(len(loocv_estimates.recording))
         )[::-1]
         ax[0].errorbar(x=np.arange(len(means)) + 1, y=means, yerr=errs, marker="o", color="k")
     else:
@@ -807,7 +807,7 @@ def erp_data(epoched_data, times, channel, n_samples=None, pad=1):
     Parameters
     ----------
         epoched_data: xr.Dataset
-            Epoched physiological data with dims 'participant'X 'epochs' X 'channels'X 'sample'
+            Epoched physiological data with dims 'recording'X 'epochs' X 'channels'X 'sample'
         times: xr.Dataset
             Times between wich to extract or resample the data with dims 'trial' X
             'event'

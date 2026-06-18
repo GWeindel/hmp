@@ -13,7 +13,7 @@ These provide methods to:
         arbitrary linear combination of channels (`ProjArbitrary`)
         or the identity of the channels (`ProjIdentity`)
     5. Whiten the components and standardize each trial's variance ( `common_variance`) and
-        standardize the components for each participants
+        standardize the components for each recordings
 
 
 Classes
@@ -91,7 +91,7 @@ class BasePreprocessor(ABC):
         self.sfreq = epoch_data.sfreq
         data = epoch_data.data
 
-        data = data.stack(trial=["participant", "epoch"]).dropna("trial", how="all")
+        data = data.stack(trial=["recording", "epoch"]).dropna("trial", how="all")
         data = data.transpose('trial','channel','sample')
 
         if self.interval_id is not None:
@@ -107,7 +107,7 @@ class BasePreprocessor(ABC):
                 data -= data.median(['sample'])
             # removes baseline
             data = data.sel(sample = slice(0, int(data.sample.max())), drop=True).\
-                    stack(trial=["participant", "epoch"]).dropna("trial", how="all")
+                    stack(trial=["recording", "epoch"]).dropna("trial", how="all")
             data = data.transpose("trial", "channel", "sample")
             warn('No intervals provided, fitting HMP on the whole epoch duration from center event')
             if self.reject_threshold is not np.inf or self.reject_threshold is not None:
@@ -222,7 +222,7 @@ class BasePreprocessor(ABC):
                 vcov_mat += cov_i
         if count < len(data.trial)/10:
             warn(f"Less than 10% of the trials used to compute covariance for"
-                 f"{np.unique(data.participant.values)}. Covariance matrix might be unreliable")
+                 f"{np.unique(data.recording.values)}. Covariance matrix might be unreliable")
         return vcov_mat/count
 
     def data_format(
@@ -245,7 +245,7 @@ class BasePreprocessor(ABC):
             data = data.unstack()
             data -= data.mean(['epoch','sample'], skipna=True)
             data /= data.std(['epoch','sample'], skipna=True)
-            data = data.stack(trial=['participant','epoch']).dropna("trial", how="all")
+            data = data.stack(trial=['recording','epoch']).dropna("trial", how="all")
         data = data.transpose('sample','component','trial')
         data.attrs["sfreq"] = self.sfreq
         data.attrs["offset"] = self.offset_end

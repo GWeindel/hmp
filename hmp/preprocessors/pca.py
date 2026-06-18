@@ -26,7 +26,7 @@ class ProjPCA(BasePreprocessor):
     Parameters
     ----------
     epoch_data : xr.Dataset
-        Input EEG data with dimensions [participant, epoch, sample, channel], from `io` module
+        Input EEG data with dimensions [recording, epoch, sample, channel], from `io` module
     interval_id: str
         Name of the variable that contains the trial intervals in the epoch_data used for cropping.
     offset_end : float
@@ -42,7 +42,7 @@ class ProjPCA(BasePreprocessor):
     common_variance : bool
         Whether to standardize variance across trials.
     subject_zscore: bool
-        Z-score each component for each participant
+        Z-score each component for each recording
     whiten : bool
         Return the components with unit-variance
     center : bool
@@ -90,11 +90,11 @@ class ProjPCA(BasePreprocessor):
         self.n_comp = n_comp
         data = self.common_preprocess(epoch_data)
 
-        participants = set(data.participant.values)
-        group_cov = np.zeros((len(participants), data.sizes["channel"], data.sizes["channel"]),
+        recordings = set(data.recording.values)
+        group_cov = np.zeros((len(recordings), data.sizes["channel"], data.sizes["channel"]),
             dtype=np.float64)
-        for j, participant in enumerate(participants):
-            part_data = data.where(data.participant == participant, drop=True)
+        for j, recording in enumerate(recordings):
+            part_data = data.where(data.recording == recording, drop=True)
             group_cov[j] = self.compute_covariance(part_data)
         vcov_mat = np.mean(group_cov, axis=0)
         if self.n_comp is None:

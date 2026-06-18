@@ -185,7 +185,7 @@ def event_channels(
     if estimate_method is None:
         estimate_method = "max"
     epoch_data = (
-        epoch_data.stack(trial=["participant", "epoch"])
+        epoch_data.stack(trial=["recording", "epoch"])
         .data
         .drop_duplicates("trial")
     )
@@ -255,7 +255,7 @@ def centered_activity(
     Parameters
     ----------
     data : xr.Dataset
-        HMP data (unpreprocessed but with trial and participant stacked)
+        HMP data (unpreprocessed but with trial and recording stacked)
     times : xr.DataArray
         Onset times in sample as computed using event_times()
     channel : list
@@ -295,7 +295,7 @@ def centered_activity(
     baseline = np.rint(baseline)
     if 'epoch' in data.dims:
         data = (
-            data.stack({'trial':['participant','epoch']})
+            data.stack({'trial':['recording','epoch']})
             .data
         )
     mask = ~data.isel(sample=0, channel=0).squeeze().isnull()
@@ -318,10 +318,10 @@ def centered_activity(
     )
 
     trial_times = np.zeros(len(common_trial)) * np.nan
-    participants = []
+    recordings = []
     epochs = np.zeros(len(common_trial))
     for i, (trial, trial_dat) in enumerate(data.groupby("trial", squeeze=False)):
-        participants.append(trial[0])
+        recordings.append(trial[0])
         epochs[i] = trial[1]
         if cut_before_event > 0:
             # Lower lim is baseline or the last sample of the previous event
@@ -376,7 +376,7 @@ def centered_activity(
         trial_times[i] = times.sel(event=event, trial=trial)
 
     trial_x_part = xr.Coordinates.from_pandas_multiindex(
-        MultiIndex.from_arrays([participants, epochs], names=("participant", "epoch")),
+        MultiIndex.from_arrays([recordings, epochs], names=("recording", "epoch")),
         "trial",
     )
     centered_data = xr.Dataset(
@@ -421,7 +421,7 @@ def condition_selection(preprocessed, condition_string, variable="event", method
         data = data.where(data[variable].str.contains(condition_string), drop=True)
     else:
         warn("unknown method, returning original data")
-    return data.stack(trial=['participant','epoch'])
+    return data.stack(trial=['recording','epoch'])
 
 
 def condition_selection_epoch(epoch_data, condition_string, variable="event", method="equal"):
@@ -447,13 +447,13 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
         Subset of preprocessed_data.
     """
     if len(epoch_data.dims) == 4:
-        stacked_epoch_data = epoch_data.stack(trial=("participant", "epoch"))
+        stacked_epoch_data = epoch_data.stack(trial=("recording", "epoch"))
         mask = ~stacked_epoch_data.data.isel(sample=0, channel=0).squeeze().isnull()
         stacked_epoch_data = stacked_epoch_data.sel(trial=stacked_epoch_data.trial.values[mask])
     else:
         raise ValueError(
             "Unexpected data object. Expected an xarray dataset with dimensions:"
-            "participant, epoch, channel, sample"
+            "recording, epoch, channel, sample"
         )
 
     if method == "equal":
@@ -467,15 +467,15 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
     return stacked_epoch_data.unstack()
 
 
-def participant_selection(preprocessed, participant):
-    """Select a participant from preprocessed_data.
+def recording_selection(preprocessed, recording):
+    """Select a recording from preprocessed_data.
 
     Parameters
     ----------
     preprocessed : xr.Dataset or hmp.preprocessors
         preprocessed EEG data for hmp
-    participant : str | num
-        Name of the participant
+    recording : str
+        Name of the recording
 
     Returns
     -------
@@ -483,10 +483,10 @@ def participant_selection(preprocessed, participant):
         Subset of preprocessed_data.
     """
     data = _check_preprocessed(preprocessed).unstack()
-    data = data.sel(participant=participant, drop=False)
-    if 'participant' not in data.dims:
-        data = data.expand_dims('participant')
-    return data.stack(trial=['participant','epoch'])
+    data = data.sel(recording=recording, drop=False)
+    if 'recording' not in data.dims:
+        data = data.expand_dims('recording')
+    return data.stack(trial=['recording','epoch'])
 
 def compute_csd(epoch_data: xr.Dataset,
                 info: Info):
@@ -508,7 +508,7 @@ def compute_csd(epoch_data: xr.Dataset,
     """
     eeg_info = pick_info(info, pick_types(info, meg=False, eeg=True))
     if eeg_info['chs'][0]['unit'] == FIFF.FIFF_UNIT_V:
-        epoch_data = epoch_data.stack(trial=['participant','epoch']).dropna("trial", how="all")
+        epoch_data = epoch_data.stack(trial=['recording','epoch']).dropna("trial", how="all")
         for trial in epoch_data.trial:
             trial_dat = epoch_data.sel(trial=trial).data
             # Build fake Epoch mne class and use MNE's dedicated function

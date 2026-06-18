@@ -19,7 +19,7 @@ class ProjCustom(BasePreprocessor):
     Parameters
     ----------
     epoch_data : xr.Dataset
-        Input EEG data with dimensions [participant, epoch, sample, channel], from `io` module
+        Input EEG data with dimensions [recording, epoch, sample, channel], from `io` module
     weights: xr.DataArray
         Custom linear combination of channels as an xarray.DataArray with 'channel' and 'component'
          dimensions and the weights
@@ -42,9 +42,9 @@ class ProjCustom(BasePreprocessor):
     common_variance : bool
         Whether to standardize variance across trials.
     subject_zscore: bool
-        Z-score each component for each participant
+        Z-score each component for each recording
     subject_zscore: bool
-        Participant-wise standardization of the projection components using zscores
+        recording-wise standardization of the projection components using zscores
     verbose : bool
         Whether to print rejection/cropping details.
     """

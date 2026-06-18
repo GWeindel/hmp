@@ -22,7 +22,7 @@ class ProjIdentity(BasePreprocessor):
     Parameters
     ----------
     epoch_data : xr.Dataset
-        Input EEG data with dimensions [participant, epoch, sample, channel], from `io` module
+        Input EEG data with dimensions [recording, epoch, sample, channel], from `io` module
     interval_id: str
         Name of the variable that contains the trial intervals in the epoch_data used for cropping.
     offset_end : float
@@ -38,7 +38,7 @@ class ProjIdentity(BasePreprocessor):
     common_variance : bool
         Whether to standardize variance across trials.
     subject_zscore: bool
-        Z-score each component for each participant
+        Z-score each component for each recording
     whiten : bool
         Return the components with unit-variance
     center : bool

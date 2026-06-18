@@ -91,7 +91,7 @@ class PatternData:
         for name, coord in metadata.items():
             if name not in durations.coords:
                 durations = durations.assign_coords({name: coord})
-        data = data.unstack().stack(all_samples=['participant','epoch','sample']).\
+        data = data.unstack().stack(all_samples=['recording','epoch','sample']).\
             dropna(dim="all_samples")
 
         if pattern is None:
