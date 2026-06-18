@@ -114,7 +114,7 @@ def preprocess_raw(data: Raw,
 
     # Set the reference
     if preprocessing_kwargs["reference"] is not None:
-        if kwargs['reference'] == 'REST' and montage is None:
+        if preprocessing_kwargs['reference'] == 'REST' and montage is None:
             raise ValueError('Cannot use REST reference without a valid montage')
         data = data.set_eeg_reference(preprocessing_kwargs["reference"])
 
