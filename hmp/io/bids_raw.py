@@ -1,11 +1,9 @@
 """EEG/MEG BIDS data format reading.
 
-This module provides functions for reading BIDS data format:
-1) Organize 
+This module provides functions for reading BIDS data format
 """
 
 import json
-import os
 import re
 from pathlib import Path
 from warnings import warn
@@ -22,11 +20,11 @@ from mne.channels import DigMontage
 
 def read_bids_raw(
     bids_kwargs: dict,
-    epoching_kwargs: dict,
-    preprocessing_kwargs: dict,
     centering_id: dict,
     response_id: dict = {},
-    montage: str | DigMontage = '',
+    montage: str | DigMontage | None = None,
+    epoching_kwargs: dict = {},
+    preprocessing_kwargs: dict = {},
     dtype: DTypeLike = np.float32,
     preprocessing_fn: Optional[Callable] = None,
     verbose: bool = True,
@@ -59,6 +57,13 @@ def read_bids_raw(
                 Processing label(s) (``proc`` entity).
             recordings : list of str | None
                 Recording label(s) (``recording`` entity).
+    centering_id : dict
+        Dictionary mapping stimulus description (keys) to event codes (values).
+    response_id : dict
+        Dictionary mapping response description (keys) to event codes (values).
+    montage: str or mne.channels.DigMontage
+        Either an MNE DigMontage or a string for a bulit-in MNE montage (see 
+        mne.channels.get_builtin_montages()) that is applied to all recordings.
     preprocessing_kwargs: dict
         arguments to be passed to the preprocessing functions. If no
         'preprocessing_fn' is specified, only the following keys are relevant:
@@ -94,13 +99,6 @@ def read_bids_raw(
                 Whether to reject epochs based on annotations. Default is False.
             decim : int, optional
                 Whether to downsample the epochs through decimation.
-    centering_id : dict, optional
-        Dictionary mapping stimulus description (keys) to event codes (values).
-    response_id : dict, optional
-        Dictionary mapping response description (keys) to event codes (values).
-    montage: str or mne.channels.DigMontage
-        Either an MNE DigMontage or a string for a bulit-in MNE montage (see 
-        mne.channels.get_builtin_montages()) that is applied to all recordings.
     dtype: np.DTypeLike
         Precision, use np.float32 or np.int64
     preprocessing_fn: callable, optional
@@ -115,6 +113,8 @@ def read_bids_raw(
     epoch_data : xarray.Dataset
         An xarray Dataset containing the processed EEG/MEG data, events, channels, and participants.
         Metadata and epoch indices are preserved.
+    info: mne.Info
+        Mock info object containing channel positions for plotting with HMP functions
     """
     # Dict integrity check
     check_bids_kwargs(bids_kwargs)
@@ -145,23 +145,22 @@ def read_bids_raw(
     recordings = [x for x in all_paths if '.fdt' not in x.fpath.suffix]
 
     # Processing loops/parallel
-    if cpus > 1:
+    if cpus == 1:
+        epochs_list = [_process_bids_dataset(
+                recording, montage, centering_id, response_id, verbose,
+                preprocessing_fn, preprocessing_kwargs, epoching_kwargs
+                )
+                for recording in recordings
+            ]
+    else:
         with mp.Pool(processes=cpus) as pool:
             epochs_list = pool.starmap(
                 _process_bids_dataset,
                 [(recording, montage, centering_id, response_id, verbose,
-                    preprocessing_fn, preprocessing_kwargs, epoching_kwargs)
+                preprocessing_fn, preprocessing_kwargs, epoching_kwargs)
                     for recording in recordings
                 ],
             )
-    else:
-        epochs_list = [
-            _process_bids_dataset(
-                    recording, montage, centering_id, response_id, verbose,
-                    preprocessing_fn, preprocessing_kwargs, epoching_kwargs
-            )
-            for recording in recordings
-        ]
     
     epoch_data = [
         utils.hmp_data_format(
@@ -175,9 +174,9 @@ def read_bids_raw(
         )
         for epochs, valid_epoch_index in epochs_list
     ]
-
+    recordings = [x.fpath for x in recordings]
     epoch_data, info = utils._concat_recordings(epoch_data, recordings, montage, bids_kwargs['datatypes'],
-                      bids_kwargs, epoching_kwargs, preprocessing_kwargs)
+                      epoching_kwargs, preprocessing_kwargs)
     bids_info = [_parse_bids_name(r) for r in epoch_data.recording.values]
 
     # Add bids info to xr coords
@@ -189,7 +188,7 @@ def read_bids_raw(
             coords[key] = ("recording", values)
     epoch_data = epoch_data.assign_coords(coords)
     return epoch_data, info
-            
+
 def _process_bids_dataset(recording, montage, centering_id, response_id, verbose,
                           preprocessing_fn, preprocessing_kwargs, epoching_kwargs):
     print(f"Processing dataset {"_".join(str(recording.basename).split("_")[:-1])}")
@@ -219,7 +218,7 @@ def _process_bids_dataset(recording, montage, centering_id, response_id, verbose
         data, events, new_cent_id, new_resp_id, verbose, epoching_kwargs)
     
     return epochs, valid_epoch_index
-        
+
 def _bids_to_annot(path, detected_event_id, centering_id, response_id, verbose):
     path_to_tsv = path.copy().update(suffix="events", extension=".tsv")
     events_dict = mne_bids.events_file_to_annotation_kwargs(path_to_tsv)

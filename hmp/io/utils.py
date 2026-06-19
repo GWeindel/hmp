@@ -3,6 +3,8 @@ import inspect
 import numpy as np
 from pandas import DataFrame
 import xarray as xr
+import os 
+
 from mne import Epochs, create_info
 from mne.io import Raw
 from mne.epochs import make_metadata
@@ -31,7 +33,7 @@ def _defaults_check_epoching(kwargs):
 
 def _defaults_check_prep(kwargs, preprocessing_fn):
     expected = ["high_pass","low_pass","sfreq","reference","pick_channels"]
-    defaults = [0.01, 40, 200, 'average', 'eeg']
+    defaults = [0.01, 40, 100, 'average', 'eeg']
     for key, value in zip(expected, defaults):
         if key not in kwargs:
             warn(f"No '{key}' provided, using default value: {value}.\n"
@@ -54,7 +56,7 @@ def _format_trigger_description(stimulus_id, response_id):
     return stimulus_id, response_id
 
 def preprocess_raw(data: Raw,
-                   montage: str | DigMontage,
+                   montage: str | DigMontage | None,
                    events: np.ndarray,
                    preprocessing_kwargs: dict,
                    verbose: bool) -> (Raw, np.ndarray):
@@ -265,7 +267,7 @@ def hmp_data_format(
 
 def create_info_hmp(ch_names: list[str],
                     montage: str | DigMontage,
-                    sfreq: float,
+                    preprocessing_kwargs: dict,
                     datatype:str):
     '''Create minimal info object for plotting in hmp.visu
     
@@ -276,12 +278,13 @@ def create_info_hmp(ch_names: list[str],
     montage: str or mne.channels.DigMontage
         Either an MNE DigMontage or a string for a bulit-in MNE montage (see 
         mne.channels.get_builtin_montages()) that is applied to all recordings.
-    sfreq: float
-        Sampling frequency of the signal in the data
+    preprocessing_kwargs: dict
+        Dictionnary containing values for sfreq and high/low_pass filters
     datatype: str
         MNE compatible data type in the data (e.g. 'eeg' or 'meg')
     '''
-    info = create_info(ch_names=ch_names, sfreq=sfreq,
+    info = create_info(ch_names=ch_names, sfreq=preprocessing_kwargs['sfreq'],
+                       
                        ch_types=np.repeat(datatype, len(ch_names)))
     if montage is not None:
         montage = _create_montage(ch_names, montage)
@@ -289,11 +292,12 @@ def create_info_hmp(ch_names: list[str],
     return info
 
 def _concat_recordings(epoch_data, recordings, montage, datatype,
-                      bids_kwargs, epoching_kwargs, preprocessing_kwargs):
+                      epoching_kwargs={}, preprocessing_kwargs={}, subj_names=None):
     '''Concatenate list of xr.Datasets into a common xr.Dataset
     '''
-    recordings = ["_".join(str(recording.basename).split("_")[:-1])
+    recordings = ["_".join(str(recording.name).split("_")[:-1])
                   for recording in recordings]
+    # Data
     epoch_data = xr.concat(
         epoch_data,
         dim=xr.DataArray(recordings, dims="recording"),
@@ -301,16 +305,18 @@ def _concat_recordings(epoch_data, recordings, montage, datatype,
         join='outer',
         combine_attrs='identical',#Throw error if not the same att
     )
+    if subj_names is not None:
+        epoch_data = epoch_data.assign_coords({'subject': ("recording", subj_names)})
+
+    # Attributes
     n_trials = (
         (~np.isnan(epoch_data.data[:, :, :, 0].data)).sum(axis=1)[:, 0].sum()
     )  # Compute number of trial based on trial where first sample is nan
-    # Use info frm last epoch object, should all be shared
+    # Creating info, should all be shared
     info = create_info_hmp(list(epoch_data.channel.values),
-                           montage, preprocessing_kwargs['sfreq'],
-                           datatype)
+                       montage, preprocessing_kwargs, datatype)
 
     epoch_data = epoch_data.assign_attrs(
-        **bids_kwargs,
         **epoching_kwargs,
         **preprocessing_kwargs
     )
