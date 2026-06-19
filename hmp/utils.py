@@ -390,62 +390,16 @@ def centered_activity(
 
     return centered_data.assign_coords(trial_x_part)
 
-
-def condition_selection(preprocessed, condition_string, variable="event", method="equal"):
-    """Select a subset from preprocessed_data.
-
-    The function selects epochs for which 'condition_string' is in 'variable' based on 'method'.
-
-    Parameters
-    ----------
-    preprocessed : xr.Dataset
-        preprocessed EEG data for hmp from the hmp.preprocessing classes
-    condition_string : str | num
-        condition indicator for selection
-    variable : str
-        variable present in preprocessed.data that is used for condition selection
-    method : str
-        'equal' selects equal trial, 'contains' selects trial in which conditions_string
-        appears in variable
-
-    Returns
-    -------
-    data : xr.Dataset
-        Subset of preprocessed_data.
-    """
+def _coordsel_preproc(preprocessed, value, variable, method):
     data = _check_preprocessed(preprocessed).unstack()
     data[variable] = data[variable].fillna("")
     if method == "equal":
-        data = data.where(data[variable] == condition_string, drop=True)
+        data = data.where(data[variable] == value, drop=True)
     elif method == "contains":
-        data = data.where(data[variable].str.contains(condition_string), drop=True)
-    else:
-        warn("unknown method, returning original data")
+        data = data.where(data[variable].str.contains(value), drop=True)
     return data.stack(trial=['recording','epoch'])
 
-
-def condition_selection_epoch(epoch_data, condition_string, variable="event", method="equal"):
-    """Select a subset from epoch_data.
-
-    The function selects epochs for which 'condition_string' is in 'variable' based on 'method'.
-
-    Parameters
-    ----------
-    epoch_data : xr.Dataset
-        Epoched EEG data for hmp
-    condition_string : str | num
-        condition indicator for selection
-    variable : str
-        variable present in preprocessed_data that is used for condition selection
-    method : str
-        'equal' selects equal trial, 'contains' selects trial in which conditions_string
-        appears in variable
-
-    Returns
-    -------
-    data : xr.Dataset
-        Subset of preprocessed_data.
-    """
+def _coordsel_data(epoch_data, value, variable, method):
     if len(epoch_data.dims) == 4:
         stacked_epoch_data = epoch_data.stack(trial=("recording", "epoch"))
         mask = ~stacked_epoch_data.data.isel(sample=0, channel=0).squeeze().isnull()
@@ -458,35 +412,49 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
 
     if method == "equal":
         stacked_epoch_data = stacked_epoch_data.where(
-            stacked_epoch_data[variable] == condition_string, drop=True
+            stacked_epoch_data[variable] == value, drop=True
         )
     elif method == "contains":
         stacked_epoch_data = stacked_epoch_data.where(
-            stacked_epoch_data[variable].str.contains(condition_string), drop=True
+            stacked_epoch_data[variable].str.contains(value), drop=True
         )
     return stacked_epoch_data.unstack()
+    
+def coord_selection(data: xr.Dataset | xr.DataArray,
+                    value: str,
+                    variable: str,
+                    method: str ="equal"
+                   ):
+    """Select a subset from the hmp data using the coordinates.
 
-
-def recording_selection(preprocessed, recording):
-    """Select a recording from preprocessed_data.
+    The function selects trials for which 'value' is in 'variable' based on 'method'.
 
     Parameters
     ----------
-    preprocessed : xr.Dataset or hmp.preprocessors
-        preprocessed EEG data for hmp
-    recording : str
-        Name of the recording
+    preprocessed : xr.Dataset
+        preprocessed EEG data for hmp from the hmp.preprocessing classes
+    value : str | num
+        condition indicator for selection
+    variable : str
+        coordinate present in preprocessed.data that is used for condition selection
+    method : str
+        'equal' selects equal trial, 'contains' selects trial in which value
+        appears in variable (e.g. 'Flanker' in 'Flanker incompatible')
 
     Returns
     -------
     data : xr.Dataset
         Subset of preprocessed_data.
     """
-    data = _check_preprocessed(preprocessed).unstack()
-    data = data.sel(recording=recording, drop=False)
-    if 'recording' not in data.dims:
-        data = data.expand_dims('recording')
-    return data.stack(trial=['recording','epoch'])
+    if variable not in data.coords:
+        raise ValueError(f"{variable} not found in data")
+    if ~np.isin(method, ['equal','contains']):
+        raise ValueError(f"unknown method {method}")
+    if 'component' in data:
+        data = _coordsel_preproc(data, value, variable, method)
+    elif 'channel' in data:
+        data = _coordsel_data(data, value, variable, method)
+    return data
 
 def compute_csd(epoch_data: xr.Dataset,
                 info: Info):
