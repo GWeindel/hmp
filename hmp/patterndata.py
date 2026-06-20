@@ -9,6 +9,8 @@ from scipy.signal import correlate
 
 from hmp.patterns import HalfSine, Pattern
 from hmp.preprocessors import BasePreprocessor
+from hmp.basedata import BaseData
+
 from hmp.utils import _check_preprocessed
 
 
@@ -46,7 +48,7 @@ class PatternData:
 
     @classmethod
     def from_preprocessor(cls,
-                         preprocessed: xr.DataArray | BasePreprocessor ,
+                         preprocessed: xr.DataArray | BasePreprocessor | BaseData,
                          pattern: Pattern | None = None,
                          dtype: DTypeLike | None = None):
         """

@@ -13,10 +13,10 @@ from pandas import MultiIndex
 from hmp.preprocessors.custom import ProjCustom
 from hmp.preprocessors.identity import ProjIdentity
 from hmp.preprocessors.pca import ProjPCA
-
+from hmp.basedata import BaseData
 
 def _check_preprocessed(preprocessed):
-    if isinstance(preprocessed, (ProjPCA, ProjIdentity, ProjCustom)):
+    if isinstance(preprocessed, (ProjPCA, ProjIdentity, ProjCustom, BaseData)):
         data = preprocessed.data
     elif 'component' in preprocessed.dims:
         data = preprocessed
