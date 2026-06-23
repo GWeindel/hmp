@@ -3,19 +3,16 @@
 This module provides functions for reading MNE raw data format
 """
 
-import json
-import re
 from pathlib import Path
 from warnings import warn
 from typing import Callable, Optional
 import multiprocessing as mp
 
-import mne_bids
 import numpy as np
 from xarray import Dataset
 from numpy.typing import DTypeLike
 import hmp.io.utils as utils
-from mne import events_from_annotations, find_events, events_from_annotations
+from mne import events_from_annotations, find_events
 from mne.io import read_raw_fif, read_raw_bdf
 from mne.channels import DigMontage
 
@@ -58,9 +55,9 @@ def read_mne_raw(
     preprocessing_kwargs: dict
         arguments to be passed to the preprocessing functions. If no
         'preprocessing_fn' is specified, only the following keys are relevant:
-            high_pass : float
+            highpass : float
                 high pass filter provided to MNE's filtering function
-            low_pass : float
+            lowpass : float
                 lowpass filter provided to MNE's filtering function
             sfreq: float
                 Desired sampling frequency, can only be lower or equal to the one of the data.
@@ -118,12 +115,8 @@ def read_mne_raw(
     centering_id, response_id = utils._format_trigger_description(centering_id, response_id)
 
     # Checking montage
-    if montage is None:
-        warn("No montage was provided, HMP plotting functions cannot be used without a "
-            "valid template montage. If using standard channel montage declare one "
-            "of MNE's built-in montage (see mne.channels.get_builtin_montages()) in "
-            "the 'montage' argument, alternatively provide an mne.DigMontage object")
-    
+    utils._check_montage()
+
     if not isinstance(recordings, list):
         raise ValueError("Expected a list of paths to the recordings."
                         f"Got an object of type {type(recordings)} instead")
@@ -132,9 +125,9 @@ def read_mne_raw(
     elif not isinstance(events_provided, list):
         raise ValueError("Expected a list of events for each recording."
                         f"Got an object of type {type(events_provided)} instead")
-    if subj_name is None:
-        subj_name = [f'S{i}' for i in range(len(recordings))]
     recordings = [Path(x) for x in recordings]
+    if subj_name is None:
+        subj_name = ["_".join(str(i.name).split("_")[:-1]) for i in recordings]
     # Processing loops/parallel
     if cpus == 1:
         epochs_list = [_process_raw_dataset(
@@ -192,7 +185,7 @@ def _process_raw_dataset(recording, montage, centering_id, response_id, events_p
     if preprocessing_fn is not None:
         data, events = preprocessing_fn(data, events, preprocessing_kwargs)
     else:
-        data, events = utils.preprocess_raw(data, montage, events,
+        data, events = utils.preprocess_data(data, montage, events,
                    preprocessing_kwargs, verbose)
     
     # Epoching + resampling + metadata creation

@@ -3,7 +3,6 @@
 This module provides functions for reading BIDS data format
 """
 
-import json
 import re
 from pathlib import Path
 from warnings import warn
@@ -67,9 +66,9 @@ def read_bids_raw(
     preprocessing_kwargs: dict
         arguments to be passed to the preprocessing functions. If no
         'preprocessing_fn' is specified, only the following keys are relevant:
-            high_pass : float
+            highpass : float
                 high pass filter provided to MNE's filtering function
-            low_pass : float
+            lowpass : float
                 lowpass filter provided to MNE's filtering function
             sfreq: float
                 Desired sampling frequency, can only be lower or equal to the one of the data.
@@ -129,12 +128,8 @@ def read_bids_raw(
     centering_id, response_id = utils._format_trigger_description(centering_id, response_id)
 
     # Checking montage
-    if montage is None:
-        warn("No montage was provided, HMP plotting functions cannot be used without a "
-            "valid template montage. If using standard channel montage declare one "
-            "of MNE's built-in montage (see mne.channels.get_builtin_montages()) in "
-            "the 'montage' argument, alternatively provide an mne.DigMontage object")
-    
+    utils._check_montage()
+
     # List all paths but exclude .fdt if old EEGLAB format
     all_paths = mne_bids.find_matching_paths(
         suffixes=bids_kwargs['datatypes'],
@@ -210,7 +205,7 @@ def _process_bids_dataset(recording, montage, centering_id, response_id, verbose
     if preprocessing_fn is not None:
         data, events = preprocessing_fn(data, events, preprocessing_kwargs)
     else:
-        data, events = utils.preprocess_raw(data, montage, events,
+        data, events = utils.preprocess_data(data, montage, events,
                    preprocessing_kwargs, verbose)
     
     # Epoching + resampling + metadata creation

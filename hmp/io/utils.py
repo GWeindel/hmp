@@ -32,7 +32,7 @@ def _defaults_check_epoching(kwargs):
     return kwargs
 
 def _defaults_check_prep(kwargs, preprocessing_fn):
-    expected = ["high_pass","low_pass","sfreq","reference","pick_channels"]
+    expected = ["highpass","lowpass","sfreq","reference","pick_channels"]
     defaults = [0.01, 40, 200, 'average', 'eeg']
     for key, value in zip(expected, defaults):
         if key not in kwargs:
@@ -55,9 +55,9 @@ def _format_trigger_description(stimulus_id, response_id):
         response_id = {f"response/{k}": v for k, v in response_id.items()}
     return stimulus_id, response_id
 
-def preprocess_raw(data: Raw,
+def preprocess_data(data: Raw | Epochs,
                    montage: str | DigMontage | None,
-                   events: np.ndarray,
+                   events: np.ndarray | None,
                    preprocessing_kwargs: dict,
                    verbose: bool) -> (Raw, np.ndarray):
     """
@@ -80,9 +80,9 @@ def preprocess_raw(data: Raw,
     preprocessing_kwargs: dict
         arguments to be passed to the preprocessing functions. If no
         'preprocessing_fn' is specified, only the following keys are relevant:
-            high_pass : float
+            highpass : float
                 high pass filter provided to MNE's filtering function
-            low_pass : float
+            lowpass : float
                 lowpass filter provided to MNE's filtering function
             sfreq: float
                 Desired sampling frequency, can only be lower or equal to the one of the data.
@@ -124,7 +124,7 @@ def preprocess_raw(data: Raw,
     # Resample here to fasten preprocessing steps, feed events to avoid
     # timing problem after resampling, if user prefer epoching resample 
     # they can use the 'decim' argument in epoching_kwargs 
-    data, events = _raw_filtering_resampling(data, preprocessing_kwargs, events, verbose)
+    data, events = _filtering_resampling(data, preprocessing_kwargs, events, verbose)
     return data, events
     
 def _create_montage(ch_names, montage):
@@ -152,17 +152,20 @@ def _apply_montage(data, montage):
     data.set_montage(montage)
     return data
 
-def _raw_filtering_resampling(data, preprocessing_kwargs, events, verbose):
-    low_pass = preprocessing_kwargs['low_pass']
+def _filtering_resampling(data, preprocessing_kwargs, events, verbose):
+    lowpass = preprocessing_kwargs['lowpass']
     if preprocessing_kwargs['sfreq'] < data.info["sfreq"]:  # Downsampling
-        if low_pass is None:
-            low_pass = preprocessing_kwargs['sfreq'] / 3.1
-        elif low_pass > preprocessing_kwargs['sfreq'] / 3.1:
-            raise ValueError(f"Requested low pass filter of {low_pass}"
+        if lowpass is None:
+            lowpass = preprocessing_kwargs['sfreq'] / 3.1
+        elif lowpass > preprocessing_kwargs['sfreq'] / 3.1:
+            raise ValueError(f"Requested low pass filter of {lowpass}"
                  f"is too high for desired sampling frequency of {preprocessing_kwargs['sfreq']}")
-    if preprocessing_kwargs['high_pass'] is not None or low_pass is not None:
-        data.filter(l_freq=preprocessing_kwargs['high_pass'], h_freq=low_pass, verbose=verbose)
-    data, events = data.resample(preprocessing_kwargs['sfreq'] , events=events)
+    if preprocessing_kwargs['highpass'] is not None or lowpass is not None:
+        data.filter(l_freq=preprocessing_kwargs['highpass'], h_freq=lowpass, verbose=verbose)
+    if isinstance(data, Raw):
+        data, events = data.resample(preprocessing_kwargs['sfreq'] , events=events)
+    else:
+        data.resample(preprocessing_kwargs['sfreq'])
     return data, events
 
 def _epoching_raw(data, events, stimulus_id, response_id, verbose, epoching_kwargs):
@@ -175,7 +178,7 @@ def _epoching_raw(data, events, stimulus_id, response_id, verbose, epoching_kwar
     else:
         keep_first=[]
         cols = ["event_name"]
-        
+
     metadata_i, meta_events, stimulus_id = make_metadata(
         events=events,
         event_id=event_id,
@@ -279,7 +282,7 @@ def create_info_hmp(ch_names: list[str],
         Either an MNE DigMontage or a string for a bulit-in MNE montage (see 
         mne.channels.get_builtin_montages()) that is applied to all recordings.
     preprocessing_kwargs: dict
-        Dictionnary containing values for sfreq and high/low_pass filters
+        Dictionnary containing values for sfreq and high/lowpass filters
     datatype: str
         MNE compatible data type in the data (e.g. 'eeg' or 'meg')
     '''
@@ -321,3 +324,10 @@ def _concat_recordings(epoch_data, recordings, montage, datatype,
         **preprocessing_kwargs
     )
     return epoch_data, info
+
+def _check_montage(montage):
+    if montage is None:
+        warn("No montage was provided, HMP plotting functions cannot be used without a "
+            "valid template montage. If using standard channel montage declare one "
+            "of MNE's built-in montage (see mne.channels.get_builtin_montages()) in "
+            "the 'montage' argument, alternatively provide an mne.DigMontage object")    
