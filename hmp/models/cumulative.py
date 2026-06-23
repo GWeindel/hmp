@@ -7,13 +7,12 @@ import numpy as np
 import xarray as xr
 from joblib import Parallel, delayed
 
+from hmp.basedata import BaseData
 from hmp.crossvalidation import pseudo_kfold
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
-from hmp.basedata import BaseData
 from hmp.patterndata import PatternData
 from hmp.patterns import Pattern
-from hmp.preprocessors import BasePreprocessor
 
 try:
     __IPYTHON__
