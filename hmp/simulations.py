@@ -10,7 +10,7 @@ import numpy as np
 import xarray as xr
 from scipy.stats import gamma
 
-from hmp.io import read_mne_data
+from hmp.io import read_mne_raw
 from hmp.models.event import EventModel
 from hmp.patterndata import PatternData
 from hmp.utils import _define_random_state
@@ -413,15 +413,22 @@ def demo():
     ]  # only retain stimulus and response triggers
 
     # Reading the data
-    eeg_dat = read_mne_data(files[0], event_id, resp_id, events_provided=events,
-                            verbose=False)
+    montage = sim_info().get_montage()
+    preprocessing = dict(sfreq=sfreq,)
+    
+    eeg_dat, info = read_mne_raw([files[0]],
+                                 centering_id=event_id,
+                                 response_id=resp_id, 
+                                 events_provided=[events],
+                                 montage = montage,
+                                 preprocessing_kwargs=preprocessing
+                                )
 
     all_other_chans = range(len(positions.ch_names[:-61]))  # non-eeg
     chan_list = list(np.arange(len(positions.ch_names)))
     chan_list = [e for e in chan_list if e not in all_other_chans]
     chan_list.pop(52)  # Bad elec
-    positions = mne.pick_info(positions, sel=chan_list)
-    return eeg_dat, random_source_times, positions
+    return eeg_dat, random_source_times, info
 
 
 def classification_true(

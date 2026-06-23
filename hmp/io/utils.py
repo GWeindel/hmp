@@ -33,7 +33,7 @@ def _defaults_check_epoching(kwargs):
 
 def _defaults_check_prep(kwargs, preprocessing_fn):
     expected = ["high_pass","low_pass","sfreq","reference","pick_channels"]
-    defaults = [0.01, 40, 100, 'average', 'eeg']
+    defaults = [0.01, 40, 200, 'average', 'eeg']
     for key, value in zip(expected, defaults):
         if key not in kwargs:
             warn(f"No '{key}' provided, using default value: {value}.\n"
@@ -161,7 +161,7 @@ def _raw_filtering_resampling(data, preprocessing_kwargs, events, verbose):
             raise ValueError(f"Requested low pass filter of {low_pass}"
                  f"is too high for desired sampling frequency of {preprocessing_kwargs['sfreq']}")
     if preprocessing_kwargs['high_pass'] is not None or low_pass is not None:
-        data.filter(preprocessing_kwargs['high_pass'], low_pass, verbose=verbose)
+        data.filter(l_freq=preprocessing_kwargs['high_pass'], h_freq=low_pass, verbose=verbose)
     data, events = data.resample(preprocessing_kwargs['sfreq'] , events=events)
     return data, events
 
