@@ -147,6 +147,22 @@ def event_times(  # noqa: PLR0912
         times = errorbars_model
     return times
 
+def _filter_common_trials_data_fit(epoch_data, estimates):
+    if len(epoch_data.dims) == 4:
+        epoch_data = epoch_data.stack(trial=("recording", "epoch"))
+    mask = ~epoch_data.data.isel(sample=0, channel=0).squeeze().isnull()
+    epoch_data = epoch_data.sel(trial=epoch_data.trial.values[mask])
+    common_trial = np.intersect1d(
+        estimates["trial"].values, epoch_data["trial"].values
+    )
+    if 'sample' in estimates.dims: #This is eventprobs
+        epoch_data = epoch_data.sel(trial=common_trial, sample=estimates.sample)\
+            .data.dropna(dim="trial", how="all")
+    else: #Secondary estimates, e.g. times
+        epoch_data = epoch_data.sel(trial=common_trial)\
+            .data.dropna(dim="trial", how="all")
+    estimates = estimates.sel(trial=common_trial).dropna(dim="trial", how="all")
+    return epoch_data, estimates
 
 def event_channels(
     epoch_data,
@@ -184,17 +200,8 @@ def event_channels(
     _check_sf_consistency(epoch_data, estimates)
     if estimate_method is None:
         estimate_method = "max"
-    epoch_data = (
-        epoch_data.stack(trial=["recording", "epoch"])
-        .data
-        .drop_duplicates("trial")
-    )
-
-    common_trial = np.intersect1d(
-        estimates["trial"].values, epoch_data["trial"].values
-    )
-    epoch_data = epoch_data.sel(trial=common_trial, sample=estimates.sample)
-    estimates = estimates.sel(trial=common_trial)
+    
+    epoch_data, estimates = _filter_common_trials_data_fit(epoch_data, estimates)
     n_events = estimates.event.count().values
     n_trial = estimates.trial.count().values
     n_channel = epoch_data.channel.count().values
@@ -203,7 +210,6 @@ def event_channels(
         normed_template = template / np.sum(template)
 
     times = event_times(estimates, mean=False, estimate_method=estimate_method,)
-    times = times.sel(trial=common_trial)
     event_values = np.zeros((n_channel, n_trial, n_events))*np.nan
     for ev in range(n_events):
         for tr in range(n_trial):
@@ -240,7 +246,7 @@ def event_channels(
 
 
 def centered_activity(
-    data,
+    epoch_data,
     times,
     channel,
     event,
@@ -254,8 +260,8 @@ def centered_activity(
 
     Parameters
     ----------
-    data : xr.Dataset
-        HMP data (unpreprocessed but with trial and recording stacked)
+    epoch_data : xr.Dataset
+        epoch_data from hmp.io
     times : xr.DataArray
         Onset times in sample as computed using event_times()
     channel : list
@@ -293,34 +299,23 @@ def centered_activity(
 
     n_samples = np.rint(n_samples)
     baseline = np.rint(baseline)
-    if 'epoch' in data.dims:
-        data = (
-            data.stack({'trial':['recording','epoch']})
-            .data
-        )
-    mask = ~data.isel(sample=0, channel=0).squeeze().isnull()
-    data = data.sel(trial=data.trial.values[mask])
+    epoch_data, times = _filter_common_trials_data_fit(epoch_data, times)
 
-
-    common_trial = np.intersect1d(
-        times["trial"].values, data["trial"].values
-    )
-    data = data.sel(trial=common_trial)
-    times = times.sel(trial=common_trial)
-
-    assert ~np.any(times > data.sample.max()),\
+    assert ~np.any(times > epoch_data.sample.max()),\
         "At least one trial is longer than the maximum possible sample.\
         Provided times should be in sample not on the millisecond scale"
 
     centered_data = np.tile(
         np.nan,
-        (len(common_trial), len(channel), int(round(n_samples - baseline + 1))),
+        (epoch_data.sizes['trial'], 
+         len(channel),
+         int(round(n_samples - baseline + 1))),
     )
 
-    trial_times = np.zeros(len(common_trial)) * np.nan
+    trial_times = np.zeros(epoch_data.sizes['trial']) * np.nan
     recordings = []
-    epochs = np.zeros(len(common_trial))
-    for i, (trial, trial_dat) in enumerate(data.groupby("trial", squeeze=False)):
+    epochs = np.zeros(epoch_data.sizes['trial'],)
+    for i, (trial, trial_dat) in enumerate(epoch_data.groupby("trial", squeeze=False)):
         recordings.append(trial[0])
         epochs[i] = trial[1]
         if cut_before_event > 0:
@@ -390,15 +385,19 @@ def centered_activity(
 
     return centered_data.assign_coords(trial_x_part)
 
-def _coordsel_preproc(preprocessed, value, variable, method):
-    data = _check_preprocessed(preprocessed).unstack()
-    data[variable] = data[variable].fillna("")
+
+def _sel_method(data, value, variable, method):
     if method == "equal":
         data = data.where(data[variable] == value, drop=True)
     elif method == "contains":
         data = data.where(data[variable].str.contains(value), drop=True)
+    return data
+    
+def _coordsel_preproc(preprocessed, value, variable, method):
+    data = _check_preprocessed(preprocessed).unstack()
+    data = _sel_method(data, value, variable, method)
     return data.stack(trial=['recording','epoch'])
-
+    
 def _coordsel_data(epoch_data, value, variable, method):
     if len(epoch_data.dims) == 4:
         stacked_epoch_data = epoch_data.stack(trial=("recording", "epoch"))
@@ -410,20 +409,17 @@ def _coordsel_data(epoch_data, value, variable, method):
             "recording, epoch, channel, sample"
         )
 
-    if method == "equal":
-        stacked_epoch_data = stacked_epoch_data.where(
-            stacked_epoch_data[variable] == value, drop=True
-        )
-    elif method == "contains":
-        stacked_epoch_data = stacked_epoch_data.where(
-            stacked_epoch_data[variable].str.contains(value), drop=True
-        )
+    stacked_epoch_data = _sel_method(stacked_epoch_data, value, variable, method)
     return stacked_epoch_data.unstack()
-    
+
+def _coordsel_estimates(data, value, variable, method):
+    data = _sel_method(data, value, variable, method)
+    return data
+
 def coord_selection(data: xr.Dataset | xr.DataArray,
                     value: str,
                     variable: str,
-                    method: str ="equal"
+                    method: str = "equal"
                    ):
     """Select a subset from the hmp data using the coordinates.
 
@@ -439,7 +435,7 @@ def coord_selection(data: xr.Dataset | xr.DataArray,
         coordinate present in preprocessed.data that is used for condition selection
     method : str
         'equal' selects equal trial, 'contains' selects trial in which value
-        appears in variable (e.g. 'Flanker' in 'Flanker incompatible')
+        appears in variable (e.g. 'comp' in 'incompatible' and 'compatible')
 
     Returns
     -------
@@ -450,10 +446,14 @@ def coord_selection(data: xr.Dataset | xr.DataArray,
         raise ValueError(f"{variable} not found in data")
     if ~np.isin(method, ['equal','contains']):
         raise ValueError(f"unknown method {method}")
-    if 'component' in data:
+    if 'component' in data.dims:
         data = _coordsel_preproc(data, value, variable, method)
-    elif 'channel' in data:
+    elif 'channel' in data.dims:
         data = _coordsel_data(data, value, variable, method)
+    elif 'event' in data.dims:
+        data = _coordsel_estimates(data, value, variable, method).dropna(dim="trial", how="all")
+    else:
+        raise ValueError('Unrecognized data type')
     return data
 
 def compute_csd(epoch_data: xr.Dataset,
