@@ -7,7 +7,7 @@ import os
 
 from mne import Epochs, create_info
 from mne.io import Raw
-from mne.epochs import make_metadata
+from mne.epochs import make_metadata, EpochsFIF
 from mne.channels import DigMontage, make_standard_montage, make_dig_montage
 from warnings import warn
     
@@ -42,7 +42,7 @@ def _defaults_check_prep(kwargs, preprocessing_fn):
 
     if preprocessing_fn is None and len(set(kwargs).difference(expected)) > 0:
         raise ValueError("Got unexpected argument for preprocessing"
-            f"{set(kwargs).difference(expected)}"
+            f"{set(kwargs).difference(expected)} "
             "use 'prepocessing_fn' is further preprocessing steps are needed")
     return kwargs
 
@@ -123,7 +123,7 @@ def preprocess_data(data: Raw | Epochs,
 
     # Resample here to fasten preprocessing steps, feed events to avoid
     # timing problem after resampling, if user prefer epoching resample 
-    # they can use the 'decim' argument in epoching_kwargs 
+    # they can use the 'decim' argument in epoching_kwargs
     data, events = _filtering_resampling(data, preprocessing_kwargs, events, verbose)
     return data, events
     
@@ -154,21 +154,26 @@ def _apply_montage(data, montage):
 
 def _filtering_resampling(data, preprocessing_kwargs, events, verbose):
     lowpass = preprocessing_kwargs['lowpass']
-    if preprocessing_kwargs['sfreq'] < data.info["sfreq"]:  # Downsampling
-        if lowpass is None:
-            lowpass = preprocessing_kwargs['sfreq'] / 3.1
-        elif lowpass > preprocessing_kwargs['sfreq'] / 3.1:
-            raise ValueError(f"Requested low pass filter of {lowpass}"
-                 f"is too high for desired sampling frequency of {preprocessing_kwargs['sfreq']}")
+    if preprocessing_kwargs['sfreq'] is not None:
+        if preprocessing_kwargs['sfreq'] < data.info["sfreq"]:  # Downsampling
+            if lowpass is None:
+                lowpass = preprocessing_kwargs['sfreq'] / 3.1
+            elif lowpass > preprocessing_kwargs['sfreq'] / 3.1:
+                raise ValueError(f"Requested low pass filter of {lowpass}"
+                     f"is too high for desired sampling frequency of {preprocessing_kwargs['sfreq']}")
     if preprocessing_kwargs['highpass'] is not None or lowpass is not None:
         data.filter(l_freq=preprocessing_kwargs['highpass'], h_freq=lowpass, verbose=verbose)
-    if isinstance(data, Raw):
-        data, events = data.resample(preprocessing_kwargs['sfreq'] , events=events)
-    else:
-        data.resample(preprocessing_kwargs['sfreq'])
+    if preprocessing_kwargs['sfreq'] is not None:
+        if isinstance(data, EpochsFIF):
+            data = data.resample(preprocessing_kwargs['sfreq'])
+        else:
+            data, events = data.resample(preprocessing_kwargs['sfreq'], events=events)
     return data, events
 
 def _epoching_raw(data, events, stimulus_id, response_id, verbose, epoching_kwargs):
+    if len(stimulus_id) == 0:
+        raise ValueError("No valid centering_id found in the data "
+                         f"detected triggers : {np.unique(events[:,2])}")
     event_id = {**stimulus_id, **response_id}
     stim = list(stimulus_id.keys())
 
@@ -287,7 +292,6 @@ def create_info_hmp(ch_names: list[str],
         MNE compatible data type in the data (e.g. 'eeg' or 'meg')
     '''
     info = create_info(ch_names=ch_names, sfreq=preprocessing_kwargs['sfreq'],
-                       
                        ch_types=np.repeat(datatype, len(ch_names)))
     if montage is not None:
         montage = _create_montage(ch_names, montage)

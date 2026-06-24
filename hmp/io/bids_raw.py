@@ -128,7 +128,7 @@ def read_bids_raw(
     centering_id, response_id = utils._format_trigger_description(centering_id, response_id)
 
     # Checking montage
-    utils._check_montage()
+    utils._check_montage(montage)
 
     # List all paths but exclude .fdt if old EEGLAB format
     all_paths = mne_bids.find_matching_paths(
@@ -170,6 +170,11 @@ def read_bids_raw(
         for epochs, valid_epoch_index in epochs_list
     ]
     recordings = [x.fpath for x in recordings]
+    # Recover hp and lp and sfreq from first epochs object
+    # to display the correct info
+    preprocessing_kwargs['sfreq'] = epochs_list[0][0].info['sfreq']
+    preprocessing_kwargs['lowpass'] = epochs_list[0][0].info['lowpass']
+    preprocessing_kwargs['highpass'] = epochs_list[0][0].info['highpass']
     epoch_data, info = utils._concat_recordings(epoch_data, recordings, montage, bids_kwargs['datatypes'],
                       epoching_kwargs, preprocessing_kwargs)
     bids_info = [_parse_bids_name(r) for r in epoch_data.recording.values]
@@ -227,12 +232,17 @@ def _bids_to_annot(path, detected_event_id, centering_id, response_id, verbose):
     old_resp_id = {v:k for k,v in response_id.items()}
     new_stim_id = {}
     new_resp_id = {}
+    not_found = []
     for k,v in read_event_id.items():
-        new_v = detected_event_id[k]
-        if v in centering_id.values():
-            new_stim_id[old_stim_id[v]] = int(new_v)
-        elif v in response_id.values():
-            new_resp_id[old_resp_id[v]] = int(new_v)
+        if v in old_stim_id or v in old_resp_id:
+            new_v = detected_event_id[k]
+            if v in centering_id.values():
+                new_stim_id[old_stim_id[v]] = int(new_v)
+            elif v in response_id.values():
+                new_resp_id[old_resp_id[v]] = int(new_v)
+        else:
+            not_found.append(v)
+    print(f'Did not found equivalence of triggers {not_found} in provided centered_id/response_id')
     return new_stim_id, new_resp_id
 
 def check_bids_kwargs(bids_kwargs):

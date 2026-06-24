@@ -115,7 +115,7 @@ def read_mne_raw(
     centering_id, response_id = utils._format_trigger_description(centering_id, response_id)
 
     # Checking montage
-    utils._check_montage()
+    utils._check_montage(montage)
 
     if not isinstance(recordings, list):
         raise ValueError("Expected a list of paths to the recordings."
@@ -159,6 +159,11 @@ def read_mne_raw(
         for epochs, valid_epoch_index in epochs_list
     ]
 
+    # Recover hp and lp and sfreq from first epochs object
+    # to display the correct info
+    preprocessing_kwargs['sfreq'] = epochs_list[0][0].info['sfreq']
+    preprocessing_kwargs['lowpass'] = epochs_list[0][0].info['lowpass']
+    preprocessing_kwargs['highpass'] = epochs_list[0][0].info['highpass']
     epoch_data, info = utils._concat_recordings(epoch_data, recordings, montage, datatype,
                     epoching_kwargs, preprocessing_kwargs, subj_name)
 
