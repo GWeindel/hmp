@@ -7,12 +7,12 @@ import numpy as np
 import xarray as xr
 from joblib import Parallel, delayed
 
+from hmp.basedata import BaseData
 from hmp.crossvalidation import pseudo_kfold
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
 from hmp.patterndata import PatternData
 from hmp.patterns import Pattern
-from hmp.preprocessors import BasePreprocessor
 
 try:
     __IPYTHON__
@@ -93,7 +93,7 @@ class CumulativeMethod(BaseModel):
 
     def fit(# noqa: PLR0912, PLR0915
         self,
-        data: PatternData | BasePreprocessor | xr.DataArray,
+        data: PatternData | BaseData | xr.DataArray,
         verbose: bool = True,
         kfold: int = 1,
         cpus: int = 1,

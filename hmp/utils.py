@@ -10,13 +10,14 @@ from mne.preprocessing import compute_current_source_density
 from numpy.random import RandomState
 from pandas import MultiIndex
 
+from hmp.basedata import BaseData
 from hmp.preprocessors.custom import ProjCustom
 from hmp.preprocessors.identity import ProjIdentity
 from hmp.preprocessors.pca import ProjPCA
 from hmp.preprocessors.base import BasePreprocessor
 
 def _check_preprocessed(preprocessed):
-    if isinstance(preprocessed, (ProjPCA, ProjIdentity, ProjCustom, BasePreprocessor)):
+    if isinstance(preprocessed, (ProjPCA, ProjIdentity, ProjCustom, BaseData)):
         data = preprocessed.data
     elif 'component' in preprocessed.dims:
         data = preprocessed
