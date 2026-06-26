@@ -38,6 +38,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from scipy.linalg import eigh
+import copy
 
 import hmp
 
@@ -499,6 +500,26 @@ class BaseData:
     def apply_pca_weights(self, weights, center: bool = True):
         """Apply previously obtained PCA weights through custom projection."""
         self.project('custom pca', weights, center=center)
+
+    @staticmethod
+    def remove_participant(data, participant):
+        """Remove data from participant"""
+        data = copy.deepcopy(data)
+        data.data = data.data.unstack()
+        data.data = data.data.drop_sel(participant=[participant])
+        data.data = data.data.stack(trial=['participant','epoch'])
+        return data
+
+    @staticmethod
+    def get_participants(data, participants):
+        """Get data from specified participants"""
+        data = copy.deepcopy(data)
+        data.data = data.data.unstack()
+        data.data = data.data.sel(participant=[participants], drop=False)
+       # if 'participant' not in actual_data.dims:
+       #     actual_data = actual_data.expand_dims('participant')
+        data.data = data.data.stack(trial=['participant','epoch'])
+        return data
 
 
     ##Private functions - all operate based on settings in self

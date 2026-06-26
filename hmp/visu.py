@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.signal as ssignal
 import xarray as xr
+import itertools
 from mne import Info
 from mne.viz import plot_brain_colorbar, plot_topomap
 from scipy import stats
@@ -32,16 +33,27 @@ def plot_model(epoch_data, estimates, channel_position, *args, **kwargs):
     ----------
     epoch_data : xr.DataArray
         The original EEG data in HMP format.
-    estimates : xr.DataArray
-        The result from a fitted HMP model.
+    estimates : xr.DataArray | list
+        The estimates from a fitted and transformed HMP model, or a list (or list of lists) 
+        of estimates
     channel_position : np.ndarray
         Either a 2D array with dimensions (channel, [x, y]) storing channel
         locations in meters or an MNE info object containing digit points for channel locations.
     *args and **kwargs: arguments for plot_topo_time_course
     """
-    if estimates.ndim == 3: #EventModels, including group
+    if isinstance(estimates, list):
+        if isinstance(estimates[0], list):
+            newlist = []
+            for estimate_list in estimates:
+                for estimate in estimate_list:
+                    newlist.append(estimate)
+            estimates = newlist
+        if len(estimates) == 1:
+            estimates = estimates[0]
+
+    if not isinstance(estimates, list) and estimates.ndim == 3: #EventModels, including group
         ax = plot_topo_timecourse(epoch_data, estimates, channel_position, *args, **kwargs)
-    elif estimates.ndim == 4: #Eliminative or other 4-dim structure
+    elif isinstance(estimates, list) or estimates.ndim == 4: #Eliminative or other 4-dim structure
         estimates = estimates.copy()
         estimate_method = kwargs['estimate_method'] if 'estimate_method' in kwargs else None
         vmax = kwargs['vmax'] if 'vmax' in kwargs else None
@@ -69,14 +81,23 @@ def plot_model(epoch_data, estimates, channel_position, *args, **kwargs):
                 vmax = np.max((np.nanmax(np.abs(channel_data[:])),vmax))
                 vmin = -vmax
 
-        fig, axes = plt.subplots(len(estimates.n_events), 1, \
-            figsize=(8, len(estimates.n_events)), sharex=True)
-        for ax, n_event in zip(axes, estimates.n_events):
-            cbar = True if n_event ==  estimates.n_events[-1] else False
-            hmp.visu.plot_topo_timecourse(epoch_data, estimates.sel(n_events=n_event), \
-                channel_position, *args, ax = ax, vmax=vmax, vmin=vmin, \
-                colorbar=cbar, **kwargs)
-            ax.set_ylabel(f"N = {n_event.values}")
+        nr_plots = len(estimates) #len(estimates.n_events)
+        fig, axes = plt.subplots(nr_plots, 1, 
+            figsize=(8, nr_plots), sharex=True)
+        
+        if not isinstance(estimates,list):
+            for ax, n_event in zip(axes, estimates.n_events):
+                cbar = True if n_event ==  estimates.n_events[-1] else False
+                hmp.visu.plot_topo_timecourse(epoch_data, estimates.sel(n_events=n_event), \
+                    channel_position, *args, ax = ax, vmax=vmax, vmin=vmin, \
+                    colorbar=cbar, **kwargs)
+                ax.set_ylabel(f"N = {n_event.values}")
+        else:
+            for ax, estimate_idx in zip(axes, range(len(estimates))):
+                cbar = True if estimate_idx ==  len(estimates)-1 else False
+                hmp.visu.plot_topo_timecourse(epoch_data, estimates[estimate_idx], \
+                    channel_position, *args, ax = ax, vmax=vmax, vmin=vmin, \
+                    colorbar=cbar, **kwargs)
         plt.tight_layout()
 
 def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
@@ -537,10 +558,10 @@ def plot_loocv(  # noqa # Refactor?
     if mean:
         alpha = 0.4  # for the indiv plot
         marker_indiv = "."
-        means = np.nanmean(loocv_estimates.data, axis=1)[::-1]
+        means = np.nanmean(loocv_estimates.data, axis=1)
         errs = (
             np.nanstd(loocv_estimates.data, axis=1) / np.sqrt(len(loocv_estimates.participant))
-        )[::-1]
+        )
         ax[0].errorbar(x=np.arange(len(means)) + 1, y=means, yerr=errs, marker="o", color="k")
     else:
         alpha = 1

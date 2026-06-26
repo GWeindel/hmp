@@ -7,10 +7,16 @@ LOOCV
 
 """
 
-from typing import Any
+from collections.abc import Callable
 import inspect
 
+from hmp.patterns import Pattern
 from hmp.patterndata import PatternData
+from hmp.basedata import BaseData
+from hmp.models.base import BaseModel
+from hmp.models.event import EventModel
+from hmp.models.eliminative import EliminativeMethod
+from hmp.models.cumulative import CumulativeMethod
 import hmp
 
 import numpy as np
@@ -25,7 +31,7 @@ class LOOCV():
     Performs leave-one-out cross validation using either the provided HMP model or
     user-defined function to calculate the initial fit. It will perform loocv by 
     leaving out one participant, applying the provided model or function to the
-    data to estimate a fit, and computing the likelihood of the data from the left out
+    data to compute a fit, and computing the likelihood of the data from the left out
     participant with the estimated parameters. This is repeated for all participants.
 
     If a self-defined function is used, it must accept data (see fit(..) below) as its
@@ -34,8 +40,7 @@ class LOOCV():
     models the likelihood of the left out participant will be calculated.
 
     The reason for using a function instead of a model is if a sequence of operations
-    needs to be performed for each subject (e.g., fitting multiple models in sequence,
-    see example_complex_func(..) below.
+    needs to be performed for each subject (e.g., fitting multiple models in sequence).
 
     For an example of potential functions, see at the bottom of this file:
     example_simple_func(..)
@@ -43,7 +48,7 @@ class LOOCV():
 
     Parameters
     ----------
-    model : Any 
+    model : BaseModel | Callable
         either a (fitted) HMP model or a self-defined function to be applied to
         provided data. If function, must accept data as its first argument and 
         return a (list of) fitted model(s). See explanation above.
@@ -64,10 +69,11 @@ class LOOCV():
     pca_cv: bool, optional
         Whether PCA has to be applied to each fold separately, and weights
         used for left-out participant. Only way to do proper independent
-        LOOCV. Requires epoched, non-preprocessed EEG data.
+        LOOCV. Requires un-projected BaseData object, with cropping and rejecting
+        epochs already applied. LOOCV will call BaseData.pca_and_variance(**pca_kwargs).
         Default = False
     pca_kwargs : dict, optional/required if pca = True
-        arguments to be passed to preprocessors.ProjPCA, n_comp is required.
+        arguments to be passed to BaseData.pca_and_variance(), n_comp is required.
         Default = None.
     verbose: bool, optional
         Default = True
@@ -77,10 +83,10 @@ class LOOCV():
 
     def __init__(
         self,
-        model: Any,
+        model: BaseModel | Callable,
         function_kwargs: dict = None,
         quick: bool = False,
-        pattern: hmp.patterns.Pattern = None,
+        pattern: Pattern = None,
         pca_cv: bool = False,
         pca_kwargs : dict = None,
         verbose: bool = True,
@@ -94,11 +100,12 @@ class LOOCV():
         self.pca_kwargs = pca_kwargs
 
         #instance of an hmp model
-        if isinstance(model, hmp.models.base.BaseModel):
+        if isinstance(model, BaseModel):
             self.model_class = type(model)
 
             if quick:
-                assert self.model._fitted, "For quick estimation, a fitted HMP model is required, but not provided."
+                assert self.model._fitted, \
+                    "For quick estimation, a fitted HMP model is required, but not provided."
                 
                 if verbose:
                     if print_warning:
@@ -106,33 +113,29 @@ class LOOCV():
                         print("IMPORTANT: 'quick' set to true, requesting a faster LOOCV procedure.")
                         print()
                         print("Note that the quick procedure is typically incorrect in the sense that")
-                        print("an initial estimate is used to inform both the fit of the left-out")
+                        print("an initial model fit is used to inform both the fit of the left-out")
                         print("participant and the other participants.")
                         print()
                         print("This means that the fits are not independent, unless the initial")
-                        print("estimate is based on the literature or another task. However, it")
-                        print("typically provides a good initial estimate of the correct LOOCV") 
+                        print("model fit is based on the literature or another task. However, it")
+                        print("typically provides a good initial model fit of the correct LOOCV") 
                         print("procedure and is relatively quick.")
                         print()
                         print("Set 'print_warning to False to suppress this info.")
         
-                if self.model_class == hmp.models.CumulativeMethod:
+                if self.model_class == CumulativeMethod:
                     if verbose and quick:
                         print("NB: quick estimation is not possible with CumulativeMethod")
                         print("    Continuing slowly.")
                     self.quick = False
 
         #assume it's a function that will return a fitted hmp model
-        elif inspect.isfunction(model): 
+        elif inspect.isfunction(model):
             if verbose and quick:
                 print("NB: quick estimation is not possible in combination with a function.")
                 print("    Continuing slowly.")
             self.quick = False
             self.model_class = "function"
-        
-        #unknown
-        else:
-            raise ValueError(f"Unknown model definition {model}, aborting.")  
 
         if pattern is None: #no pattern given
             if self.model_class != "function":
@@ -142,19 +145,19 @@ class LOOCV():
         else: #pattern provided
             if self.model_class != "function":
                 if not np.array_equal(pattern.template, self.model.pattern.template):
-                    print("Different pattern provided for loocv than in model.")
+                    print("Different pattern provided for LOOCV than in model.")
                     print("Proceeding with model Pattern.")
                 self.pattern = self.model.pattern
             else:
                 self.pattern = pattern
 
         if self.pca_cv:
-            assert pca_kwargs is not None, "If pca == True, pca_kwargs have to be provided"
+            assert pca_kwargs is not None, "If pca_cv == True, pca_kwargs have to be provided"
             assert 'n_comp' in pca_kwargs, "n_comp required for pca"
 
     def fit(
         self,
-        data: Any,
+        data: BaseData | PatternData,
         cpus_cv: int = 1,
         cpus_model: int = 1,
         verbose: bool = True):
@@ -164,13 +167,12 @@ class LOOCV():
         
         Parameters
         ----------
-        data : Data to fit the model on. Three options:
-            1. data from BasePreprocessor
-            2. PatternData object.
-            3. Epoched data from MNE
+        data : Data to fit the model on. Two options:
+            1. BaseData object
+            2. PatternData object
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
             If using a 'function' for LOOCV (see init), it is recommended to provide PatternData 
-            or pattern to reduce RAM requirements. If 3, pca_kwargs are required to allow PCA.
+            or pattern to reduce RAM requirements.
         cpus_cv : int, optional
             Nr of cpus to use for cross validation. Defaul = 1.
             We recommend using 1 CPU for CV on a laptop or normal PC. 
@@ -188,24 +190,22 @@ class LOOCV():
             cpus_model = 1
 
         # Prep data
-        if isinstance(data, xr.core.dataset.Dataset) and 'epoch' in data.coords:
-            assert self.pca_kwargs is not None, "If epoched data is provided, pca_kwargs are required"
+        if isinstance(data, BaseData) and data.projection_type == 'identity': #PCA not applied
+            assert self.pca_kwargs is not None, \
+                "If non-projected data are provided, pca_kwargs are required"
             assert 'n_comp' in self.pca_kwargs, "n_comp required for pca"
 
         if self.pca_cv:
-            #check epoched data
-            assert isinstance(data, xr.core.dataset.Dataset) and 'epoch' in data.coords,\
-                "If PCA, data must be provided as raw, epoched data from MNE."
+            assert isinstance(data, BaseData) and data.projection_type == 'identity',\
+                "If PCA cross-validation, data must be provided as non-projected BaseData."
         else:
-            if isinstance(data, xr.core.dataset.Dataset) and 'epoch' in data.coords:
+            if isinstance(data, BaseData) and data.projection_type == 'identity':
                 #warn and apply pca
-                print("Epoched data provided but PCA cross validation not requested.")
+                print("Non-projected BaseData provided but PCA cross validation not requested.")
                 print("Continuing by performing PCA on all data, NOT in folds.")
-                data = hmp.preprocessors.ProjPCA(data, **self.pca_kwargs)
+                data.pca_and_variance(**self.pca_kwargs)
 
-        if isinstance(data, PatternData) or isinstance(data, xr.core.dataset.Dataset):
-            pass
-        elif isinstance(data, hmp.preprocessors.pca.ProjPCA):
+        if isinstance(data, BaseData) and data.projection_type != 'identity':
             if self.pattern is not None:
                 data = PatternData.from_preprocessor(data, self.pattern)
             else: # must be function: cannot create PatternData as template is unknown
@@ -215,7 +215,7 @@ class LOOCV():
                     print("using a function, it is recommended to provide PatternData or pattern.")
 
         #if Eliminative/Cumulative, set max_events based on all data
-        if self.model_class in [hmp.models.EliminativeMethod, hmp.models.CumulativeMethod]:
+        if self.model_class in [EliminativeMethod, CumulativeMethod]:
             if self.model.max_events is None:
                 self.model.max_events = \
                     self.model._compute_max_events(data, self.model.location)              
@@ -223,28 +223,26 @@ class LOOCV():
         # Get participants here to be able to split for multithreading
         if isinstance(data, PatternData):
             self.participants_idx = np.unique(data.durations.participant.values)
-        elif isinstance(data, hmp.preprocessors.pca.ProjPCA):
+        elif isinstance(data, BaseData):
             self.participants_idx = np.unique(data.data.participant.values)
-        elif isinstance(data, xr.core.dataset.Dataset):
-            self.participants_idx = np.unique(data.participant.values)
 
         # Step 1, fit models on n-1 subjects for all folds
         if verbose:
             print(f"Fitting models for n-1 subjects for all folds.")
 
-        estimates = []
+        modelfits = []
         if cpus_cv == 1:  # not mp at cv level
             for participant in self.participants_idx:
-                estimates.append(
-                    self.loocv_estimate(
+                modelfits.append(
+                    self.loocv_modelfit(
                         data, 
                         participant, 
                         cpus_model=cpus_model, 
                         verbose=verbose))
         else:  # mp at cv level
             with mp.Pool(processes=cpus_cv) as pool:
-                estimates = pool.starmap(
-                    self.loocv_estimate,
+                modelfits = pool.starmap(
+                    self.loocv_modelfit,
                     zip(
                         itertools.repeat(data),
                         self.participants_idx,
@@ -253,34 +251,34 @@ class LOOCV():
                     )
                 )
         
-        # if multiple estimates are returned per subject, rearrange data so
-        # each item of all_estimates will contain one estimate for each subject.
-        # So for eliminative, all_estimates[0] will have all n-stage subject
+        # if multiple modelfits are returned per subject, rearrange data so
+        # each item of all_modelfits will contain one modelfit for each subject.
+        # So for eliminative, all_modelfits[0] will have all n-stage subject
         # models.
-        if isinstance(estimates[0], list): #from a function or quick elim
-            all_estimates = []
-            for est_idx in range(len(estimates[0])):
-                #each estimate can also be eliminative or cumulative
-                if isinstance(estimates[0][est_idx], hmp.models.EliminativeMethod):
-                    for est_idx2 in range(estimates[0][est_idx].max_events):
-                        all_estimates.append([estimate[est_idx].submodels[est_idx2+1] for estimate in estimates])
-                elif isinstance(estimates[0][est_idx], hmp.models.CumulativeMethod):
-                    all_estimates.append([estimate[est_idx].submodels[-1] for estimate in estimates])
-                elif isinstance(estimates[0][est_idx], hmp.models.EventModel):                       
-                    all_estimates.append([estimate[est_idx] for estimate in estimates])
-        elif isinstance(estimates[0], hmp.models.EliminativeMethod):
-            all_estimates = []
-            for est_idx in range(estimates[0].max_events):
-                all_estimates.append([estimate.submodels[est_idx+1] for estimate in estimates])
-        elif isinstance(estimates[0], hmp.models.CumulativeMethod):
-            all_estimates = [[estimate.submodels[-1] for estimate in estimates]]
-        elif isinstance(estimates[0], hmp.models.EventModel):                       
-            all_estimates = [estimates]
+        if isinstance(modelfits[0], list): #from a function or quick elim
+            all_modelfits = []
+            for est_idx in range(len(modelfits[0])):
+                #each modelfit can also be eliminative or cumulative
+                if isinstance(modelfits[0][est_idx], EliminativeMethod):
+                    for est_idx2 in range(modelfits[0][est_idx].max_events):
+                        all_modelfits.append([modelfit[est_idx].submodels[est_idx2+1] for modelfit in modelfits])
+                elif isinstance(modelfits[0][est_idx], CumulativeMethod):
+                    all_modelfits.append([modelfit[est_idx].submodels[-1] for modelfit in modelfits])
+                elif isinstance(modelfits[0][est_idx], EventModel):                       
+                    all_modelfits.append([modelfit[est_idx] for modelfit in modelfits])
+        elif isinstance(modelfits[0], EliminativeMethod):
+            all_modelfits = []
+            for est_idx in range(modelfits[0].max_events):
+                all_modelfits.append([modelfit.submodels[est_idx+1] for modelfit in modelfits])
+        elif isinstance(modelfits[0], CumulativeMethod):
+            all_modelfits = [[modelfit.submodels[-1] for modelfit in modelfits]]
+        elif isinstance(modelfits[0], EventModel):
+            all_modelfits = [modelfits]
 
         # Step 2, get loglikelihood from left out subjects
         print()
         all_likelihoods = []
-        for est, estimates in enumerate(all_estimates):
+        for est, modelfits in enumerate(all_modelfits):
             if verbose:
                 print("Calculating likelihoods.")
 
@@ -291,7 +289,7 @@ class LOOCV():
                         self.loocv_loglikelihood(
                             data, 
                             participant, 
-                            estimates[pidx], 
+                            modelfits[pidx], 
                             cpus_model=cpus_model,
                             verbose=verbose
                         )
@@ -303,7 +301,7 @@ class LOOCV():
                         zip(
                             itertools.repeat(data),
                             self.participants_idx,
-                            estimates,
+                            modelfits,
                             itertools.repeat(1), #cpus
                             itertools.repeat(verbose),
                         )
@@ -313,49 +311,51 @@ class LOOCV():
             likelihoods = xr.DataArray(
                 np.expand_dims(np.array(loocv).astype(np.float64), axis=0),
                 dims=("n_event", "participant"),
-                coords={"n_event": np.array([estimates[0].n_events]),
+                coords={"n_event": np.array([modelfits[0].n_events]),
                     "participant": self.participants_idx},
                 name="loo_likelihood"
             )
             likelihoods.attrs['model_class'] = self.model_class
             likelihoods.attrs['model'] = self.model
-            likelihoods.attrs['n_events'] = np.array([estimate.n_events for estimate in estimates])
+            likelihoods.attrs['n_events'] = np.array([modelfit.n_events for modelfit in modelfits])
             if not np.all(likelihoods.n_events==likelihoods.n_events[0]):
                 likelihoods['n_event'] = 'variable'
             likelihoods.attrs['quick'] = self.quick
             
-            estimates_xr = likelihoods.copy()
-            estimates_xr.data = np.expand_dims(np.array(estimates), axis=0)
-            all_estimates[est] = estimates_xr
+            modelfits_xr = likelihoods.copy()
+            modelfits_xr.data = np.expand_dims(np.array(modelfits), axis=0)
+            all_modelfits[est] = modelfits_xr
             all_likelihoods.append(likelihoods)
 
-        #In case of eliminative, we can concat likelihoods and estimates
-        if self.model_class == hmp.models.EliminativeMethod:
+        #In case of eliminative, we can concat likelihoods and modelfits
+        if self.model_class == EliminativeMethod:
             all_likelihoods = xr.concat(all_likelihoods, dim="n_event")
             all_likelihoods.attrs['n_event'] = np.zeros(all_likelihoods.data.shape).astype(int)
             for ev in range(all_likelihoods.data.shape[0]):
-                all_likelihoods.attrs['n_event'][ev,:] = [estimate.n_events for estimate in all_estimates[ev].data[0,:]]
-            all_estimates = xr.concat(all_estimates, dim="n_event")
-            all_estimates.attrs['n_event'] = all_likelihoods.attrs['n_event']
+                all_likelihoods.attrs['n_event'][ev,:] = [modelfit.n_events for modelfit in all_modelfits[ev].data[0,:]]
+            all_modelfits = xr.concat(all_modelfits, dim="n_event")
+            all_modelfits.attrs['n_event'] = all_likelihoods.attrs['n_event']
         elif len(all_likelihoods) == 1:
             all_likelihoods = all_likelihoods[0]
-        if len(all_estimates) == 1:
-            all_estimates = all_estimates[0]
+        if len(all_modelfits) == 1:
+            all_modelfits = all_modelfits[0]
         
-        return all_likelihoods, all_estimates
+        #average_modelfit = get_average_modelfit_eventprobs(data, all_modelfits)
+        return all_likelihoods, all_modelfits #, average_modelfit, average_eventprobs
     
 
-    def loocv_estimate(self, data, participant, cpus_model=1, verbose=True):
+    def loocv_modelfit(self, data, participant, cpus_model=1, verbose=True):
         """Apply loocv estimation using either the provided model or function, while
         leaving out participant 'participant'
 
         Parameters 
         ----------
         data : Data to fit the model on. One of two options:
-            1. data from BaseTransformer
+            1. BaseData
             2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.model.pattern.
-            If using a 'function' for LOOCV (see init), it is recommended to provide PatternData to reduce RAM requirements.
+            If using a 'function' for LOOCV (see init), it is recommended to provide PatternData
+            or pattern to reduce RAM requirements.
         participant : str
             name of the participant to leave out
         cpus_model : int
@@ -366,7 +366,7 @@ class LOOCV():
         Returns
         -------
         hmp model
-            estimated hmp_model(s) on n-1 participants
+            fitted hmp_model(s) on n-1 participants
         """
 
         if verbose:
@@ -375,74 +375,74 @@ class LOOCV():
         # Extract data without left-out participant
         if isinstance(data, PatternData):
             data = hmp.patterndata.remove_participant(data, participant)
-        elif isinstance(data, hmp.preprocessors.pca.ProjPCA):
-            data = hmp.transformers.BaseTransformer.remove_participant(data, participant)
-        elif isinstance(data, xr.core.dataset.Dataset): #pca_cv
-            data = data.drop_sel(participant = [participant])
-            data = hmp.preprocessors.ProjPCA(data, **self.pca_kwargs)
+        elif isinstance(data, BaseData):
+            data = BaseData.remove_participant(data, participant)
+            if data.projection_type == 'identity':
+                data.pca_and_variance(**self.pca_kwargs)
 
         # Fit model on data
         if self.model_class == "function":
-            estimated_model = self.model(data, **self.function_kwargs)
+            fitted_model = self.model(data, **self.function_kwargs)
         else:
             if not self.quick: #same for Event and Eliminative
-                estimated_model = copy.deepcopy(self.model)
-                estimated_model.fit(data=data, cpus=cpus_model, verbose= False)
+                fitted_model = copy.deepcopy(self.model)
+                fitted_model.fit(data=data, cpus=cpus_model, verbose= False)
             else: #quick
                 if self.model_class == hmp.models.EventModel: #use prev params
-                    estimated_model = copy.deepcopy(self.model)
-                    estimated_model.fit(data=data, channel_pars=estimated_model.channel_pars,\
-                         time_pars=estimated_model.time_pars, cpus=cpus_model, verbose= False)
+                    fitted_model = copy.deepcopy(self.model)
+                    fitted_model.fit(data=data, channel_pars=fitted_model.channel_pars,\
+                         time_pars=fitted_model.time_pars, cpus=cpus_model, verbose= False)
                 elif self.model_class == hmp.models.EliminativeMethod: 
                 #use prev params per model
-                    estimated_model = []
+                    fitted_model = []
                     for n_events in range(1, self.model.max_events + 1):
-                        estimated_model.append(copy.deepcopy(self.model.submodels[n_events]))
-                        estimated_model[-1].fit(data=data, \
-                            channel_pars=estimated_model[-1].channel_pars, \
-                            time_pars=estimated_model[-1].time_pars, cpus=cpus_model, \
+                        fitted_model.append(copy.deepcopy(self.model.submodels[n_events]))
+                        fitted_model[-1].fit(data=data, \
+                            channel_pars=fitted_model[-1].channel_pars, \
+                            time_pars=fitted_model[-1].time_pars, cpus=cpus_model, \
                             verbose= False)
 
         #if pca_cv, attach pca weights to each model
         if self.pca_cv:
-            if isinstance(estimated_model, hmp.models.EventModel):
-                estimated_model.pca_weights = data.weights
-            elif isinstance(estimated_model, hmp.models.CumulativeMethod):
-                estimated_model.submodels[-1].pca_weights = data.weights
-            elif isinstance(estimated_model, hmp.models.EliminativeMethod):
-                for est_idx in range(estimated_model.max_events):
-                    estimated_model.submodels[est_idx+1].pca_weights = data.weights
-            elif isinstance(estimated_model, list): #from a function or quick elim
-                for est_idx in range(len(estimated_model)):
-                    #each estimate can also be eliminative or cumulative
-                    if isinstance(estimated_model[est_idx], hmp.models.EliminativeMethod):
-                        for est_idx2 in range(estimated_model[est_idx].max_events):
-                            estimated_model[est_idx].submodels[est_idx2+1].pca_weights = data.weights
-                    elif isinstance(estimated_model[est_idx], hmp.models.CumulativeMethod):
-                        estimated_model[est_idx].submodels[-1].pca_weights = data.weights
-                    elif isinstance(estimated_model[est_idx], hmp.models.EventModel):
-                        estimated_model[est_idx].pca_weights = data.weights
+            if isinstance(fitted_model, hmp.models.EventModel):
+                fitted_model.pca_weights = data.weights
+            elif isinstance(fitted_model, hmp.models.CumulativeMethod):
+                fitted_model.submodels[-1].pca_weights = data.weights
+            elif isinstance(fitted_model, hmp.models.EliminativeMethod):
+                for est_idx in range(fitted_model.max_events):
+                    fitted_model.submodels[est_idx+1].pca_weights = data.weights
+            elif isinstance(fitted_model, list): #from a function or quick elim
+                for est_idx in range(len(fitted_model)):
+                    #each fitte can also be eliminative or cumulative
+                    if isinstance(fitted_model[est_idx], hmp.models.EliminativeMethod):
+                        for est_idx2 in range(fitted_model[est_idx].max_events):
+                            fitted_model[est_idx].submodels[est_idx2+1].pca_weights = data.weights
+                    elif isinstance(fitted_model[est_idx], hmp.models.CumulativeMethod):
+                        fitted_model[est_idx].submodels[-1].pca_weights = data.weights
+                    elif isinstance(fitted_model[est_idx], hmp.models.EventModel):
+                        fitted_model[est_idx].pca_weights = data.weights
 
-        return estimated_model
+        return fitted_model
 
 
-    def loocv_loglikelihood(self, data, participant, estimate, cpus_model=1, verbose=False):
+    def loocv_loglikelihood(self, data, participant, modelfit, cpus_model=1, verbose=False):
         """Compute the log-likelihood of the fit.
 
-        Calculate loglikelihood of fit on participant using parameters from estimate,
+        Calculate loglikelihood of fit on participant using parameters from modelfit,
         either using single model or level based model.
 
         Parameters
         ----------
         data : Data to fit the model on. One of two options:
-            1. data from BaseTransformer
+            1. BaseData
             2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.model.pattern.
-            If using a 'function' for LOOCV (see init), it is recommended to provide PatternData to reduce RAM requirements.
+            If using a 'function' for LOOCV (see init), it is recommended to provide PatternData 
+            or pattern to reduce RAM requirements.
         participant : str
-            name of the participant to estimate likelihood
-        estimate : xarray.Dataset
-            estimate that has parameters to apply.
+            name of the participant to compute likelihood
+        modelfit : xarray.Dataset
+            modelfit that has parameters to apply.
         cpus_model : int
             Number of cpus to use to fit the models.
         verbose : bool
@@ -458,42 +458,76 @@ class LOOCV():
         # Extract data of left-out participant
         if isinstance(data, PatternData):
             data = hmp.patterndata.get_participants(data, participant)
-        elif isinstance(data, hmp.preprocessors.pca.ProjPCA):
-            data = hmp.transformers.BaseTransformer.get_participants(data, participant)
-        elif isinstance(data, xr.core.dataset.Dataset): #pca_cv
-            data = data.sel(participant = [participant])
-            base_kwargs = {k: self.pca_kwargs[k] for k in \
-                            ['interval_id', 'offset_end', 'offset_start',
-                              'min_duration', 'max_duration', 'reject_threshold',
-                              'verbose','common_variance','subject_zscore',
-                              'whiten','center'                             
-                             ] & self.pca_kwargs.keys()}
-            base_preprocess = hmp.preprocessors.BasePreprocessor(**base_kwargs)
-            data = base_preprocess.common_preprocess(data)
-            base_preprocess.data_format(data, estimate.pca_weights)
-            data = base_preprocess
+        elif isinstance(data, BaseData):
+            data = BaseData.get_participants(data, participant)
+            if data.projection_type == 'identity': #pca_cv
+                center = self.pca_kwargs.get('center', True)
+                whiten = self.pca_kwargs.get('whiten', True)
+                common_variance = self.pca_kwargs.get('common_variance', True)
+                subject_zscore = self.pca_kwargs.get('subject_zscore', True)
+                data.apply_pca_weights(modelfit.pca_weights, center=center)
+                data.apply_variance_ops(whiten=whiten, common_variance=common_variance,
+                                        subject_zscore=subject_zscore)
 
         # Calculate loglikelihood of model applied on data of participant
-        likelihood, _ = estimate.transform(data, cpus=cpus_model)
+        likelihood, _ = modelfit.transform(data, cpus=cpus_model)
 
         if len(likelihood) == 1:
             return likelihood[0]
         else:
             return likelihood
 
+def get_average_fit_eventprobs(modelfits, data: PatternData):
+    """
+    Return average modelfit(s) and eventprobs from list of fitted models.
 
+    Parameters
+    ----------
+    modelfits : xr.DataArray
+        output from LOOCV.fit(..), can be a 1d array or a 2d array. In the
+        latter case, an average is provided for every row. If there are 
+        modelfits with different numbers of events in a row, the average
+        per event number is returned.
+    data : PatternData
+        Data to transform given average modelfit.
+    """
+    all_averages = []
+    for row in modelfits:
+        row = np.squeeze(row)
+        ev_nrs = np.unique(row.n_events)
+        all_averages_row = []
+        for ev_nr in ev_nrs:
+            subrow = row[row.n_events==ev_nr]
+            average_modelfit = copy.deepcopy(subrow[0].item())
+            if len(subrow) > 1:
+                for subject in subrow[1:]:
+                    average_modelfit.time_pars += subject.item().time_pars
+                    average_modelfit.channel_pars += subject.item().channel_pars
+                average_modelfit.time_pars /= len(subrow)
+                average_modelfit.channel_pars /= len(subrow)
+            all_averages_row.append(average_modelfit)
+        if len(all_averages_row) == 1:
+            all_averages_row = all_averages_row[0]
+        all_averages.append(all_averages_row)
 
-
-## add function to return average model.
-# follow structures of estimates
-# if variable nr of events, return average for each number
-
-
-
+    all_eventprobs = []
+    if isinstance(all_averages[0], list):
+        all_eventprobs_row = []
+        for row in all_averages:
+            for average in row:
+                _, eventprobs = average.transform(data)
+                all_eventprobs_row.append(eventprobs)
+            all_eventprobs.append(all_eventprobs_row)
+    else:
+        for average in all_averages:
+            _, eventprobs = average.transform(data)
+            all_eventprobs.append(eventprobs)
+    
+    return all_averages, all_eventprobs
 
 ### Example loocv functions
 def example_simple_func(data, n_events, channel_pars=None, time_pars=None, verbose=False):
-    """Example of a simple function that estimates an n_event model.
+    """Example of a simple function that fits an n_event model.
 
     Note that this would normally not be done, as you could just provide
     this model directly to loocv(..). This is only an example of how a 
@@ -502,7 +536,7 @@ def example_simple_func(data, n_events, channel_pars=None, time_pars=None, verbo
     Example code
     -------------
     loocv_simple_func = hmp.loocv.LOOCV(example_simple_func, function_kwargs={'n_events' : 2})
-    lkh_simple_func, estimates_simple_func = loocv_simple_func.fit(pattern_data, cpus_cv=4, cpus_model=1)
+    lkh_simple_func, modelfit_simple_func = loocv_simple_func.fit(pattern_data, cpus_cv=4, cpus_model=1)
     """
 
     ev_model = hmp.models.EventModel(n_events=n_events)
@@ -516,7 +550,7 @@ def example_complex_func(
     This function first performs backwards estimation up to max_events,
     and follows this with a group-based model of n_events, informed
     by the selected backward model and the provided maps. It returns
-    both models, so for both the likelihood will be estimated.
+    both models, so for both the likelihood will be computed.
 
     Example code
     -------------
@@ -530,7 +564,7 @@ def example_complex_func(
                                                       'channel_map' : channel_map, 
                                                       'time_map': time_map, 
                                                       'grouping_dict': grouping_dict})   
-    lkh_complex_func, estimates_complex_func = loocv_complex_func.fit(pattern_data, \
+    lkh_complex_func, modelfits_complex_func = loocv_complex_func.fit(pattern_data, \
                                                             cpus_cv=4, cpus_model=1)
     """
 
@@ -544,7 +578,7 @@ def example_complex_func(
                                         time_map=time_map, 
                                         grouping_dict=grouping_dict)
     group_model.fit(data=data,
-                    channel_pars = eliminative_model.submodels[4].channel_pars,
-                    time_pars = eliminative_model.submodels[4].time_pars)
+                    channel_pars = eliminative_model.submodels[n_events].channel_pars,
+                    time_pars = eliminative_model.submodels[n_events].time_pars)
 
     return [eliminative_model, group_model]
