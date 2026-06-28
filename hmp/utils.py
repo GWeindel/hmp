@@ -9,7 +9,9 @@ from mne.io.constants import FIFF
 from mne.preprocessing import compute_current_source_density
 from numpy.random import RandomState
 from pandas import MultiIndex
+
 from hmp.basedata import BaseData
+
 
 def _check_basedata(base_data):
     if isinstance(base_data, BaseData):

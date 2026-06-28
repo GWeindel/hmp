@@ -7,11 +7,11 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from hmp.basedata import BaseData
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
 from hmp.patterndata import PatternData
 from hmp.patterns import Pattern
-from hmp.basedata import BaseData
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
