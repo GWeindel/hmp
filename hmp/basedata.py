@@ -31,7 +31,6 @@ Includes methods to:
 """
 
 import copy
-import typing
 from dataclasses import dataclass
 from warnings import warn
 
@@ -151,8 +150,7 @@ class BaseData:
     ##Classmethods
 
     @classmethod
-    @typing.override
-    def from_io_general( # noqa: PLR0912
+    def from_io_general( # noqa: PLR0912, PLR0913
                 cls, epoch_data: xr.Dataset, weights: xr.DataArray = None,
                 interval_id: str = 'rt',
                 crop: bool = False, crop_kwargs: dict = None,
@@ -264,9 +262,9 @@ class BaseData:
         return base_data
 
     #shortcuts from_io
-    @typing.override
     @staticmethod
-    def from_io_all(epoch_data: xr.Dataset, weights: xr.DataArray = None,
+    def from_io_all( # noqa: PLR0913
+                epoch_data: xr.Dataset, weights: xr.DataArray = None,
                 interval_id: str = 'rt', offset_start: float = 0, offset_end: float = 0,
                 min_duration: float = 0, max_duration: float = float('Inf'),
                 reject_amplitude: float = None, projection_type: str = None,
@@ -297,9 +295,9 @@ class BaseData:
                         variance_kwargs = {'whiten': whiten, 'common_variance': common_variance,
                                           'subject_zscore': subject_zscore})
 
-    @typing.override
     @staticmethod
-    def from_io_all_pca(epoch_data: xr.Dataset, weights: xr.DataArray = None,
+    def from_io_all_pca( # noqa: PLR0913
+                epoch_data: xr.Dataset, weights: xr.DataArray = None,
                 interval_id: str = 'rt', offset_start: float = 0, offset_end: float = 0,
                 min_duration: float = 0, max_duration: float = float('Inf'),
                 reject_amplitude: float = None, n_comp: float = None, center: bool = True,
