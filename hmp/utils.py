@@ -11,19 +11,15 @@ from numpy.random import RandomState
 from pandas import MultiIndex
 
 from hmp.basedata import BaseData
-from hmp.preprocessors.custom import ProjCustom
-from hmp.preprocessors.identity import ProjIdentity
-from hmp.preprocessors.pca import ProjPCA
-from hmp.preprocessors.base import BasePreprocessor
 
-def _check_preprocessed(preprocessed):
-    if isinstance(preprocessed, (ProjPCA, ProjIdentity, ProjCustom, BaseData)):
-        data = preprocessed.data
-    elif 'component' in preprocessed.dims:
-        data = preprocessed
+
+def _check_basedata(base_data):
+    if isinstance(base_data, BaseData):
+        data = base_data.data
+    elif 'component' in base_data.dims:
+        data = base_data
     else:
-        raise ValueError("preprocessed must be an hmp preprocessed object from a class"
-                             "in hmp.preprocessors")
+        raise ValueError("base_data must be an hmp base_data object")
     return data
 
 def _check_sf_consistency(epoch_data, estimates):
@@ -392,15 +388,15 @@ def centered_activity(
     return centered_data.assign_coords(trial_x_part)
 
 
-def condition_selection(preprocessed, condition_string, variable="event", method="equal"):
+def condition_selection(base_data, condition_string, variable="event", method="equal"):
     """Select a subset from preprocessed_data.
 
     The function selects epochs for which 'condition_string' is in 'variable' based on 'method'.
 
     Parameters
     ----------
-    preprocessed : xr.Dataset
-        preprocessed EEG data for hmp from the hmp.preprocessing classes
+    base_data : BaseDta
+        base_data object
     condition_string : str | num
         condition indicator for selection
     variable : str
@@ -414,7 +410,7 @@ def condition_selection(preprocessed, condition_string, variable="event", method
     data : xr.Dataset
         Subset of preprocessed_data.
     """
-    data = _check_preprocessed(preprocessed).unstack()
+    data = _check_basedata(base_data).unstack()
     data[variable] = data[variable].fillna("")
     if method == "equal":
         data = data.where(data[variable] == condition_string, drop=True)
@@ -468,12 +464,12 @@ def condition_selection_epoch(epoch_data, condition_string, variable="event", me
     return stacked_epoch_data.unstack()
 
 
-def participant_selection(preprocessed, participant):
-    """Select a participant from preprocessed_data.
+def participant_selection(base_data, participant):
+    """Select a participant from BaseData.
 
     Parameters
     ----------
-    preprocessed : xr.Dataset or hmp.preprocessors
+    base_data : xr.Dataset or BaseData
         preprocessed EEG data for hmp
     participant : str | num
         Name of the participant
@@ -483,7 +479,7 @@ def participant_selection(preprocessed, participant):
     data : xr.Dataset
         Subset of preprocessed_data.
     """
-    data = _check_preprocessed(preprocessed).unstack()
+    data = _check_basedata(base_data).unstack()
     data = data.sel(participant=participant, drop=False)
     if 'participant' not in data.dims:
         data = data.expand_dims('participant')

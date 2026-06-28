@@ -30,7 +30,7 @@ Includes methods to:
        (`common_variance`) and standardize the components for each participant.
 """
 
-import typing
+import copy
 from dataclasses import dataclass
 from warnings import warn
 
@@ -46,18 +46,20 @@ import hmp
 @dataclass
 class BaseData:
     """
-    Based data classes containing all data necessary for estimating HMP models.
+    BaseData class containing all data necessary for estimating HMP models.
 
     Note that __init__ does not perform any of the operations!
 
     Attributes
     ----------
-    data : xr.DataArray with dimensions [sample, component, trial], coordinates that
-           describe the dataset including recording, subject, epoch, and a trial
-           MultiIndex, and attributes sfreq and offset. Typically obtained
-           through class method 'from_io(..)'.
-    weights : xr.DataArray with dimensions [channel, component] and coordinates
-            channel (Fp1, CPz, ..) and component (0, 1, ..).
+    data : xr.DataArray
+        Data with dimensions [sample, component, trial], coordinates that
+        describe the dataset including recording, subject, epoch, and a trial
+        MultiIndex, and attributes sfreq and offset. Typically obtained
+        through class method 'from_io(..)'.
+    weights : xr.DataArray
+        DataArray with dimensions [channel, component] and coordinates
+        channel (Fp1, CPz, ..) and component (0, 1, ..).
         Default = None
     interval_id: str, optional
         Name of the variable that contains the trial intervals in the epoch_data
@@ -66,7 +68,7 @@ class BaseData:
 
     #Cropping parameters used
     crop : bool, optional
-        Crop data based on parameters below.
+        Crop data based on the duration and parameters below.
         Default = False
     offset_start : float, optional
         Time offset from interval start for cropping. Negative number extends
@@ -149,10 +151,9 @@ class BaseData:
     ##Classmethods
 
     @classmethod
-    @typing.override
-    def from_io( # noqa: PLR0912
+    def from_io_general( # noqa: PLR0912, PLR0913
                 cls, epoch_data: xr.Dataset, weights: xr.DataArray = None,
-                interval_id: str = None,
+                interval_id: str = 'rt',
                 crop: bool = False, crop_kwargs: dict = None,
                 reject: bool = False, reject_kwargs: dict = None,
                 projection_type: str = None, projection_kwargs: dict = None,
@@ -219,9 +220,8 @@ class BaseData:
             rts_arr = base_data.data.coords[base_data.interval_id].values.copy()
             max_rt = np.nanmax(rts_arr)
             if np.nanmax(rts_arr) > 500:
-                warn_str = f"Found intervals with a max value value of {np.round(max_rt,2)}\n,\
-                            assuming intervals are in milliseconds and converting to seconds"
-                warn(warn_str)
+                warn(f"Found intervals with a max value value of {np.round(max_rt,2)}\n,\
+                        assuming intervals are in milliseconds and converting to seconds")
 
         #crop data
         if crop:
@@ -263,10 +263,10 @@ class BaseData:
         return base_data
 
     #shortcuts from_io
-    @typing.override
     @staticmethod
-    def from_io_all(epoch_data: xr.Dataset, weights: xr.DataArray = None,
-                interval_id: str = None, offset_start: float = 0, offset_end: float = 0,
+    def from_io_all( # noqa: PLR0913
+                epoch_data: xr.Dataset, weights: xr.DataArray = None,
+                interval_id: str = 'rt', offset_start: float = 0, offset_end: float = 0,
                 min_duration: float = 0, max_duration: float = float('Inf'),
                 reject_amplitude: float = None, projection_type: str = None,
                 n_comp: float = None, center: bool = True, method_pca: str='svd',
@@ -283,7 +283,7 @@ class BaseData:
         All parameters are specified directly. See from_io(..) and BaseData
         for details on the parameters.
         """
-        return hmp.basedata.BaseData.from_io(epoch_data, weights, interval_id,
+        return hmp.basedata.BaseData.from_io_general(epoch_data, weights, interval_id,
                         crop = True, crop_kwargs = {'offset_start': offset_start,
                                                    'offset_end': offset_end},
                         reject = True, reject_kwargs = {'min_duration': min_duration,
@@ -296,10 +296,10 @@ class BaseData:
                         variance_kwargs = {'whiten': whiten, 'common_variance': common_variance,
                                           'subject_zscore': subject_zscore})
 
-    @typing.override
     @staticmethod
-    def from_io_all_pca(epoch_data: xr.Dataset, weights: xr.DataArray = None,
-                interval_id: str = None, offset_start: float = 0, offset_end: float = 0,
+    def from_io_all_pca( # noqa: PLR0913
+                epoch_data: xr.Dataset, weights: xr.DataArray = None,
+                interval_id: str = 'rt', offset_start: float = 0, offset_end: float = 0,
                 min_duration: float = 0, max_duration: float = float('Inf'),
                 reject_amplitude: float = None, n_comp: float = None, center: bool = True,
                 method_pca: str='svd', whiten: bool = True, common_variance: bool = True,
@@ -315,7 +315,7 @@ class BaseData:
         All parameters are specified directly. See from_io(..) and BaseData
         for details on the parameters.
         """
-        return hmp.basedata.BaseData.from_io(epoch_data, weights, interval_id,
+        return hmp.basedata.BaseData.from_io_general(epoch_data, weights, interval_id,
                         crop = True, crop_kwargs = {'offset_start': offset_start,
                                                    'offset_end': offset_end},
                         reject = True, reject_kwargs = {'min_duration': min_duration,
@@ -340,7 +340,7 @@ class BaseData:
         All parameters are specified directly. See from_io(..) and BaseData
         for details on the parameters.
         """
-        return hmp.basedata.BaseData.from_io(epoch_data,
+        return hmp.basedata.BaseData.from_io_general(epoch_data,
                         projection_type = 'pca',
                         projection_kwargs = {'n_comp': n_comp, 'center': center,
                                              'method_pca': method_pca},
@@ -503,7 +503,7 @@ class BaseData:
 
     @staticmethod
     def remove_participant(data, participant):
-        """Remove data from participant"""
+        """Remove data from participant."""
         data = copy.deepcopy(data)
         data.data = data.data.unstack()
         data.data = data.data.drop_sel(participant=[participant])
@@ -512,7 +512,7 @@ class BaseData:
 
     @staticmethod
     def get_participants(data, participants):
-        """Get data from specified participants"""
+        """Get data from specified participants."""
         data = copy.deepcopy(data)
         data.data = data.data.unstack()
         data.data = data.data.sel(participant=[participants], drop=False)

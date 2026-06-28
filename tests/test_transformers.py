@@ -3,7 +3,7 @@ from pathlib import Path
 from hmp import io
 from hmp import simulations
 import numpy as np
-from hmp.preprocessors import ProjPCA, ProjIdentity, ProjCustom
+import hmp
 
 DATA_DIR = Path("tests", "gen_data")
 DATA_DIR_A = DATA_DIR / "dataset_a"
@@ -41,12 +41,13 @@ def init_data():
 ])
 def test_proj_pca_custom_variants(init_data, n_comp, center, whiten, reject_threshold, min_duration, max_duration):
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data
-    pca = ProjPCA(epoch_data, n_comp=n_comp, center=center, whiten=whiten)
+    pca = hmp.basedata.BaseData.from_io_all_pca(epoch_data, n_comp=n_comp, center=center, whiten=whiten)
     assert pca.data.shape[1] == n_comp
     if whiten:
         assert np.allclose(pca.data.var(dim=['trial','sample']), 1, atol=0.05)
 
-    custom = ProjCustom(epoch_data, weights=pca.weights, center=center, whiten=whiten)
+    custom = hmp.basedata.BaseData.from_io_all(epoch_data, weights=pca.weights, center=center,
+                                               whiten=whiten, projection_type='custom')
     assert custom.data.shape[1] == n_comp
     if whiten:
         assert np.allclose(custom.data.var(dim=['trial','sample']), 1, atol=0.05)
@@ -59,7 +60,39 @@ def test_proj_pca_custom_variants(init_data, n_comp, center, whiten, reject_thre
 ])
 def test_proj_identity_variants(init_data, center, whiten, reject_threshold, min_duration, max_duration):
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data
-    identity = ProjIdentity(epoch_data, center=center, whiten=whiten)
+    identity = hmp.basedata.BaseData.from_io_all(epoch_data, center=center, whiten=whiten)
     assert identity.data.shape[1] == epoch_data.sizes['channel']
     if whiten:
         assert np.allclose(identity.data.var(dim=['trial','sample']), 1, atol=0.05)
+
+@pytest.mark.parametrize("n_comp,center,whiten,reject_threshold,min_duration,max_duration", [
+    (5, True, True, None, None, None),
+    (10, False, True, 0.1, None, None),
+    (1, True, False, None, 0.05, 1.5),
+    (2, False, False, 0.2, 0.1, 2.0),
+])
+def test_proj_pca_custom_variants_newbasedata(init_data, n_comp, center, whiten,
+                                 reject_threshold, min_duration, max_duration):
+    event_b, event_a, epoch_data, positions, sfreq, n_events = init_data
+    #pca = hmp.basedata.BaseData.from_io_all_pca(epoch_data, n_comp=n_comp, center=center, whiten=whiten)
+    pca = hmp.basedata.BaseData.from_io_general(epoch_data)
+    pca.crop_epochs()
+    pca.reject_epochs()
+    pca.pca_and_variance(n_comp=n_comp,center=center,whiten=whiten)
+
+    assert pca.data.shape[1] == n_comp
+    if whiten:
+        assert np.allclose(pca.data.var(dim=['trial','sample']), 1, atol=0.05)
+
+    custom = hmp.basedata.BaseData.from_io_all(epoch_data, weights=pca.weights, center=center,
+                                               whiten=whiten, projection_type='custom')
+    
+    custom = hmp.basedata.BaseData.from_io_general(epoch_data)
+    custom.crop_epochs()
+    custom.reject_epochs()
+    custom.project(projection_type='custom',center=center, weights=pca.weights)
+    custom.apply_variance_ops(whiten=whiten)
+
+    assert custom.data.shape[1] == n_comp
+    if whiten:
+        assert np.allclose(custom.data.var(dim=['trial','sample']), 1, atol=0.05)

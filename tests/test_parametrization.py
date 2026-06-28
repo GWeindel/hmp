@@ -2,10 +2,10 @@ import pytest
 from pathlib import Path
 from hmp import io
 
+import hmp
 from hmp.patterndata import PatternData
 from hmp.patterns import Pattern, HalfSine
 from hmp import distributions
-from hmp.preprocessors import ProjPCA
 from hmp.models import EventModel
 import numpy as np
 from test_io import init_data
@@ -16,7 +16,7 @@ DATA_DIR_B = DATA_DIR / "dataset_b"
 
 def data():
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
-    hmp_data = ProjPCA(epoch_data, n_comp=5)
+    hmp_data = hmp.basedata.BaseData.from_io_all_pca(epoch_data, n_comp=5)
     return event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events
 
 @pytest.mark.parametrize("width, template",
@@ -33,7 +33,7 @@ def test_patterns(width, template):
     else:
         pattern = Pattern(template, width)
     print(pattern.template)
-    pattern_data = PatternData.from_preprocessor(hmp_data, pattern=pattern)
+    pattern_data = PatternData.from_basedata(hmp_data, pattern=pattern)
 
     model = EventModel(pattern=pattern, n_events=n_events)
     model.fit_transform(pattern_data)
@@ -51,7 +51,7 @@ def test_patterns(width, template):
         pattern = HalfSine(width)
     else:
         pattern = Pattern(template, width)
-    pattern_data = PatternData.from_preprocessor(hmp_data, pattern=pattern)
+    pattern_data = PatternData.from_basedata(hmp_data, pattern=pattern)
 
     model = EventModel(pattern=pattern, n_events=n_events)
     model.fit_transform(pattern_data)
