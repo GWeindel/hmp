@@ -57,7 +57,7 @@ class BaseModel(ABC):
                      f"than in model {self.pattern}. Data pattern is used.")
             self.pattern = data.pattern
         else: #assume preprocessed (is checked later)
-            pattern_data = PatternData.from_preprocessor(data, self.pattern)
+            pattern_data = PatternData.from_basedata(data, self.pattern)
         return pattern_data
 
     def _time_to_samples(self, time, sfreq):

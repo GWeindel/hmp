@@ -15,11 +15,11 @@ from test_io import init_data
 def test_cumulative_simple():
     """ test a simple fit_transform on perfect data and compare to ground truth."""
     event_c, epoch_data, positions, sfreq, n_events = init_data_large()
-    hmp_data = hmp.preprocessors.ProjPCA(epoch_data, n_comp=2).data
+    hmp_data = hmp.basedata.BaseData.from_io_all_pca(epoch_data, n_comp=2).data
     # Data b is without noise, recovery should be perfect
     data_c = hmp.utils.participant_selection(hmp_data, 'c')
     pattern = HalfSine()
-    trial_data_c = PatternData.from_preprocessor(data_c)
+    trial_data_c = PatternData.from_basedata(data_c)
     true_model = EventModel(n_events=n_events)
     # Recover generating parameters
     sim_source_times, true_pars, true_magnitudes, _ = \

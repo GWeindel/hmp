@@ -14,7 +14,7 @@ from test_io import init_data, init_data_large, init_data_short
 
 def data():
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
-    hmp_data = hmp.preprocessors.ProjPCA(epoch_data, n_comp=5)
+    hmp_data = hmp.basedata.BaseData.from_io_all_pca(epoch_data, n_comp=5)
     return event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events
 
 def test_fixed_simple():
@@ -23,7 +23,7 @@ def test_fixed_simple():
     # Data b is without noise, recovery should be perfect
     data_b = hmp.utils.participant_selection(hmp_data.data, 'b')
     pattern = HalfSine()
-    pdata_b = PatternData.from_preprocessor(data_b, pattern=pattern)
+    pdata_b = PatternData.from_basedata(data_b, pattern=pattern)
     time_distribution = Gamma()
     model = EventModel(distribution=time_distribution, pattern=pattern, n_events=n_events)
     # Recover generating parameters
@@ -45,7 +45,7 @@ def test_fixed_simple():
     # test the difference between electrode values at event times
     assert np.isclose(np.sum(np.abs(true_topos.data - test_topos.data)), 0, atol=1e-4, rtol=0)
     # Test whether likelihood is the expected one
-    assert np.isclose(lkh_b, np.array(101.31), atol=1e-2, rtol=0)
+    assert np.isclose(lkh_b, np.array(101.39), atol=1e-2, rtol=0)
 
     #locations
     locations = np.zeros(n_events+1, dtype=int)
@@ -53,7 +53,7 @@ def test_fixed_simple():
     noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b)
     model = EventModel(n_events=n_events, location=25)
     noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b,)
-    assert np.isclose(noloc_loglikelihood, np.array(101.31), atol=1e-2, rtol=0)
+    assert np.isclose(noloc_loglikelihood, np.array(101.39), atol=1e-2, rtol=0)
 
     # testing recovery of attributes
     model.xrlikelihoods
@@ -70,7 +70,8 @@ def test_fixed_csd():
 def test_fixed_short():
     """ test very short latencies """
     event_d, epoch_data, positions, sfreq, n_events = init_data_short()
-    hmp_data = hmp.preprocessors.ProjIdentity(epoch_data)
+    hmp_data = hmp.basedata.BaseData.from_io_general(epoch_data, crop=True,
+                                                     reject = True, apply_variance=True)
     model = EventModel(n_events=n_events)
 
     #Estimate
@@ -89,9 +90,9 @@ def test_fixed_grouping():
     
     hmp_data_a = hmp.utils.participant_selection(hmp_data.data, 'a')
     hmp_data_b = hmp.utils.participant_selection(hmp_data.data, 'b')
-    pdata = PatternData.from_preprocessor(hmp_data)
-    pdata_a = PatternData.from_preprocessor(hmp_data_a)
-    pdata_b = PatternData.from_preprocessor(hmp_data_b)
+    pdata = PatternData.from_basedata(hmp_data)
+    pdata_a = PatternData.from_basedata(hmp_data_a)
+    pdata_b = PatternData.from_basedata(hmp_data_b)
 
     model = EventModel(n_events=n_events)
     # Recover generating parameters
@@ -143,7 +144,7 @@ def test_fixed_grouping():
 def test_starting_points():
     _, _, epoch_data, hmp_data, positions, sfreq, n_events = data()
     pattern = HalfSine()
-    pdata = PatternData.from_preprocessor(hmp_data, pattern=pattern)
+    pdata = PatternData.from_basedata(hmp_data, pattern=pattern)
     # Testing starting points
     model_sp = EventModel(pattern=pattern, n_events=n_events, starting_points=2, max_duration=1000)
     model_sp.fit(pdata, verbose=True, cpus=2)

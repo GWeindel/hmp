@@ -10,7 +10,6 @@ from . import (
     models,
     patterndata,
     patterns,
-    preprocessors,
     utils,
     visu,
 )
@@ -21,5 +20,5 @@ except PackageNotFoundError:
     __version__ = "unknown"
 
 
-__all__ = ["models", "simulations", "utils", "visu", "io", "preprocessors", "patterns",
+__all__ = ["models", "simulations", "utils", "visu", "io", "patterns",
            "patterndata", "basedata", "distributions" ,"crossvalidation", "__version__"]
