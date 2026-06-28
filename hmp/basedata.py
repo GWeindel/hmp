@@ -516,8 +516,6 @@ class BaseData:
         data = copy.deepcopy(data)
         data.data = data.data.unstack()
         data.data = data.data.sel(participant=[participants], drop=False)
-       # if 'participant' not in actual_data.dims:
-       #     actual_data = actual_data.expand_dims('participant')
         data.data = data.data.stack(trial=['participant','epoch'])
         return data
 
