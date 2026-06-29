@@ -12,6 +12,8 @@ import numpy as np
 from xarray import Dataset
 from numpy.typing import DTypeLike
 import hmp.io.utils as utils
+import hmp.io.preprocessing as preprocessing
+
 from mne import read_epochs
 from mne.epochs import Epochs
 from mne.io import read_raw_fif, read_raw_bdf
@@ -127,12 +129,9 @@ def read_mne_epochs(
         for epochs, valid_epoch_index in epochs_list
     ]
 
-    # Recover hp and lp and sfreq from first epochs object
-    # to display the correct info
-    preprocessing_kwargs['sfreq'] = epochs_list[0][0].info['sfreq']
-    preprocessing_kwargs['lowpass'] = epochs_list[0][0].info['lowpass']
-    preprocessing_kwargs['highpass'] = epochs_list[0][0].info['highpass']
-    epoch_data, info = utils._concat_recordings(epoch_data, recordings, montage, datatype,
+    # Recover info from first epochs object
+    info = epochs_list[0][0].info
+    epoch_data = utils._concat_recordings(epoch_data, recordings, datatype,
                     {}, preprocessing_kwargs, subj_name)
 
     return epoch_data, info
@@ -151,9 +150,10 @@ def _process_epoch_dataset(recording, montage, verbose,
     # filtering and resampling if needed and take data, events, preprocessing_kwargs
     # as input and output data and events, see example in utils.preprocess_raw
     if preprocessing_fn is not None:
-        data, events = preprocessing_fn(data, events, preprocessing_kwargs)
+        data, events = preprocessing_fn(data, montage, None,
+                   verbose, preprocessing_kwargs)
     else:
-        data, _ = utils.preprocess_data(data, montage, None,
-                   preprocessing_kwargs, verbose)
+        data, _ = preprocessing.preprocess_data(data, montage, None,
+                   verbose, preprocessing_kwargs)
     valid_epoch_index = [x for x, y in enumerate(data.drop_log) if len(y) == 0]
     return data, valid_epoch_index

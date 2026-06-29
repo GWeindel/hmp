@@ -6,9 +6,8 @@ import xarray as xr
 import os 
 
 from mne import Epochs, create_info
-from mne.io import Raw
 from mne.epochs import make_metadata, EpochsFIF
-from mne.channels import DigMontage, make_standard_montage, make_dig_montage
+from mne.channels import DigMontage
 from warnings import warn
     
 def _defaults_check_epoching(kwargs):
@@ -54,121 +53,6 @@ def _format_trigger_description(stimulus_id, response_id):
     if any(not k.startswith("response/") for k in response_id.keys()):
         response_id = {f"response/{k}": v for k, v in response_id.items()}
     return stimulus_id, response_id
-
-def preprocess_data(data: Raw | Epochs,
-                   montage: str | DigMontage | None,
-                   events: np.ndarray | None,
-                   preprocessing_kwargs: dict,
-                   verbose: bool) -> (Raw, np.ndarray):
-    """
-    Apply minimal preprocessing on the raw, continuous, M/EEG data.
-
-    This function:
-        1) re-references the data
-        2) applies the desired channel montage
-        3) Filters and resamples the data
-
-    Parameters
-    ----------
-    data : mne.Raw
-        MNE Raw object
-    montage: str or mne.channels.DigMontage
-        Either an MNE DigMontage or a string for a bulit-in MNE montage (see 
-        mne.channels.get_builtin_montages()) that is applied to all recordings.
-    events: np.ndarray
-        A 2D numpy array with dimension event (one row per trigger) X description (sample, 0, trigger code)
-    preprocessing_kwargs: dict
-        arguments to be passed to the preprocessing functions. If no
-        'preprocessing_fn' is specified, only the following keys are relevant:
-            highpass : float
-                high pass filter provided to MNE's filtering function
-            lowpass : float
-                lowpass filter provided to MNE's filtering function
-            sfreq: float
-                Desired sampling frequency, can only be lower or equal to the one of the data.
-                The downsampling is performed on the raw data which can result in time jitter
-                in the event triggers. This is minimzed in HMP by providing the events to the 
-                resampling function. Users who prefer to perform that at the epoch level can use
-                the 'decim' argument in epoching_kargs
-            reference: str
-                Electrodes or method to use for referencing (see mne.set_eeg_reference).
-                Average (common reference) or REST are highly recommended to fit HMP models.
-            pick_channels: list of str
-                Channels to use, can be list of channel names or 'eeg'/'meg'
-    verbose: bool
-        Whether to print outputs or not
-
-    Returns
-    -------
-    data: Raw
-        The preprocessed mne.Raw object
-    events: np.ndarray
-        The events recorded in the data eventually resampled to the new sampling frequency
-    """
-    # Load data for filtering/resampling
-    data.load_data()
-    data.rename_channels({'FP1': 'Fp1', 'FP2': 'Fp2'}, on_missing='ignore')
-    # Select channels
-    data = data.pick(preprocessing_kwargs["pick_channels"])
-
-    # Apply the desired montage
-    if montage is not None:
-        data = _apply_montage(data, montage)
-
-    # Set the reference
-    if preprocessing_kwargs["reference"] is not None:
-        if preprocessing_kwargs['reference'] == 'REST' and montage is None:
-            raise ValueError('Cannot use REST reference without a valid montage')
-        data = data.set_eeg_reference(preprocessing_kwargs["reference"])
-
-    # Resample here to fasten preprocessing steps, feed events to avoid
-    # timing problem after resampling, if user prefer epoching resample 
-    # they can use the 'decim' argument in epoching_kwargs
-    data, events = _filtering_resampling(data, preprocessing_kwargs, events, verbose)
-    return data, events
-    
-def _create_montage(ch_names, montage):
-    if isinstance(montage, str):
-        montage = make_standard_montage(montage)
-    elif not isinstance(montage, DigMontage):
-        raise ValueError("Unrecognized montage object, should either be a string"
-                        "from one of the list in mne.channels.get_builtin_montages()"
-                        "or a mne.DigMontage")
-    montage
-    pos = montage.get_positions()['ch_pos']
-    
-    montage = make_dig_montage(
-        ch_pos={ch: pos[ch] for ch in ch_names},
-        coord_frame='head'
-    )
-    return montage
-
-def _apply_montage(data, montage):
-    montage = _create_montage(data.ch_names, montage)
-    # Correct for eventual capitalization differences
-    data.rename_channels({c:n for c,n in zip(data.ch_names,
-        [ch for ch in montage.ch_names if ch.lower() in\
-         [x.lower() for x in data.info["ch_names"]]])})
-    data.set_montage(montage)
-    return data
-
-def _filtering_resampling(data, preprocessing_kwargs, events, verbose):
-    lowpass = preprocessing_kwargs['lowpass']
-    if preprocessing_kwargs['sfreq'] is not None:
-        if preprocessing_kwargs['sfreq'] < data.info["sfreq"]:  # Downsampling
-            if lowpass is None:
-                lowpass = preprocessing_kwargs['sfreq'] / 3.1
-            elif lowpass > preprocessing_kwargs['sfreq'] / 3.1:
-                raise ValueError(f"Requested low pass filter of {lowpass}"
-                     f"is too high for desired sampling frequency of {preprocessing_kwargs['sfreq']}")
-    if preprocessing_kwargs['highpass'] is not None or lowpass is not None:
-        data.filter(l_freq=preprocessing_kwargs['highpass'], h_freq=lowpass, verbose=verbose)
-    if preprocessing_kwargs['sfreq'] is not None:
-        if isinstance(data, EpochsFIF):
-            data = data.resample(preprocessing_kwargs['sfreq'])
-        else:
-            data, events = data.resample(preprocessing_kwargs['sfreq'], events=events)
-    return data, events
 
 def _epoching_raw(data, events, stimulus_id, response_id, verbose, epoching_kwargs):
     if len(stimulus_id) == 0:
@@ -274,7 +158,7 @@ def hmp_data_format(
     return data
 
 def create_info_hmp(ch_names: list[str],
-                    montage: str | DigMontage,
+                    montage: DigMontage,
                     preprocessing_kwargs: dict,
                     datatype:str):
     '''Create minimal info object for plotting in hmp.visu
@@ -283,22 +167,20 @@ def create_info_hmp(ch_names: list[str],
     ----------
     ch_names: list of str
         List of channels in the data
-    montage: str or mne.channels.DigMontage
-        Either an MNE DigMontage or a string for a bulit-in MNE montage (see 
-        mne.channels.get_builtin_montages()) that is applied to all recordings.
-    preprocessing_kwargs: dict
-        Dictionnary containing values for sfreq and high/lowpass filters
+    montage: mne.channels.DigMontage
+        An MNE DigMontage that is applied to all recordings.
+    sfreq: float
+        Sampling frequency of the signal
     datatype: str
         MNE compatible data type in the data (e.g. 'eeg' or 'meg')
     '''
-    info = create_info(ch_names=ch_names, sfreq=preprocessing_kwargs['sfreq'],
+    info = create_info(ch_names=ch_names, sfreq=sfreq,
                        ch_types=np.repeat(datatype, len(ch_names)))
     if montage is not None:
-        montage = _create_montage(ch_names, montage)
         info.set_montage(montage)
     return info
 
-def _concat_recordings(epoch_data, recordings, montage, datatype,
+def _concat_recordings(epoch_data, recordings, datatype,
                       epoching_kwargs={}, preprocessing_kwargs={}, subj_names=None):
     '''Concatenate list of xr.Datasets into a common xr.Dataset
     '''
@@ -319,15 +201,12 @@ def _concat_recordings(epoch_data, recordings, montage, datatype,
     n_trials = (
         (~np.isnan(epoch_data.data[:, :, :, 0].data)).sum(axis=1)[:, 0].sum()
     )  # Compute number of trial based on trial where first sample is nan
-    # Creating info, should all be shared
-    info = create_info_hmp(list(epoch_data.channel.values),
-                       montage, preprocessing_kwargs, datatype)
 
     epoch_data = epoch_data.assign_attrs(
         **epoching_kwargs,
         **preprocessing_kwargs
     )
-    return epoch_data, info
+    return epoch_data
 
 def _check_montage(montage):
     if montage is None:

@@ -14,6 +14,8 @@ import numpy as np
 from xarray import Dataset
 from numpy.typing import DTypeLike
 import hmp.io.utils as utils
+import hmp.io.preprocessing as preprocessing
+
 from mne import events_from_annotations
 from mne.channels import DigMontage
 
@@ -170,12 +172,9 @@ def read_bids_raw(
         for epochs, valid_epoch_index in epochs_list
     ]
     recordings = [x.fpath for x in recordings]
-    # Recover hp and lp and sfreq from first epochs object
-    # to display the correct info
-    preprocessing_kwargs['sfreq'] = epochs_list[0][0].info['sfreq']
-    preprocessing_kwargs['lowpass'] = epochs_list[0][0].info['lowpass']
-    preprocessing_kwargs['highpass'] = epochs_list[0][0].info['highpass']
-    epoch_data, info = utils._concat_recordings(epoch_data, recordings, montage, bids_kwargs['datatypes'],
+    # Recover info from first epochs object
+    info = epochs_list[0][0].info
+    epoch_data = utils._concat_recordings(epoch_data, recordings, bids_kwargs['datatypes'],
                       epoching_kwargs, preprocessing_kwargs)
     bids_info = [_parse_bids_name(r) for r in epoch_data.recording.values]
 
@@ -208,10 +207,11 @@ def _process_bids_dataset(recording, montage, centering_id, response_id, verbose
     # filtering and resampling if needed and take data, events, preprocessing_kwargs
     # as input and output data and events, see example in utils.preprocess_raw
     if preprocessing_fn is not None:
-        data, events = preprocessing_fn(data, events, preprocessing_kwargs)
+        data, events = preprocessing_fn(data, montage, events,
+                   verbose, preprocessing_kwargs)
     else:
-        data, events = utils.preprocess_data(data, montage, events,
-                   preprocessing_kwargs, verbose)
+        data, events = preprocessing.preprocess_data(data, montage, events,
+                   verbose, preprocessing_kwargs)
     
     # Epoching + resampling + metadata creation
     epochs, valid_epoch_index = utils._epoching_raw(
@@ -242,7 +242,8 @@ def _bids_to_annot(path, detected_event_id, centering_id, response_id, verbose):
                 new_resp_id[old_resp_id[v]] = int(new_v)
         else:
             not_found.append(v)
-    print(f'Did not found equivalence of triggers {not_found} in provided centered_id/response_id')
+    if len(not_found)>0:
+        print(f'Did not found equivalence of triggers {not_found} in provided centered_id/response_id')
     return new_stim_id, new_resp_id
 
 def check_bids_kwargs(bids_kwargs):
