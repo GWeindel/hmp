@@ -75,7 +75,7 @@ def test_proj_pca_custom_variants_newbasedata(init_data, n_comp, center, whiten,
                                  reject_threshold, min_duration, max_duration):
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data
     #pca = hmp.basedata.BaseData.from_io_all_pca(epoch_data, n_comp=n_comp, center=center, whiten=whiten)
-    pca = hmp.basedata.BaseData.from_io_general(epoch_data)
+    pca = hmp.basedata.BaseData.from_io(epoch_data)
     pca.crop_epochs()
     pca.reject_epochs()
     pca.pca_and_variance(n_comp=n_comp,center=center,whiten=whiten)
@@ -87,7 +87,7 @@ def test_proj_pca_custom_variants_newbasedata(init_data, n_comp, center, whiten,
     custom = hmp.basedata.BaseData.from_io_all(epoch_data, weights=pca.weights, center=center,
                                                whiten=whiten, projection_type='custom')
     
-    custom = hmp.basedata.BaseData.from_io_general(epoch_data)
+    custom = hmp.basedata.BaseData.from_io(epoch_data)
     custom.crop_epochs()
     custom.reject_epochs()
     custom.project(projection_type='custom',center=center, weights=pca.weights)

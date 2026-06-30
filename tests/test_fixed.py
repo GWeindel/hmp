@@ -70,8 +70,8 @@ def test_fixed_csd():
 def test_fixed_short():
     """ test very short latencies """
     event_d, epoch_data, positions, sfreq, n_events = init_data_short()
-    hmp_data = hmp.basedata.BaseData.from_io_general(epoch_data, crop=True,
-                                                     reject = True, apply_variance=True)
+    hmp_data = hmp.basedata.BaseData.from_io(epoch_data, crop=True,
+                                                reject = True, apply_variance=True)
     model = EventModel(n_events=n_events)
 
     #Estimate

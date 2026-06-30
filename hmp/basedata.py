@@ -9,7 +9,8 @@ Option 1, specify all information in the 'from_io' call:
                     reject=True, apply_variance=True, projection_type='pca',
                     projection_kwargs={'n_comp': 10})
 
-Option 2, first build an object with from_io(io_data), then apply operations:
+Option 2, first build an object with from_io(io_data), then apply operations
+in the following order:
 
     preprocessed = hmp.basedata.BaseData.from_io(io_data)
     preprocessed.crop_epochs(interval_id='RT')
@@ -22,7 +23,7 @@ Includes methods to:
        (e.g. response), optionally including a fixed offset after the interval.
     2. Reject epochs whose interval exceeds lower and upper interval limits
        (`min_duration` and `max_duration`) or amplitude exceeds a threshold
-    3. Center the data (recommended for covariance based approaches)
+    3. Center the data
     4. Project channels to new virtual channel, either based on PCA,
         an arbitrary linear combination of channels,
         or the identity of the channels.
@@ -100,7 +101,7 @@ class BaseData:
         explaining at least n_comp% variance are retained.  If None, user input requested.
         Default = None
     center : bool, optional
-        Whether to center the data across the last dimension before projection
+        Whether to center the data within each epoch for each channel before projection
         Default = True
     method_pca: str, optional
         Perform PCA ('pca') or SVD decomposition ('svd') for PCA
@@ -150,7 +151,7 @@ class BaseData:
     ##Classmethods
 
     @classmethod
-    def from_io_general( # noqa: PLR0912, PLR0913
+    def from_io( # noqa: PLR0912, PLR0913
                 cls, epoch_data: xr.Dataset, weights: xr.DataArray = None,
                 interval_id: str = 'rt',
                 crop: bool = False, crop_kwargs: dict = None,
@@ -217,10 +218,7 @@ class BaseData:
         #if crop or reject, check for ms
         if crop or reject:
             rts_arr = base_data.data.coords[base_data.interval_id].values.copy()
-            max_rt = np.nanmax(rts_arr)
-            if np.nanmax(rts_arr) > 500:
-                warn(f"Found intervals with a max value value of {np.round(max_rt,2)}\n,\
-                        assuming intervals are in milliseconds and converting to seconds")
+            hmp.basedata._check_scale_ms(rts_arr)
 
         #crop data
         if crop:
@@ -263,39 +261,6 @@ class BaseData:
 
     #shortcuts from_io
     @staticmethod
-    def from_io_all( # noqa: PLR0913
-                epoch_data: xr.Dataset, weights: xr.DataArray = None,
-                interval_id: str = 'rt', offset_start: float = 0, offset_end: float = 0,
-                min_duration: float = 0, max_duration: float = float('Inf'),
-                reject_amplitude: float = None, projection_type: str = None,
-                n_comp: float = None, center: bool = True, method_pca: str='svd',
-                whiten: bool = True, common_variance: bool = True,
-                subject_zscore: bool = True):
-        """
-        Create a BaseData instance from data from io.
-
-        Includes:
-         - epoch cropping
-         - epoch rejection
-         - projection
-         - variance operations.
-        All parameters are specified directly. See from_io(..) and BaseData
-        for details on the parameters.
-        """
-        return hmp.basedata.BaseData.from_io_general(epoch_data, weights, interval_id,
-                        crop = True, crop_kwargs = {'offset_start': offset_start,
-                                                   'offset_end': offset_end},
-                        reject = True, reject_kwargs = {'min_duration': min_duration,
-                                                        'max_duration': max_duration,
-                                                        'reject_amplitude': reject_amplitude},
-                        projection_type = projection_type,
-                        projection_kwargs = {'n_comp': n_comp, 'center': center,
-                                             'method_pca': method_pca},
-                        apply_variance = True,
-                        variance_kwargs = {'whiten': whiten, 'common_variance': common_variance,
-                                          'subject_zscore': subject_zscore})
-
-    @staticmethod
     def from_io_all_pca( # noqa: PLR0913
                 epoch_data: xr.Dataset, weights: xr.DataArray = None,
                 interval_id: str = 'rt', offset_start: float = 0, offset_end: float = 0,
@@ -314,7 +279,7 @@ class BaseData:
         All parameters are specified directly. See from_io(..) and BaseData
         for details on the parameters.
         """
-        return hmp.basedata.BaseData.from_io_general(epoch_data, weights, interval_id,
+        return hmp.basedata.BaseData.from_io(epoch_data, weights, interval_id,
                         crop = True, crop_kwargs = {'offset_start': offset_start,
                                                    'offset_end': offset_end},
                         reject = True, reject_kwargs = {'min_duration': min_duration,
@@ -326,27 +291,6 @@ class BaseData:
                         apply_variance = True,
                         variance_kwargs = {'whiten': whiten, 'common_variance': common_variance,
                                           'subject_zscore': subject_zscore})
-    @staticmethod
-    def from_io_pca_variance(epoch_data: xr.Dataset, n_comp: float = None, center: bool = True,
-                    method_pca: str='svd', whiten: bool = True, common_variance: bool = True,
-                    subject_zscore: bool = True):
-        """
-        Create a BaseData instance from data from io.
-
-        Includes:
-         - PCA
-         - variance operations.
-        All parameters are specified directly. See from_io(..) and BaseData
-        for details on the parameters.
-        """
-        return hmp.basedata.BaseData.from_io_general(epoch_data,
-                        projection_type = 'pca',
-                        projection_kwargs = {'n_comp': n_comp, 'center': center,
-                                             'method_pca': method_pca},
-                        apply_variance = True,
-                        variance_kwargs = {'whiten': whiten, 'common_variance': common_variance,
-                                          'subject_zscore': subject_zscore})
-
 
     ## Public functions
 
@@ -361,7 +305,8 @@ class BaseData:
         self._center_data()
         self._format_data()
 
-    def apply_variance_ops(self, whiten=True, common_variance=True, subject_zscore=True):
+    def apply_variance_ops(self, whiten: bool = True, common_variance: bool = True,
+                            subject_zscore: bool = True):
         """
         Apply three variance operators, typically after projection.
 
@@ -375,12 +320,9 @@ class BaseData:
             z-score each component for each participant
             Default = True
         """
-        if whiten:
-            self.whiten = True
-        if common_variance:
-            self.common_variance = True
-        if subject_zscore:
-            self.subject_zscore = True
+        self.whiten = whiten
+        self.common_variance = common_variance
+        self.subject_zscore = subject_zscore
         self._apply_variance_ops()
         self._format_data()
 
@@ -540,6 +482,16 @@ class BaseData:
         self.data = self.data.rename({'component': 'channel'})
         self.data = self.data.transpose('trial','channel','sample')
 
+    @staticmethod
+    def _check_scale_ms(rts, warning=True):
+        max_rt = np.nanmax(rts)
+        if max_rt > 500:
+            if warning:
+                warn(f"Found intervals with a max value value of {np.round(max_rt,2)}\n,\
+                        assuming intervals are in milliseconds and converting to seconds")
+            rts /= 1000
+        return rts
+
     def _center_data(self):
         """Center data per epoch."""
         self.center = True
@@ -574,9 +526,7 @@ class BaseData:
         self.crop = True
 
         rts_arr = self.data.coords[self.interval_id].values.copy()
-        max_rt = np.nanmax(rts_arr)
-        if max_rt > 500:
-            rts_arr /= 1000
+        rts_arr = hmp.basedata._check_scale_ms(rts_arr, warning=False)
         offset_end_samples = int(np.rint(self.offset_end * self.sfreq))
         offset_start_samples = int(np.rint(self.offset_start * self.sfreq))
 
@@ -587,11 +537,12 @@ class BaseData:
         min_rt = min(rts_arr[rts_arr > 0])
         if min_rt < 10:
            warn("The shortest interval is less than 10 samples. "
-                "Consider specifying too short trials using the `min_duration` parameter "
+                "Consider rejecting too short trials using the `min_duration` parameter "
                 "or increasing sampling frequency of the signal.")
 
         time0 = np.argmin(np.abs(self.data.sample.values))
-        if time0 + offset_start_samples < 0:
+        min_sample = np.min(self.data.sample.values)
+        if min_sample > offset_start_samples:
             raise ValueError("Offset before start is too large for the epoch data provided."
                              f"Max is {time0/self.sfreq} seconds.")
 
@@ -637,10 +588,7 @@ class BaseData:
             self.min_duration = 1 / self.sfreq
 
         rts_arr = self.data.coords[self.interval_id].values.copy()
-        max_rt = np.nanmax(rts_arr)
-        if max_rt > 500:
-            rts_arr /= 1000
-
+        rts_arr = hmp.basedata._check_scale_ms(rts_arr, warning=False)
         rts_arr[rts_arr > self.max_duration] = 0
         rts_arr[rts_arr < self.min_duration] = 0
         rt_criteria_rej = len(rts_arr[rts_arr == 0])
