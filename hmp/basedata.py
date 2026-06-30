@@ -218,7 +218,7 @@ class BaseData:
         #if crop or reject, check for ms
         if crop or reject:
             rts_arr = base_data.data.coords[base_data.interval_id].values.copy()
-            hmp.basedata._check_scale_ms(rts_arr)
+            hmp.basedata.BaseData._check_scale_ms(rts_arr)
 
         #crop data
         if crop:
@@ -482,16 +482,6 @@ class BaseData:
         self.data = self.data.rename({'component': 'channel'})
         self.data = self.data.transpose('trial','channel','sample')
 
-    @staticmethod
-    def _check_scale_ms(rts, warning=True):
-        max_rt = np.nanmax(rts)
-        if max_rt > 500:
-            if warning:
-                warn(f"Found intervals with a max value value of {np.round(max_rt,2)}\n,\
-                        assuming intervals are in milliseconds and converting to seconds")
-            rts /= 1000
-        return rts
-
     def _center_data(self):
         """Center data per epoch."""
         self.center = True
@@ -526,7 +516,7 @@ class BaseData:
         self.crop = True
 
         rts_arr = self.data.coords[self.interval_id].values.copy()
-        rts_arr = hmp.basedata._check_scale_ms(rts_arr, warning=False)
+        rts_arr = self._check_scale_ms(rts_arr, warning=False)
         offset_end_samples = int(np.rint(self.offset_end * self.sfreq))
         offset_start_samples = int(np.rint(self.offset_start * self.sfreq))
 
@@ -588,7 +578,7 @@ class BaseData:
             self.min_duration = 1 / self.sfreq
 
         rts_arr = self.data.coords[self.interval_id].values.copy()
-        rts_arr = hmp.basedata._check_scale_ms(rts_arr, warning=False)
+        rts_arr = self._check_scale_ms(rts_arr, warning=False)
         rts_arr[rts_arr > self.max_duration] = 0
         rts_arr[rts_arr < self.min_duration] = 0
         rt_criteria_rej = len(rts_arr[rts_arr == 0])
@@ -752,3 +742,13 @@ class BaseData:
             warn(f"Less than 10% of the trials used to compute covariance for"
                  f"{np.unique(data.participant.values)}. Covariance matrix might be unreliable")
         return vcov_mat/count
+        
+    @staticmethod
+    def _check_scale_ms(rts, warning=True):
+        max_rt = np.nanmax(rts)
+        if max_rt > 500:
+            if warning:
+                warn(f"Found intervals with a max value value of {np.round(max_rt,2)}\n,\
+                        assuming intervals are in milliseconds and converting to seconds")
+            rts /= 1000
+        return rts
