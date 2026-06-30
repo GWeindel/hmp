@@ -742,7 +742,7 @@ class BaseData:
             warn(f"Less than 10% of the trials used to compute covariance for"
                  f"{np.unique(data.participant.values)}. Covariance matrix might be unreliable")
         return vcov_mat/count
-        
+
     @staticmethod
     def _check_scale_ms(rts, warning=True):
         max_rt = np.nanmax(rts)
