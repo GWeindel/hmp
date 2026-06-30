@@ -108,7 +108,8 @@ def read_mne_raw(# noqa: PLR0913
     epoching_kwargs = utils._defaults_check_epoching(epoching_kwargs)
 
     # Same for preprocessing
-    preprocessing_kwargs = utils._defaults_check_prep(preprocessing_kwargs, preprocessing_fn)
+    if preprocessing_fn is None:
+        preprocessing_kwargs = utils._defaults_check_prep(preprocessing_kwargs)
 
     # Trigger definition and check
     centering_id, response_id = utils._format_trigger_description(centering_id, response_id)

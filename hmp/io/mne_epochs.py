@@ -79,7 +79,8 @@ def read_mne_epochs(
         preprocessing_kwargs['lowpass'] = None
 
     # Same for preprocessing
-    preprocessing_kwargs = utils._defaults_check_prep(preprocessing_kwargs, preprocessing_fn)
+    if preprocessing_fn is None:
+        preprocessing_kwargs = utils._defaults_check_prep(preprocessing_kwargs)
 
     utils._check_montage(montage)
 

@@ -122,8 +122,9 @@ def read_bids_raw(
     epoching_kwargs = utils._defaults_check_epoching(epoching_kwargs)
 
     # Same for preprocessing
-    preprocessing_kwargs = utils._defaults_check_prep(preprocessing_kwargs, preprocessing_fn)
-
+    if preprocessing_fn is None:
+        preprocessing_kwargs = utils._defaults_check_prep(preprocessing_kwargs)
+        
     # Trigger definition and check
     centering_id, response_id = utils._format_trigger_description(centering_id, response_id)
     [utils._check_trigger_dicts(x) for x in [centering_id, response_id]]

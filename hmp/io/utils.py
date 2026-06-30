@@ -30,16 +30,16 @@ def _defaults_check_epoching(kwargs):
                         "and defaults at https://mne.tools/stable/generated/mne.Epochs.html")
     return kwargs
 
-def _defaults_check_prep(kwargs, preprocessing_fn):
+def _defaults_check_prep(kwargs):
     expected = ["highpass","lowpass","sfreq","reference","pick_channels"]
-    defaults = [0.01, 40, 200, 'average', 'eeg']
+    defaults = [None, None, None, None, None]
     for key, value in zip(expected, defaults):
         if key not in kwargs:
-            warn(f"No '{key}' provided, using default value: {value}.\n"
-                "use preprocessing_kwargs to override default values")
+            if value is not None:
+                warn(f"No '{key}' provided, using default value: {value}.\n"
+                    "use preprocessing_kwargs to override default values")
             kwargs.setdefault(key, value)
-
-    if preprocessing_fn is None and len(set(kwargs).difference(expected)) > 0:
+    if len(set(kwargs).difference(expected)) > 0:
         raise ValueError("Got unexpected argument for preprocessing"
             f"{set(kwargs).difference(expected)} "
             "use 'prepocessing_fn' is further preprocessing steps are needed")
