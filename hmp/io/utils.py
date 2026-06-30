@@ -213,6 +213,14 @@ def _concat_recordings(epoch_data, recordings, datatype,
         **epoching_kwargs,
         **preprocessing_kwargs
     )
+    # Convert tuple and None to string as mostly for info and allows easy saving
+    epoch_data.attrs = {
+        k: (
+            v if isinstance(v, (int, float, np.integer, np.floating)) and not isinstance(v, bool)
+            else str(v)
+        )
+        for k, v in epoch_data.attrs.items()
+    }
     return epoch_data
 
 def _check_montage(montage):
