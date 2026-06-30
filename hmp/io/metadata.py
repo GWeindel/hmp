@@ -9,7 +9,7 @@ import xarray as xr
 
 def add_metadata(epoch_data: xr.Dataset,
                   df: pd.DataFrame,
-                 recording_id: str = 'subject',
+                 recording_id: str = 'recording',
                  epoch_id: str = 'epoch'
                  ):
     """Append metadata to a dataset obtained from the io module.
