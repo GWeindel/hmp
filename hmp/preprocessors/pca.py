@@ -59,7 +59,7 @@ class ProjPCA(BasePreprocessor):
     def __init__(#noqa: PLR0913
         self,
         epoch_data: xr.Dataset,
-        interval_id: str = 'rt',
+        interval_id: str = 'duration',
         offset_end: float = 0,
         offset_start: float = 0,
         min_duration: float = 0,
