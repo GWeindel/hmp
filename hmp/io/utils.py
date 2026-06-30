@@ -45,6 +45,13 @@ def _defaults_check_prep(kwargs, preprocessing_fn):
             "use 'prepocessing_fn' is further preprocessing steps are needed")
     return kwargs
 
+def _check_trigger_dicts(trigger_dict):
+    triggers = [v for k, v in trigger_dict.items()]
+    if len(triggers) != len(set(triggers)):
+        raise ValueError(f"Duplicate trigger (value) found in {triggers}. "
+            "When providing centering or response IDs one description "             
+            "should correspond to one trigger")
+
 def _format_trigger_description(stimulus_id, response_id):
     if len(stimulus_id.keys()) == 0:
         raise ValueError('At lease one centering event needs to be provided')
@@ -89,7 +96,7 @@ def _epoching_raw(data, events, stimulus_id, response_id, verbose, epoching_kwar
         metadata=metadata_i,
         **epoching_kwargs
     )
-    epochs.metadata.rename({"response": "rt", "first_response":"response"}, axis=1, inplace=True, errors='ignore')
+    epochs.metadata.rename({"event_name":"stimulus", "response": "duration", "first_response":"response"}, axis=1, inplace=True, errors='ignore')
 
     valid_epoch_index = [x for x, y in enumerate(epochs.drop_log) if len(y) == 0]
     return epochs, valid_epoch_index
@@ -182,7 +189,7 @@ def create_info_hmp(ch_names: list[str],
 
 def _concat_recordings(epoch_data, recordings, datatype,
                       epoching_kwargs={}, preprocessing_kwargs={}, subj_names=None):
-    '''Concatenate list of xr.Datasets into a common xr.Dataset
+    '''Concatenate list of xr.Datasets into a common xr.Dataset.
     '''
     recordings = ["_".join(str(recording.name).split("_")[:-1])
                   for recording in recordings]

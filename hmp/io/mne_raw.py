@@ -114,6 +114,7 @@ def read_mne_raw(
 
     # Trigger definition and check
     centering_id, response_id = utils._format_trigger_description(centering_id, response_id)
+    [utils._check_trigger_dicts(x) for x in [centering_id, response_id]]
 
     # Checking montage
     utils._check_montage(montage)
@@ -162,6 +163,9 @@ def read_mne_raw(
 
     # Recover info from first epochs object
     info = epochs_list[0][0].info
+    preprocessing_kwargs['sfreq'] = epochs_list[0][0].info['sfreq']
+    preprocessing_kwargs['lowpass'] = epochs_list[0][0].info['lowpass']
+    preprocessing_kwargs['highpass'] = epochs_list[0][0].info['highpass']
     epoch_data = utils._concat_recordings(epoch_data, recordings, datatype,
                     epoching_kwargs, preprocessing_kwargs, subj_name)
 

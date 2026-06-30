@@ -131,6 +131,9 @@ def read_mne_epochs(
 
     # Recover info from first epochs object
     info = epochs_list[0][0].info
+    preprocessing_kwargs['sfreq'] = epochs_list[0][0].info['sfreq']
+    preprocessing_kwargs['lowpass'] = epochs_list[0][0].info['lowpass']
+    preprocessing_kwargs['highpass'] = epochs_list[0][0].info['highpass']
     epoch_data = utils._concat_recordings(epoch_data, recordings, datatype,
                     {}, preprocessing_kwargs, subj_name)
 
