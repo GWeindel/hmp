@@ -104,33 +104,60 @@ def init_data_short():
 #### SAVE AS BIDS READ WITH BIDS AND CHECK IT:S THE SAME
 #### Same for EPOCH
 
+def test_bids():
+    centering_id = {"stimulus":1}
+    response_id = {"response":5}
+    bids_path = DATA_DIR / "pseudo_BIDS"
+    bids_kwargs = dict(
+        root = bids_path, #Mandatory path to the data
+        datatypes=['eeg'],#Mandatory, type of data we want to model, could be `meg`
+        tasks=["X"],# Here the task we want to analyze 
+    )
+    montage = simulations.sim_info().get_montage()
+    preprocessing = dict(sfreq=120, #Test upsampling
+                         lowpass=40,
+                         highpass=.1,
+                         reference='average',
+                         pick_channels='eeg' 
+                        )
 
-# def test_epochs():
-#     # Declaring path where the EEG data will be stored
-#     epoch_data_path = os.path.join('sample_data', 'eeg')
-#     os.makedirs(epoch_data_path, exist_ok=True)
+    epoching = dict()
     
-#     # URLs of the first two participants
-#     file_urls = [
-#         "https://osf.io/download/67cffa85f67af67e7a92f0a6/",
-#     ]
+    # Reading the data
+    epoch_data, info = io.read_bids_raw(
+        bids_kwargs=bids_kwargs,
+        epoching_kwargs=epoching,
+        montage=montage,
+        preprocessing_kwargs=preprocessing,
+        centering_id = centering_id,
+        response_id = response_id,
+        cpus=2,
+    )
+
+def test_epochs():
+    # Declaring path where the EEG data will be stored
+    epoch_data_path = os.path.join('sample_data', 'eeg')
+    os.makedirs(epoch_data_path, exist_ok=True)
     
-#     # Download and save each file if not already in folder
-#     for i, url in enumerate(file_urls, start=1):
-#         file_path = os.path.join(epoch_data_path, f'participant{i}_epo.fif')
-#         if not os.path.exists(file_path):
-#             response = requests.get(url)
-#             with open(file_path, 'wb') as f:
-#                 f.write(response.content)
-#     # sfreq = 100 #at what sampling rate we want the data, downsampling to 100Hz is computationally less intensive for hmp instances
+    # URLs of the first participant
+    file_urls = [
+        "https://osf.io/download/67cffa85f67af67e7a92f0a6/",
+    ]
     
-#     # Recovering individual files and participant names
-#     subj_files = [os.path.join(epoch_data_path, f) for f in os.listdir(epoch_data_path) if f.endswith('.fif')]  # Create a list of files with full paths
-#     subj_name = [os.path.splitext(f)[0] for f in os.listdir(epoch_data_path) if f.endswith('.fif')]  # Extract subject names based on file names
-    
-#     # Then we read the data (see more in Tutorial 1)
-#     epoch_data = io.read_mne_epochs(subj_files, sfreq=sfreq, data_format='epochs',
-#                             verbose=False, subj_name=subj_name)
+    # Download and save each file if not already in folder
+    for i, url in enumerate(file_urls, start=1):
+        file_path = os.path.join(epoch_data_path, f'S{i}_epo.fif')
+        if not os.path.exists(file_path):
+            response = requests.get(url)
+            with open(file_path, 'wb') as f:
+                f.write(response.content)
+    preprocessing = dict(sfreq = 100)
+    subj_files = [os.path.join(epoch_data_path, f) for f in os.listdir(epoch_data_path) if f.endswith('.fif')]  # Create a list of files with full paths
+    epoch_data, info = io.read_mne_epochs(subj_files,
+                                preprocessing_kwargs=preprocessing,
+                                montage='biosemi64',
+                                verbose=True)
+
 
 # def test_bids():
 #     # Testing on small bids dataset (1.8 GB)
