@@ -3,27 +3,26 @@
 This module provides functions for reading MNE raw data format
 """
 
-from pathlib import Path
-from warnings import warn
-from typing import Callable, Optional
 import multiprocessing as mp
+from pathlib import Path
+from typing import Callable, Optional
 
 import numpy as np
-from xarray import Dataset
-from numpy.typing import DTypeLike
-import hmp.io.utils as utils
-import hmp.io.preprocessing as preprocessing
 from mne import events_from_annotations, find_events
-from mne.io import read_raw_fif, read_raw_bdf
 from mne.channels import DigMontage
+from mne.io import read_raw_bdf, read_raw_fif
+from numpy.typing import DTypeLike
+from xarray import Dataset
 
-def read_mne_raw(
+from hmp.io import preprocessing, utils
+
+
+def read_mne_raw(# noqa: PLR0913
     recordings: list,
     centering_id: dict,
     response_id: dict = {},
     events_provided: np.ndarray | None = None,
     subj_name: list = None,
-    datatype: str = 'eeg',
     montage: str | DigMontage | None = None,
     epoching_kwargs: dict = {},
     preprocessing_kwargs: dict = {},
@@ -43,15 +42,15 @@ def read_mne_raw(
     response_id : dict
         Dictionary mapping response description (keys) to event codes (values).
     events_provided : list
-        list of np.ndarray, one per recording. Each np.array has one row per event and 3 columns: [sample of the event, initial value of the channel, event code].
+        list of np.ndarray, one per recording. Each np.array has:
+            1 row per event and
+            3 columns: [sample of the event, initial value of the channel, event code].
         Used if automated event detection is not suitable.
         Only works if a single recording is provided
     subj_name : list
         List of subject names
-    datatype: str
-        The datatype to preprocess (e.g. 'eeg' or 'meg')
     montage: str or mne.channels.DigMontage
-        Either an MNE DigMontage or a string for a bulit-in MNE montage (see 
+        Either an MNE DigMontage or a string for a bulit-in MNE montage (see
         mne.channels.get_builtin_montages()) that is applied to all recordings.
     preprocessing_kwargs: dict
         arguments to be passed to the preprocessing functions. If no
@@ -63,7 +62,7 @@ def read_mne_raw(
             sfreq: float
                 Desired sampling frequency, can only be lower or equal to the one of the data.
                 The downsampling is performed on the raw data which can result in time jitter
-                in the event triggers. This is minimzed in HMP by providing the events to the 
+                in the event triggers. This is minimzed in HMP by providing the events to the
                 resampling function. Users who prefer to perform that at the epoch level can use
                 the 'decim' argument in epoching_kargs
             reference: str
@@ -105,7 +104,6 @@ def read_mne_raw(
     info: mne.Info
         Mock info object containing channel positions for plotting with HMP functions
     """
-
     # Epoching defaults and check
     epoching_kwargs = utils._defaults_check_epoching(epoching_kwargs)
 
@@ -166,14 +164,14 @@ def read_mne_raw(
     preprocessing_kwargs['sfreq'] = epochs_list[0][0].info['sfreq']
     preprocessing_kwargs['lowpass'] = epochs_list[0][0].info['lowpass']
     preprocessing_kwargs['highpass'] = epochs_list[0][0].info['highpass']
-    epoch_data = utils._concat_recordings(epoch_data, recordings, datatype,
+    epoch_data = utils._concat_recordings(epoch_data, recordings,
                     epoching_kwargs, preprocessing_kwargs, subj_name)
 
     return epoch_data, info
 
 def _process_raw_dataset(recording, montage, centering_id, response_id, events_provided,
         verbose, preprocessing_fn, preprocessing_kwargs, epoching_kwargs):
-    print(f"Processing dataset {"_".join(str(recording.name).split("_")[:-1])}")
+    print(f"Processing dataset {'_'.join(str(recording.name).split('_')[:-1])}")
     if recording.suffix == ".fif":
         data = read_raw_fif(recording, verbose=verbose)
     elif recording.suffix == ".bdf":
@@ -195,11 +193,11 @@ def _process_raw_dataset(recording, montage, centering_id, response_id, events_p
     else:
         data, events = preprocessing.preprocess_data(data, montage, events,
                    verbose, preprocessing_kwargs)
-    
+
     # Epoching + resampling + metadata creation
     epochs, valid_epoch_index = utils._epoching_raw(
         data, events, centering_id, response_id, verbose, epoching_kwargs)
-    
+
     return epochs, valid_epoch_index
 
 def _extract_mne_events(data, events, centering_id, response_id, verbose):

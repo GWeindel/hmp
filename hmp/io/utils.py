@@ -1,15 +1,15 @@
 """Utilities to read data from different format."""
 import inspect
-import numpy as np
-from pandas import DataFrame
-import xarray as xr
-import os 
-
-from mne import Epochs, create_info
-from mne.epochs import make_metadata, EpochsFIF
-from mne.channels import DigMontage
 from warnings import warn
-    
+
+import numpy as np
+import xarray as xr
+from mne import Epochs, create_info
+from mne.channels import DigMontage
+from mne.epochs import make_metadata
+from pandas import DataFrame
+
+
 def _defaults_check_epoching(kwargs):
     expected = list(inspect.signature(Epochs).parameters)
     critical = {"tmin":-.2,"tmax":2}
@@ -49,14 +49,14 @@ def _check_trigger_dicts(trigger_dict):
     triggers = [v for k, v in trigger_dict.items()]
     if len(triggers) != len(set(triggers)):
         raise ValueError(f"Duplicate trigger (value) found in {triggers}. "
-            "When providing centering or response IDs one description "             
+            "When providing centering or response IDs one description "
             "should correspond to one trigger")
 
 def _format_trigger_description(stimulus_id, response_id):
     if len(stimulus_id.keys()) == 0:
         raise ValueError('At lease one centering event needs to be provided')
     if any(not k.startswith("stimulus/") for k in stimulus_id.keys()):
-        stimulus_id = {f"stimulus/{k}": v for k, v in stimulus_id.items()}    
+        stimulus_id = {f"stimulus/{k}": v for k, v in stimulus_id.items()}
     if any(not k.startswith("response/") for k in response_id.keys()):
         response_id = {f"response/{k}": v for k, v in response_id.items()}
     return stimulus_id, response_id
@@ -94,9 +94,11 @@ def _epoching_raw(data, events, stimulus_id, response_id, verbose, epoching_kwar
         stimulus_id,
         preload=True,
         metadata=metadata_i,
+        verbose=verbose,
         **epoching_kwargs
     )
-    epochs.metadata.rename({"event_name":"stimulus", "response": "duration", "first_response":"response"}, axis=1, inplace=True, errors='ignore')
+    epochs.metadata.rename({"event_name":"stimulus", "response": "duration",
+            "first_response":"response"}, axis=1, inplace=True, errors='ignore')
 
     valid_epoch_index = [x for x, y in enumerate(epochs.drop_log) if len(y) == 0]
     return epochs, valid_epoch_index
@@ -110,7 +112,6 @@ def hmp_data_format(
     channel: list | None = None,
     metadata: DataFrame | None = None,
 ) -> xr.Dataset:
-
     """
     Convert data to the expected xarray Dataset format.
 
@@ -139,7 +140,6 @@ def hmp_data_format(
     xr.Dataset
         An xarray Dataset containing the reshaped data, with appropriate dimensions and attributes.
     """
-
     n_epochs, n_channels, n_samples = np.shape(data)
 
     if channel is None:
@@ -168,8 +168,8 @@ def create_info_hmp(ch_names: list[str],
                     montage: DigMontage,
                     preprocessing_kwargs: dict,
                     datatype:str):
-    '''Create minimal info object for plotting in hmp.visu
-    
+    """Create minimal info object for plotting in hmp.visu.
+
     Parameters
     ----------
     ch_names: list of str
@@ -180,17 +180,16 @@ def create_info_hmp(ch_names: list[str],
         Sampling frequency of the signal
     datatype: str
         MNE compatible data type in the data (e.g. 'eeg' or 'meg')
-    '''
-    info = create_info(ch_names=ch_names, sfreq=sfreq,
+    """
+    info = create_info(ch_names=ch_names, sfreq=preprocessing_kwargs['sfreq'],
                        ch_types=np.repeat(datatype, len(ch_names)))
     if montage is not None:
         info.set_montage(montage)
     return info
 
-def _concat_recordings(epoch_data, recordings, datatype,
+def _concat_recordings(epoch_data, recordings,
                       epoching_kwargs={}, preprocessing_kwargs={}, subj_names=None):
-    '''Concatenate list of xr.Datasets into a common xr.Dataset.
-    '''
+    """Concatenate list of xr.Datasets into a common xr.Dataset."""
     recordings = ["_".join(str(recording.name).split("_")[:-1])
                   for recording in recordings]
     # Data
@@ -205,7 +204,7 @@ def _concat_recordings(epoch_data, recordings, datatype,
         epoch_data = epoch_data.assign_coords({'subject': ("recording", subj_names)})
 
     # Attributes
-    n_trials = (
+    (
         (~np.isnan(epoch_data.data[:, :, :, 0].data)).sum(axis=1)[:, 0].sum()
     )  # Compute number of trial based on trial where first sample is nan
 
@@ -228,4 +227,4 @@ def _check_montage(montage):
         warn("No montage was provided, HMP plotting functions cannot be used without a "
             "valid template montage. If using standard channel montage declare one "
             "of MNE's built-in montage (see mne.channels.get_builtin_montages()) in "
-            "the 'montage' argument, alternatively provide an mne.DigMontage object")    
+            "the 'montage' argument, alternatively provide an mne.DigMontage object")

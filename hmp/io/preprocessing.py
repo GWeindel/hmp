@@ -3,10 +3,11 @@
 This module provides functions for preprocessing either raw or epoched data
 """
 import numpy as np
-from mne import Epochs, create_info
-from mne.io.fiff.raw import Raw
+from mne import Epochs
+from mne.channels import DigMontage, make_dig_montage, make_standard_montage
 from mne.epochs import EpochsFIF
-from mne.channels import DigMontage, make_standard_montage, make_dig_montage
+from mne.io.fiff.raw import Raw
+
 
 def preprocess_data(data: Raw | Epochs,
                    montage: str | DigMontage | None,
@@ -27,10 +28,11 @@ def preprocess_data(data: Raw | Epochs,
     data : mne.Raw | mne.Epochs
         MNE Raw or epoched object
     montage: str or mne.channels.DigMontage
-        Either an MNE DigMontage or a string for a bulit-in MNE montage (see 
+        Either an MNE DigMontage or a string for a bulit-in MNE montage (see
         mne.channels.get_builtin_montages()) that is applied to all recordings.
     events: np.ndarray
-        A 2D numpy array with dimension event (one row per trigger) X description (sample, 0, trigger code)
+        A 2D numpy array with dimension:
+        event (one row per trigger) X description (sample, 0, trigger code)
     preprocessing_kwargs: dict
         arguments to be passed to the preprocessing functions. If no
         'preprocessing_fn' is specified, only the following keys are relevant:
@@ -41,7 +43,7 @@ def preprocess_data(data: Raw | Epochs,
             sfreq: float
                 Desired sampling frequency, can only be lower or equal to the one of the data.
                 When the downsampling is performed on the raw data which can result in time jitter
-                in the event triggers. This is minimzed by providing the events to the 
+                in the event triggers. This is minimzed by providing the events to the
                 resampling function. Users who prefer to perform that at the epoch level can use
                 the 'decim' argument in epoching_kargs
             reference: str
@@ -61,7 +63,7 @@ def preprocess_data(data: Raw | Epochs,
     """
     # Load data for filtering/resampling
     data.load_data()
-    
+
     # Dealing with some datasets with unexpected capitalization
     data.rename_channels({'FP1': 'Fp1', 'FP2': 'Fp2'}, on_missing='ignore')
 
@@ -71,7 +73,7 @@ def preprocess_data(data: Raw | Epochs,
     # Apply the desired montage
     if montage is not None:
         data = _apply_montage(data, montage)
-    
+
     # Set the reference
     if preprocessing_kwargs["reference"] is not None:
         if preprocessing_kwargs["reference"] == 'REST' and montage is None:
@@ -79,7 +81,7 @@ def preprocess_data(data: Raw | Epochs,
         data = data.set_eeg_reference(preprocessing_kwargs["reference"])
 
     # Resample here to fasten preprocessing steps, feed events to avoid
-    # timing problem after resampling, if user prefer epoching resample 
+    # timing problem after resampling, if user prefer epoching resample
     # they can use the 'decim' argument in epoching_kwargs
     data, events = _filtering_resampling(data, preprocessing_kwargs, events, verbose)
     return data, events
@@ -92,7 +94,8 @@ def _filtering_resampling(data, preprocessing_kwargs, events, verbose):
                 lowpass = preprocessing_kwargs['sfreq'] / 3.1
             elif lowpass > preprocessing_kwargs['sfreq'] / 3.1:
                 raise ValueError(f"Requested low pass filter of {lowpass}"
-                     f"is too high for desired sampling frequency of {preprocessing_kwargs['sfreq']}")
+                     "is too high for desired sampling frequency of "
+                     f"{preprocessing_kwargs['sfreq']}")
     if preprocessing_kwargs['highpass'] is not None or lowpass is not None:
         data.filter(l_freq=preprocessing_kwargs['highpass'], h_freq=lowpass, verbose=verbose)
     if preprocessing_kwargs['sfreq'] is not None:
@@ -112,7 +115,7 @@ def _apply_montage(data, montage):
     data.set_montage(montage)
     return data
 
-    
+
 def _create_montage(ch_names, montage):
     if isinstance(montage, str):
         montage = make_standard_montage(montage)
@@ -121,7 +124,7 @@ def _create_montage(ch_names, montage):
                         "from one of the list in mne.channels.get_builtin_montages()"
                         "or a mne.DigMontage")
     pos = montage.get_positions()['ch_pos']
-    
+
     montage = make_dig_montage(
         ch_pos={ch: pos[ch] for ch in ch_names},
         coord_frame='head'

@@ -3,26 +3,22 @@
 This module provides functions for reading MNE epoched data format (.fif only)
 """
 
-from pathlib import Path
-from warnings import warn
-from typing import Callable, Optional
 import multiprocessing as mp
+from pathlib import Path
+from typing import Callable, Optional
 
 import numpy as np
-from xarray import Dataset
-from numpy.typing import DTypeLike
-import hmp.io.utils as utils
-import hmp.io.preprocessing as preprocessing
-
 from mne import read_epochs
-from mne.epochs import Epochs
-from mne.io import read_raw_fif, read_raw_bdf
 from mne.channels import DigMontage
+from numpy.typing import DTypeLike
+from xarray import Dataset
+
+from hmp.io import preprocessing, utils
+
 
 def read_mne_epochs(
     recordings: list,
     subj_name: list = None,
-    datatype: str = 'eeg',
     montage: str | DigMontage | None = None,
     preprocessing_kwargs: dict = {},
     dtype: DTypeLike = np.float32,
@@ -38,10 +34,8 @@ def read_mne_epochs(
         List of the paths to the recordings to load
     subj_name : list
         List of subject names
-    datatype: str
-        The datatype to preprocess (e.g. 'eeg' or 'meg')
     montage: str or mne.channels.DigMontage
-        Either an MNE DigMontage or a string for a bulit-in MNE montage (see 
+        Either an MNE DigMontage or a string for a bulit-in MNE montage (see
         mne.channels.get_builtin_montages()) that is applied to all recordings.
     preprocessing_kwargs: dict
         arguments to be passed to the preprocessing functions. If no
@@ -53,7 +47,7 @@ def read_mne_epochs(
             sfreq: float
                 Desired sampling frequency, can only be lower or equal to the one of the data.
                 The downsampling is performed on the raw data which can result in time jitter
-                in the event triggers. This is minimzed in HMP by providing the events to the 
+                in the event triggers. This is minimzed in HMP by providing the events to the
                 resampling function. Users who prefer to perform that at the epoch level can use
                 the 'decim' argument in epoching_kargs
             reference: str
@@ -86,9 +80,9 @@ def read_mne_epochs(
 
     # Same for preprocessing
     preprocessing_kwargs = utils._defaults_check_prep(preprocessing_kwargs, preprocessing_fn)
-    
+
     utils._check_montage(montage)
-    
+
     if not isinstance(recordings, list):
         raise ValueError("Expected a list of paths to the recordings."
                         f"Got an object of type {type(recordings)} instead")
@@ -134,14 +128,14 @@ def read_mne_epochs(
     preprocessing_kwargs['sfreq'] = epochs_list[0][0].info['sfreq']
     preprocessing_kwargs['lowpass'] = epochs_list[0][0].info['lowpass']
     preprocessing_kwargs['highpass'] = epochs_list[0][0].info['highpass']
-    epoch_data = utils._concat_recordings(epoch_data, recordings, datatype,
+    epoch_data = utils._concat_recordings(epoch_data, recordings,
                     {}, preprocessing_kwargs, subj_name)
 
     return epoch_data, info
 
 def _process_epoch_dataset(recording, montage, verbose,
             preprocessing_fn, preprocessing_kwargs):
-    print(f"Processing dataset {"_".join(str(recording.name).split("_")[:-1])}")
+    print(f"Processing dataset {'_'.join(str(recording.name).split('_')[:-1])}")
     if recording.suffix == ".fif":
         data = read_epochs(recording, verbose=verbose)
     else:

@@ -3,21 +3,19 @@
 This module provides functions for reading BIDS data format
 """
 
-import re
-from pathlib import Path
-from warnings import warn
-from typing import Callable, Optional
 import multiprocessing as mp
+import re
+from typing import Callable, Optional
 
 import mne_bids
 import numpy as np
-from xarray import Dataset
-from numpy.typing import DTypeLike
-import hmp.io.utils as utils
-import hmp.io.preprocessing as preprocessing
-
 from mne import events_from_annotations
 from mne.channels import DigMontage
+from numpy.typing import DTypeLike
+from xarray import Dataset
+
+from hmp.io import preprocessing, utils
+
 
 def read_bids_raw(
     bids_kwargs: dict,
@@ -63,7 +61,7 @@ def read_bids_raw(
     response_id : dict
         Dictionary mapping response description (keys) to event codes (values).
     montage: str or mne.channels.DigMontage
-        Either an MNE DigMontage or a string for a bulit-in MNE montage (see 
+        Either an MNE DigMontage or a string for a bulit-in MNE montage (see
         mne.channels.get_builtin_montages()) that is applied to all recordings.
     preprocessing_kwargs: dict
         arguments to be passed to the preprocessing functions. If no
@@ -75,7 +73,7 @@ def read_bids_raw(
             sfreq: float
                 Desired sampling frequency, can only be lower or equal to the one of the data.
                 The downsampling is performed on the raw data which can result in time jitter
-                in the event triggers. This is minimzed in HMP by providing the events to the 
+                in the event triggers. This is minimzed in HMP by providing the events to the
                 resampling function. Users who prefer to perform that at the epoch level can use
                 the 'decim' argument in epoching_kargs
             reference: str
@@ -118,7 +116,7 @@ def read_bids_raw(
         Mock info object containing channel positions for plotting with HMP functions
     """
     # Dict integrity check
-    check_bids_kwargs(bids_kwargs)
+    _check_bids_kwargs(bids_kwargs)
 
     # Epoching defaults and check
     epoching_kwargs = utils._defaults_check_epoching(epoching_kwargs)
@@ -159,7 +157,7 @@ def read_bids_raw(
                     for recording in recordings
                 ],
             )
-    
+
     epoch_data = [
         utils.hmp_data_format(
             epochs.get_data(copy=False).astype(dtype),
@@ -178,13 +176,13 @@ def read_bids_raw(
     preprocessing_kwargs['sfreq'] = epochs_list[0][0].info['sfreq']
     preprocessing_kwargs['lowpass'] = epochs_list[0][0].info['lowpass']
     preprocessing_kwargs['highpass'] = epochs_list[0][0].info['highpass']
-    epoch_data = utils._concat_recordings(epoch_data, recordings, bids_kwargs['datatypes'],
+    epoch_data = utils._concat_recordings(epoch_data, recordings,
                       epoching_kwargs, preprocessing_kwargs)
     bids_info = [_parse_bids_name(r) for r in epoch_data.recording.values]
 
     # Add bids info to xr coords
     coords = {}
-    all_keys = bids_info[0].keys()    
+    all_keys = bids_info[0].keys()
     for key in all_keys:
         values = [x[key] for x in bids_info]
         if any(v is not None for v in values):
@@ -194,19 +192,19 @@ def read_bids_raw(
 
 def _process_bids_dataset(recording, montage, centering_id, response_id, verbose,
                           preprocessing_fn, preprocessing_kwargs, epoching_kwargs):
-    print(f"Processing dataset {"_".join(str(recording.basename).split("_")[:-1])}")
-    
+    print(f"Processing dataset {'_'.join(str(recording.basename).split('_')[:-1])}")
+
     data = mne_bids.read_raw_bids(
         bids_path = recording,
         verbose=False # Not ideal but too many prints from BIDS warnings
     )
     events, detected_event_id = events_from_annotations(data)
-    # MNE bids extracts triggers from annotations but (sometimes?) loses the 
-    # original trigger values. The following ensures mapping by matching the 
+    # MNE bids extracts triggers from annotations but (sometimes?) loses the
+    # original trigger values. The following ensures mapping by matching the
     # description between the events.tsv and the event_from_annotations
     # and uptating the trigger value in the expected stimulus/response dicts
     new_cent_id, new_resp_id = _bids_to_annot(recording, detected_event_id,
-                                               centering_id, response_id, verbose) 
+                                               centering_id, response_id, verbose)
     # User level preprocessing, should include: re-referencing, channel selection
     # filtering and resampling if needed and take data, events, preprocessing_kwargs
     # as input and output data and events, see example in utils.preprocess_raw
@@ -216,11 +214,11 @@ def _process_bids_dataset(recording, montage, centering_id, response_id, verbose
     else:
         data, events = preprocessing.preprocess_data(data, montage, events,
                    verbose, preprocessing_kwargs)
-    
+
     # Epoching + resampling + metadata creation
     epochs, valid_epoch_index = utils._epoching_raw(
         data, events, new_cent_id, new_resp_id, verbose, epoching_kwargs)
-    
+
     return epochs, valid_epoch_index
 
 def _bids_to_annot(path, detected_event_id, centering_id, response_id, verbose):
@@ -232,7 +230,7 @@ def _bids_to_annot(path, detected_event_id, centering_id, response_id, verbose):
         print(f'Found events {np.sort(list(read_event_id.values()))} in '
               f'{path_to_tsv}, \n mapping to the declared '
               f'triggers: {np.sort(list((centering_id | response_id).values()))}')
-    old_stim_id = {v:k for k,v in centering_id.items()} 
+    old_stim_id = {v:k for k,v in centering_id.items()}
     old_resp_id = {v:k for k,v in response_id.items()}
     new_stim_id = {}
     new_resp_id = {}
@@ -247,11 +245,11 @@ def _bids_to_annot(path, detected_event_id, centering_id, response_id, verbose):
         else:
             not_found.append(v)
     if len(not_found)>0:
-        print(f'Did not found equivalence of triggers {not_found} in provided centered_id/response_id')
+        print(f"Did not found equivalence of triggers {not_found} "
+            "in provided centered_id/response_id")
     return new_stim_id, new_resp_id
 
-def check_bids_kwargs(bids_kwargs):
-    print(bids_kwargs)
+def _check_bids_kwargs(bids_kwargs):
     if 'root' not in bids_kwargs:
         raise ValueError("No 'root' directory provided for this BIDS dataset")
     for key in bids_kwargs.keys():

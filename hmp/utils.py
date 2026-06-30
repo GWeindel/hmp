@@ -1,6 +1,5 @@
 """Functions to transform the input data and the estimates."""
 
-from warnings import warn
 
 import numpy as np
 import xarray as xr
@@ -200,7 +199,7 @@ def event_channels(
     _check_sf_consistency(epoch_data, estimates)
     if estimate_method is None:
         estimate_method = "max"
-    
+
     epoch_data, estimates = _filter_common_trials_data_fit(epoch_data, estimates)
     n_events = estimates.event.count().values
     n_trial = estimates.trial.count().values
@@ -307,7 +306,7 @@ def centered_activity(
 
     centered_data = np.tile(
         np.nan,
-        (epoch_data.sizes['trial'], 
+        (epoch_data.sizes['trial'],
          len(channel),
          int(round(n_samples - baseline + 1))),
     )
@@ -392,12 +391,12 @@ def _sel_method(data, value, variable, method):
     elif method == "contains":
         data = data.where(data[variable].str.contains(value), drop=True)
     return data
-    
+
 def _coordsel_preproc(preprocessed, value, variable, method):
     data = _check_preprocessed(preprocessed).unstack()
     data = _sel_method(data, value, variable, method)
     return data.stack(trial=['recording','epoch'])
-    
+
 def _coordsel_data(epoch_data, value, variable, method):
     if len(epoch_data.dims) == 4:
         stacked_epoch_data = epoch_data.stack(trial=("recording", "epoch"))

@@ -6,6 +6,7 @@ This module provides functions for reading metadata
 import pandas as pd
 import xarray as xr
 
+
 def add_metadata(epoch_data: xr.Dataset,
                   df: pd.DataFrame,
                  recording_id: str = 'subject',
@@ -16,6 +17,7 @@ def add_metadata(epoch_data: xr.Dataset,
     This functions adds any column in the dataframe to epoch_data.
     The correspondance between epochs in the epoch_data and the dataframe
     cannot be guaranteed and should be inspected
+
     Parameters
     ----------
     epoch_data: xr.Dataset
@@ -36,7 +38,7 @@ def add_metadata(epoch_data: xr.Dataset,
     df = df.copy()
     if df[epoch_id].min() == 1: #Assume this means 1-based indexing
         df[epoch_id] -= 1
-    
+
     # Checks:
     if len(set(epoch_data.recording.values)) != len(set(df[recording_id].values)):
         raise ValueError("Cannot align epoch_data and metadata. "
@@ -51,7 +53,7 @@ def add_metadata(epoch_data: xr.Dataset,
                          f"{set(df[recording_id].values)} in metadata")
     if not set(df[epoch_id]).issuperset(epoch_data.epoch.values):
         raise ValueError(f"DataFrame {epoch_id} is not a superset of epoch_data['epoch']. "
-                         "Did not find epochs " 
+                         "Did not find epochs "
                          f"{set(df[epoch_id]).difference(epoch_data.epoch.values)}"
                         )
     if not set(df[recording_id]).issuperset(epoch_data.recording.values):
