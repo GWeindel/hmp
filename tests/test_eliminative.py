@@ -14,7 +14,7 @@ def test_backward_simple():
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
     hmp_data = hmp.preprocessors.ProjPCA(epoch_data, n_comp=3,).data
     # Data b is without noise, recovery should be perfect
-    data_b = hmp.utils.participant_selection(hmp_data, 'b')
+    data_b = hmp.utils.coord_selection(hmp_data, 'b', 'condition')
     pdata_b = PatternData.from_preprocessor(data_b)
     true_model = EventModel(n_events=n_events)
     # Recover generating parameters

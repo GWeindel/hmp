@@ -15,8 +15,8 @@ def init_data():
     sfreq = 100
     n_events = 3
     events = []
-    event_id = {'stimulus':1}#trigger 1 = stimulus
-    resp_id = {'response':5}
+    centering_id = {'stimulus':1}#trigger 1 = stimulus
+    response_id = {'response':5}
     raws = [DATA_DIR_A / 'dataset_a_raw_raw.fif', DATA_DIR_B / 'dataset_b_raw_raw.fif']
     event_files = [DATA_DIR_A / 'dataset_a_raw_raw_generating_events.npy',
                    DATA_DIR_B / 'dataset_b_raw_raw_generating_events.npy']
@@ -25,9 +25,13 @@ def init_data():
     event_a = events[0]
     event_b = events[1]
     # Data reading
-    epoch_data = io.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq,
-            events_provided=events, verbose=True, reference='average', subj_name=['a','b'], tmin=-.01)
-    epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
+    preprocessing_kwargs = dict(sfreq = sfreq)
+    montage = simulations.sim_info().get_montage()
+    epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, 
+                response_id=response_id, events_provided=events,
+                subj_name=['a','b'], montage=montage,
+                preprocessing_kwargs=preprocessing_kwargs)
+    epoch_data = epoch_data.assign_coords({'condition': ('recording', epoch_data.subject.data)})
     epoch_data = epoch_data.sel(channel=epoch_data.channel[::4])
     print(epoch_data.channel)
     positions = simulations.positions()

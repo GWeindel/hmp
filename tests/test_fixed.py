@@ -21,11 +21,9 @@ def test_fixed_simple():
     """ test a simple fit_transform on perfect data and compare to ground truth."""
     event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events = data()
     # Data b is without noise, recovery should be perfect
-    data_b = hmp.utils.participant_selection(hmp_data.data, 'b')
-    pattern = HalfSine()
-    pdata_b = PatternData.from_preprocessor(data_b, pattern=pattern)
-    time_distribution = Gamma()
-    model = EventModel(distribution=time_distribution, pattern=pattern, n_events=n_events)
+    data_b = hmp.utils.coord_selection(hmp_data.data, 'b', 'subject')
+    pdata_b = PatternData.from_preprocessor(data_b)
+    model = EventModel(n_events=n_events)
     # Recover generating parameters
     sim_source_times, true_pars, true_magnitudes, _ = \
         simulations.simulated_times_and_parameters(event_b, model, pdata_b)
@@ -45,7 +43,7 @@ def test_fixed_simple():
     # test the difference between electrode values at event times
     assert np.isclose(np.sum(np.abs(true_topos.data - test_topos.data)), 0, atol=1e-4, rtol=0)
     # Test whether likelihood is the expected one
-    assert np.isclose(lkh_b, np.array(101.31), atol=1e-2, rtol=0)
+    assert np.isclose(lkh_b, np.array(99.52), atol=1e-2, rtol=0)
 
     #locations
     locations = np.zeros(n_events+1, dtype=int)
@@ -53,7 +51,7 @@ def test_fixed_simple():
     noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b)
     model = EventModel(n_events=n_events, location=25)
     noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b,)
-    assert np.isclose(noloc_loglikelihood, np.array(101.31), atol=1e-2, rtol=0)
+    assert np.isclose(noloc_loglikelihood, np.array(99.52), atol=1e-2, rtol=0)
 
     # testing recovery of attributes
     model.xrlikelihoods
@@ -87,8 +85,9 @@ def test_fixed_grouping():
                          [0, 0, 1, 0],])
     grouping_dict = {'condition': ['a', 'b']}
     
-    hmp_data_a = hmp.utils.participant_selection(hmp_data.data, 'a')
-    hmp_data_b = hmp.utils.participant_selection(hmp_data.data, 'b')
+    hmp_data_a = hmp.utils.coord_selection(hmp_data.data, 'a', 'subject')
+    hmp_data_b = hmp.utils.coord_selection(hmp_data.data, 'b', 'subject')
+
     pdata = PatternData.from_preprocessor(hmp_data)
     pdata_a = PatternData.from_preprocessor(hmp_data_a)
     pdata_b = PatternData.from_preprocessor(hmp_data_b)

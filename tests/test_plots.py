@@ -18,8 +18,7 @@ def test_plot():
     time_map = np.array([[0, 0, -1, 0],
                          [0, 0, 0, 0],])
     group_dict = {'condition': ['a', 'b']}
-    
-    hmp_data_a = hmp.utils.participant_selection(hmp_data.data, 'a')
+    hmp_data_a = hmp.utils.coord_selection(hmp_data.data, 'a', 'condition')
     
     model = EventModel(n_events=n_events)
     
