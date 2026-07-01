@@ -6,19 +6,16 @@ import xarray as xr
 from numpy.random import RandomState
 from pandas import MultiIndex
 
-from hmp.preprocessors.custom import ProjCustom
-from hmp.preprocessors.identity import ProjIdentity
-from hmp.preprocessors.pca import ProjPCA
+from hmp.basedata import BaseData
 
 
-def _check_preprocessed(preprocessed):
-    if isinstance(preprocessed, (ProjPCA, ProjIdentity, ProjCustom)):
-        data = preprocessed.data
-    elif 'component' in preprocessed.dims:
-        data = preprocessed
+def _check_basedata(base_data):
+    if isinstance(base_data, BaseData):
+        data = base_data.data
+    elif 'component' in base_data.dims:
+        data = base_data
     else:
-        raise ValueError("preprocessed must be an hmp preprocessed object from a class"
-                             "in hmp.preprocessors")
+        raise ValueError("base_data must be an hmp base_data object")
     return data
 
 def _check_sf_consistency(epoch_data, estimates):
@@ -381,7 +378,6 @@ def centered_activity(
 
     return centered_data.assign_coords(trial_x_part)
 
-
 def _sel_method(data, value, variable, method):
     if method == "equal":
         data = data.where(data[variable] == value, drop=True)
@@ -389,8 +385,8 @@ def _sel_method(data, value, variable, method):
         data = data.where(data[variable].str.contains(value), drop=True)
     return data
 
-def _coordsel_preproc(preprocessed, value, variable, method):
-    data = _check_preprocessed(preprocessed).unstack()
+def _coordsel_bd(basedata, value, variable, method):
+    data = _check_basedata(base_data).unstack()
     data = _sel_method(data, value, variable, method)
     return data.stack(trial=['recording','epoch'])
 
@@ -442,8 +438,8 @@ def coord_selection(data: xr.Dataset | xr.DataArray,
         raise ValueError(f"{variable} not found in data")
     if ~np.isin(method, ['equal','contains']):
         raise ValueError(f"unknown method {method}")
-    if 'component' in data.dims:
-        data = _coordsel_preproc(data, value, variable, method)
+    if isinstance(data, BaseData):
+        data = _coordsel_bd(data, value, variable, method)
     elif 'channel' in data.dims:
         data = _coordsel_data(data, value, variable, method)
     elif 'event' in data.dims:

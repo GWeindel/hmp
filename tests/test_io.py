@@ -9,10 +9,10 @@ import requests
 from zipfile import ZipFile
 
 
+import hmp
 from hmp import io
 from hmp import simulations
 from hmp import utils
-from hmp import preprocessors
 from hmp.patterndata import PatternData
 from hmp.models import EventModel
 

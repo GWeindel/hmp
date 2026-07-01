@@ -14,6 +14,7 @@ from warnings import resetwarnings, warn
 import numpy as np
 import xarray as xr
 
+from hmp.basedata import BaseData
 from hmp.models.base import BaseModel
 from hmp.patterndata import PatternData
 from hmp.patterns import Pattern
@@ -255,7 +256,7 @@ class EventModel(BaseModel):
 
     def fit(
         self,
-        data: Any,
+        data: BaseData | PatternData,
         channel_pars: np.ndarray = None,
         time_pars: np.ndarray = None,
         verbose: bool = True,
