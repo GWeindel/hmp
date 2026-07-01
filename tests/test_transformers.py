@@ -94,6 +94,15 @@ def test_proj_pca_custom_variants_newbasedata(init_data, n_comp, center, whiten,
     custom.reject_epochs()
     custom.project(projection_type='custom',center=center, weights=pca.weights)
     custom.apply_variance_ops(whiten=whiten)
+    data = hmp.basedata.BaseData.remove_participant(custom, 'a')
+    data = hmp.basedata.BaseData.get_participants(custom, ['a'])
+
+    #and pca pca based
+    pca = hmp.basedata.BaseData.from_io(epoch_data)
+    pca.crop_epochs()
+    pca.reject_epochs()
+    pca.pca_and_variance(n_comp=n_comp,center=center,
+                         whiten=whiten, method_pca='pca')
 
     assert custom.data.shape[1] == n_comp
     if whiten:

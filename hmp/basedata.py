@@ -456,7 +456,10 @@ class BaseData:
         """Get data from specified participants."""
         data = copy.deepcopy(data)
         data.data = data.data.unstack()
-        data.data = data.data.sel(participant=[participants], drop=False)
+        if isinstance(participants,list) or isinstance(participants,np.ndarray):
+            data.data = data.data.sel(participant=participants, drop=False)
+        else:
+            data.data = data.data.sel(participant=[participants], drop=False)
         data.data = data.data.stack(trial=['participant','epoch'])
         return data
 
