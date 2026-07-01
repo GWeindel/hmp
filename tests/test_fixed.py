@@ -60,11 +60,6 @@ def test_fixed_simple():
     model.xrtime_pars_dev
     model.xrtraces
 
-def test_fixed_csd():
-    """ test CSD computation"""
-    event_c, epoch_data, info, sfreq, n_events = init_data_large()
-    epoch_data, info = hmp.utils.compute_csd(epoch_data, info)
-
 def test_fixed_short():
     """ test very short latencies """
     event_d, epoch_data, positions, sfreq, n_events = init_data_short()

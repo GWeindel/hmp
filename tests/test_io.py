@@ -179,3 +179,9 @@ def test_epochs():
     metadata = epoch_data['RT'].to_dataframe().reset_index().iloc[:,:4]
     metadata['recording'] = 'S1'
     io.add_metadata(epoch_data,metadata)
+
+
+def test_fixed_csd():
+    """ test CSD computation"""
+    event_c, epoch_data, info, sfreq, n_events = init_data_large()
+    epoch_data, info = io.preprocessing.compute_csd(epoch_data, info)
