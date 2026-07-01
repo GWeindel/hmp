@@ -3,9 +3,6 @@
 
 import numpy as np
 import xarray as xr
-from mne import EpochsArray, Info, pick_info, pick_types
-from mne.io.constants import FIFF
-from mne.preprocessing import compute_current_source_density
 from numpy.random import RandomState
 from pandas import MultiIndex
 

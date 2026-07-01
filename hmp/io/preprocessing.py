@@ -3,10 +3,13 @@
 This module provides functions for preprocessing either raw or epoched data
 """
 import numpy as np
-from mne import Epochs
+import xarray as xr
+from mne import Epochs, EpochsArray, Info, pick_info, pick_types
 from mne.channels import DigMontage, make_dig_montage, make_standard_montage
 from mne.epochs import EpochsFIF
+from mne.io.constants import FIFF
 from mne.io.fiff.raw import Raw
+from mne.preprocessing import compute_current_source_density
 
 
 def preprocess_data(data: Raw | Epochs,
