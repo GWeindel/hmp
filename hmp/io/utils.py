@@ -46,48 +46,51 @@ def _defaults_check_prep(kwargs):
     return kwargs
 
 def _check_trigger_dicts(trigger_dict):
+    descs = [k for k, v in trigger_dict.items()]
     triggers = [v for k, v in trigger_dict.items()]
+    # Duplicates are possible for trigger/values
     if len(triggers) != len(set(triggers)):
         raise ValueError(f"Duplicate trigger (value) found in {triggers}. "
             "When providing centering or response IDs one description "
             "should correspond to one trigger")
+    faulty_desc = []
+    for desc in descs:
+        if '/' not in desc:
+            faulty_desc.append(desc)
+    if len(faulty_desc) > 0:
+        raise ValueError("Trigger description should be separated with slashes (/).\n"
+                        f"Descriptions: {faulty_desc} does not align with the expected format")
 
-def _format_trigger_description(stimulus_id, response_id):
+def _format_trigger_description(stimulus_id, event_id):
     if len(stimulus_id.keys()) == 0:
         raise ValueError('At lease one centering event needs to be provided')
     if any(not k.startswith("stimulus/") for k in stimulus_id.keys()):
         stimulus_id = {f"stimulus/{k}": v for k, v in stimulus_id.items()}
-    if any(not k.startswith("response/") for k in response_id.keys()):
-        response_id = {f"response/{k}": v for k, v in response_id.items()}
-    return stimulus_id, response_id
+    return stimulus_id, event_id
 
-def _epoching_raw(data, events, stimulus_id, response_id, verbose, epoching_kwargs):
+def _epoching_raw(data, events, stimulus_id, event_id, verbose, epoching_kwargs):
     if len(stimulus_id) == 0:
         raise ValueError("No valid centering_id found in the data "
                          f"detected triggers : {np.unique(events[:,2])}")
-    event_id = {**stimulus_id, **response_id}
+    all_id = {**stimulus_id, **event_id}
     stim = list(stimulus_id.keys())
 
-    if len(response_id) > 0:
-        keep_first=["response"]
-        cols = ["event_name", "response"]
-    else:
-        keep_first=[]
-        cols = ["event_name"]
+    categories = list(dict.fromkeys(key.split('/')[0] for key in all_id))
 
     metadata_i, meta_events, stimulus_id = make_metadata(
         events=events,
-        event_id=event_id,
+        event_id=all_id,
         tmin=epoching_kwargs['tmin'],
         tmax=epoching_kwargs['tmax'],
         sfreq=data.info["sfreq"],
         row_events=stim,
-        keep_first=keep_first,
+        keep_first=categories,
     )
-    if 'first_response' in metadata_i.columns:
-        cols.append('first_response')
-    metadata_i = metadata_i[cols]  # only keep event_names and rts
-
+    metadata_i.rename({x:f"{x}_time" for x in categories}, axis=1, inplace=True)
+    metadata_i.rename({f"first_{x}":x for x in categories}, axis=1, inplace=True)
+    cols_to_keep = [col for col in metadata_i if col not in [*stim,*list(event_id.keys())]]
+    metadata_i = metadata_i[cols_to_keep]  # only keep event_names and rts
+    metadata_i['event_name'] = ["/".join(x.split("/")[1:]) for x in metadata_i['event_name']]
     epochs = Epochs(
         data,
         meta_events,
@@ -97,8 +100,8 @@ def _epoching_raw(data, events, stimulus_id, response_id, verbose, epoching_kwar
         verbose=verbose,
         **epoching_kwargs
     )
-    epochs.metadata.rename({"event_name":"stimulus", "response": "duration",
-            "first_response":"response"}, axis=1, inplace=True, errors='ignore')
+    # epochs.metadata.rename({"response": "duration",
+    #         "first_response":"response"}, axis=1, inplace=True, errors='ignore')
 
     valid_epoch_index = [x for x, y in enumerate(epochs.drop_log) if len(y) == 0]
     return epochs, valid_epoch_index

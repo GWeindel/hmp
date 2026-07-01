@@ -103,9 +103,10 @@ def _filtering_resampling(data, preprocessing_kwargs, events, verbose):
         data.filter(l_freq=preprocessing_kwargs['highpass'], h_freq=lowpass, verbose=verbose)
     if preprocessing_kwargs['sfreq'] is not None:
         if isinstance(data, EpochsFIF):
-            data = data.resample(preprocessing_kwargs['sfreq'])
+            data = data.resample(preprocessing_kwargs['sfreq'], verbose=verbose)
         else:
-            data, events = data.resample(preprocessing_kwargs['sfreq'], events=events)
+            data, events = data.resample(preprocessing_kwargs['sfreq'],
+                                         events=events, verbose=verbose)
     return data, events
 
 

@@ -20,7 +20,7 @@ from hmp.io import preprocessing, utils
 def read_mne_raw(# noqa: PLR0913
     recordings: list,
     centering_id: dict,
-    response_id: dict = {},
+    event_id: dict = {},
     events_provided: np.ndarray | None = None,
     subj_name: list = None,
     montage: str | DigMontage | None = None,
@@ -39,8 +39,8 @@ def read_mne_raw(# noqa: PLR0913
         List of the paths to the recordings to load
     centering_id : dict
         Dictionary mapping stimulus description (keys) to event codes (values).
-    response_id : dict
-        Dictionary mapping response description (keys) to event codes (values).
+    event_id : dict
+        Dictionary mapping non-centering events description (keys) to event codes (values).
     events_provided : list
         list of np.ndarray, one per recording. Each np.array has:
             1 row per event and
@@ -112,8 +112,8 @@ def read_mne_raw(# noqa: PLR0913
         preprocessing_kwargs = utils._defaults_check_prep(preprocessing_kwargs)
 
     # Trigger definition and check
-    centering_id, response_id = utils._format_trigger_description(centering_id, response_id)
-    [utils._check_trigger_dicts(x) for x in [centering_id, response_id]]
+    centering_id, event_id = utils._format_trigger_description(centering_id, event_id)
+    [utils._check_trigger_dicts(x) for x in [centering_id, event_id]]
 
     # Checking montage
     utils._check_montage(montage)
@@ -132,7 +132,7 @@ def read_mne_raw(# noqa: PLR0913
     # Processing loops/parallel
     if cpus == 1:
         epochs_list = [_process_raw_dataset(
-            recording, montage, centering_id, response_id, event,
+            recording, montage, centering_id, event_id, event,
             verbose, preprocessing_fn, preprocessing_kwargs, epoching_kwargs
             )
             for recording, event in zip(recordings, events_provided)
@@ -141,7 +141,7 @@ def read_mne_raw(# noqa: PLR0913
         with mp.Pool(processes=cpus) as pool:
             epochs_list = pool.starmap(
                 _process_raw_dataset,
-                [(recording, montage, centering_id, response_id, event,
+                [(recording, montage, centering_id, event_id, event,
             verbose, preprocessing_fn, preprocessing_kwargs, epoching_kwargs)
                     for recording, event in zip(recordings, events_provided)
                 ],
@@ -170,9 +170,10 @@ def read_mne_raw(# noqa: PLR0913
 
     return epoch_data, info
 
-def _process_raw_dataset(recording, montage, centering_id, response_id, events_provided,
+def _process_raw_dataset(recording, montage, centering_id, event_id, events_provided,
         verbose, preprocessing_fn, preprocessing_kwargs, epoching_kwargs):
-    print(f"Processing dataset {'_'.join(str(recording.name).split('_')[:-1])}")
+    if verbose:
+        print(f"Processing dataset {'_'.join(str(recording.name).split('_')[:-1])}")
     if recording.suffix == ".fif":
         data = read_raw_fif(recording, verbose=verbose)
     elif recording.suffix == ".bdf":
@@ -183,7 +184,7 @@ def _process_raw_dataset(recording, montage, centering_id, response_id, events_p
         "issue on https://github.com/GWeindel/hmp/issues")
 
     events = _extract_mne_events(data, events_provided,
-                                        centering_id, response_id, verbose)
+                                        centering_id, event_id, verbose)
 
     # User level preprocessing, should include: re-referencing, channel selection
     # filtering and resampling if needed and take data, events, preprocessing_kwargs
@@ -197,11 +198,11 @@ def _process_raw_dataset(recording, montage, centering_id, response_id, events_p
 
     # Epoching + resampling + metadata creation
     epochs, valid_epoch_index = utils._epoching_raw(
-        data, events, centering_id, response_id, verbose, epoching_kwargs)
+        data, events, centering_id, event_id, verbose, epoching_kwargs)
 
     return epochs, valid_epoch_index
 
-def _extract_mne_events(data, events, centering_id, response_id, verbose):
+def _extract_mne_events(data, events, centering_id, event_id, verbose):
     if events is None:
         try:
             events = find_events(
@@ -220,11 +221,11 @@ def _extract_mne_events(data, events, centering_id, response_id, verbose):
     events_values = np.concatenate(
         [
             np.array([x for x in centering_id.values()]),
-            np.array([x for x in response_id.values()]),
+            np.array([x for x in event_id.values()]),
         ]
     )
     events = np.array(
         [list(x) for x in events if x[2] in events_values]
-    )  # only keeps events with stim or response
+    )  # only keeps declared events
 
     return events

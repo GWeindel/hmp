@@ -8,6 +8,7 @@ import re
 from typing import Callable, Optional
 
 import mne_bids
+from mne_bids.config import ALLOWED_DATATYPE_EXTENSIONS
 import numpy as np
 from mne import events_from_annotations
 from mne.channels import DigMontage
@@ -20,7 +21,7 @@ from hmp.io import preprocessing, utils
 def read_bids_raw(
     bids_kwargs: dict,
     centering_id: dict,
-    response_id: dict = {},
+    event_id: dict = {},
     montage: str | DigMontage | None = None,
     epoching_kwargs: dict = {},
     preprocessing_kwargs: dict = {},
@@ -58,8 +59,8 @@ def read_bids_raw(
                 Recording label(s) (``recording`` entity).
     centering_id : dict
         Dictionary mapping stimulus description (keys) to event codes (values).
-    response_id : dict
-        Dictionary mapping response description (keys) to event codes (values).
+    event_id : dict
+        Dictionary mapping non-centering events description (keys) to event codes (values).
     montage: str or mne.channels.DigMontage
         Either an MNE DigMontage or a string for a bulit-in MNE montage (see
         mne.channels.get_builtin_montages()) that is applied to all recordings.
@@ -126,8 +127,8 @@ def read_bids_raw(
         preprocessing_kwargs = utils._defaults_check_prep(preprocessing_kwargs)
 
     # Trigger definition and check
-    centering_id, response_id = utils._format_trigger_description(centering_id, response_id)
-    [utils._check_trigger_dicts(x) for x in [centering_id, response_id]]
+    centering_id, event_id = utils._format_trigger_description(centering_id, event_id)
+    [utils._check_trigger_dicts(x) for x in [centering_id, event_id]]
 
     # Checking montage
     utils._check_montage(montage)
@@ -139,12 +140,14 @@ def read_bids_raw(
         ignore_nosub=True,
         **bids_kwargs
     )
-    recordings = [x for x in all_paths if '.fdt' not in x.fpath.suffix]
+
+    recordings = [x for x in all_paths
+                  if x.fpath.suffix in ALLOWED_DATATYPE_EXTENSIONS[bids_kwargs['datatypes'][0]]]
 
     # Processing loops/parallel
     if cpus == 1:
         epochs_list = [_process_bids_dataset(
-                recording, montage, centering_id, response_id, verbose,
+                recording, montage, centering_id, event_id, verbose,
                 preprocessing_fn, preprocessing_kwargs, epoching_kwargs
                 )
                 for recording in recordings
@@ -153,7 +156,7 @@ def read_bids_raw(
         with mp.Pool(processes=cpus) as pool:
             epochs_list = pool.starmap(
                 _process_bids_dataset,
-                [(recording, montage, centering_id, response_id, verbose,
+                [(recording, montage, centering_id, event_id, verbose,
                 preprocessing_fn, preprocessing_kwargs, epoching_kwargs)
                     for recording in recordings
                 ],
@@ -191,9 +194,10 @@ def read_bids_raw(
     epoch_data = epoch_data.assign_coords(coords)
     return epoch_data, info
 
-def _process_bids_dataset(recording, montage, centering_id, response_id, verbose,
+def _process_bids_dataset(recording, montage, centering_id, event_id, verbose,
                           preprocessing_fn, preprocessing_kwargs, epoching_kwargs):
-    print(f"Processing dataset {'_'.join(str(recording.basename).split('_')[:-1])}")
+    if verbose:
+        print(f"Processing dataset {'_'.join(str(recording.basename).split('_')[:-1])}")
 
     data = mne_bids.read_raw_bids(
         bids_path = recording,
@@ -203,9 +207,9 @@ def _process_bids_dataset(recording, montage, centering_id, response_id, verbose
     # MNE bids extracts triggers from annotations but (sometimes?) loses the
     # original trigger values. The following ensures mapping by matching the
     # description between the events.tsv and the event_from_annotations
-    # and uptating the trigger value in the expected stimulus/response dicts
+    # and uptating the trigger value in the expected stimulus/events dicts
     new_cent_id, new_resp_id = _bids_to_annot(recording, detected_event_id,
-                                               centering_id, response_id, verbose)
+                                               centering_id, event_id, verbose)
     # User level preprocessing, should include: re-referencing, channel selection
     # filtering and resampling if needed and take data, events, preprocessing_kwargs
     # as input and output data and events, see example in utils.preprocess_raw
@@ -222,7 +226,7 @@ def _process_bids_dataset(recording, montage, centering_id, response_id, verbose
 
     return epochs, valid_epoch_index
 
-def _bids_to_annot(path, detected_event_id, centering_id, response_id, verbose):
+def _bids_to_annot(path, detected_event_id, centering_id, event_id, verbose):
     path_to_tsv = path.copy().update(suffix="events", extension=".tsv")
     events_dict = mne_bids.events_file_to_annotation_kwargs(path_to_tsv)
     read_event_id = events_dict['event_id']
@@ -230,9 +234,9 @@ def _bids_to_annot(path, detected_event_id, centering_id, response_id, verbose):
     if verbose:
         print(f'Found events {np.sort(list(read_event_id.values()))} in '
               f'{path_to_tsv}, \n mapping to the declared '
-              f'triggers: {np.sort(list((centering_id | response_id).values()))}')
+              f'triggers: {np.sort(list((centering_id | event_id).values()))}')
     old_stim_id = {v:k for k,v in centering_id.items()}
-    old_resp_id = {v:k for k,v in response_id.items()}
+    old_resp_id = {v:k for k,v in event_id.items()}
     new_stim_id = {}
     new_resp_id = {}
     not_found = []
@@ -241,13 +245,13 @@ def _bids_to_annot(path, detected_event_id, centering_id, response_id, verbose):
             new_v = detected_event_id[k]
             if v in centering_id.values():
                 new_stim_id[old_stim_id[v]] = int(new_v)
-            elif v in response_id.values():
+            elif v in event_id.values():
                 new_resp_id[old_resp_id[v]] = int(new_v)
         else:
             not_found.append(v)
     if len(not_found)>0:
         print(f"Did not found equivalence of triggers {not_found} "
-            "in provided centered_id/response_id")
+            "in provided centered_id/event_id")
     return new_stim_id, new_resp_id
 
 def _check_bids_kwargs(bids_kwargs):
