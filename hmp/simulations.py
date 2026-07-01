@@ -405,8 +405,8 @@ def demo():
     resp_trigger = int(
         np.max(np.unique(generating_events[:, 2]))
     )  # Resp trigger is the last source in each trial
-    event_id = {"stimulus": 1}
-    resp_id = {"response": resp_trigger}
+    event_id = {"stimulus/dummy": 1}
+    resp_id = {"response/dummy": resp_trigger}
     events = generating_events[
         (generating_events[:, 2] == 1) | (generating_events[:, 2] == resp_trigger)
     ]  # only retain stimulus and response triggers
@@ -419,7 +419,7 @@ def demo():
 
     eeg_dat, info = read_mne_raw(eeg_file,
                                  centering_id=event_id,
-                                 response_id=resp_id,
+                                 event_id=resp_id,
                                  events_provided=[events],
                                  montage = montage,
                                  preprocessing_kwargs=preprocessing,
