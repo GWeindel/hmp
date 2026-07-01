@@ -130,3 +130,40 @@ def _create_montage(ch_names, montage):
         coord_frame='head'
     )
     return montage
+
+def compute_csd(epoch_data: xr.Dataset,
+                info: Info):
+    """Compute laplacian using MNE's function.
+
+    Parameters
+    ----------
+    epoch_data : xr.Dataset
+        Data read through the HMP IO module
+    info : Info
+        Info object from MNE
+
+    Returns
+    -------
+    epoch_data : xr.Dataset
+        Updated dataset with CSD values
+    eeg_info: Info
+        Updated info ubject with correct units given CSD transform
+    """
+    eeg_info = pick_info(info, pick_types(info, meg=False, eeg=True))
+    if eeg_info['chs'][0]['unit'] == FIFF.FIFF_UNIT_V:
+        epoch_data = epoch_data.stack(trial=['recording','epoch']).dropna("trial", how="all")
+        for trial in epoch_data.trial:
+            trial_dat = epoch_data.sel(trial=trial).data
+            # Build fake Epoch mne class and use MNE's dedicated function
+            epoch = EpochsArray(np.array([trial_dat.values]), eeg_info)
+            epoch = compute_current_source_density(epoch, verbose=False)
+            epoch_data['data'].loc[dict(trial=trial)] = epoch.get_data()[0]
+        epoch_data = epoch_data.unstack()
+        # Set EEG channels to the correct CSD unit
+
+        for ch in eeg_info['chs']:
+            ch['unit'] = FIFF.FIFF_UNIT_V_M2
+
+    else:
+        raise ValueError(f"Cannot apply CSD on channels with units {info['chs'][0]['unit']}")
+    return epoch_data, eeg_info
