@@ -14,7 +14,7 @@ from test_io import init_data, init_data_large, init_data_short
 
 def data():
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
-    hmp_data = hmp.preprocessors.ProjPCA(epoch_data, n_comp=5)
+    hmp_data = hmp.preprocessors.ProjPCA(epoch_data, n_comp=5, interval_id = 'response_time')
     return event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events
 
 def test_fixed_simple():
@@ -63,7 +63,7 @@ def test_fixed_simple():
 def test_fixed_short():
     """ test very short latencies """
     event_d, epoch_data, positions, sfreq, n_events = init_data_short()
-    hmp_data = hmp.preprocessors.ProjIdentity(epoch_data)
+    hmp_data = hmp.preprocessors.ProjIdentity(epoch_data, interval_id = 'response_time')
     model = EventModel(n_events=n_events)
 
     #Estimate

@@ -15,8 +15,8 @@ def init_data():
     sfreq = 100
     n_events = 3
     events = []
-    centering_id = {'stimulus':1}#trigger 1 = stimulus
-    response_id = {'response':5}
+    centering_id = {'stimulus/0':1}#trigger 1 = stimulus
+    event_id = {'response/0':5}
     raws = [DATA_DIR_A / 'dataset_a_raw_raw.fif', DATA_DIR_B / 'dataset_b_raw_raw.fif']
     event_files = [DATA_DIR_A / 'dataset_a_raw_raw_generating_events.npy',
                    DATA_DIR_B / 'dataset_b_raw_raw_generating_events.npy']
@@ -28,7 +28,7 @@ def init_data():
     preprocessing_kwargs = dict(sfreq = sfreq)
     montage = simulations.sim_info().get_montage()
     epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, 
-                response_id=response_id, events_provided=events,
+                event_id=event_id, events_provided=events,
                 subj_name=['a','b'], montage=montage,
                 preprocessing_kwargs=preprocessing_kwargs)
     epoch_data = epoch_data.assign_coords({'condition': ('recording', epoch_data.subject.data)})
@@ -45,12 +45,12 @@ def init_data():
 ])
 def test_proj_pca_custom_variants(init_data, n_comp, center, whiten, reject_threshold, min_duration, max_duration):
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data
-    pca = ProjPCA(epoch_data, n_comp=n_comp, center=center, whiten=whiten)
+    pca = ProjPCA(epoch_data, n_comp=n_comp, center=center, whiten=whiten, interval_id = 'response_time')
     assert pca.data.shape[1] == n_comp
     if whiten:
         assert np.allclose(pca.data.var(dim=['trial','sample']), 1, atol=0.05)
 
-    custom = ProjCustom(epoch_data, weights=pca.weights, center=center, whiten=whiten)
+    custom = ProjCustom(epoch_data, weights=pca.weights, center=center, whiten=whiten, interval_id = 'response_time')
     assert custom.data.shape[1] == n_comp
     if whiten:
         assert np.allclose(custom.data.var(dim=['trial','sample']), 1, atol=0.05)
@@ -63,7 +63,7 @@ def test_proj_pca_custom_variants(init_data, n_comp, center, whiten, reject_thre
 ])
 def test_proj_identity_variants(init_data, center, whiten, reject_threshold, min_duration, max_duration):
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data
-    identity = ProjIdentity(epoch_data, center=center, whiten=whiten)
+    identity = ProjIdentity(epoch_data, center=center, whiten=whiten, interval_id = 'response_time')
     assert identity.data.shape[1] == epoch_data.sizes['channel']
     if whiten:
         assert np.allclose(identity.data.var(dim=['trial','sample']), 1, atol=0.05)

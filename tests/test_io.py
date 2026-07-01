@@ -33,8 +33,8 @@ def init_data():
     sfreq = 100
     n_events = 3
     events = []
-    centering_id = {'stimulus':1}#trigger 1 = stimulus
-    response_id = {'response':5}
+    centering_id = {'stimulus/0':1}#trigger 1 = stimulus
+    event_id = {'response/0':5}
     raws = [DATA_DIR_A / 'dataset_a_raw_raw.fif', DATA_DIR_B / 'dataset_b_raw_raw.fif']
     event_files = [DATA_DIR_A / 'dataset_a_raw_raw_generating_events.npy',
                    DATA_DIR_B / 'dataset_b_raw_raw_generating_events.npy']
@@ -46,7 +46,7 @@ def init_data():
     preprocessing_kwargs = dict(sfreq = sfreq, reference='average')
     montage = simulations.sim_info().get_montage()
     epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, 
-                response_id=response_id, events_provided=events,
+                event_id=event_id, events_provided=events,
                 subj_name=['a','b'], montage=montage,
                 preprocessing_kwargs=preprocessing_kwargs, cpus=2)
     epoch_data = epoch_data.assign_coords({'condition': ('recording', epoch_data.subject.data)})
@@ -61,8 +61,8 @@ def init_data_large():
     sfreq = 100
     n_events = 3
     events = []
-    centering_id = {'stimulus':1}#trigger 1 = stimulus
-    response_id = {'response':5}
+    centering_id = {'stimulus/0':1}#trigger 1 = stimulus
+    event_id = {'response/0':5}
     raws = [DATA_DIR_C / 'dataset_c_raw_raw.fif']
     event_files = [DATA_DIR_C / 'dataset_c_raw_raw_generating_events.npy']
     for file in event_files:
@@ -73,10 +73,10 @@ def init_data_large():
     
     montage = simulations.sim_info().get_montage()
     epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, 
-                response_id=response_id, events_provided=events,
+                event_id=event_id, events_provided=events,
                 subj_name=['c'], montage=montage, preprocessing_fn=preprocessing_fn,
                 preprocessing_kwargs=preprocessing_kwargs)
-    epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, response_id=response_id,
+    epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, event_id=event_id,
             events_provided=events, verbose=True, subj_name=['c'])
     epoch_data = epoch_data.assign_coords({'condition': ('recording', epoch_data.subject.data)})
     return event_c, epoch_data, info, sfreq, n_events
@@ -87,8 +87,8 @@ def init_data_short():
     sfreq = 100
     n_events = 3
     events = []
-    centering_id = {'stimulus':1}#trigger 1 = stimulus
-    response_id = {'response':5}
+    centering_id = {'stimulus/0':1}#trigger 1 = stimulus
+    event_id = {'response/0':5}
     raws = [DATA_DIR_D / 'dataset_d_raw_raw.fif']
     event_files = [DATA_DIR_D / 'dataset_d_raw_raw_generating_events.npy']
     for file in event_files:
@@ -96,7 +96,7 @@ def init_data_short():
     event_d = events[0]
     # Data reading
     preprocessing_kwargs = dict(sfreq = sfreq)
-    epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, response_id=response_id,
+    epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, event_id=event_id,
             events_provided=events, verbose=True, subj_name=['d'],
             preprocessing_kwargs=preprocessing_kwargs)
     epoch_data = epoch_data.assign_coords({'condition': ('recording', epoch_data.recording.data)})
@@ -105,12 +105,9 @@ def init_data_short():
     positions = simulations.positions()[::10]
     return event_d, epoch_data, positions, sfreq, n_events
 
-#### SAVE AS BIDS READ WITH BIDS AND CHECK IT:S THE SAME
-#### Same for EPOCH
-
 def test_bids():
-    centering_id = {"stimulus":1}
-    response_id = {"response":5}
+    centering_id = {'stimulus/0':1}#trigger 1 = stimulus
+    event_id = {'response/0':5}
     bids_path = DATA_DIR / "pseudo_BIDS"
     bids_kwargs = dict(
         root = bids_path, #Mandatory path to the data
@@ -135,7 +132,7 @@ def test_bids():
         preprocessing_kwargs=preprocessing,
         preprocessing_fn=preprocessing_fn,
         centering_id = centering_id,
-        response_id = response_id,
+        event_id = event_id,
         cpus=1,
     )
     epoch_data, info = io.read_bids_raw(
@@ -144,7 +141,7 @@ def test_bids():
         montage=montage,
         preprocessing_kwargs=preprocessing,
         centering_id = centering_id,
-        response_id = response_id,
+        event_id = event_id,
         cpus=2,
     )
 
