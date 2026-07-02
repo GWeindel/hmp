@@ -5,7 +5,7 @@ attributes are set correctly.
 
 Option 1, specify all information in the 'from_io' call:
 
-    preprocessed = hmp.basedata.BaseData.from_io(io_data, interval_id='RT', crop=True,
+    preprocessed = hmp.basedata.BaseData.from_io(io_data, interval_id='response_time', crop=True,
                     reject=True, apply_variance=True, projection_type='pca',
                     projection_kwargs={'n_comp': 10})
 
@@ -13,7 +13,7 @@ Option 2, first build an object with from_io(io_data), then apply operations
 in the following order:
 
     preprocessed = hmp.basedata.BaseData.from_io(io_data)
-    preprocessed.crop_epochs(interval_id='RT')
+    preprocessed.crop_epochs(interval_id='response_time')
     preprocessed.reject_epochs()
     preprocessed.pca(n_comp=10)
     preprocessed.apply_variance_ops()
@@ -28,7 +28,7 @@ Includes methods to:
         an arbitrary linear combination of channels,
         or the identity of the channels.
     5. Whiten the components and standardize each trial's variance
-       (`common_variance`) and standardize the components for each participant.
+       (`common_variance`) and standardize the components for each recording.
 """
 
 import copy
@@ -64,7 +64,7 @@ class BaseData:
     interval_id: str, optional
         Name of the variable that contains the trial intervals in the epoch_data
         used for cropping and rejection.
-        Default = 'rt'.
+        Default = 'response_time'.
 
     #Cropping parameters used
     crop : bool, optional
@@ -115,14 +115,14 @@ class BaseData:
         Standardize variance across trials.
         Default = True
     subject_zscore: bool, optional
-        z-score each component for each participant
+        z-score each component for each recording
         Default = True
 
     """
 
     data: xr.DataArray
     weights: xr.DataArray = None
-    interval_id: str = 'rt'
+    interval_id: str = 'response_time'
 
     #cropping
     crop: bool = False
@@ -153,7 +153,7 @@ class BaseData:
     @classmethod
     def from_io( # noqa: PLR0912, PLR0913
                 cls, epoch_data: xr.Dataset, weights: xr.DataArray = None,
-                interval_id: str = 'rt',
+                interval_id: str = 'response_time',
                 crop: bool = False, crop_kwargs: dict = None,
                 reject: bool = False, reject_kwargs: dict = None,
                 projection_type: str = None, projection_kwargs: dict = None,
@@ -168,7 +168,7 @@ class BaseData:
         Parameters
         ----------
         epoch_data : xr.Dataset
-            Input EEG data with dimensions [participant, epoch, sample, channel],
+            Input EEG data with dimensions [recording, epoch, sample, channel],
             from `io` module
         weights : xr.DataArray with dimensions [channel, component] and coordinates
             channel (Fp1, CPz, ..) and component (0, 1, ..).
@@ -176,7 +176,7 @@ class BaseData:
         interval_id: str, optional
             Name of the variable that contains the trial intervals in the epoch_data
             used for cropping and rejection.
-            Default = 'rt'.
+            Default = 'response_time'.
         crop : bool, optional
             crop data based on parameters in crop_kwargs
             Default = False
@@ -263,7 +263,7 @@ class BaseData:
     @staticmethod
     def from_io_all_pca( # noqa: PLR0913
                 epoch_data: xr.Dataset, weights: xr.DataArray = None,
-                interval_id: str = 'rt', offset_start: float = 0, offset_end: float = 0,
+                interval_id: str = 'response_time', offset_start: float = 0, offset_end: float = 0,
                 min_duration: float = 0, max_duration: float = float('Inf'),
                 reject_amplitude: float = None, n_comp: float = None, center: bool = True,
                 method_pca: str='svd', whiten: bool = True, common_variance: bool = True,
@@ -317,7 +317,7 @@ class BaseData:
             Standardize variance across trials.
             Default = True
         subject_zscore: bool, optional
-            z-score each component for each participant
+            z-score each component for each recording
             Default = True
         """
         self.whiten = whiten
@@ -443,24 +443,24 @@ class BaseData:
         self.project('custom pca', weights, center=center)
 
     @staticmethod
-    def remove_participant(data, participant):
-        """Remove data from participant."""
+    def remove_recording(data, recording):
+        """Remove data from recording."""
         data = copy.deepcopy(data)
         data.data = data.data.unstack()
-        data.data = data.data.drop_sel(participant=[participant])
-        data.data = data.data.stack(trial=['participant','epoch'])
+        data.data = data.data.drop_sel(recording=[recording])
+        data.data = data.data.stack(trial=['recording','epoch'])
         return data
 
     @staticmethod
-    def get_participants(data, participants):
-        """Get data from specified participants."""
+    def get_recordings(data, recordings):
+        """Get data from specified recordings."""
         data = copy.deepcopy(data)
         data.data = data.data.unstack()
-        if isinstance(participants,list) or isinstance(participants,np.ndarray):
-            data.data = data.data.sel(participant=participants, drop=False)
+        if isinstance(recordings,list) or isinstance(recordings,np.ndarray):
+            data.data = data.data.sel(recording=recordings, drop=False)
         else:
-            data.data = data.data.sel(participant=[participants], drop=False)
-        data.data = data.data.stack(trial=['participant','epoch'])
+            data.data = data.data.sel(recording=[recordings], drop=False)
+        data.data = data.data.stack(trial=['recording','epoch'])
         return data
 
 
@@ -469,7 +469,7 @@ class BaseData:
     def _format_io_data(self):
         """Format data coming from io to basedata working format."""
         self.sfreq = self.data.sfreq
-        self.data = self.data.data.stack(trial=["participant", "epoch"]).dropna("trial", how="all")
+        self.data = self.data.data.stack(trial=["recording", "epoch"]).dropna("trial", how="all")
         self.data = self.data.transpose('trial','channel','sample')
 
     def _format_data(self):
@@ -504,7 +504,7 @@ class BaseData:
             self.data = self.data.unstack()
             self.data -= self.data.mean(['epoch','sample'], skipna=True)
             self.data /= self.data.std(['epoch','sample'], skipna=True)
-            self.data = self.data.stack(trial=['participant','epoch'])
+            self.data = self.data.stack(trial=['recording','epoch'])
 
     def _crop_epochs(self, verbose=True):
         """
@@ -650,11 +650,11 @@ class BaseData:
     def _project_pca(self, verbose=True):
         """Perform and apply PCA."""
         #covariance
-        participants = set(self.data.participant.values)
-        group_cov = np.zeros((len(participants), self.data.sizes["channel"],
+        recordings = set(self.data.recording.values)
+        group_cov = np.zeros((len(recordings), self.data.sizes["channel"],
                               self.data.sizes["channel"]), dtype=np.float64)
-        for j, participant in enumerate(participants):
-            part_data = self.data.where(self.data.participant == participant, drop=True)
+        for j, recording in enumerate(recordings):
+            part_data = self.data.where(self.data.recording == recording, drop=True)
             group_cov[j] = self._compute_covariance(part_data)
         vcov_mat = np.mean(group_cov, axis=0)
 
@@ -743,7 +743,7 @@ class BaseData:
                 vcov_mat += cov_i
         if count < len(data.trial)/10:
             warn(f"Less than 10% of the trials used to compute covariance for"
-                 f"{np.unique(data.participant.values)}. Covariance matrix might be unreliable")
+                 f"{np.unique(data.recording.values)}. Covariance matrix might be unreliable")
         return vcov_mat/count
 
     @staticmethod
