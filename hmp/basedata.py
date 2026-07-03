@@ -504,7 +504,8 @@ class BaseData:
             self.data = self.data.unstack()
             self.data -= self.data.mean(['epoch','sample'], skipna=True)
             self.data /= self.data.std(['epoch','sample'], skipna=True)
-            self.data = self.data.stack(trial=['recording','epoch'])
+            self.data = self.data.stack(trial=['recording','epoch'])\
+                .dropna("trial", how="all")
 
     def _crop_epochs(self, verbose=True):
         """
