@@ -1,13 +1,13 @@
 """Functions to transform the input data and the estimates."""
 
-
+from typing import Callable
+import copy
 import numpy as np
 import xarray as xr
 from numpy.random import RandomState
 from pandas import MultiIndex
 
 from hmp.basedata import BaseData
-
 
 def _check_basedata(base_data):
     if isinstance(base_data, BaseData):
@@ -78,7 +78,7 @@ def event_times(  # noqa: PLR0912
         times = eventprobs.argmax("sample") - event_shift  # Most likely event location
     else:
         times = xr.dot(eventprobs, eventprobs.sample, dims="sample") - event_shift
-    times = times.astype("float32")  # needed for eventual addition of NANs
+    times = times.astype("float64")  # needed for eventual addition of NANs
     times_group = (
         times.groupby("group").mean("trial").values
     )  # take average to make sure it's not just 0 on the trial-group
@@ -379,74 +379,80 @@ def centered_activity(
     return centered_data.assign_coords(trial_x_part)
 
 def _sel_method(data, value, variable, method):
-    if method == "equal":
-        data = data.where(data[variable] == value, drop=True)
-    elif method == "contains":
-        data = data.where(data[variable].str.contains(value), drop=True)
+    if variable in data.coords:
+        result = method(data[variable], value)
+        if result.dtype != bool:
+            raise ValueError(
+                f"Unsupported method. Use a callable that returns boolean."
+            )
+        data = data.where(result, drop=True)
+    else:
+        raise ValueError(f"{variable} not found in data")
     return data
-
-def _coordsel_bd(basedata, value, variable, method):
-    data = _check_basedata(base_data).unstack()
-    data = _sel_method(data, value, variable, method)
-    return data.stack(trial=['recording','epoch'])
 
 def _coordsel_data(epoch_data, value, variable, method):
     if len(epoch_data.dims) == 4:
         stacked_epoch_data = epoch_data.stack(trial=("recording", "epoch"))
+        # Faster and less RAM
         mask = ~stacked_epoch_data.data.isel(sample=0, channel=0).squeeze().isnull()
         stacked_epoch_data = stacked_epoch_data.sel(trial=stacked_epoch_data.trial.values[mask])
     else:
         raise ValueError(
-            "Unexpected data object. Expected an xarray dataset with dimensions:"
+            "Unexpected epoch_data object. Expected an xarray dataset with dimensions:"
             "recording, epoch, channel, sample"
         )
 
     stacked_epoch_data = _sel_method(stacked_epoch_data, value, variable, method)
     return stacked_epoch_data.unstack()
 
-def _coordsel_estimates(data, value, variable, method):
-    data = _sel_method(data, value, variable, method)
-    return data
 
-def coord_selection(data: xr.Dataset | xr.DataArray,
-                    value: str,
+def coord_selection(data: xr.Dataset | xr.DataArray | BaseData,
+                    value: object,
                     variable: str,
-                    method: str = "equal"
+                    method: Callable[[xr.DataArray, object], xr.DataArray] = np.equal
                    ):
-    """Select a subset from the hmp data using the coordinates.
+    """Select a subset from the hmp data using the specified coordinate(s).
 
-    The function selects trials for which 'value' is in 'variable' based on 'method'.
+    The function selects trials where `method(data[variable], value)` is True.
 
     Parameters
     ----------
-    preprocessed : xr.Dataset
-        preprocessed EEG data for hmp from the hmp.preprocessing classes
+    data : xr.Dataset | xr.DataArray | BaseData
+        Data from io, BaseData or estimates from hmp
     value : str | num
-        condition indicator for selection
+        Value to test with method().
     variable : str
-        coordinate present in preprocessed.data that is used for condition selection
-    method : str
-        'equal' selects equal trial, 'contains' selects trial in which value
+        coordinate present in data that is used for condition selection
+    method : callable
+        You can use callable resulting in a boolean,
+        e.g. 'np.equal', `np.greater` or lambda s, v: s.str.contains(v)
+        Method also allows for 'contains' that selects trial in which value
         appears in variable (e.g. 'comp' in 'incompatible' and 'compatible')
 
     Returns
     -------
     data : xr.Dataset
-        Subset of preprocessed_data.
+        Subset of data.
     """
-    if variable not in data.coords:
-        raise ValueError(f"{variable} not found in data")
-    if ~np.isin(method, ['equal','contains']):
-        raise ValueError(f"unknown method {method}")
     if isinstance(data, BaseData):
-        data = _coordsel_bd(data, value, variable, method)
-    elif 'channel' in data.dims:
-        data = _coordsel_data(data, value, variable, method)
-    elif 'event' in data.dims:
-        data = _coordsel_estimates(data, value, variable, method).dropna(dim="trial", how="all")
+        data = copy.deepcopy(data)
+        bdata = data.data.unstack()
+        bdata = _sel_method(bdata, value, variable, method)\
+            .stack(trial=['recording','epoch']).dropna(dim="trial", how="all")
+        data.data = bdata 
+    elif isinstance(data, (xr.DataArray, xr.Dataset)):
+        data = data.copy(deep=True)
+        if 'channel' in data.dims:
+            data = _coordsel_data(data, value, variable, method)
+        elif 'event' in data.dims:
+            data = _sel_method(data, value, variable, method).dropna(dim="trial", how="all")
+        # Doesn't handle basedata.data
+        else:
+            raise ValueError('Unexpected data type')
     else:
         raise ValueError('Unrecognized data type')
     return data
+
 
 def _define_random_state(seed=None):
     if seed is not None:
