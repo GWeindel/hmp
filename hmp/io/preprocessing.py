@@ -91,11 +91,22 @@ def preprocess_data(data: Raw | Epochs,
 
 def _filtering_resampling(data, preprocessing_kwargs, events, verbose):
     lowpass = preprocessing_kwargs['lowpass']
+
     if preprocessing_kwargs['sfreq'] is not None:
-        if preprocessing_kwargs['sfreq'] < data.info["sfreq"]:  # Downsampling
+        if isinstance(data, EpochsFIF):
+        # https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
+            decim = np.round(data.info["sfreq"] / preprocessing_kwargs['sfreq']).astype(int)
+            obtained_sfreq = data.info["sfreq"] / decim
+            max_lowpass = obtained_sfreq / 3.0
+            print(f"Epoch data will be decimated by {decim}"
+                  f"to achieve a sampling frequency of {obtained_sfreq}Hz")
+        else:
+            max_lowpass = preprocessing_kwargs['sfreq'] / 3.0
+        if preprocessing_kwargs['sfreq'] < data.info["sfreq"] and \
+            data.info['lowpass'] > max_lowpass:  # Downsampling
             if lowpass is None:
-                lowpass = preprocessing_kwargs['sfreq'] / 3.1
-            elif lowpass > preprocessing_kwargs['sfreq'] / 3.1:
+                lowpass = max_lowpass
+            elif lowpass > max_lowpass:
                 raise ValueError(f"Requested low pass filter of {lowpass}"
                      "is too high for desired sampling frequency of "
                      f"{preprocessing_kwargs['sfreq']}")
@@ -103,7 +114,7 @@ def _filtering_resampling(data, preprocessing_kwargs, events, verbose):
         data.filter(l_freq=preprocessing_kwargs['highpass'], h_freq=lowpass, verbose=verbose)
     if preprocessing_kwargs['sfreq'] is not None:
         if isinstance(data, EpochsFIF):
-            data = data.resample(preprocessing_kwargs['sfreq'], verbose=verbose)
+            data = data.decimate(decim, verbose=verbose)
         else:
             data, events = data.resample(preprocessing_kwargs['sfreq'],
                                          events=events, verbose=verbose)
