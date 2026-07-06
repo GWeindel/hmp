@@ -5,108 +5,47 @@ from hmp import simulations
 import numpy as np
 import hmp
 
-DATA_DIR = Path("tests", "gen_data")
-DATA_DIR_A = DATA_DIR / "dataset_a"
-DATA_DIR_B = DATA_DIR / "dataset_b"
+from test_io import init_data
 
 @pytest.fixture
-def init_data():
-    """ Initialize all data and model related info."""
-    sfreq = 100
-    n_events = 3
-    events = []
-    centering_id = {'stimulus/0':1}#trigger 1 = stimulus
-    event_id = {'response/0':5}
-    raws = [DATA_DIR_A / 'dataset_a_raw_raw.fif', DATA_DIR_B / 'dataset_b_raw_raw.fif']
-    event_files = [DATA_DIR_A / 'dataset_a_raw_raw_generating_events.npy',
-                   DATA_DIR_B / 'dataset_b_raw_raw_generating_events.npy']
-    for file in event_files:
-        events.append(np.load(file))
-    event_a = events[0]
-    event_b = events[1]
-    # Data reading
-    preprocessing_kwargs = dict(sfreq = sfreq)
-    montage = simulations.sim_info().get_montage()
-    epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, 
-                event_id=event_id, events_provided=events,
-                subj_name=['a','b'], montage=montage,
-                preprocessing_kwargs=preprocessing_kwargs)
-    epoch_data = epoch_data.assign_coords({'condition': ('recording', epoch_data.subject.data)})
-    epoch_data = epoch_data.sel(channel=epoch_data.channel[::4])
-    print(epoch_data.channel)
-    positions = simulations.positions()
-    return event_b, event_a, epoch_data, positions, sfreq, n_events
+def fixt_init_data():
+    return init_data()
 
-@pytest.mark.parametrize("n_comp,center,whiten,reject_threshold,min_duration,max_duration", [
-    (5, True, True, None, None, None),
-    (10, False, True, 0.1, None, None),
-    (1, True, False, None, 0.05, 1.5),
-    (2, False, False, 0.2, 0.1, 2.0),
+@pytest.mark.parametrize("n_comp,whiten,reject_threshold,min_duration,max_duration", [
+    (5, True, None, None, None),
+    (10, True, 0.1, None, None),
+    (1, False, None, 0.05, 1.5),
+    (.999, False, 0.2, 0.1, 2.0),
 ])
-def test_proj_pca_custom_variants(init_data, n_comp, center, whiten, reject_threshold, min_duration, max_duration):
-    event_b, event_a, epoch_data, positions, sfreq, n_events = init_data
-    pca = hmp.basedata.BaseData.from_io_all_pca(epoch_data, n_comp=n_comp, center=center, whiten=whiten, interval_id = 'response_time')
-    assert pca.data.shape[1] == n_comp
+def test_proj_pca_custom_variants(fixt_init_data, n_comp, whiten, reject_threshold, min_duration, max_duration):
+    event_b, event_a, epoch_data, positions, sfreq, n_events = fixt_init_data
+    pca = hmp.basedata.from_io(epoch_data)
+    pca.crop_reject_epochs()
+    pca.project(hmp.projectors.PCA(n_comp=n_comp))
+    pca.apply_variance_ops(whiten=whiten)
+    custom = hmp.basedata.from_io(epoch_data)
+    custom.project(hmp.projectors.Custom(weights=pca.weights))
+    custom.apply_variance_ops()
+    if n_comp == 5: #Only needs to run once
+        # Testing default shortcut
+        pca = hmp.basedata.default(epoch_data, n_comp=n_comp, whiten=whiten,
+                               reject_amplitude=reject_threshold,
+                               min_duration =min_duration,
+                               max_duration = max_duration,
+                               duration_id = 'response_time')
+        #testing identity
+        identity = hmp.basedata.from_io(epoch_data)
+        identity.project(hmp.projectors.Identity())
+        identity.apply_variance_ops(whiten=whiten)
+        assert identity.data.shape[1] == epoch_data.sizes['channel']
+        if whiten:
+            assert np.allclose(identity.data.var(dim=['trial','sample']),
+                               1, atol=0.05)
+
+    if isinstance(n_comp, int):
+        assert pca.data.shape[1] == n_comp
+        assert custom.data.shape[1] == n_comp
     if whiten:
         assert np.allclose(pca.data.var(dim=['trial','sample']), 1, atol=0.05)
-    custom = hmp.basedata.BaseData.from_io(epoch_data, weights=pca.weights,
-            projection_kwargs={'center': center}, crop=True, reject=True,
-            apply_variance=True, variance_kwargs={'whiten': whiten},
-            projection_type='custom', interval_id = 'response_time')
-    assert custom.data.shape[1] == n_comp
-    if whiten:
         assert np.allclose(custom.data.var(dim=['trial','sample']), 1, atol=0.05)
-
-@pytest.mark.parametrize("center,whiten,reject_threshold,min_duration,max_duration", [
-    (True, True, None, None, None),
-    (False, True, 0.1, None, None),
-    (True, False, None, 0.05, 1.5),
-    (False, False, 0.2, 0.1, 2.0),
-])
-def test_proj_identity_variants(init_data, center, whiten, reject_threshold, min_duration, max_duration):
-    event_b, event_a, epoch_data, positions, sfreq, n_events = init_data
-    identity = hmp.basedata.BaseData.from_io(epoch_data, crop=True, reject=True,
-                                             apply_variance=True, interval_id = 'response_time'
-                                             projection_kwargs={'center': center},
-                                             variance_kwargs={'whiten': whiten})
-    assert identity.data.shape[1] == epoch_data.sizes['channel']
-    if whiten:
-        assert np.allclose(identity.data.var(dim=['trial','sample']), 1, atol=0.05)
-
-@pytest.mark.parametrize("n_comp,center,whiten,reject_threshold,min_duration,max_duration", [
-    (5, True, True, None, None, None),
-    (10, False, True, 0.1, None, None),
-    (1, True, False, None, 0.05, 1.5),
-    (2, False, False, 0.2, 0.1, 2.0),
-])
-def test_proj_pca_custom_variants_newbasedata(init_data, n_comp, center, whiten,
-                                 reject_threshold, min_duration, max_duration):
-    event_b, event_a, epoch_data, positions, sfreq, n_events = init_data
-    #pca = hmp.basedata.BaseData.from_io_all_pca(epoch_data, n_comp=n_comp, center=center, whiten=whiten)
-    pca = hmp.basedata.BaseData.from_io(epoch_data)
-    pca.crop_epochs()
-    pca.reject_epochs()
-    pca.pca_and_variance(n_comp=n_comp,center=center,whiten=whiten)
-
-    assert pca.data.shape[1] == n_comp
-    if whiten:
-        assert np.allclose(pca.data.var(dim=['trial','sample']), 1, atol=0.05)
-
-    custom = hmp.basedata.BaseData.from_io(epoch_data)
-    custom.crop_epochs()
-    custom.reject_epochs()
-    custom.project(projection_type='custom',center=center, weights=pca.weights)
-    custom.apply_variance_ops(whiten=whiten)
-    data = hmp.basedata.BaseData.remove_participant(custom, 'a')
-    data = hmp.basedata.BaseData.get_participants(custom, ['a'])
-
-    #and pca pca based
-    pca = hmp.basedata.BaseData.from_io(epoch_data)
-    pca.crop_epochs()
-    pca.reject_epochs()
-    pca.pca_and_variance(n_comp=n_comp,center=center,
-                         whiten=whiten, method_pca='pca')
-
-    assert custom.data.shape[1] == n_comp
-    if whiten:
-        assert np.allclose(custom.data.var(dim=['trial','sample']), 1, atol=0.05)
+    

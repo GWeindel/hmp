@@ -7,7 +7,7 @@ in the following order:
 
  hmp_data = hmp.basedata.from_io(io_data)
  hmp_data.crop_reject_epochs(duration_id='response_time')
- hmp_data.project(n_comp=10)
+ hmp_data.project(hmp.projectors.PCA(n_comp=10))
  hmp_data.apply_variance_ops()
 
 Option 2: use the default pipeline with:
@@ -53,7 +53,7 @@ class BaseData:
 
     data: xr.DataArray
 
-    def crop_reject_epochs(self, duration_id: str = None, offset_start: float = 0,
+    def crop_reject_epochs(self, duration_id: str = 'response_time', offset_start: float = 0,
                            offset_end: float = 0, center: bool = False,
                            min_duration: float = 0, max_duration: float = np.inf,
                            reject_amplitude = np.inf, verbose=True):
@@ -96,9 +96,9 @@ class BaseData:
         self.max_duration = max_duration
         self.reject_amplitude = reject_amplitude
 
-        if self.max_duration is float('Inf') or None:
+        if self.max_duration is float('Inf') or self.max_duration is None:
             self.max_duration = int(self.data.sample.max()) / self.data.sfreq
-        if self.min_duration == 0 or None:
+        if self.min_duration == 0 or self.min_duration is None:
             self.min_duration = 1 / self.data.sfreq
 
         if self.max_duration < 0 or self.min_duration < 0 or \

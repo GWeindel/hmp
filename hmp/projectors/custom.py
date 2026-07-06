@@ -20,12 +20,11 @@ class Custom(Projector):
 
     def fit(self,
             data: DataArray,
-            weights: DataArray,
             verbose: bool = True):
         """Passing weights."""
         if verbose is True:
-            print('Applying custom projection on the data')
-        self.weights = weights
+            print("Using weights at initialization for "
+                  "custom projection on the data")
 
     def transform(self,
                   data: DataArray,) -> DataArray:
