@@ -98,8 +98,9 @@ def _filtering_resampling(data, preprocessing_kwargs, events, verbose):
             decim = np.round(data.info["sfreq"] / preprocessing_kwargs['sfreq']).astype(int)
             obtained_sfreq = data.info["sfreq"] / decim
             max_lowpass = obtained_sfreq / 3.0
-            print(f"Epoch data will be decimated by {decim}"
-                  f"to achieve a sampling frequency of {obtained_sfreq}Hz")
+            if verbose:
+                print(f"Epoch data will be decimated by {decim} "
+                      f"to achieve a sampling frequency of {obtained_sfreq}Hz")
         else:
             max_lowpass = preprocessing_kwargs['sfreq'] / 3.0
         if preprocessing_kwargs['sfreq'] < data.info["sfreq"] and \
