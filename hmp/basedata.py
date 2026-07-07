@@ -131,7 +131,7 @@ class BaseData:
         self.projector = projector
 
     def apply_variance_ops(self, whiten: bool = True, common_variance: bool = True,
-                            subject_zscore: bool = True):
+                            recording_zscore: bool = True):
         """
         Apply three variance operators, typically after projection.
 
@@ -141,22 +141,22 @@ class BaseData:
         common_variance : bool, optional
             Standardize variance across trials.
             Default = True
-        subject_zscore: bool, optional
+        recording_zscore: bool, optional
             z-score each component for each recording
             Default = True
         """
         self._check_order(projected=True)
         self.whiten = whiten
         self.common_variance = common_variance
-        self.subject_zscore = subject_zscore
+        self.recording_zscore = recording_zscore
         self._apply_variance_ops()
 
     def pca_and_variance(self, n_comp: float = None, method_pca: str='svd',
-                         whiten=True, common_variance=True, subject_zscore=True, verbose=True):
+                         whiten=True, common_variance=True, recording_zscore=True, verbose=True):
         """Apply PCA and variance operations."""
         self.project(PCA(n_comp=n_comp, method_pca=method_pca, verbose=verbose))
         self.apply_variance_ops(whiten=whiten, common_variance=common_variance,
-                                subject_zscore=subject_zscore)
+                                recording_zscore=recording_zscore)
 
     def select_coord(self,
                 value: object,
@@ -208,7 +208,7 @@ class BaseData:
         if self.common_variance:
             self.data /= self.data.std(['component','sample'], skipna=True)
 
-        if self.subject_zscore:
+        if self.recording_zscore:
             self.data = self.data.unstack()
             self.data -= self.data.mean(['epoch','sample'], skipna=True)
             self.data /= self.data.std(['epoch','sample'], skipna=True)
@@ -360,7 +360,7 @@ def default(
             n_comp: float = None,
             whiten: bool = True,
             common_variance: bool = True,
-            subject_zscore: bool = True,
+            recording_zscore: bool = True,
             verbose: bool = True
     ):
     """
@@ -411,7 +411,7 @@ def default(
     common_variance : bool, optional
         Standardize variance across trials.
         Default = True
-    subject_zscore: bool, optional
+    recording_zscore: bool, optional
         z-score each component for each recording
         Default = True
     verbose:
@@ -440,7 +440,7 @@ def default(
     base_data.apply_variance_ops(
         whiten=whiten,
         common_variance=common_variance,
-        subject_zscore=subject_zscore,
+        recording_zscore=recording_zscore,
     )
 
     return base_data
