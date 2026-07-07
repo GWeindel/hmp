@@ -24,7 +24,7 @@ def test_proj_pca_custom_variants(fixt_init_data, n_comp, whiten, reject_thresho
     pca.project(hmp.projectors.PCA(n_comp=n_comp))
     pca.apply_variance_ops(whiten=whiten)
     custom = hmp.basedata.from_io(epoch_data)
-    custom.project(hmp.projectors.Custom(weights=pca.weights))
+    custom.project(hmp.projectors.Custom(weights=pca.projector.weights))
     custom.apply_variance_ops()
     if n_comp == 5: #Only needs to run once
         # Testing default shortcut

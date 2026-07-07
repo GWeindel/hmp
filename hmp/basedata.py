@@ -125,7 +125,6 @@ class BaseData:
         """
         projector.verbose = verbose
         self.data = projector.fit_transform(self.data)
-        self.weights = projector.weights
         self.data = self.data.transpose('sample','component','trial')
         self.projector = projector
 
