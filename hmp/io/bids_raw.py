@@ -143,7 +143,8 @@ def read_bids_raw(
 
     recordings = [x for x in all_paths
                   if x.fpath.suffix in ALLOWED_DATATYPE_EXTENSIONS[bids_kwargs['datatypes'][0]]
-                  or x.fpath.suffix == '.fif']
+                  or x.fpath.suffix == '.fif'
+                  or x.fpath.suffix == '.set']
 
     # Processing loops/parallel
     if cpus == 1:
