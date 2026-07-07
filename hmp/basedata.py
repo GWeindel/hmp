@@ -56,7 +56,7 @@ class BaseData:
     data: xr.DataArray
 
     def crop_reject_epochs(self, duration_id: str = 'response_time', offset_start: float = 0,
-                           offset_end: float = 0, center: bool = True,
+                           offset_end: float = 0, center: bool = False,
                            min_duration: float = 0, max_duration: float = np.inf,
                            reject_amplitude = np.inf, verbose=True):
         """
@@ -113,6 +113,17 @@ class BaseData:
         if self.reject_amplitude < 0:
             warn('Amplitude threshold is used in absolute values.')
             self.reject_amplitude = np.abs(self.reject_amplitude)
+
+        # Check baseline correction if no centering
+        if center is False:
+            if 0 in self.data.sample:
+                bsl = [min(self.data.sample), 0]
+                bsl_values = self.data.sel(sample=slice(*bsl)).mean(['trial','sample'])/\
+                        self.data.sel(sample=slice(*bsl)).std(['trial','sample'])
+                if (bsl_values.values > 0.1).any():
+                    warn("Some electrodes/recordings have not been baseline corrected. "
+                         "Non-centered data might behave unexpectedly in the next steps. "
+                         "Consider baseline correcting the data before using BaseData.")
         
         self._crop_reject_epochs(verbose)
 
@@ -353,7 +364,7 @@ def default(
             duration_id: str = 'response_time',
             offset_start: float = 0, 
             offset_end: float = 0,
-            center: bool = True,
+            center: bool = False,
             min_duration: float = 0,
             max_duration: float = float('Inf'),
             reject_amplitude: float = np.inf,
