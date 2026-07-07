@@ -23,6 +23,11 @@ DATA_DIR_B = DATA_DIR / "dataset_b"
 DATA_DIR_C = DATA_DIR / "dataset_c"
 DATA_DIR_D = DATA_DIR / "dataset_d"
 
+sfreq = 100
+n_events = 3
+centering_id = {'stimulus/0':1}#trigger 1 = stimulus
+event_id = {'response/0':5}
+
 def preprocessing_fn(data, montage, events, 
                    verbose, preprocessing_kwargs):
     return data, events
@@ -30,11 +35,7 @@ def preprocessing_fn(data, montage, events,
 def init_data():
     # Also tests data_format 'raw'
     """ Initialize all data and model related info."""
-    sfreq = 100
-    n_events = 3
     events = []
-    centering_id = {'stimulus/0':1}#trigger 1 = stimulus
-    event_id = {'response/0':5}
     raws = [DATA_DIR_A / 'dataset_a_raw_raw.fif', DATA_DIR_B / 'dataset_b_raw_raw.fif']
     event_files = [DATA_DIR_A / 'dataset_a_raw_raw_generating_events.npy',
                    DATA_DIR_B / 'dataset_b_raw_raw_generating_events.npy']
@@ -43,12 +44,11 @@ def init_data():
     event_a = events[0]
     event_b = events[1]
     # Data reading
-    preprocessing_kwargs = dict(sfreq = sfreq, reference='average')
     montage = simulations.sim_info().get_montage()
     epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, 
                 event_id=event_id, events_provided=events,
                 subj_name=['a','b'], montage=montage,
-                preprocessing_kwargs=preprocessing_kwargs, cpus=2)
+                cpus=2)
     epoch_data = epoch_data.assign_coords({'condition': ('recording', epoch_data.subject.data)})
     # subsample channels for speed
     epoch_data = epoch_data.sel(channel=epoch_data.channel[::3])
@@ -58,24 +58,18 @@ def init_data():
 def init_data_large():
     # all electrode and more trials
     """ Initialize all data and model related info."""
-    sfreq = 100
-    n_events = 3
     events = []
-    centering_id = {'stimulus/0':1}#trigger 1 = stimulus
-    event_id = {'response/0':5}
     raws = [DATA_DIR_C / 'dataset_c_raw_raw.fif']
     event_files = [DATA_DIR_C / 'dataset_c_raw_raw_generating_events.npy']
     for file in event_files:
         events.append(np.load(file))
     event_c = events[0]
     # Data reading
-    preprocessing_kwargs = dict(sfreq = sfreq)
-    
     montage = simulations.sim_info().get_montage()
     epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, 
                 event_id=event_id, events_provided=events,
-                subj_name=['c'], montage=montage, preprocessing_fn=preprocessing_fn,
-                preprocessing_kwargs=preprocessing_kwargs)
+                subj_name=['c'], montage=montage, 
+                preprocessing_fn=preprocessing_fn)
     epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, event_id=event_id,
             events_provided=events, verbose=True, subj_name=['c'])
     epoch_data = epoch_data.assign_coords({'condition': ('recording', epoch_data.subject.data)})
@@ -84,21 +78,16 @@ def init_data_large():
 def init_data_short():
     # events separated by a very short interval to trigger invalid LL
     """ Initialize all data and model related info."""
-    sfreq = 100
-    n_events = 3
     events = []
-    centering_id = {'stimulus/0':1}#trigger 1 = stimulus
-    event_id = {'response/0':5}
     raws = [DATA_DIR_D / 'dataset_d_raw_raw.fif']
     event_files = [DATA_DIR_D / 'dataset_d_raw_raw_generating_events.npy']
     for file in event_files:
         events.append(np.load(file))
     event_d = events[0]
     # Data reading
-    preprocessing_kwargs = dict(sfreq = sfreq)
     epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, event_id=event_id,
-            events_provided=events, verbose=True, subj_name=['d'],
-            preprocessing_kwargs=preprocessing_kwargs)
+            events_provided=events, verbose=True, subj_name=['d'], 
+            preprocessing_fn=preprocessing_fn)
     epoch_data = epoch_data.assign_coords({'condition': ('recording', epoch_data.recording.data)})
     # subsample channels for speed
     epoch_data = epoch_data.sel(channel=epoch_data.channel[::10])
@@ -106,8 +95,6 @@ def init_data_short():
     return event_d, epoch_data, positions, sfreq, n_events
 
 def test_bids():
-    centering_id = {'stimulus/0':1}#trigger 1 = stimulus
-    event_id = {'response/0':5}
     bids_path = DATA_DIR / "pseudo_BIDS"
     bids_kwargs = dict(
         root = bids_path, #Mandatory path to the data
@@ -122,7 +109,7 @@ def test_bids():
                          pick_channels='eeg' 
                         )
 
-    epoching = dict()
+    epoching = dict(tmin=-.1, tmax=2)
     
     # Reading the data
     epoch_data, info = io.read_bids_raw(
@@ -162,14 +149,11 @@ def test_epochs():
             response = requests.get(url)
             with open(file_path, 'wb') as f:
                 f.write(response.content)
-    preprocessing = dict(sfreq = 100)
     subj_files = [os.path.join(epoch_data_path, f) for f in os.listdir(epoch_data_path) if f.endswith('.fif')]  # Create a list of files with full paths
     epoch_data, info = io.read_mne_epochs(subj_files,
-                                preprocessing_kwargs=preprocessing,
                                 montage='biosemi64',
                                 verbose=True)
     epoch_data, info = io.read_mne_epochs(subj_files,
-                                preprocessing_kwargs=preprocessing,
                                 montage='biosemi64',
                                 verbose=True, cpus=2, preprocessing_fn=preprocessing_fn)
     epoch_data.drop_vars(['stim'])

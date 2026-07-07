@@ -30,6 +30,7 @@ def test_proj_pca_custom_variants(fixt_init_data, n_comp, whiten, reject_thresho
         # Testing default shortcut
         pca = hmp.basedata.default(epoch_data, n_comp=n_comp, whiten=whiten,
                                reject_amplitude=reject_threshold,
+                               center=False,
                                min_duration =min_duration,
                                max_duration = max_duration,
                                duration_id = 'response_time')
