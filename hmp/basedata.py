@@ -190,13 +190,16 @@ class BaseData:
         """
         rts_arr = self.data.coords[self.duration_id].values.copy()
         rts_arr = self._check_scale_ms(rts_arr, warning=True)
+        rts_arr[np.isnan(rts_arr)] = 0  # rejected during epoching or inexistant     
+        inexistant_dur = len(rts_arr[rts_arr == 0])
 
+        if verbose:
+            print(f"Found {len(rts_arr[rts_arr > 0])} trials with positively defined durations "
+                f"and {inexistant_dur} trials without durations (0 or nan)")
+        
         rts_arr[rts_arr > self.max_duration] = 0
         rts_arr[rts_arr < self.min_duration] = 0
-        rt_criteria_rej = len(rts_arr[rts_arr == 0])
-
-        inexistant_rej = len(rts_arr[np.isnan(rts_arr)])
-        rts_arr[np.isnan(rts_arr)] = 0  # rejected during epoching or inexistant     
+        rt_criteria_rej = len(rts_arr[rts_arr == 0]) - inexistant_dur
 
         # Sample domain
         rts_arr = np.rint(rts_arr * self.data.sfreq).astype(int)
@@ -220,6 +223,7 @@ class BaseData:
 
         # threshold based rejection, cropping and median centering
         time0 = np.argmin(np.abs(self.data.sample.values)) #Centering event
+        inexistant_rej = 0
         rej = 0
         for i in range(len(self.data.data)):
             #Total sample up to duration, including baseline
@@ -247,12 +251,10 @@ class BaseData:
 
         if verbose:
             print()
-            print(f"{len(rts_arr[rts_arr > 0])} positively defined intervals "\
-                f"between {self.min_duration} and {self.max_duration} seconds.")
             print(f"Rejection summary: \n {rej} trials rejected based on threshold of "
-             f"{self.reject_amplitude} \n {rt_criteria_rej} trials rejected based on interval "
-             f"limit of {self.min_duration, self.max_duration} \n {inexistant_rej} trials "
-             "detected with no interval (e.g. preprocessing or interval exceeding epoch)) ")
+             f"{self.reject_amplitude} \n {rt_criteria_rej} trials rejected "
+             f" based on duration limit of {self.min_duration, self.max_duration} \n"
+             f" {inexistant_rej} with duration but without data (nan at time 0)")
 
         self.data = self.data.sel(
                 sample=slice(offset_start_samples,
