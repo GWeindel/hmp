@@ -121,9 +121,10 @@ class BaseData:
                 bsl_values = self.data.sel(sample=slice(*bsl)).mean(['trial','sample'])/\
                         self.data.sel(sample=slice(*bsl)).std(['trial','sample'])
                 if (bsl_values.values > 0.1).any():
-                    warn("Some electrodes/recordings have not been baseline corrected. "
+                    warn("Some electrodes might not have not been baseline corrected. "
                          "Non-centered data might behave unexpectedly in the next steps. "
-                         "Consider baseline correcting the data before using BaseData.")
+                         "Consider baseline correcting the data before using BaseData or "
+                         "to use the `center` parameter in basedata.crop_reject_epochs. ")
         
         self._crop_reject_epochs(verbose)
 
