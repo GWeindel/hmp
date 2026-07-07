@@ -54,7 +54,7 @@ class BaseData:
     data: xr.DataArray
 
     def crop_reject_epochs(self, duration_id: str = 'response_time', offset_start: float = 0,
-                           offset_end: float = 0, center: bool = False,
+                           offset_end: float = 0, center: bool = True,
                            min_duration: float = 0, max_duration: float = np.inf,
                            reject_amplitude = np.inf, verbose=True):
         """
