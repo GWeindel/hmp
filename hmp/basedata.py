@@ -229,7 +229,7 @@ class BaseData:
                 if ~(np.abs(self.data.values[i, :, : epoch_max_time])
                             > self.reject_amplitude).any():
                     # Crops the epochs up to duration of trial 
-                    self.data.values[i, :, epoch_max_time:] = np.nan
+                    self.data.values[i, :, epoch_max_time + 1:] = np.nan
                     # Centering, including baseling
                     if self.center:
                         self.data.values[i] -= np.median(
