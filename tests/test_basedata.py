@@ -15,7 +15,7 @@ def fixt_init_data():
     (5, True, None, None, None),
     (10, True, 0.1, None, None),
     (1, False, None, 0.05, 1.5),
-    (.999, False, 0.2, 0.1, 2.0),
+    (1, False, 0.2, 0.1, 2.0),
 ])
 def test_proj_pca_custom_variants(fixt_init_data, n_comp, whiten, reject_threshold, min_duration, max_duration):
     event_b, event_a, epoch_data, positions, sfreq, n_events = fixt_init_data
@@ -41,6 +41,12 @@ def test_proj_pca_custom_variants(fixt_init_data, n_comp, whiten, reject_thresho
         if whiten:
             assert np.allclose(identity.data.var(dim=['trial','sample']),
                                1, atol=0.05)
+        #Testing selection
+        # Selecting participant
+        a = pca.select_coord(value='a', variable='recording', method=np.equal)
+        # Selecting participant list
+        not_a = pca.select_coord(value='a', variable='recording', method=np.not_equal)
+        assert pca.data.sizes['trial'] == a.data.sizes['trial'] + not_a.data.sizes['trial']
 
     if isinstance(n_comp, int):
         assert pca.data.shape[1] == n_comp

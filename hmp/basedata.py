@@ -26,9 +26,10 @@ Includes methods to:
        (`common_variance`) and standardize the components for each recording.
 """
 
-import copy
+from copy import deepcopy
 from dataclasses import dataclass
 from warnings import warn
+from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -36,6 +37,7 @@ import xarray as xr
 from scipy.linalg import eigh
 
 from .projectors import Projector, PCA
+from .utils import _sel_method
 
 @dataclass
 class BaseData:
@@ -155,6 +157,46 @@ class BaseData:
         self.project(PCA(n_comp=n_comp, method_pca=method_pca, verbose=verbose))
         self.apply_variance_ops(whiten=whiten, common_variance=common_variance,
                                 subject_zscore=subject_zscore)
+
+    def select_coord(self,
+                value: object,
+                variable: str,
+                method: Callable[[xr.DataArray, object], xr.DataArray] = np.equal,
+                copy: bool = True
+               ):
+        """Select a subset from basedata using the specified coordinate(s).
+    
+        The function selects trials where `method(data[variable], value)` is True.
+        You can either use functions returning booleans or a custom function 
+        using lambda, e.g. `method=lambda x, v: ~x.isin(v)`
+    
+        Parameters
+        ----------
+        data : BaseData
+            Data from io, BaseData or estimates from hmp
+        value : str | num
+            Value to test with method().
+        variable : str
+            coordinate present in data that is used for condition selection
+        method : callable
+            You can use callable resulting in a boolean,
+            e.g. 'np.equal', `np.greater` or lambda s, v: s.str.contains(v)
+            Method also allows for 'contains' that selects trial in which value
+            appears in variable (e.g. 'comp' in 'incompatible' and 'compatible')
+        copy : bool
+            Whether to return a copy (True, Default) or overwrite the current object (False)
+        Returns
+        -------
+        data : BaseData
+            Subset of the provided BaseData object.
+        """
+        if copy:
+            bdata = deepcopy(self)
+        else:
+            bdata = self
+        bdata.data = (_sel_method(bdata.data.unstack(), value, variable, method)
+            .stack(trial=["recording", "epoch"]).dropna(dim="trial", how="all"))
+        return bdata
 
     def _apply_variance_ops(self):
         """Apply one or more variance operations."""
@@ -283,6 +325,7 @@ class BaseData:
         elif projected is False and 'component' in self.data.dims:
             raise ValueError('Previous projection was applied. Use raw epoched data')
 
+
 def from_io(epoch_data: xr.Dataset) -> BaseData:
     """
     Create a BaseData instance from data from io.
@@ -401,3 +444,13 @@ def default(
     )
 
     return base_data
+
+
+def _check_basedata(base_data):
+    if isinstance(base_data, BaseData):
+        data = base_data.data
+    elif 'component' in base_data.dims:
+        data = base_data
+    else:
+        raise ValueError("base_data must be an hmp base_data object")
+    return data

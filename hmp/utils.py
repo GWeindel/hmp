@@ -1,22 +1,10 @@
 """Functions to transform the input data and the estimates."""
 
 from typing import Callable
-import copy
 import numpy as np
 import xarray as xr
 from numpy.random import RandomState
 from pandas import MultiIndex
-
-from hmp.basedata import BaseData
-
-def _check_basedata(base_data):
-    if isinstance(base_data, BaseData):
-        data = base_data.data
-    elif 'component' in base_data.dims:
-        data = base_data
-    else:
-        raise ValueError("base_data must be an hmp base_data object")
-    return data
 
 def _check_sf_consistency(epoch_data, estimates):
     if epoch_data.sfreq != estimates.sfreq:
@@ -406,19 +394,22 @@ def _coordsel_data(epoch_data, value, variable, method):
     return stacked_epoch_data.unstack()
 
 
-def coord_selection(data: xr.Dataset | xr.DataArray | BaseData,
+def coord_selection(data: xr.Dataset | xr.DataArray,
                     value: object,
                     variable: str,
-                    method: Callable[[xr.DataArray, object], xr.DataArray] = np.equal
+                    method: Callable[[xr.DataArray, object], xr.DataArray] = np.equal,
+                    copy: bool = True
                    ):
     """Select a subset from the hmp data using the specified coordinate(s).
 
     The function selects trials where `method(data[variable], value)` is True.
-
+    You can either use functions returning booleans or a custom function 
+    using lambda, e.g. `method=lambda x, v: ~x.isin(v)`
+    
     Parameters
     ----------
-    data : xr.Dataset | xr.DataArray | BaseData
-        Data from io, BaseData or estimates from hmp
+    data : xr.Dataset | xr.DataArray
+        Data from io or estimates from hmp
     value : str | num
         Value to test with method().
     variable : str
@@ -428,31 +419,22 @@ def coord_selection(data: xr.Dataset | xr.DataArray | BaseData,
         e.g. 'np.equal', `np.greater` or lambda s, v: s.str.contains(v)
         Method also allows for 'contains' that selects trial in which value
         appears in variable (e.g. 'comp' in 'incompatible' and 'compatible')
-
+    copy : bool
+        Whether to return a copy (True, Default) or overwrite the current object (False)
     Returns
     -------
     data : xr.Dataset
         Subset of data.
     """
-    if isinstance(data, BaseData):
-        data = copy.deepcopy(data)
-        bdata = data.data.unstack()
-        bdata = _sel_method(bdata, value, variable, method)\
-            .stack(trial=['recording','epoch']).dropna(dim="trial", how="all")
-        data.data = bdata 
-    elif isinstance(data, (xr.DataArray, xr.Dataset)):
+    if copy:
         data = data.copy(deep=True)
-        if 'channel' in data.dims:
-            data = _coordsel_data(data, value, variable, method)
-        elif 'event' in data.dims:
-            data = _sel_method(data, value, variable, method).dropna(dim="trial", how="all")
-        # Doesn't handle basedata.data
-        else:
-            raise ValueError('Unexpected data type')
+    if 'channel' in data.dims: #Means epoch_data
+        data = _coordsel_data(data, value, variable, method)
+    elif 'event' in data.dims: #HMP outputs
+        data = _sel_method(data, value, variable, method).dropna(dim="trial", how="all")
     else:
-        raise ValueError('Unrecognized data type')
+        raise ValueError('Unexpected data type')
     return data
-
 
 def _define_random_state(seed=None):
     if seed is not None:

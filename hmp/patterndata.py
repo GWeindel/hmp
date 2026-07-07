@@ -7,9 +7,8 @@ import xarray as xr
 from numpy.typing import DTypeLike
 from scipy.signal import correlate
 
-from hmp.basedata import BaseData
+from hmp.basedata import BaseData, _check_basedata
 from hmp.patterns import HalfSine, Pattern
-from hmp.utils import _check_basedata
 
 
 @dataclass
