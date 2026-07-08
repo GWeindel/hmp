@@ -26,6 +26,13 @@ def test_proj_pca_custom_variants(fixt_init_data, n_comp, whiten, reject_thresho
     custom = hmp.basedata.from_io(epoch_data)
     custom.project(hmp.projectors.Custom(weights=pca.projector.weights))
     custom.apply_variance_ops()
+    if isinstance(n_comp, int):
+        assert pca.data.shape[1] == n_comp
+        assert custom.data.shape[1] == n_comp
+    if whiten:
+        assert np.allclose(pca.data.var(dim=['trial','sample']), 1, atol=0.05)
+        assert np.allclose(custom.data.var(dim=['trial','sample']), 1, atol=0.05)
+        
     if n_comp == 5: #Only needs to run once
         # Testing default shortcut
         pca = hmp.basedata.default(epoch_data, n_comp=n_comp, whiten=whiten,
@@ -40,19 +47,11 @@ def test_proj_pca_custom_variants(fixt_init_data, n_comp, whiten, reject_thresho
         identity.apply_variance_ops(whiten=whiten)
         assert identity.data.shape[1] == epoch_data.sizes['channel']
         if whiten:
-            assert np.allclose(identity.data.var(dim=['trial','sample']),
-                               1, atol=0.05)
+            assert np.allclose(identity.data.var(dim=['trial','sample']), 1, atol=0.05)
         #Testing selection
         # Selecting participant
         a = pca.select_coord(value='a', variable='recording', method=np.equal)
+        a.data.attrs['sfreq']    
         # Selecting participant list
         not_a = pca.select_coord(value='a', variable='recording', method=np.not_equal)
         assert pca.data.sizes['trial'] == a.data.sizes['trial'] + not_a.data.sizes['trial']
-
-    if isinstance(n_comp, int):
-        assert pca.data.shape[1] == n_comp
-        assert custom.data.shape[1] == n_comp
-    if whiten:
-        assert np.allclose(pca.data.var(dim=['trial','sample']), 1, atol=0.05)
-        assert np.allclose(custom.data.var(dim=['trial','sample']), 1, atol=0.05)
-    

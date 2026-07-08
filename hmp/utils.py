@@ -373,7 +373,9 @@ def _sel_method(data, value, variable, method):
             raise ValueError(
                 f"Unsupported method. Use a callable that returns boolean."
             )
+        attrs = data.attrs.copy()
         data = data.where(result, drop=True)
+        data.attrs = attrs
     else:
         raise ValueError(f"{variable} not found in data")
     return data
