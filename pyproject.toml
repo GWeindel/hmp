@@ -27,14 +27,15 @@ classifiers = [
 dependencies=["mne >=1.0.0",
 "numpy",
 "pandas",
-"xarray >= 2023.8.0",
+"xarray >= 2026.1.0",
 "statsmodels",
 "scipy",
 "netcdf4",
 "ipywidgets",
 "nibabel",
 "mne_bids",
-"joblib"]
+"joblib",
+"sklearn"]
 
 dynamic = ["version"]
 
