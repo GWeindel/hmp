@@ -12,9 +12,9 @@ from test_io import init_data
 def test_backward_simple():
     """ test a simple fit_transform on perfect data and compare to ground truth."""
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
-    hmp_data = hmp.basedata.BaseData.from_io_all_pca(epoch_data, n_comp=3,).data
     # Data b is without noise, recovery should be perfect
-    data_b = hmp.utils.participant_selection(hmp_data, 'b')
+    hmp_data = hmp.basedata.default(epoch_data, n_comp=3, duration_id = 'response_time')
+    data_b =  hmp_data.select_coord('b', 'condition')
     pdata_b = PatternData.from_basedata(data_b)
     true_model = EventModel(n_events=n_events)
     # Recover generating parameters

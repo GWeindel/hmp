@@ -1,4 +1,5 @@
 import os
+import shutil
 import numpy as np
 from scipy.stats import gamma
 
@@ -45,6 +46,12 @@ def create_data():
     raw_d, event_d = simulations.simulate(sources, n_trials, cpus, 'dataset_d_raw', overwrite=True,
          sfreq=sfreq, noise=True, seed=1, path='dataset_d')
 
+    # For BIDS
+    os.makedirs("pseudo_BIDS/sub-a/eeg", exist_ok=True)
+    shutil.move(
+        "dataset_a/dataset_a_raw_raw.fif",
+        "pseudo_BIDS/sub-a/eeg/sub-a_task-X_eeg.fif",
+    )
 
 if __name__ == "__main__":
     create_data()

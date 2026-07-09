@@ -23,15 +23,19 @@ DATA_DIR_B = DATA_DIR / "dataset_b"
 DATA_DIR_C = DATA_DIR / "dataset_c"
 DATA_DIR_D = DATA_DIR / "dataset_d"
 
+sfreq = 100
+n_events = 3
+centering_id = {'stimulus/0':1}#trigger 1 = stimulus
+event_id = {'response/0':5}
+
+def preprocessing_fn(data, montage, events, 
+                   verbose, preprocessing_kwargs):
+    return data, events
 
 def init_data():
     # Also tests data_format 'raw'
     """ Initialize all data and model related info."""
-    sfreq = 100
-    n_events = 3
     events = []
-    event_id = {'stimulus':1}#trigger 1 = stimulus
-    resp_id = {'response':5}
     raws = [DATA_DIR_A / 'dataset_a_raw_raw.fif', DATA_DIR_B / 'dataset_b_raw_raw.fif']
     event_files = [DATA_DIR_A / 'dataset_a_raw_raw_generating_events.npy',
                    DATA_DIR_B / 'dataset_b_raw_raw_generating_events.npy']
@@ -40,9 +44,12 @@ def init_data():
     event_a = events[0]
     event_b = events[1]
     # Data reading
-    epoch_data = io.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq, pick_channels='eeg',
-            events_provided=events, verbose=True, subj_name=['a','b'], tmin=-.01, tmax=1)
-    epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
+    montage = simulations.sim_info().get_montage()
+    epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, 
+                event_id=event_id, events_provided=events,
+                subj_name=['a','b'], montage=montage,
+                cpus=2)
+    epoch_data = epoch_data.assign_coords({'condition': ('recording', epoch_data.subject.data)})
     # subsample channels for speed
     epoch_data = epoch_data.sel(channel=epoch_data.channel[::3])
     positions = simulations.positions()[::3]
@@ -51,113 +58,111 @@ def init_data():
 def init_data_large():
     # all electrode and more trials
     """ Initialize all data and model related info."""
-    sfreq = 100
-    n_events = 3
     events = []
-    event_id = {'stimulus':1}#trigger 1 = stimulus
-    resp_id = {'response':5}
     raws = [DATA_DIR_C / 'dataset_c_raw_raw.fif']
     event_files = [DATA_DIR_C / 'dataset_c_raw_raw_generating_events.npy']
     for file in event_files:
         events.append(np.load(file))
     event_c = events[0]
     # Data reading
-    epoch_data = io.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq, pick_channels='eeg',
-            events_provided=events, verbose=True, subj_name=['c'], tmin=-.01, tmax=1)
-    epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
-    info = simulations.sim_info()
+    montage = simulations.sim_info().get_montage()
+    epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, 
+                event_id=event_id, events_provided=events,
+                subj_name=['c'], montage=montage, 
+                preprocessing_fn=preprocessing_fn)
+    epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, event_id=event_id,
+            events_provided=events, verbose=True, subj_name=['c'])
+    epoch_data = epoch_data.assign_coords({'condition': ('recording', epoch_data.subject.data)})
     return event_c, epoch_data, info, sfreq, n_events
 
 def init_data_short():
     # events separated by a very short interval to trigger invalid LL
     """ Initialize all data and model related info."""
-    sfreq = 100
-    n_events = 3
     events = []
-    event_id = {'stimulus':1}#trigger 1 = stimulus
-    resp_id = {'response':5}
     raws = [DATA_DIR_D / 'dataset_d_raw_raw.fif']
     event_files = [DATA_DIR_D / 'dataset_d_raw_raw_generating_events.npy']
     for file in event_files:
         events.append(np.load(file))
     event_d = events[0]
     # Data reading
-    epoch_data = io.read_mne_data(raws, event_id=event_id, resp_id=resp_id, sfreq=sfreq, pick_channels='eeg',
-            events_provided=events, verbose=True, subj_name=['d'], tmin=-.01, tmax=1)
-    epoch_data = epoch_data.assign_coords({'condition': ('participant', epoch_data.participant.data)})
+    epoch_data, info = io.read_mne_raw(raws, centering_id=centering_id, event_id=event_id,
+            events_provided=events, verbose=True, subj_name=['d'], 
+            preprocessing_fn=preprocessing_fn)
+    epoch_data = epoch_data.assign_coords({'condition': ('recording', epoch_data.recording.data)})
     # subsample channels for speed
     epoch_data = epoch_data.sel(channel=epoch_data.channel[::10])
     positions = simulations.positions()[::10]
     return event_d, epoch_data, positions, sfreq, n_events
 
+def test_bids():
+    bids_path = DATA_DIR / "pseudo_BIDS"
+    bids_kwargs = dict(
+        root = bids_path, #Mandatory path to the data
+        datatypes=['eeg'],#Mandatory, type of data we want to model, could be `meg`
+        tasks=["X"],# Here the task we want to analyze 
+    )
+    montage = simulations.sim_info().get_montage()
+    preprocessing = dict(sfreq=120, #Test upsampling
+                         lowpass=40,
+                         highpass=.1,
+                         reference='average',
+                         pick_channels='eeg' 
+                        )
+
+    epoching = dict(tmin=-.1, tmax=2)
     
+    # Reading the data
+    epoch_data, info = io.read_bids_raw(
+        bids_kwargs=bids_kwargs,
+        epoching_kwargs=epoching,
+        montage=montage,
+        preprocessing_kwargs=preprocessing,
+        preprocessing_fn=preprocessing_fn,
+        centering_id = centering_id,
+        event_id = event_id,
+        cpus=1,
+    )
+    epoch_data, info = io.read_bids_raw(
+        bids_kwargs=bids_kwargs,
+        epoching_kwargs=epoching,
+        montage=montage,
+        preprocessing_kwargs=preprocessing,
+        centering_id = centering_id,
+        event_id = event_id,
+        cpus=2,
+    )
+
 def test_epochs():
     # Declaring path where the EEG data will be stored
     epoch_data_path = os.path.join('sample_data', 'eeg')
     os.makedirs(epoch_data_path, exist_ok=True)
     
-    # URLs of the first two participants
+    # URLs of the first participant
     file_urls = [
         "https://osf.io/download/67cffa85f67af67e7a92f0a6/",
     ]
     
     # Download and save each file if not already in folder
     for i, url in enumerate(file_urls, start=1):
-        file_path = os.path.join(epoch_data_path, f'participant{i}_epo.fif')
+        file_path = os.path.join(epoch_data_path, f'S{i}_epo.fif')
         if not os.path.exists(file_path):
             response = requests.get(url)
             with open(file_path, 'wb') as f:
                 f.write(response.content)
-    sfreq = 100 #at what sampling rate we want the data, downsampling to 100Hz is computationally less intensive for hmp instances
-    
-    # Recovering individual files and participant names
     subj_files = [os.path.join(epoch_data_path, f) for f in os.listdir(epoch_data_path) if f.endswith('.fif')]  # Create a list of files with full paths
-    subj_names = [os.path.splitext(f)[0] for f in os.listdir(epoch_data_path) if f.endswith('.fif')]  # Extract subject names based on file names
-    
-    # Then we read the data (see more in Tutorial 1)
-    epoch_data = io.read_mne_data(subj_files, sfreq=sfreq, data_format='epochs',
-                            verbose=False, subj_name=subj_names)#Turning verbose off for the documentation but it is recommended to leave it on as some output from MNE might be useful
+    epoch_data, info = io.read_mne_epochs(subj_files,
+                                montage='biosemi64',
+                                verbose=True)
+    epoch_data, info = io.read_mne_epochs(subj_files,
+                                montage='biosemi64',
+                                verbose=True, cpus=2, preprocessing_fn=preprocessing_fn)
+    epoch_data.drop_vars(['stim'])
+    metadata = epoch_data['RT'].to_dataframe().reset_index().iloc[:,:4]
+    metadata['recording'] = 'S1'
+    io.add_metadata(epoch_data,metadata)
 
-# def test_bids():
-#     # Testing on small bids dataset (1.8 GB)
-#     erp_core_url = "https://osf.io/download/3zk6n/"
-#     zip_path = "ERP_CORE_P3.zip"
-#     extract_dir = "./"
-    
-#     if not os.path.exists(zip_path):
-#         print("Downloading ERP CORE dataset...")
-#         r = requests.get(erp_core_url, stream=True)
-#         with open(zip_path, "wb") as f:
-#             for chunk in r.iter_content(chunk_size=8192):
-#                 f.write(chunk)
-#     print("Extracting ERP CORE dataset...")
-#     with ZipFile(zip_path, "r") as zip_ref:
-#         zip_ref.extractall(extract_dir)
-    
-#     sfreq = 250 
-#     tmin, tmax = -.2, .8
-#     epoch_data = io.read_mne_data([], 
-#                                       data_format='bids',
-#                                       tmin=tmin, tmax=tmax, 
-#                                       sfreq=sfreq,
-#                                       bids_parameters={
-#                                           'bids_root': 'ERP_CORE',
-#                                           'task': 'P3',
-#                                           'datatype': 'eeg',
-#                                           'session': 'P3'
-#                                       },
-#                                       reference='average',
-#                                       verbose=False
-#                                       )
-    
 
-def test_save_dat():
-    event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
-    hmp_data = hmp.basedata.BaseData.from_io_all_pca(epoch_data, n_comp=2)
-    data_b = utils.participant_selection(hmp_data.data, 'b')
-    model = EventModel(n_events=n_events)
-    _, estimates = model.fit_transform(data_b)
-
-    io.save_eventprobs_csv(estimates, 'test')
-    
-    
+def test_fixed_csd():
+    """ test CSD computation"""
+    event_c, epoch_data, info, sfreq, n_events = init_data_large()
+    epoch_data, info = io.preprocessing.compute_csd(epoch_data, info)

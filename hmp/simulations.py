@@ -10,7 +10,7 @@ import numpy as np
 import xarray as xr
 from scipy.stats import gamma
 
-from hmp.io import read_mne_data
+from hmp.io import read_mne_raw
 from hmp.models.event import EventModel
 from hmp.patterndata import PatternData
 from hmp.utils import _define_random_state
@@ -214,7 +214,7 @@ def simulate(  # noqa  # Might need to be refactored.
             subj_file = file + f"_{subj}_raw.fif"
         if subj_file in os.listdir(path) and not overwrite:
             subj_file = op.join(path, subj_file)
-            warn(f"{subj_file} exists no new simulation performed", UserWarning)
+            warn(f"{subj}_raw.fif exists no new simulation performed", UserWarning)
             files_subj.append(subj_file)
             files_subj.append(subj_file.split(".fif")[0] + "_generating_events.npy")
             if save_snr:
@@ -224,7 +224,7 @@ def simulate(  # noqa  # Might need to be refactored.
             files.append(files_subj)
         else:
             subj_file = op.join(path, subj_file)
-            print(f"Simulating {subj_file}")
+            print(f"Simulating {subj}_raw.fif")
             # stim_onset occurs every x samples.
             events = np.zeros((n_trials, 3), int)
             stim_onsets = 1 + trial_time  # offset of first stim is 1 s
@@ -351,10 +351,8 @@ def simulate(  # noqa  # Might need to be refactored.
             files.append(files_subj)
             if save_noiseless:
                 files_subj.append(file + "_noiseless_raw.fif")
-            print(f"{subj_file} simulated")
+            print(f"{subj}_raw.fif simulated")
 
-    if n_subj == 1:
-        files = files[0]
     return files
 
 
@@ -394,8 +392,9 @@ def demo():
         sources, n_trials, cpus, file, path='sample_data', overwrite=overwrite, seed=seed,
         noise=True, sfreq=sfreq
     )
-
-    generating_events = np.load(files[1])
+    eeg_file = [files[0][0]]
+    event_file = files[0][1]
+    generating_events = np.load(event_file)
 
     number_of_sources = len(np.unique(generating_events[:, 2])[1:])  # one trigger = one source
     random_source_times = np.reshape(
@@ -406,22 +405,32 @@ def demo():
     resp_trigger = int(
         np.max(np.unique(generating_events[:, 2]))
     )  # Resp trigger is the last source in each trial
-    event_id = {"stimulus": 1}
-    resp_id = {"response": resp_trigger}
+    event_id = {"stimulus/dummy": 1}
+    resp_id = {"response/dummy": resp_trigger}
     events = generating_events[
         (generating_events[:, 2] == 1) | (generating_events[:, 2] == resp_trigger)
     ]  # only retain stimulus and response triggers
 
     # Reading the data
-    eeg_dat = read_mne_data(files[0], event_id, resp_id, events_provided=events,
-                            verbose=False)
+    montage = sim_info().get_montage()
+    preprocessing = dict(sfreq=sfreq, highpass=None, lowpass=40,
+                            pick_channels='eeg', reference='average')
+    epochin = dict(tmin=-.1, tmax=2)
+
+    eeg_dat, info = read_mne_raw(eeg_file,
+                                 centering_id=event_id,
+                                 event_id=resp_id,
+                                 events_provided=[events],
+                                 montage = montage,
+                                 preprocessing_kwargs=preprocessing,
+                                 epoching_kwargs = epochin,
+                                )
 
     all_other_chans = range(len(positions.ch_names[:-61]))  # non-eeg
     chan_list = list(np.arange(len(positions.ch_names)))
     chan_list = [e for e in chan_list if e not in all_other_chans]
     chan_list.pop(52)  # Bad elec
-    positions = mne.pick_info(positions, sel=chan_list)
-    return eeg_dat, random_source_times, positions
+    return eeg_dat, random_source_times, info
 
 
 def classification_true(

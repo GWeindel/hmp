@@ -10,13 +10,9 @@ from hmp.models import EventModel
 import numpy as np
 from test_io import init_data
 
-DATA_DIR = Path("tests", "gen_data")
-DATA_DIR_A = DATA_DIR / "dataset_a"
-DATA_DIR_B = DATA_DIR / "dataset_b"
-
 def data():
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
-    hmp_data = hmp.basedata.BaseData.from_io_all_pca(epoch_data, n_comp=5)
+    hmp_data = hmp.basedata.default(epoch_data, n_comp=5, duration_id = 'response_time')
     return event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events
 
 @pytest.mark.parametrize("width, template",
@@ -32,7 +28,6 @@ def test_patterns(width, template):
         pattern = HalfSine(width)
     else:
         pattern = Pattern(template, width)
-    print(pattern.template)
     pattern_data = PatternData.from_basedata(hmp_data, pattern=pattern)
 
     model = EventModel(pattern=pattern, n_events=n_events)

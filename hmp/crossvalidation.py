@@ -21,7 +21,6 @@ def _recut_data(rand_idx, trial_data):
                                              starts = starts,
                                              ends = ends,
                                              sfreq = trial_data.sfreq,
-                                             offset = trial_data.offset,
                                              pattern = trial_data.pattern,
                                              template = trial_data.template,
                                              cross_corr = splitted_cross_corr)

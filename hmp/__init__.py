@@ -7,12 +7,13 @@ from . import (
     crossvalidation,
     distributions,
     io,
+    loocv,
     models,
     patterndata,
     patterns,
+    projectors,
     utils,
     visu,
-    loocv
 )
 
 try:
@@ -21,5 +22,5 @@ except PackageNotFoundError:
     __version__ = "unknown"
 
 
-__all__ = ["models", "simulations", "utils", "visu", "io", "patterns",
-           "patterndata", "basedata", "distributions" ,"crossvalidation", "loocv", "__version__"]
+__all__ = ["loocv", "models", "simulations", "utils", "visu", "io", "preprocessors", "patterns",
+           "distributions" ,"crossvalidation", "__version__"]

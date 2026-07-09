@@ -9,15 +9,14 @@ from test_io import init_data
 
 def test_plot():
     _, _, epoch_data, positions, sfreq, n_events = init_data()
-    hmp_data = hmp.basedata.BaseData.from_io_all_pca(epoch_data, n_comp=2,)
+    hmp_data = hmp.basedata.default(epoch_data, n_comp=2,duration_id = 'response_time')
     # Testing one event less in one condition
     channel_map = np.array([[0, 0, -1],
                          [0, 0, 0]])
     time_map = np.array([[0, 0, -1, 0],
                          [0, 0, 0, 0],])
     group_dict = {'condition': ['a', 'b']}
-    
-    hmp_data_a = hmp.utils.participant_selection(hmp_data.data, 'a')
+    hmp_data_a =  hmp_data.select_coord('a', 'condition')
     
     model = EventModel(n_events=n_events)
     

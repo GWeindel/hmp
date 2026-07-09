@@ -9,7 +9,6 @@ import xarray as xr
 from typing import Any
 from warnings import resetwarnings, warn
 
-
 from hmp.basedata import BaseData
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
