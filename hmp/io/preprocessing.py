@@ -149,8 +149,7 @@ def _create_montage(ch_names, montage):
     return montage
 
 def compute_csd(epoch_data: xr.Dataset,
-                info: Info,
-                verbose=True):
+                info: Info):
     """Compute laplacian using MNE's function.
 
     Parameters
@@ -166,21 +165,19 @@ def compute_csd(epoch_data: xr.Dataset,
         Updated dataset with CSD values
     eeg_info: Info
         Updated info ubject with correct units given CSD transform
-    verbose : bool | str, default=True
-        Whether to display messages. also supports MNE logging syntax:
-        DEBUG, INFO, WARNING, ERROR, or CRITICAL
     """
     eeg_info = pick_info(info, pick_types(info, meg=False, eeg=True))
     if eeg_info['chs'][0]['unit'] == FIFF.FIFF_UNIT_V:
-        epoch_data = epoch_data.stack(trial=['recording','epoch']).dropna("trial", how="all")\
-            .transpose('trial','channel','sample')
-        # Build fake Epoch mne class and use MNE's dedicated function
-        epoch = EpochsArray(epoch_data.data.values, eeg_info, verbose=verbose)
-        epoch = compute_current_source_density(epoch, verbose=verbose)
-        epoch_data['data'] = (("trial", "channel", "sample"), epoch.get_data())
+        # Looping through recording to avoid high RAM usage
+        for recording in epoch_data.recording:
+            recording_dat = epoch_data.sel(recording=recording).data
+            # Build fake Epoch mne class and use MNE's dedicated function
+            epoch = EpochsArray(recording_dat.values, eeg_info)
+            epoch = compute_current_source_density(epoch, verbose=False)
+            epoch_data['data'].loc[dict(recording=recording)] = epoch.get_data()
         epoch_data = epoch_data.unstack()
+        
         # Set EEG channels to the correct CSD unit
-
         for ch in eeg_info['chs']:
             ch['unit'] = FIFF.FIFF_UNIT_V_M2
 
