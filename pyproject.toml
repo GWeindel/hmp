@@ -35,7 +35,7 @@ dependencies=["mne >=1.0.0",
 "nibabel",
 "mne_bids",
 "joblib",
-"sklearn"]
+"scikit-learn"]
 
 dynamic = ["version"]
 
