@@ -15,7 +15,7 @@ from mne.preprocessing import compute_current_source_density
 def preprocess_data(data: Raw | Epochs,
                    montage: str | DigMontage | None,
                    events: np.ndarray | None,
-                   verbose: bool,
+                   verbose: bool | str,
                    preprocessing_kwargs: dict,
                     ) -> (Raw, np.ndarray):
     """
@@ -54,8 +54,9 @@ def preprocess_data(data: Raw | Epochs,
                 Average (common reference) or REST are highly recommended to fit HMP models.
             pick_channels: list of str
                 Channels to use, can be list of channel names or 'eeg'/'meg'
-    verbose: bool
-        Whether to print outputs or not
+    verbose : bool | str, default=True
+        Whether to display messages. also supports MNE logging syntax:
+        DEBUG, INFO, WARNING, ERROR, or CRITICAL
 
     Returns
     -------
@@ -98,7 +99,7 @@ def _filtering_resampling(data, preprocessing_kwargs, events, verbose):
             decim = np.round(data.info["sfreq"] / preprocessing_kwargs['sfreq']).astype(int)
             obtained_sfreq = data.info["sfreq"] / decim
             max_lowpass = obtained_sfreq / 3.0
-            if verbose:
+            if verbose is True or verbose in ["DEBUG","INFO"]:
                 print(f"Epoch data will be decimated by {decim} "
                       f"to achieve a sampling frequency of {obtained_sfreq}Hz")
         else:
@@ -148,7 +149,8 @@ def _create_montage(ch_names, montage):
     return montage
 
 def compute_csd(epoch_data: xr.Dataset,
-                info: Info):
+                info: Info,
+                verbose=True):
     """Compute laplacian using MNE's function.
 
     Parameters
@@ -164,16 +166,18 @@ def compute_csd(epoch_data: xr.Dataset,
         Updated dataset with CSD values
     eeg_info: Info
         Updated info ubject with correct units given CSD transform
+    verbose : bool | str, default=True
+        Whether to display messages. also supports MNE logging syntax:
+        DEBUG, INFO, WARNING, ERROR, or CRITICAL
     """
     eeg_info = pick_info(info, pick_types(info, meg=False, eeg=True))
     if eeg_info['chs'][0]['unit'] == FIFF.FIFF_UNIT_V:
-        epoch_data = epoch_data.stack(trial=['recording','epoch']).dropna("trial", how="all")
-        for trial in epoch_data.trial:
-            trial_dat = epoch_data.sel(trial=trial).data
-            # Build fake Epoch mne class and use MNE's dedicated function
-            epoch = EpochsArray(np.array([trial_dat.values]), eeg_info)
-            epoch = compute_current_source_density(epoch, verbose=False)
-            epoch_data['data'].loc[dict(trial=trial)] = epoch.get_data()[0]
+        epoch_data = epoch_data.stack(trial=['recording','epoch']).dropna("trial", how="all")\
+            .transpose('trial','channel','sample')
+        # Build fake Epoch mne class and use MNE's dedicated function
+        epoch = EpochsArray(epoch_data.data.values, eeg_info, verbose=verbose)
+        epoch = compute_current_source_density(epoch, verbose=verbose)
+        epoch_data['data'] = (("trial", "channel", "sample"), epoch.get_data())
         epoch_data = epoch_data.unstack()
         # Set EEG channels to the correct CSD unit
 

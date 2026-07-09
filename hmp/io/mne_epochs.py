@@ -23,7 +23,7 @@ def read_mne_epochs(
     preprocessing_kwargs: dict = {},
     dtype: DTypeLike = np.float32,
     preprocessing_fn: Optional[Callable] = None,
-    verbose: bool = True,
+    verbose: bool | str = True,
     cpus: int = 1,
 ) -> Dataset:
     """Read .bdf or .fif continuous recordings using MNE/MNE-BIDS functions.
@@ -61,8 +61,9 @@ def read_mne_epochs(
         How many cpus to use. If > 1 process several datasets in parallel
     preprocessing_fn: callable
         A user defined function preprocessing the raw data before epoching.
-    verbose : bool, default=True
-        Whether to display messages.
+    verbose : bool | str, default=True
+        Whether to display messages. also supports MNE logging syntax:
+        DEBUG, INFO, WARNING, ERROR, or CRITICAL
 
     Returns
     -------
@@ -132,7 +133,8 @@ def read_mne_epochs(
 
 def _process_epoch_dataset(recording, montage, verbose,
             preprocessing_fn, preprocessing_kwargs):
-    print(f"Processing dataset {'_'.join(str(recording.name).split('_')[:-1])}")
+    if verbose is True or verbose in ["DEBUG","INFO"]:
+        print(f"Processing dataset {'_'.join(str(recording.name).split('_')[:-1])}")
     if recording.suffix == ".fif":
         data = read_epochs(recording, verbose=verbose)
     else:
