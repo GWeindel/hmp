@@ -18,7 +18,7 @@ Includes methods to:
        (`min_duration` and `max_duration`).
         Reject epochs whose amplitude exceeds a threshold on any electrode.
         For valid epochs crop the data up to `duration`
-        Center the data using samples from baseline up to `duration`. 
+        Center the data using samples from baseline up to `duration`.
     2. Project channels to new virtual channel, either based on PCA,
         an arbitrary linear combination of channels,
         or the identity of the channels.
@@ -28,16 +28,15 @@ Includes methods to:
 
 from copy import deepcopy
 from dataclasses import dataclass
-from warnings import warn
 from typing import Callable
+from warnings import warn
 
-import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
-from scipy.linalg import eigh
 
-from .projectors import Projector, PCA
+from .projectors import PCA, Projector
 from .utils import _sel_method
+
 
 @dataclass
 class BaseData:
@@ -109,7 +108,7 @@ class BaseData:
 
         if self.reject_amplitude is None:
             self.reject_amplitude = np.inf
-        
+
         if self.reject_amplitude < 0:
             warn('Amplitude threshold is used in absolute values.')
             self.reject_amplitude = np.abs(self.reject_amplitude)
@@ -125,7 +124,7 @@ class BaseData:
                          "Non-centered data might behave unexpectedly in the next steps. "
                          "Consider baseline correcting the data before using BaseData or "
                          "to use the `center` parameter in basedata.crop_reject_epochs. ")
-        
+
         self._crop_reject_epochs(verbose)
 
     def project(self,
@@ -177,11 +176,11 @@ class BaseData:
                 copy: bool = True
                ):
         """Select a subset from basedata using the specified coordinate(s).
-    
+
         The function selects trials where `method(data[variable], value)` is True.
-        You can either use functions returning booleans or a custom function 
+        You can either use functions returning booleans or a custom function
         using lambda, e.g. `method=lambda x, v: ~x.isin(v)`
-    
+
         Parameters
         ----------
         data : BaseData
@@ -197,6 +196,7 @@ class BaseData:
             appears in variable (e.g. 'comp' in 'incompatible' and 'compatible')
         copy : bool
             Whether to return a copy (True, Default) or overwrite the current object (False)
+
         Returns
         -------
         data : BaseData
@@ -244,13 +244,13 @@ class BaseData:
         """
         rts_arr = self.data.coords[self.duration_id].values.copy()
         rts_arr = self._check_scale_ms(rts_arr, warning=True)
-        rts_arr[np.isnan(rts_arr)] = 0  # rejected during epoching or inexistant     
+        rts_arr[np.isnan(rts_arr)] = 0  # rejected during epoching or inexistant
         inexistant_dur = len(rts_arr[rts_arr == 0])
 
         if verbose:
             print(f"Found {len(rts_arr[rts_arr > 0])} trials with positively defined durations "
                 f"and {inexistant_dur} trials without durations (0 or nan)")
-        
+
         rts_arr[rts_arr > self.max_duration] = 0
         rts_arr[rts_arr < self.min_duration] = 0
         rt_criteria_rej = len(rts_arr[rts_arr == 0]) - inexistant_dur
@@ -259,7 +259,7 @@ class BaseData:
         rts_arr = np.rint(rts_arr * self.data.sfreq).astype(int)
         offset_end_samples = int(np.rint(self.offset_end * self.data.sfreq))
         offset_start_samples = int(np.rint(self.offset_start * self.data.sfreq))
-        
+
         #check nr of samples
         min_rt = min(rts_arr[rts_arr > 0])
         if min_rt < 10:
@@ -268,7 +268,7 @@ class BaseData:
             warn("The shortest interval is less than 10 samples. "
                 "Consider rejecting too short trials using the `min_duration` "
                 "parameter or increasing sampling frequency of the signal.")
-        
+
         # Check given offset start if exceeds available samples
         min_sample = np.min(self.data.sample.values)
         if min_sample > offset_start_samples:
@@ -286,7 +286,7 @@ class BaseData:
                 # if doesn't exceeds threshold, including baseline
                 if ~(np.abs(self.data.values[i, :, : epoch_max_time])
                             > self.reject_amplitude).any():
-                    # Crops the epochs up to duration of trial 
+                    # Crops the epochs up to duration of trial
                     self.data.values[i, :, epoch_max_time + 1:] = np.nan
                     # Centering, including baseling
                     if self.center:
@@ -329,7 +329,7 @@ class BaseData:
                         assuming intervals are in milliseconds and converting to seconds")
             rts /= 1000
         return rts
-    
+
     def _check_order(self, projected=False):
         if projected is True and 'component' not in self.data.dims:
             raise ValueError('Cannot perform operation on unprojected data. '
@@ -355,15 +355,16 @@ def from_io(epoch_data: xr.Dataset) -> BaseData:
     """
     base_data = BaseData(data=epoch_data.copy())
     #process data from io
-    base_data.data = base_data.data.data.stack(trial=["recording", "epoch"]).dropna("trial", how="all")
+    base_data.data = base_data.data.data.stack(trial=["recording", "epoch"])\
+        .dropna("trial", how="all")
     base_data.data = base_data.data.transpose('trial','channel','sample')
     base_data.data.attrs["sfreq"] = epoch_data.sfreq
     return base_data
 
-def default(
+def default( # noqa: PLR0913
             epoch_data: xr.Dataset,
             duration_id: str = 'response_time',
-            offset_start: float = 0, 
+            offset_start: float = 0,
             offset_end: float = 0,
             center: bool = False,
             min_duration: float = 0,
@@ -382,7 +383,7 @@ def default(
      - epoch cropping and rejection
      - PCA
      - variance operations.
-    
+
     Parameters
     ----------
     data : xr.DataArray
@@ -435,7 +436,7 @@ def default(
         An instance of BaseData using default preprocessing routine
     """
     base_data = from_io(epoch_data)
-    
+
     base_data.crop_reject_epochs(
         duration_id=duration_id,
         offset_start=offset_start,

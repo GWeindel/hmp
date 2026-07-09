@@ -1,7 +1,10 @@
+"""Return original data."""
+
 import numpy as np
 from xarray import DataArray
 
 from hmp.projectors.base import Projector
+
 
 class Identity(Projector):
     """Returns identity projection.
@@ -14,15 +17,16 @@ class Identity(Projector):
         Default = None
 
     """
+
     weights: DataArray
-    
+
     def __init__(self):
         self.weights = None
-        
+
     def fit(self,
             data: DataArray,
             verbose: bool = True):
-        """Passing weights."""
+        """Create weights as identity matrix."""
         if verbose is True:
             print('No projection applied, returning Identity')
         self.weights = DataArray(

@@ -10,9 +10,9 @@ from . import (
     models,
     patterndata,
     patterns,
+    projectors,
     utils,
     visu,
-    projectors
 )
 
 try:

@@ -1,6 +1,8 @@
+"""Apply given weights for custom linear combination."""
 from xarray import DataArray
 
 from hmp.projectors.base import Projector
+
 
 class Custom(Projector):
     """Project data using custom weights.
@@ -13,15 +15,16 @@ class Custom(Projector):
         Default = None
 
     """
+
     weights: DataArray
 
     def __init__(self, weights):
         self.weights = weights
 
     def fit(self,
-            data: DataArray,
+            _data: DataArray,
             verbose: bool = True):
-        """Passing weights."""
+        """Pass weights."""
         if verbose is True:
             print("Using weights at initialization for "
                   "custom projection on the data")

@@ -8,10 +8,10 @@ import re
 from typing import Callable, Optional
 
 import mne_bids
-from mne_bids.config import ALLOWED_DATATYPE_EXTENSIONS
 import numpy as np
 from mne import events_from_annotations, set_log_level
 from mne.channels import DigMontage
+from mne_bids.config import ALLOWED_DATATYPE_EXTENSIONS
 from numpy.typing import DTypeLike
 from xarray import Dataset
 
@@ -145,8 +145,7 @@ def read_bids_raw(
 
     recordings = [x for x in all_paths
                   if x.fpath.suffix in ALLOWED_DATATYPE_EXTENSIONS[bids_kwargs['datatypes'][0]]
-                  or x.fpath.suffix == '.fif'
-                  or x.fpath.suffix == '.set']
+                  or x.fpath.suffix in {'.fif', '.set'}]
 
     # Processing loops/parallel
     if cpus == 1:

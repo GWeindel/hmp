@@ -1,16 +1,17 @@
-"""Classes for projecting data into new component space
+"""Classes for projecting data into new component space.
 
 Classes
 -------
-ProjPCA
+PCA
     Project channels into principal component space based on the covariance matrix among electrodes
-ProjCustom
+Custom
     Apply a user-defined linear combination of original channels to a new set of virtual channels
-ProjIdentity
+Identity
     Returns the channels in the same space
 """
 
 from abc import ABC, abstractmethod
+
 
 class Projector(ABC):
     """Base class projection.

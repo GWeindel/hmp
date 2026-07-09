@@ -176,7 +176,7 @@ def compute_csd(epoch_data: xr.Dataset,
             epoch = compute_current_source_density(epoch, verbose=False)
             epoch_data['data'].loc[dict(recording=recording)] = epoch.get_data()
         epoch_data = epoch_data.unstack()
-        
+
         # Set EEG channels to the correct CSD unit
         for ch in eeg_info['chs']:
             ch['unit'] = FIFF.FIFF_UNIT_V_M2

@@ -1,8 +1,14 @@
-import numpy as np
+"""Applying a PCA on data."""
+
+from warnings import warn
+
 import matplotlib.pyplot as plt
+import numpy as np
+from scipy.linalg import eigh
 from xarray import DataArray
 
 from hmp.projectors.base import Projector
+
 
 class PCA(Projector):
     """Project data into PC space using the covariance matrix.
@@ -16,12 +22,13 @@ class PCA(Projector):
         Nr of components retained if > 1, otherwise (0 < n_comp < 1) nr of components
         explaining at least n_comp% variance are retained.  If None, user input requested.
         Default = None
-   weights : DataArray
+    weights : DataArray
         DataArray with dimensions [channel, component] and coordinates
         channel (Fp1, CPz, ..) and component (0, 1, ..).
         Default = None
 
     """
+
     def __init__(self, method_pca="svd", n_comp=None):
         self.method_pca = method_pca
         self.n_comp = n_comp

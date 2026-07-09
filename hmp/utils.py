@@ -1,10 +1,12 @@
 """Functions to transform the input data and the estimates."""
 
 from typing import Callable
+
 import numpy as np
 import xarray as xr
 from numpy.random import RandomState
 from pandas import MultiIndex
+
 
 def _check_sf_consistency(epoch_data, estimates):
     if epoch_data.sfreq != estimates.sfreq:
@@ -371,7 +373,7 @@ def _sel_method(data, value, variable, method):
         result = method(data[variable], value)
         if result.dtype != bool:
             raise ValueError(
-                f"Unsupported method. Use a callable that returns boolean."
+                "Unsupported method. Use a callable that returns boolean."
             )
         attrs = data.attrs.copy()
         data = data.where(result, drop=True)
@@ -405,9 +407,9 @@ def select_coord(data: xr.Dataset | xr.DataArray,
     """Select a subset from the data or estimates using the specified coordinate(s).
 
     The function selects trials where `method(data[variable], value)` is True.
-    You can either use functions returning booleans or a custom function 
+    You can either use functions returning booleans or a custom function
     using lambda, e.g. `method=lambda x, v: ~x.isin(v)`
-    
+
     Parameters
     ----------
     data : xr.Dataset | xr.DataArray
@@ -423,6 +425,7 @@ def select_coord(data: xr.Dataset | xr.DataArray,
         appears in variable (e.g. 'comp' in 'incompatible' and 'compatible')
     copy : bool
         Whether to return a copy (True, Default) or overwrite the current object (False)
+
     Returns
     -------
     data : xr.Dataset
@@ -430,7 +433,7 @@ def select_coord(data: xr.Dataset | xr.DataArray,
     """
     if copy:
         data = data.copy(deep=True)
-    if 'epoch' in data.dims and "channel" in data.dims: #Means epoch_data, stack first, select, then unstack
+    if 'epoch' in data.dims and "channel" in data.dims: #Epoch_data stack, select, then unstack
         data = _coordsel_data(data, value, variable, method)
     elif 'trial' in data.dims: #HMP outputs, already stacked
         data = _sel_method(data, value, variable, method).dropna(dim="trial", how="all")
