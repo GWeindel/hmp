@@ -7,9 +7,8 @@ import xarray as xr
 from numpy.typing import DTypeLike
 from scipy.signal import correlate
 
-from hmp.basedata import BaseData
+from hmp.basedata import BaseData, _check_basedata
 from hmp.patterns import HalfSine, Pattern
-from hmp.utils import _check_basedata
 
 
 @dataclass
@@ -27,8 +26,6 @@ class PatternData:
         Array of end indices for each trial (usually response onsets position in samples)
     sfreq : float
         Sampling frequency of the data.
-    offset : int
-        Offset applied to the data.
     pattern : np.ndarray
         Values for the pattern used for the cross-correlation.
     cross_corr : np.ndarray
@@ -39,7 +36,6 @@ class PatternData:
     starts: np.ndarray
     ends: np.ndarray
     sfreq: float
-    offset: int
     pattern: Pattern
     template: np.ndarray
     cross_corr: np.ndarray
@@ -111,7 +107,7 @@ class PatternData:
 
         return cls(durations=durations, starts=starts, ends=ends,
                     cross_corr=cross_corr, pattern=pattern, template=template,
-                   offset=data.offset, sfreq=data.sfreq)
+                    sfreq=data.sfreq)
 
 def _norm_template(sfreq, template):
     tstep = int(np.rint(1000/sfreq))

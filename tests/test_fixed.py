@@ -14,14 +14,14 @@ from test_io import init_data, init_data_large, init_data_short
 
 def data():
     event_b, event_a, epoch_data, positions, sfreq, n_events = init_data()
-    hmp_data = hmp.basedata.BaseData.from_io_all_pca(epoch_data, n_comp=5, interval_id = 'response_time')
+    hmp_data = hmp.basedata.default(epoch_data, n_comp=3, center=True, duration_id = 'response_time')
     return event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events
 
 def test_fixed_simple():
     """ test a simple fit_transform on perfect data and compare to ground truth."""
     event_b, event_a, epoch_data, hmp_data, positions, sfreq, n_events = data()
     # Data b is without noise, recovery should be perfect
-    data_b = hmp.utils.coord_selection(hmp_data.data, 'b', 'subject')
+    data_b = hmp_data.select_coord('b', 'subject')
     pdata_b = PatternData.from_basedata(data_b)
     model = EventModel(n_events=n_events)
     # Recover generating parameters
@@ -43,7 +43,8 @@ def test_fixed_simple():
     # test the difference between electrode values at event times
     assert np.isclose(np.sum(np.abs(true_topos.data - test_topos.data)), 0, atol=1e-4, rtol=0)
     # Test whether likelihood is the expected one
-    assert np.isclose(lkh_b, np.array(101.39), atol=1e-2, rtol=0)
+    expected_lkh = np.array(53.)
+    assert np.isclose(lkh_b, expected_lkh, atol=1e-2, rtol=0)
 
     #locations
     locations = np.zeros(n_events+1, dtype=int)
@@ -51,7 +52,7 @@ def test_fixed_simple():
     noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b)
     model = EventModel(n_events=n_events, location=25)
     noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b,)
-    assert np.isclose(noloc_loglikelihood, np.array(101.39), atol=1e-2, rtol=0)
+    assert np.isclose(noloc_loglikelihood, expected_lkh, atol=1e-2, rtol=0)
 
     # testing recovery of attributes
     model.xrlikelihoods
@@ -59,12 +60,12 @@ def test_fixed_simple():
     model.xrtime_pars
     model.xrtime_pars_dev
     model.xrtraces
+    estimates_b.sfreq
 
 def test_fixed_short():
     """ test very short latencies """
     event_d, epoch_data, positions, sfreq, n_events = init_data_short()
-    hmp_data = hmp.basedata.BaseData.from_io(epoch_data, crop=True, interval_id = 'response_time'
-                                                reject = True, apply_variance=True)
+    hmp_data = hmp.basedata.default(epoch_data, n_comp=.999)
     model = EventModel(n_events=n_events)
 
     #Estimate
@@ -81,8 +82,8 @@ def test_fixed_grouping():
                          [0, 0, 1, 0],])
     grouping_dict = {'condition': ['a', 'b']}
     
-    hmp_data_a = hmp.utils.coord_selection(hmp_data.data, 'a', 'subject')
-    hmp_data_b = hmp.utils.coord_selection(hmp_data.data, 'b', 'subject')
+    hmp_data_a = hmp_data.select_coord('a', 'subject')
+    hmp_data_b = hmp_data.select_coord('b', 'subject')
 
     pdata = PatternData.from_basedata(hmp_data)
     pdata_a = PatternData.from_basedata(hmp_data_a)

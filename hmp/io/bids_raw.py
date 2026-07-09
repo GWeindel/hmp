@@ -8,10 +8,10 @@ import re
 from typing import Callable, Optional
 
 import mne_bids
-from mne_bids.config import ALLOWED_DATATYPE_EXTENSIONS
 import numpy as np
-from mne import events_from_annotations
+from mne import events_from_annotations, set_log_level
 from mne.channels import DigMontage
+from mne_bids.config import ALLOWED_DATATYPE_EXTENSIONS
 from numpy.typing import DTypeLike
 from xarray import Dataset
 
@@ -27,7 +27,7 @@ def read_bids_raw(
     preprocessing_kwargs: dict = {},
     dtype: DTypeLike = np.float32,
     preprocessing_fn: Optional[Callable] = None,
-    verbose: bool = True,
+    verbose: bool | str = True,
     cpus: int = 1,
 ) -> Dataset:
     """Read BIDS formated EEG/MEG data format using MNE/MNE-BIDS functions.
@@ -105,8 +105,9 @@ def read_bids_raw(
         A user defined function preprocessing the raw data before epoching.
     cpus : int
         How many cpus to use. If > 1 process several datasets in parallel
-    verbose : bool, default=True
-        Whether to display messages.
+    verbose : bool | str, default=True
+        Whether to display messages. also supports MNE logging syntax:
+        DEBUG, INFO, WARNING, ERROR, or CRITICAL
 
     Returns
     -------
@@ -116,6 +117,7 @@ def read_bids_raw(
     info: mne.Info
         Mock info object containing channel positions for plotting with HMP functions
     """
+    set_log_level(verbose)
     # Dict integrity check
     _check_bids_kwargs(bids_kwargs)
 
@@ -143,7 +145,7 @@ def read_bids_raw(
 
     recordings = [x for x in all_paths
                   if x.fpath.suffix in ALLOWED_DATATYPE_EXTENSIONS[bids_kwargs['datatypes'][0]]
-                  or x.fpath.suffix == '.fif']
+                  or x.fpath.suffix in {'.fif', '.set'}]
 
     # Processing loops/parallel
     if cpus == 1:
@@ -197,12 +199,11 @@ def read_bids_raw(
 
 def _process_bids_dataset(recording, montage, centering_id, event_id, verbose,
                           preprocessing_fn, preprocessing_kwargs, epoching_kwargs):
-    if verbose:
+    if verbose is True or verbose in ["DEBUG","INFO"]:
         print(f"Processing dataset {'_'.join(str(recording.basename).split('_')[:-1])}")
 
     data = mne_bids.read_raw_bids(
         bids_path = recording,
-        verbose=False # Not ideal but too many prints from BIDS warnings
     )
     events, detected_event_id = events_from_annotations(data)
     # MNE bids extracts triggers from annotations but (sometimes?) loses the
@@ -232,7 +233,7 @@ def _bids_to_annot(path, detected_event_id, centering_id, event_id, verbose):
     events_dict = mne_bids.events_file_to_annotation_kwargs(path_to_tsv)
     read_event_id = events_dict['event_id']
     # Remap based on user requested dict
-    if verbose:
+    if verbose is True:
         print(f'Found events {np.sort(list(read_event_id.values()))} in '
               f'{path_to_tsv}, \n mapping to the declared '
               f'triggers: {np.sort(list((centering_id | event_id).values()))}')

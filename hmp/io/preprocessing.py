@@ -15,7 +15,7 @@ from mne.preprocessing import compute_current_source_density
 def preprocess_data(data: Raw | Epochs,
                    montage: str | DigMontage | None,
                    events: np.ndarray | None,
-                   verbose: bool,
+                   verbose: bool | str,
                    preprocessing_kwargs: dict,
                     ) -> (Raw, np.ndarray):
     """
@@ -54,8 +54,9 @@ def preprocess_data(data: Raw | Epochs,
                 Average (common reference) or REST are highly recommended to fit HMP models.
             pick_channels: list of str
                 Channels to use, can be list of channel names or 'eeg'/'meg'
-    verbose: bool
-        Whether to print outputs or not
+    verbose : bool | str, default=True
+        Whether to display messages. also supports MNE logging syntax:
+        DEBUG, INFO, WARNING, ERROR, or CRITICAL
 
     Returns
     -------
@@ -91,11 +92,23 @@ def preprocess_data(data: Raw | Epochs,
 
 def _filtering_resampling(data, preprocessing_kwargs, events, verbose):
     lowpass = preprocessing_kwargs['lowpass']
+
     if preprocessing_kwargs['sfreq'] is not None:
-        if preprocessing_kwargs['sfreq'] < data.info["sfreq"]:  # Downsampling
+        if isinstance(data, EpochsFIF):
+        # https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html
+            decim = np.round(data.info["sfreq"] / preprocessing_kwargs['sfreq']).astype(int)
+            obtained_sfreq = data.info["sfreq"] / decim
+            max_lowpass = obtained_sfreq / 3.0
+            if verbose is True or verbose in ["DEBUG","INFO"]:
+                print(f"Epoch data will be decimated by {decim} "
+                      f"to achieve a sampling frequency of {obtained_sfreq}Hz")
+        else:
+            max_lowpass = preprocessing_kwargs['sfreq'] / 3.0
+        if preprocessing_kwargs['sfreq'] < data.info["sfreq"] and \
+            data.info['lowpass'] > max_lowpass:  # Downsampling
             if lowpass is None:
-                lowpass = preprocessing_kwargs['sfreq'] / 3.1
-            elif lowpass > preprocessing_kwargs['sfreq'] / 3.1:
+                lowpass = max_lowpass
+            elif lowpass > max_lowpass:
                 raise ValueError(f"Requested low pass filter of {lowpass}"
                      "is too high for desired sampling frequency of "
                      f"{preprocessing_kwargs['sfreq']}")
@@ -103,7 +116,7 @@ def _filtering_resampling(data, preprocessing_kwargs, events, verbose):
         data.filter(l_freq=preprocessing_kwargs['highpass'], h_freq=lowpass, verbose=verbose)
     if preprocessing_kwargs['sfreq'] is not None:
         if isinstance(data, EpochsFIF):
-            data = data.resample(preprocessing_kwargs['sfreq'], verbose=verbose)
+            data = data.decimate(decim, verbose=verbose)
         else:
             data, events = data.resample(preprocessing_kwargs['sfreq'],
                                          events=events, verbose=verbose)
@@ -155,16 +168,16 @@ def compute_csd(epoch_data: xr.Dataset,
     """
     eeg_info = pick_info(info, pick_types(info, meg=False, eeg=True))
     if eeg_info['chs'][0]['unit'] == FIFF.FIFF_UNIT_V:
-        epoch_data = epoch_data.stack(trial=['recording','epoch']).dropna("trial", how="all")
-        for trial in epoch_data.trial:
-            trial_dat = epoch_data.sel(trial=trial).data
+        # Looping through recording to avoid high RAM usage
+        for recording in epoch_data.recording:
+            recording_dat = epoch_data.sel(recording=recording).data
             # Build fake Epoch mne class and use MNE's dedicated function
-            epoch = EpochsArray(np.array([trial_dat.values]), eeg_info)
+            epoch = EpochsArray(recording_dat.values, eeg_info)
             epoch = compute_current_source_density(epoch, verbose=False)
-            epoch_data['data'].loc[dict(trial=trial)] = epoch.get_data()[0]
+            epoch_data['data'].loc[dict(recording=recording)] = epoch.get_data()
         epoch_data = epoch_data.unstack()
-        # Set EEG channels to the correct CSD unit
 
+        # Set EEG channels to the correct CSD unit
         for ch in eeg_info['chs']:
             ch['unit'] = FIFF.FIFF_UNIT_V_M2
 

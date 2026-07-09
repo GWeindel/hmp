@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
-from mne import read_epochs
+from mne import read_epochs, set_log_level
 from mne.channels import DigMontage
 from numpy.typing import DTypeLike
 from xarray import Dataset
@@ -23,7 +23,7 @@ def read_mne_epochs(
     preprocessing_kwargs: dict = {},
     dtype: DTypeLike = np.float32,
     preprocessing_fn: Optional[Callable] = None,
-    verbose: bool = True,
+    verbose: bool | str = True,
     cpus: int = 1,
 ) -> Dataset:
     """Read .bdf or .fif continuous recordings using MNE/MNE-BIDS functions.
@@ -61,8 +61,9 @@ def read_mne_epochs(
         How many cpus to use. If > 1 process several datasets in parallel
     preprocessing_fn: callable
         A user defined function preprocessing the raw data before epoching.
-    verbose : bool, default=True
-        Whether to display messages.
+    verbose : bool | str, default=True
+        Whether to display messages. also supports MNE logging syntax:
+        DEBUG, INFO, WARNING, ERROR, or CRITICAL
 
     Returns
     -------
@@ -72,11 +73,7 @@ def read_mne_epochs(
     info: mne.Info
         Mock info object containing channel positions for plotting with HMP functions
     """
-    # Assuming data already preprocessed so turning default filtering off
-    if 'highpass' not in preprocessing_kwargs:
-        preprocessing_kwargs['highpass'] = None
-    if 'lowpass' not in preprocessing_kwargs:
-        preprocessing_kwargs['lowpass'] = None
+    set_log_level(verbose)
 
     # Same for preprocessing
     if preprocessing_fn is None:
@@ -136,7 +133,8 @@ def read_mne_epochs(
 
 def _process_epoch_dataset(recording, montage, verbose,
             preprocessing_fn, preprocessing_kwargs):
-    print(f"Processing dataset {'_'.join(str(recording.name).split('_')[:-1])}")
+    if verbose is True or verbose in ["DEBUG","INFO"]:
+        print(f"Processing dataset {'_'.join(str(recording.name).split('_')[:-1])}")
     if recording.suffix == ".fif":
         data = read_epochs(recording, verbose=verbose)
     else:
@@ -146,9 +144,9 @@ def _process_epoch_dataset(recording, montage, verbose,
 
     # User level preprocessing, should include: re-referencing, channel selection
     # filtering and resampling if needed and take data, events, preprocessing_kwargs
-    # as input and output data and events, see example in utils.preprocess_raw
+    # as input and output data and events, see example in utils.preprocess_data
     if preprocessing_fn is not None:
-        data, events = preprocessing_fn(data, montage, None,
+        data, _ = preprocessing_fn(data, montage, None,
                    verbose, preprocessing_kwargs)
     else:
         data, _ = preprocessing.preprocess_data(data, montage, None,

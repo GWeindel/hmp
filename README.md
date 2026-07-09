@@ -2,7 +2,7 @@ HMP
 ==========
 
 > [!WARNING]
-> We are transitionning to a stable version of HMP 1.0.0 by spring 2026. There will be some bumps on the road sorry for that. The stable version 0.5.0 is usable but we recommend new users to start with the development branch as this will be closer to the future stable version (and is also the one presented on [readthedocs: https://hmp.readthedocs.io/en/latest/welcome.html](https://hmp.readthedocs.io/en/latest/welcome.html)). In case of problem or questions because of the transition period don't hesitate to open issues, threads in the discussion section or drop an email to one of the contributor (e.g. see https://github.com/GWeindel).
+> We are transitionning to a stable version of HMP 1.0.0 by autumn 2026. There will be some bumps on the road sorry for that. The stable version 0.5.0 is usable but we recommend new users to start with the latest version as this will be closer to the future stable version (and is also the one presented on [readthedocs: https://hmp.readthedocs.io/en/latest/welcome.html](https://hmp.readthedocs.io/en/latest/welcome.html)). In case of problem or questions because of the transition period don't hesitate to open issues, threads in the discussion section or drop an email to one of the contributor (e.g. see https://github.com/GWeindel).
 
 
 
