@@ -100,8 +100,6 @@ def _epoching_raw(data, events, stimulus_id, event_id, verbose, epoching_kwargs)
         verbose=verbose,
         **epoching_kwargs
     )
-    # epochs.metadata.rename({"response": "duration",
-    #         "first_response":"response"}, axis=1, inplace=True, errors='ignore')
 
     valid_epoch_index = [x for x, y in enumerate(epochs.drop_log) if len(y) == 0]
     return epochs, valid_epoch_index

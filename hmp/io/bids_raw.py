@@ -10,7 +10,7 @@ from typing import Callable, Optional
 import mne_bids
 from mne_bids.config import ALLOWED_DATATYPE_EXTENSIONS
 import numpy as np
-from mne import events_from_annotations
+from mne import events_from_annotations, set_log_level
 from mne.channels import DigMontage
 from numpy.typing import DTypeLike
 from xarray import Dataset
@@ -116,6 +116,7 @@ def read_bids_raw(
     info: mne.Info
         Mock info object containing channel positions for plotting with HMP functions
     """
+    set_log_level(verbose)
     # Dict integrity check
     _check_bids_kwargs(bids_kwargs)
 

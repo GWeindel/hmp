@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
-from mne import events_from_annotations, find_events
+from mne import events_from_annotations, find_events, set_log_level
 from mne.channels import DigMontage
 from mne.io import read_raw_bdf, read_raw_fif
 from numpy.typing import DTypeLike
@@ -104,6 +104,7 @@ def read_mne_raw(# noqa: PLR0913
     info: mne.Info
         Mock info object containing channel positions for plotting with HMP functions
     """
+    set_log_level(verbose)
     # Epoching defaults and check
     epoching_kwargs = utils._defaults_check_epoching(epoching_kwargs)
 
