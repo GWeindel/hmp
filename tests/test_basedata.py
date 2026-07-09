@@ -50,8 +50,15 @@ def test_proj_pca_custom_variants(fixt_init_data, n_comp, whiten, reject_thresho
             assert np.allclose(identity.data.var(dim=['trial','sample']), 1, atol=0.05)
         #Testing selection
         # Selecting participant
-        a = pca.select_coord(value='a', variable='recording', method=np.equal)
-        a.data.attrs['sfreq']    
+        # print(pca)
+        a = pca.select_coord(value='a', variable='subject', method=np.equal)
+        print(a)
+        assert a.data.sizes['trial'] == 2
         # Selecting participant list
-        not_a = pca.select_coord(value='a', variable='recording', method=np.not_equal)
+        not_a = pca.select_coord(value='a', variable='subject', method=np.not_equal)
+        print(not_a)
         assert pca.data.sizes['trial'] == a.data.sizes['trial'] + not_a.data.sizes['trial']
+        #Testing attributes preservation
+        a.data.attrs['sfreq']
+        pdata_a = hmp.patterndata.PatternData.from_basedata(a)
+        pdata_a.durations.attrs['sfreq']

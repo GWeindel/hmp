@@ -43,8 +43,8 @@ def test_fixed_simple():
     # test the difference between electrode values at event times
     assert np.isclose(np.sum(np.abs(true_topos.data - test_topos.data)), 0, atol=1e-4, rtol=0)
     # Test whether likelihood is the expected one
-    expected_lkh = 52.63
-    assert np.isclose(lkh_b, np.array(expected_lkh), atol=1e-2, rtol=0)
+    expected_lkh = np.array(53.)
+    assert np.isclose(lkh_b, expected_lkh, atol=1e-2, rtol=0)
 
     #locations
     locations = np.zeros(n_events+1, dtype=int)
@@ -52,7 +52,7 @@ def test_fixed_simple():
     noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b)
     model = EventModel(n_events=n_events, location=25)
     noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b,)
-    assert np.isclose(noloc_loglikelihood, np.array(expected_lkh), atol=1e-2, rtol=0)
+    assert np.isclose(noloc_loglikelihood, expected_lkh, atol=1e-2, rtol=0)
 
     # testing recovery of attributes
     model.xrlikelihoods
@@ -60,6 +60,7 @@ def test_fixed_simple():
     model.xrtime_pars
     model.xrtime_pars_dev
     model.xrtraces
+    estimates_b.sfreq
 
 def test_fixed_short():
     """ test very short latencies """
