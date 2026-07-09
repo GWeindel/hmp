@@ -396,13 +396,13 @@ def _coordsel_data(epoch_data, value, variable, method):
     return stacked_epoch_data.unstack()
 
 
-def coord_selection(data: xr.Dataset | xr.DataArray,
+def select_coord(data: xr.Dataset | xr.DataArray,
                     value: object,
                     variable: str,
                     method: Callable[[xr.DataArray, object], xr.DataArray] = np.equal,
                     copy: bool = True
                    ):
-    """Select a subset from the hmp data using the specified coordinate(s).
+    """Select a subset from the data or estimates using the specified coordinate(s).
 
     The function selects trials where `method(data[variable], value)` is True.
     You can either use functions returning booleans or a custom function 
@@ -430,9 +430,9 @@ def coord_selection(data: xr.Dataset | xr.DataArray,
     """
     if copy:
         data = data.copy(deep=True)
-    if 'channel' in data.dims: #Means epoch_data
+    if 'epoch' in data.dims and "channel" in data.dims: #Means epoch_data, stack first, select, then unstack
         data = _coordsel_data(data, value, variable, method)
-    elif 'event' in data.dims: #HMP outputs
+    elif 'trial' in data.dims: #HMP outputs, already stacked
         data = _sel_method(data, value, variable, method).dropna(dim="trial", how="all")
     else:
         raise ValueError('Unexpected data type')
