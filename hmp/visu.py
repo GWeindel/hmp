@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.signal as ssignal
 import xarray as xr
-import itertools
 from mne import Info
 from mne.viz import plot_brain_colorbar, plot_topomap
 from scipy import stats
@@ -21,7 +20,8 @@ unit_map = {
     'FIFF_UNIT_V_M2': "V/m²",
 }
 
-def plot_model(epoch_data, estimates, channel_position, *args, **kwargs):
+def plot_model( #noqa PLR0912
+    epoch_data, estimates, channel_position, *args, **kwargs):
     """
     Plot model results.
 
@@ -34,7 +34,7 @@ def plot_model(epoch_data, estimates, channel_position, *args, **kwargs):
     epoch_data : xr.DataArray
         The original EEG data in HMP format.
     estimates : xr.DataArray | list
-        The estimates from a fitted and transformed HMP model, or a list (or list of lists) 
+        The estimates from a fitted and transformed HMP model, or a list (or list of lists)
         of estimates
     channel_position : np.ndarray
         Either a 2D array with dimensions (channel, [x, y]) storing channel
@@ -82,9 +82,9 @@ def plot_model(epoch_data, estimates, channel_position, *args, **kwargs):
                 vmin = -vmax
 
         nr_plots = len(estimates) #len(estimates.n_events)
-        fig, axes = plt.subplots(nr_plots, 1, 
+        fig, axes = plt.subplots(nr_plots, 1,
             figsize=(8, nr_plots), sharex=True)
-        
+
         if not isinstance(estimates,list):
             for ax, n_event in zip(axes, estimates.n_events):
                 cbar = True if n_event ==  estimates.n_events[-1] else False
@@ -560,7 +560,7 @@ def plot_loocv(  # noqa # Refactor?
         marker_indiv = "."
         means = np.nanmean(loocv_estimates.data, axis=1)
         errs = (
-            np.nanstd(loocv_estimates.data, axis=1) / np.sqrt(len(loocv_estimates.recording))
+            np.nanstd(loocv_estimates.data, axis=1) / np.sqrt(loocv_estimates.shape[1])
         )[::-1]
         ax[0].errorbar(x=np.arange(len(means)) + 1, y=means, yerr=errs, marker="o", color="k")
     else:

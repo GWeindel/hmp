@@ -13,6 +13,7 @@ import inspect
 from hmp.patterns import Pattern
 from hmp.patterndata import PatternData
 from hmp.basedata import BaseData
+from hmp.projectors import Custom, Identity, PCA
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
 from hmp.models.eliminative import EliminativeMethod
@@ -30,18 +31,17 @@ class LOOCV():
 
     Performs leave-one-out cross validation using either the provided HMP model or
     user-defined function to calculate the initial fit. It will perform loocv by 
-    leaving out one participant, applying the provided model or function to the
+    leaving out one subject or recording, applying the provided model or function to the
     data to compute a fit, and computing the likelihood of the data from the left out
-    participant with the estimated parameters. This is repeated for all participants.
+    subject/recording with the estimated parameters. This is repeated for all subjects/recordings.
 
     If a self-defined function is used, it must accept data (see fit(..) below) as its
     first argument. Additional arguments can be provided through named func_kwargs. 
     The function is required to return a (list of) fitted model(s); for all provided
-    models the likelihood of the left out participant will be calculated.
+    models the likelihood of the left out subject/recording will be calculated.
 
     The reason for using a function instead of a model is if a sequence of operations
-    needs to be performed for each subject (e.g., fitting multiple models in sequence).
-
+    needs to be performed for each subject/recording (e.g., fitting multiple models in sequence).
     For an example of potential functions, see at the bottom of this file:
     example_simple_func(..)
     example_complex_func(..)
@@ -52,6 +52,9 @@ class LOOCV():
         either a (fitted) HMP model or a self-defined function to be applied to
         provided data. If function, must accept data as its first argument and 
         return a (list of) fitted model(s). See explanation above.
+    dimension : Str
+        dimension to perform LOOCV over, either 'subject' or 'recording'
+        Default = 'subject'.
     function_kwargs : dict, optional
         additional arguments to pass on to self-defined function.
         Default = None.
@@ -84,6 +87,7 @@ class LOOCV():
     def __init__(
         self,
         model: BaseModel | Callable,
+        dimension: str = 'subject',
         function_kwargs: dict = None,
         quick: bool = False,
         pattern: Pattern = None,
@@ -94,6 +98,7 @@ class LOOCV():
     ):
 
         self.model = model
+        self.dimension = dimension
         self.function_kwargs = function_kwargs
         self.quick = quick
         self.pca_cv = pca_cv
@@ -190,24 +195,24 @@ class LOOCV():
             cpus_model = 1
 
         # Prep data
-        if isinstance(data, BaseData) and data.projection_type == 'identity': #PCA not applied
+        if isinstance(data, BaseData) and (not hasattr(data,'projector') or isinstance(data.projector, Identity)): #PCA not applied
             assert self.pca_kwargs is not None, \
                 "If non-projected data are provided, pca_kwargs are required"
             assert 'n_comp' in self.pca_kwargs, "n_comp required for pca"
 
         if self.pca_cv:
-            assert isinstance(data, BaseData) and data.projection_type == 'identity',\
+            assert isinstance(data, BaseData) and (not hasattr(data,'projector') or isinstance(data.projector, Identity)),\
                 "If PCA cross-validation, data must be provided as non-projected BaseData."
         else:
-            if isinstance(data, BaseData) and data.projection_type == 'identity':
+            if isinstance(data, BaseData) and (not hasattr(data,'projector') or isinstance(data.projector, Identity)):
                 #warn and apply pca
                 print("Non-projected BaseData provided but PCA cross validation not requested.")
                 print("Continuing by performing PCA on all data, NOT in folds.")
                 data.pca_and_variance(**self.pca_kwargs)
 
-        if isinstance(data, BaseData) and data.projection_type != 'identity':
+        if isinstance(data, BaseData) and not (not hasattr(data,'projector') or isinstance(data.projector, Identity)):
             if self.pattern is not None:
-                data = PatternData.from_preprocessor(data, self.pattern)
+                data = PatternData.from_basedata(data, self.pattern)
             else: # must be function: cannot create PatternData as template is unknown
                 if verbose:
                     print("NOTE: 'function' provided for LOOCV without PatternData or Pattern")
@@ -220,11 +225,11 @@ class LOOCV():
                 self.model.max_events = \
                     self.model._compute_max_events(data, self.model.location)              
 
-        # Get participants here to be able to split for multithreading
+        # Get subjects/recording here to be able to split for multithreading
         if isinstance(data, PatternData):
-            self.participants_idx = np.unique(data.durations.participant.values)
+            self.dimension_idx = np.unique(data.durations[self.dimension].values)
         elif isinstance(data, BaseData):
-            self.participants_idx = np.unique(data.data.participant.values)
+            self.dimension_idx = np.unique(data.data[self.dimension].values)
 
         # Step 1, fit models on n-1 subjects for all folds
         if verbose:
@@ -232,11 +237,11 @@ class LOOCV():
 
         modelfits = []
         if cpus_cv == 1:  # not mp at cv level
-            for participant in self.participants_idx:
+            for dim in self.dimension_idx:
                 modelfits.append(
                     self.loocv_modelfit(
                         data, 
-                        participant, 
+                        dim, 
                         cpus_model=cpus_model, 
                         verbose=verbose))
         else:  # mp at cv level
@@ -245,7 +250,7 @@ class LOOCV():
                     self.loocv_modelfit,
                     zip(
                         itertools.repeat(data),
-                        self.participants_idx,
+                        self.dimension_idx,
                         itertools.repeat(1), #cpus_model has to be 1
                         itertools.repeat(verbose)
                     )
@@ -284,12 +289,12 @@ class LOOCV():
 
             loocv = []
             if cpus_cv == 1:  # no mp for cross validation
-                for pidx, participant in enumerate(self.participants_idx):
+                for didx, dim in enumerate(self.dimension_idx):
                     loocv.append(
                         self.loocv_loglikelihood(
                             data, 
-                            participant, 
-                            modelfits[pidx], 
+                            dim, 
+                            modelfits[didx], 
                             cpus_model=cpus_model,
                             verbose=verbose
                         )
@@ -300,7 +305,7 @@ class LOOCV():
                         self.loocv_loglikelihood,
                         zip(
                             itertools.repeat(data),
-                            self.participants_idx,
+                            self.dimension_idx,
                             modelfits,
                             itertools.repeat(1), #cpus
                             itertools.repeat(verbose),
@@ -310,13 +315,14 @@ class LOOCV():
             #format results
             likelihoods = xr.DataArray(
                 np.expand_dims(np.array(loocv).astype(np.float64), axis=0),
-                dims=("n_event", "participant"),
+                dims=("n_event", self.dimension),
                 coords={"n_event": np.array([modelfits[0].n_events]),
-                    "participant": self.participants_idx},
+                    self.dimension: self.dimension_idx},
                 name="loo_likelihood"
             )
             likelihoods.attrs['model_class'] = self.model_class
             likelihoods.attrs['model'] = self.model
+            likelihoods.attrs['dimension'] = self.dimension
             likelihoods.attrs['n_events'] = np.array([modelfit.n_events for modelfit in modelfits])
             if not np.all(likelihoods.n_events==likelihoods.n_events[0]):
                 likelihoods['n_event'] = 'variable'
@@ -344,9 +350,9 @@ class LOOCV():
         return all_likelihoods, all_modelfits #, average_modelfit, average_eventprobs
     
 
-    def loocv_modelfit(self, data, participant, cpus_model=1, verbose=True):
+    def loocv_modelfit(self, data, dim, cpus_model=1, verbose=True):
         """Apply loocv estimation using either the provided model or function, while
-        leaving out participant 'participant'
+        leaving out subject or recording 'dimension'
 
         Parameters 
         ----------
@@ -356,8 +362,8 @@ class LOOCV():
             In case of option 1, data is cross-correlated with the pattern in self.model.pattern.
             If using a 'function' for LOOCV (see init), it is recommended to provide PatternData
             or pattern to reduce RAM requirements.
-        participant : str
-            name of the participant to leave out
+        dim : str
+            name of the dimension (of subject or recording) to leave out
         cpus_model : int
             nr of cpus to use for model estimation (nr of cpus for cross validation specified 
             above)
@@ -366,18 +372,18 @@ class LOOCV():
         Returns
         -------
         hmp model
-            fitted hmp_model(s) on n-1 participants
+            fitted hmp_model(s) on n-1 subjects/recordings
         """
 
         if verbose:
-            print(f"\tEstimating model for all participants except {participant}")
+            print(f"\tEstimating model for all {self.dimension}s except {dim}")
 
-        # Extract data without left-out participant
+        # Extract data without left-out dim
         if isinstance(data, PatternData):
-            data = hmp.patterndata.remove_participant(data, participant)
+            data = hmp.patterndata.get_subset(data, variable=self.dimension, values=self.dimension_idx[self.dimension_idx != dim])
         elif isinstance(data, BaseData):
-            data = BaseData.remove_participant(data, participant)
-            if data.projection_type == 'identity':
+            data = data.select_coord(variable=self.dimension, value=dim, method=lambda dim, variable: ~dim.isin(variable))
+            if not hasattr(data,'projector') or isinstance(data.projector, Identity):
                 data.pca_and_variance(**self.pca_kwargs)
 
         # Fit model on data
@@ -405,30 +411,30 @@ class LOOCV():
         #if pca_cv, attach pca weights to each model
         if self.pca_cv:
             if isinstance(fitted_model, hmp.models.EventModel):
-                fitted_model.pca_weights = data.weights
+                fitted_model.pca_weights = data.projector.weights
             elif isinstance(fitted_model, hmp.models.CumulativeMethod):
-                fitted_model.submodels[-1].pca_weights = data.weights
+                fitted_model.submodels[-1].pca_weights = data.projector.weights
             elif isinstance(fitted_model, hmp.models.EliminativeMethod):
                 for est_idx in range(fitted_model.max_events):
-                    fitted_model.submodels[est_idx+1].pca_weights = data.weights
+                    fitted_model.submodels[est_idx+1].pca_weights = data.projector.weights
             elif isinstance(fitted_model, list): #from a function or quick elim
                 for est_idx in range(len(fitted_model)):
                     #each fitte can also be eliminative or cumulative
                     if isinstance(fitted_model[est_idx], hmp.models.EliminativeMethod):
                         for est_idx2 in range(fitted_model[est_idx].max_events):
-                            fitted_model[est_idx].submodels[est_idx2+1].pca_weights = data.weights
+                            fitted_model[est_idx].submodels[est_idx2+1].pca_weights = data.projector.weights
                     elif isinstance(fitted_model[est_idx], hmp.models.CumulativeMethod):
-                        fitted_model[est_idx].submodels[-1].pca_weights = data.weights
+                        fitted_model[est_idx].submodels[-1].pca_weights = data.projector.weights
                     elif isinstance(fitted_model[est_idx], hmp.models.EventModel):
-                        fitted_model[est_idx].pca_weights = data.weights
+                        fitted_model[est_idx].pca_weights = data.projector.weights
 
         return fitted_model
 
 
-    def loocv_loglikelihood(self, data, participant, modelfit, cpus_model=1, verbose=False):
+    def loocv_loglikelihood(self, data, dim, modelfit, cpus_model=1, verbose=False):
         """Compute the log-likelihood of the fit.
 
-        Calculate loglikelihood of fit on participant using parameters from modelfit,
+        Calculate loglikelihood of fit on dim using parameters from modelfit,
         either using single model or level based model.
 
         Parameters
@@ -439,8 +445,8 @@ class LOOCV():
             In case of option 1, data is cross-correlated with the pattern in self.model.pattern.
             If using a 'function' for LOOCV (see init), it is recommended to provide PatternData 
             or pattern to reduce RAM requirements.
-        participant : str
-            name of the participant to compute likelihood
+        dim : str
+            name of the dimension (subject or recording) to compute likelihood
         modelfit : xarray.Dataset
             modelfit that has parameters to apply.
         cpus_model : int
@@ -450,24 +456,24 @@ class LOOCV():
         Returns
         -------
         likelihood : float
-            likelihood computed for the left-out participant
+            likelihood computed for the left-out dim
         """
         if verbose:
-            print(f"\tCalculating likelihood for participant {participant}")
+            print(f"\tCalculating likelihood for {self.dimension} {dim}")
 
-        # Extract data of left-out participant
+        # Extract data of left-out dim
         if isinstance(data, PatternData):
-            data = hmp.patterndata.get_participants(data, participant)
-        elif isinstance(data, BaseData):
-            data = BaseData.get_participants(data, participant)
-            if data.projection_type == 'identity': #pca_cv
-                center = self.pca_kwargs.get('center', True)
+            data = hmp.patterndata.get_subset(data, variable=self.dimension, values=dim)
+        elif isinstance(data, BaseData):            
+            data = data.select_coord(variable=self.dimension, value=dim)
+
+            if not hasattr(data,'projector') or isinstance(data.projector, Identity): #pca_cv
                 whiten = self.pca_kwargs.get('whiten', True)
                 common_variance = self.pca_kwargs.get('common_variance', True)
-                subject_zscore = self.pca_kwargs.get('subject_zscore', True)
-                data.apply_pca_weights(modelfit.pca_weights, center=center)
+                recording_zscore = self.pca_kwargs.get('recording_zscore', True)
+                data.project(Custom(weights=modelfit.pca_weights))
                 data.apply_variance_ops(whiten=whiten, common_variance=common_variance,
-                                        subject_zscore=subject_zscore)
+                                        recording_zscore=recording_zscore)
 
         # Calculate loglikelihood of model applied on data of participant
         likelihood, _ = modelfit.transform(data, cpus=cpus_model)

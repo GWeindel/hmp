@@ -10,7 +10,6 @@ import multiprocessing as mp
 from itertools import product
 from typing import Any
 from warnings import resetwarnings, warn
-from typing import Any
 
 import numpy as np
 import xarray as xr

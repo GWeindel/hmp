@@ -22,5 +22,6 @@ except PackageNotFoundError:
     __version__ = "unknown"
 
 
-__all__ = ["loocv", "models", "simulations", "utils", "visu", "io", "preprocessors", "patterns",
+__all__ = ["basedata", "patterndata", "projectors", "loocv", "models",
+           "simulations", "utils", "visu", "io", "patterns",
            "distributions" ,"crossvalidation", "__version__"]

@@ -70,6 +70,6 @@ def add_metadata(epoch_data: xr.Dataset,
     for coord in coords.coords:
         if coord not in epoch_data.coords:
             epoch_data = epoch_data.assign_coords({
-                coord:(('recording', 'epoch'), coords[coord].values)
+                coord: coords[coord]
             })
     return epoch_data

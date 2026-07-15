@@ -221,7 +221,7 @@ class CumulativeMethod(BaseModel):
         else:
             warn("Failed to find more than two stages, returning None")
             self._fitted = False
-    
+
     def transform(self, *args, **kwargs):
         """
         Transform the input data using the last model fitted in the cumulative method.

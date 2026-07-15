@@ -6,8 +6,6 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import xarray as xr
-from typing import Any
-from warnings import resetwarnings, warn
 
 from hmp.basedata import BaseData
 from hmp.models.base import BaseModel
@@ -79,8 +77,8 @@ class EliminativeMethod(BaseModel):
     ) -> None:
         """Perform the eliminative estimation.
 
-        First, read or estimate the max_event solution, then estimate the 
-        max_event - 1 solution by iteratively removing one of the events 
+        First, read or estimate the max_event solution, then estimate the
+        max_event - 1 solution by iteratively removing one of the events
         and picking the one with the highest log-likelihood.
 
         Parameters
@@ -102,7 +100,7 @@ class EliminativeMethod(BaseModel):
             max_events = self._compute_max_events(pattern_data, self.location)
         else:
             max_events = self.max_events
-        
+
         min_events = self.min_events
 
         if not self.base_fit:

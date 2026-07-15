@@ -120,7 +120,7 @@ class BaseData:
                 bsl_values = self.data.sel(sample=slice(*bsl)).mean(['trial','sample'])/\
                         self.data.sel(sample=slice(*bsl)).std(['trial','sample'])
                 if (bsl_values.values > 0.1).any():
-                    warn("Some electrodes might not have not been baseline corrected. "
+                    warn("Some electrodes might not have been baseline corrected. "
                          "Non-centered data might behave unexpectedly in the next steps. "
                          "Consider baseline correcting the data before using BaseData or "
                          "to use the `center` parameter in basedata.crop_reject_epochs. ")
@@ -163,9 +163,9 @@ class BaseData:
         self._apply_variance_ops()
 
     def pca_and_variance(self, n_comp: float = None, method_pca: str='svd',
-                         whiten=True, common_variance=True, recording_zscore=True, verbose=True):
+                         whiten=True, common_variance=True, recording_zscore=True):
         """Apply PCA and variance operations."""
-        self.project(PCA(n_comp=n_comp, method_pca=method_pca, verbose=verbose))
+        self.project(PCA(n_comp=n_comp, method_pca=method_pca))
         self.apply_variance_ops(whiten=whiten, common_variance=common_variance,
                                 recording_zscore=recording_zscore)
 
