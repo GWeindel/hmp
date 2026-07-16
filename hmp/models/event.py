@@ -379,7 +379,7 @@ class EventModel(BaseModel):
             self.channel_pars, self.time_pars, groups, cpus=cpus
         )
 
-        return likelihoods, xreventprobs
+        return [likelihoods.sum()], xreventprobs
 
     @property
     def xrtraces(self):
@@ -970,7 +970,7 @@ class EventModel(BaseModel):
         all_xreventprobs.attrs['group_lkh'] = np.array(likelihood)
         all_xreventprobs.attrs['group_labels'] = self.group_labels
 
-        return [np.array(likelihood).sum(), all_xreventprobs]
+        return [np.array(likelihood), all_xreventprobs]
 
     def distribution_pdf(
         self,
