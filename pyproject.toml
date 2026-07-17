@@ -9,7 +9,7 @@ name = "hmp"
 authors = [
   { name="Gabriel Weindel", email="gabriel.weindel@gmail.com" },
   { name="Leendert van Maanen", email="e@mail.com" },
-  { name="Jelmer Borst", email="e@mail.com" },
+  { name="Jelmer Borst", email="j.p.borst@rug.nl" },
 ]
 description = "Package for fitting Hidden Multivariate pattern model to time-series"
 readme = "README.md"
