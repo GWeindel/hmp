@@ -52,7 +52,7 @@ class EliminativeMethod(BaseModel):
         pattern: Pattern = None,
         location: float = None,
         max_events: int | None = None,
-        min_events: int = 0,
+        min_events: int = 1,
         base_fit: EventModel | None = None,
         tolerance: float = 1e-4,
         max_iteration: int = 1000,
@@ -113,7 +113,7 @@ class EliminativeMethod(BaseModel):
         max_events = base_fit.n_events
         self.submodels[max_events] = base_fit
 
-        for n_events in np.arange(max_events - 1, min_events, -1):
+        for n_events in np.arange(max_events - 1, min_events-1, -1):
             event_model = self.get_event_model(n_events, starting_points=n_events+1)
 
             print(f"Estimating all solutions for {n_events} events")

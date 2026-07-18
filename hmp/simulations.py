@@ -128,6 +128,8 @@ def simulate(  # noqa  # Might need to be refactored.
     """
     os.environ["SUBJECTS_DIR"] = op.join(root,'simulation_parameters')
     path = op.join(os.getcwd(), path)
+    if not os.path.isdir(path):
+        os.mkdir(path)
 
     if not verbose:
         mne.set_log_level("warning")
