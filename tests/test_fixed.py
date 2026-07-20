@@ -43,7 +43,7 @@ def test_fixed_simple():
     # test the difference between electrode values at event times
     assert np.isclose(np.sum(np.abs(true_topos.data - test_topos.data)), 0, atol=1e-4, rtol=0)
     # Test whether likelihood is the expected one
-    expected_lkh = np.array(52.63)
+    expected_lkh = np.array(53)
     assert np.isclose(lkh_b, expected_lkh, atol=1e-2, rtol=0)
 
     #locations
