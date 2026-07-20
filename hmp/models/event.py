@@ -348,9 +348,9 @@ class EventModel(BaseModel):
         self.channel_pars =  np.array(estimates[max_lkhs][1])
         self.time_pars = np.array(estimates[max_lkhs][2])
         self.traces = np.array(estimates[max_lkhs][3])
-        self.time_pars_dev = np.array(estimates[max_lkhs][4])
+        self.traces_group = np.array(estimates[max_lkhs][4])
+        self.time_pars_dev = np.array(estimates[max_lkhs][5])
         self.group = groups
-
 
     def transform(self, data: Any, cpus: int = 1) -> tuple[np.ndarray, xr.DataArray]:
         """
@@ -394,12 +394,12 @@ class EventModel(BaseModel):
         """
         self._check_fitted("get traces")
         return xr.DataArray(
-            self.traces,
+            self.traces_group,
             dims=("em_iteration", "group"),
             name="traces",
             coords={
-                "em_iteration": range(self.traces.shape[0]),
-                "group": range(self.traces.shape[1]),
+                "em_iteration": range(self.traces_group.shape[0]),
+                "group": range(self.traces_group.shape[1]),
             }
         )
 
@@ -537,15 +537,14 @@ class EventModel(BaseModel):
         channel_pars = initial_channel_pars.copy()
         time_pars = initial_time_pars.copy()
         traces = [lkh]
+        traces_group = [eventprobs.group_lkh]
         time_pars_dev = [time_pars.copy()]
         i = 0
 
         lkh_prev = lkh.copy()
         while i < self.max_iteration:  # Expectation-Maximization algorithm
             if i >= self.min_iteration and (
-                np.isneginf(lkh.sum()) or \
-                self.tolerance > (lkh.sum() - lkh_prev.sum()) / np.abs(lkh_prev.sum())
-            ):
+                np.isneginf(lkh) or self.tolerance > (lkh - lkh_prev) / np.abs(lkh_prev)):
                 break
 
             # As long as new run gives better likelihood, go on
@@ -615,7 +614,7 @@ class EventModel(BaseModel):
                     break
 
                 # Half step in case the llk is ill-defined
-                if np.isneginf(lkh.sum()):
+                if np.isneginf(lkh):
                     new_channel_pars = (new_channel_pars + channel_pars)/2
                     new_time_pars = (new_time_pars + time_pars)/2
                 else:
@@ -627,6 +626,7 @@ class EventModel(BaseModel):
             channel_pars = new_channel_pars
 
             traces.append(lkh)
+            traces_group.append(eventprobs.group_lkh)
             time_pars_dev.append(time_pars.copy())
             i += 1
 
@@ -636,7 +636,8 @@ class EventModel(BaseModel):
                 f"({int(self.max_iteration)})",
                 RuntimeWarning,
             )
-        return lkh, channel_pars, time_pars, np.array(traces), np.array(time_pars_dev)
+        return lkh, channel_pars, time_pars, np.array(traces), \
+            np.array(traces_group), np.array(time_pars_dev)
 
     def get_channel_time_parameters_expectation(
         self,
@@ -970,7 +971,7 @@ class EventModel(BaseModel):
         all_xreventprobs.attrs['group_lkh'] = np.array(likelihood)
         all_xreventprobs.attrs['group_labels'] = self.group_labels
 
-        return [np.array(likelihood), all_xreventprobs]
+        return [likelihood.sum(), all_xreventprobs]
 
     def distribution_pdf(
         self,

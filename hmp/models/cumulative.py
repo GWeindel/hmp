@@ -169,7 +169,7 @@ class CumulativeMethod(BaseModel):
             )
             # check solution
             diff_llk = llk - llk_prev
-            if all(llk_prev != -np.inf):
+            if np.all(llk_prev != -np.inf):
                 diff_llk /= np.abs(llk_prev)
 
             if np.median(diff_llk) > self.tolerance:  # accept solution if likelihood improved
@@ -352,7 +352,7 @@ class CumulativeMethod(BaseModel):
             cpus=1
         )
 
-        llk = event_model.transform(test_td)[0].sum()
+        llk = event_model.transform(test_td)[0]
         max_scale = np.max(
                     [np.sum(x[0, :n_events-1, 1]) for x in event_model.time_pars_dev]
                 )
