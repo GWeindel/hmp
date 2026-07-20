@@ -279,7 +279,8 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
         topo_size = event_size * magnify
     else:
         timescale = (
-            max_time if max_time else (np.nanmax(times_to_display) * 1.05)
+            max_time if max_time else (np.nanmax((np.nanmax(times_to_display), \
+                np.nanmax(times[:, -1]))) * 1.05)
         ) + time_step
         topo_size = 0.08 * timescale * magnify  # 8% of time scale
 
@@ -423,7 +424,7 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
         )
 
     ax.set_xlim(0, (
-            max_time if max_time else (np.nanmax(times_to_display) * 1.05)
+            max_time
         ))
     # plot ylabels
     if len(ylabels) > 0:
