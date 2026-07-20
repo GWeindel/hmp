@@ -183,8 +183,6 @@ class BaseData:
 
         Parameters
         ----------
-        data : BaseData
-            Data from io, BaseData or estimates from hmp
         value : str | num
             Value to test with method().
         variable : str
