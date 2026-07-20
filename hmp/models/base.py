@@ -83,11 +83,7 @@ class BaseModel(ABC):
         """
         min_dur = np.min(pattern_data.durations.values)
         location_samples = self._time_to_samples(location, pattern_data.sfreq)
-        if self.pattern.width < location:
-            return int(np.floor((min_dur - self.pattern.width)/ \
-                            location_samples)) + 1
-        else:
-            return int(np.floor(min_dur / location_samples))
+        return int(np.floor(min_dur / location_samples))
 
     @abstractmethod
     def fit(self):
