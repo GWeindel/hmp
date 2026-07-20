@@ -4,6 +4,7 @@ This module provides functions for reading MNE epoched data format (.fif only)
 """
 
 import multiprocessing as mp
+from copy import deepcopy
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -123,11 +124,12 @@ def read_mne_epochs(
 
     # Recover info from first epochs object
     info = epochs_list[0][0].info
-    preprocessing_kwargs['sfreq'] = epochs_list[0][0].info['sfreq']
-    preprocessing_kwargs['lowpass'] = epochs_list[0][0].info['lowpass']
-    preprocessing_kwargs['highpass'] = epochs_list[0][0].info['highpass']
+    final_prep_kwargs = deepcopy(preprocessing_kwargs)
+    final_prep_kwargs['sfreq'] = epochs_list[0][0].info['sfreq']
+    final_prep_kwargs['lowpass'] = epochs_list[0][0].info['lowpass']
+    final_prep_kwargs['highpass'] = epochs_list[0][0].info['highpass']
     epoch_data = utils._concat_recordings(epoch_data, recordings,
-                    {}, preprocessing_kwargs, subj_name)
+                      {}, final_prep_kwargs, subj_name)
 
     return epoch_data, info
 

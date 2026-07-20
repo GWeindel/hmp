@@ -5,6 +5,7 @@ This module provides functions for reading BIDS data format
 
 import multiprocessing as mp
 import re
+from copy import deepcopy
 from typing import Callable, Optional
 
 import mne_bids
@@ -180,11 +181,12 @@ def read_bids_raw(
     recordings = [x.fpath for x in recordings]
     # Recover info from first epochs object
     info = epochs_list[0][0].info
-    preprocessing_kwargs['sfreq'] = epochs_list[0][0].info['sfreq']
-    preprocessing_kwargs['lowpass'] = epochs_list[0][0].info['lowpass']
-    preprocessing_kwargs['highpass'] = epochs_list[0][0].info['highpass']
+    final_prep_kwargs = deepcopy(preprocessing_kwargs)
+    final_prep_kwargs['sfreq'] = epochs_list[0][0].info['sfreq']
+    final_prep_kwargs['lowpass'] = epochs_list[0][0].info['lowpass']
+    final_prep_kwargs['highpass'] = epochs_list[0][0].info['highpass']
     epoch_data = utils._concat_recordings(epoch_data, recordings,
-                      epoching_kwargs, preprocessing_kwargs)
+                      epoching_kwargs, final_prep_kwargs)
     bids_info = [_parse_bids_name(r) for r in epoch_data.recording.values]
 
     # Add bids info to xr coords
