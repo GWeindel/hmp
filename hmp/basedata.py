@@ -149,7 +149,7 @@ class BaseData:
         self.projector = projector
 
     def apply_variance_ops(self, whiten: bool = True, common_variance: bool = True,
-                            recording_zscore: bool = True):
+                            standardize_recording: bool = True):
         """
         Apply three variance operators, typically after projection.
 
@@ -159,22 +159,22 @@ class BaseData:
         common_variance : bool, optional
             Standardize variance across trials.
             Default = True
-        recording_zscore: bool, optional
-            z-score each component for each recording
+        standardize_recording: bool, optional
+            Divide each component for each recording by its standard deviation
             Default = True
         """
         self._check_order(projected=True)
         self.whiten = whiten
         self.common_variance = common_variance
-        self.recording_zscore = recording_zscore
+        self.standardize_recording = standardize_recording
         self._apply_variance_ops()
 
     def pca_and_variance(self, n_comp: float = None, method_pca: str='svd',
-                         whiten=True, common_variance=True, recording_zscore=True, verbose=True):
+                         whiten=True, common_variance=True, standardize_recording=True, verbose=True):
         """Apply PCA and variance operations."""
-        self.project(PCA(n_comp=n_comp, method_pca=method_pca, verbose=verbose))
+        self.project(PCA(n_comp=n_comp, method_pca=method_pca).fit_transform())
         self.apply_variance_ops(whiten=whiten, common_variance=common_variance,
-                                recording_zscore=recording_zscore)
+                                standardize_recording=standardize_recording)
 
     def select_coord(self,
                 value: object,
@@ -221,16 +221,15 @@ class BaseData:
             self.data /= self.data.std(['trial','sample'], skipna=True)
         else:
             self.data /= self.data.std(..., skipna=True)
-
-        if self.common_variance:
-            self.data /= self.data.std(['component','sample'], skipna=True)
-
-        if self.recording_zscore:
+        
+        if self.standardize_recording:
             self.data = self.data.unstack()
-            self.data -= self.data.mean(['epoch','sample'], skipna=True)
             self.data /= self.data.std(['epoch','sample'], skipna=True)
             self.data = self.data.stack(trial=['recording','epoch'])\
                 .dropna("trial", how="all")
+        
+        if self.common_variance:
+            self.data /= self.data.std(['component','sample'], skipna=True)
 
     def _crop_reject_epochs(self, #noqa: PLR0912
                             verbose=True):
@@ -381,7 +380,7 @@ def default( # noqa: PLR0913, PLR0917
             n_comp: float | None = None,
             whiten: bool = True,
             common_variance: bool = True,
-            recording_zscore: bool = True,
+            standardize_recording: bool = True,
             verbose: bool = True
     ):
     """
@@ -432,8 +431,8 @@ def default( # noqa: PLR0913, PLR0917
     common_variance : bool, optional
         Standardize variance across trials.
         Default = True
-    recording_zscore: bool, optional
-        z-score each component for each recording
+    standardize_recording: bool, optional
+        Divide each component for each recording by its standard deviation
         Default = True
     verbose:
         Provide feedback on the different operations
@@ -460,7 +459,7 @@ def default( # noqa: PLR0913, PLR0917
     base_data.apply_variance_ops(
         whiten=whiten,
         common_variance=common_variance,
-        recording_zscore=recording_zscore,
+        standardize_recording=standardize_recording,
     )
 
     return base_data
