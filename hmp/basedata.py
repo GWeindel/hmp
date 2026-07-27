@@ -148,8 +148,8 @@ class BaseData:
         self.data = self.data.transpose('sample','component','trial')
         self.projector = projector
 
-    def apply_variance_ops(self, whiten: bool = True, common_variance: bool = True,
-                            standardize_recording: bool = True):
+    def apply_variance_ops(self, whiten: bool = True, common_variance: bool = False,
+                            standardize_recording: bool = False):
         """
         Apply three variance operators, typically after projection.
 
@@ -221,16 +221,16 @@ class BaseData:
             self.data /= self.data.std(['trial','sample'], skipna=True)
         else:
             self.data /= self.data.std(..., skipna=True)
-        
-        if self.common_variance:
-            self.data /= self.data.std(['component','sample'], skipna=True)
-        
+
         if self.standardize_recording:
             self.data = self.data.unstack()
             self.data /= self.data.std(['epoch','sample'], skipna=True)
             self.data = self.data.stack(trial=['recording','epoch'])\
                 .dropna("trial", how="all")
-            
+
+        if self.common_variance:
+            self.data /= self.data.std(['component','sample'], skipna=True)
+
     def _crop_reject_epochs(self, #noqa: PLR0912
                             verbose=True):
         """
@@ -379,8 +379,8 @@ def default( # noqa: PLR0913, PLR0917
             reject_amplitude: float = np.inf,
             n_comp: float | None = None,
             whiten: bool = True,
-            common_variance: bool = True,
-            standardize_recording: bool = True,
+            common_variance: bool = False,
+            standardize_recording: bool = False,
             verbose: bool = True
     ):
     """
