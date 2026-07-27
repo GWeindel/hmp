@@ -222,15 +222,15 @@ class BaseData:
         else:
             self.data /= self.data.std(..., skipna=True)
         
+        if self.common_variance:
+            self.data /= self.data.std(['component','sample'], skipna=True)
+        
         if self.standardize_recording:
             self.data = self.data.unstack()
             self.data /= self.data.std(['epoch','sample'], skipna=True)
             self.data = self.data.stack(trial=['recording','epoch'])\
                 .dropna("trial", how="all")
-        
-        if self.common_variance:
-            self.data /= self.data.std(['component','sample'], skipna=True)
-
+            
     def _crop_reject_epochs(self, #noqa: PLR0912
                             verbose=True):
         """
