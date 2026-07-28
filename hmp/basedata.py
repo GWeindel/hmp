@@ -135,15 +135,13 @@ class BaseData:
         self._crop_reject_epochs(verbose)
 
     def project(self,
-                projector: Projector,
-                verbose=True):
+                projector: Projector):
         """
         Project data from channels to components.
 
         projector: Projector
             Module from the projectors class
         """
-        projector.verbose = verbose
         self.data = projector.fit_transform(self.data)
         self.data = self.data.transpose('sample','component','trial')
         self.projector = projector
@@ -170,9 +168,10 @@ class BaseData:
         self._apply_variance_ops()
 
     def pca_and_variance(self, n_comp: float = None, method_pca: str='svd',
-                         whiten=True, common_variance=True, standardize_recording=True, verbose=True):
+                         whiten=True, common_variance=False, standardize_recording=False,
+                         verbose=True):
         """Apply PCA and variance operations."""
-        self.project(PCA(n_comp=n_comp, method_pca=method_pca).fit_transform())
+        self.project(PCA(n_comp=n_comp, method_pca=method_pca, verbose=verbose))
         self.apply_variance_ops(whiten=whiten, common_variance=common_variance,
                                 standardize_recording=standardize_recording)
 

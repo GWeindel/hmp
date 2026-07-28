@@ -62,3 +62,7 @@ def test_proj_pca_custom_variants(fixt_init_data, n_comp, whiten, reject_thresho
         a.data.attrs['sfreq']
         pdata_a = hmp.patterndata.PatternData.from_basedata(a)
         pdata_a.durations.attrs['sfreq']
+
+        # Testing shortcut
+        pca = hmp.basedata.from_io(epoch_data)
+        pca = pca.pca_and_variance(n_comp=1)
