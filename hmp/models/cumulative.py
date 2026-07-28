@@ -71,7 +71,7 @@ class CumulativeMethod(BaseModel):
         location: float = None,
         step: float = None,
         end: int = None,
-        sequential: bool = False,
+        sequential: bool = True,
         fastforward: bool = True,
         tolerance: float = 1e-4,
         base_fit: EventModel | None = None,
