@@ -22,8 +22,8 @@ Includes methods to:
     2. Project channels to new virtual channel, either based on PCA,
         an arbitrary linear combination of channels,
         or the identity of the channels.
-    3. Whiten the components and standardize each trial's variance
-       (`common_variance`) and standardize the components for each recording.
+    3. Whiten the components,  standardize the components for each recording (False by Default)
+        and standardize each trial's variance (`common_variance`).
 """
 
 from copy import deepcopy
@@ -147,7 +147,7 @@ class BaseData:
         self.projector = projector
 
     def apply_variance_ops(self, whiten: bool = True, common_variance: bool = False,
-                            standardize_recording: bool = False):
+                            standardize_recording: bool = True):
         """
         Apply three variance operators, typically after projection.
 
@@ -159,7 +159,7 @@ class BaseData:
             Default = True
         standardize_recording: bool, optional
             Divide each component for each recording by its standard deviation
-            Default = True
+            Default = False
         """
         self._check_order(projected=True)
         self.whiten = whiten
@@ -168,7 +168,7 @@ class BaseData:
         self._apply_variance_ops()
 
     def pca_and_variance(self, n_comp: float = None, method_pca: str='svd',
-                         whiten=True, common_variance=False, standardize_recording=False,
+                         whiten=True, common_variance=True, standardize_recording=False,
                          verbose=True):
         """Apply PCA and variance operations."""
         self.project(PCA(n_comp=n_comp, method_pca=method_pca, verbose=verbose))
@@ -378,7 +378,7 @@ def default( # noqa: PLR0913, PLR0917
             reject_amplitude: float = np.inf,
             n_comp: float | None = None,
             whiten: bool = True,
-            common_variance: bool = False,
+            common_variance: bool = True,
             standardize_recording: bool = False,
             verbose: bool = True
     ):
@@ -432,7 +432,7 @@ def default( # noqa: PLR0913, PLR0917
         Default = True
     standardize_recording: bool, optional
         Divide each component for each recording by its standard deviation
-        Default = True
+        Default = False
     verbose:
         Provide feedback on the different operations
 
