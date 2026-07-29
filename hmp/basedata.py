@@ -147,7 +147,7 @@ class BaseData:
         self.projector = projector
 
     def apply_variance_ops(self, whiten: bool = True, common_variance: bool = False,
-                            standardize_recording: bool = True):
+                            standardize_recording: bool = False):
         """
         Apply three variance operators, typically after projection.
 
@@ -156,7 +156,7 @@ class BaseData:
             Default = True
         common_variance : bool, optional
             Standardize variance across trials.
-            Default = True
+            Default = False
         standardize_recording: bool, optional
             Divide each component for each recording by its standard deviation
             Default = False
@@ -168,7 +168,7 @@ class BaseData:
         self._apply_variance_ops()
 
     def pca_and_variance(self, n_comp: float = None, method_pca: str='svd',
-                         whiten=True, common_variance=True, standardize_recording=False,
+                         whiten=True, common_variance=False, standardize_recording=False,
                          verbose=True):
         """Apply PCA and variance operations."""
         self.project(PCA(n_comp=n_comp, method_pca=method_pca, verbose=verbose))
@@ -216,19 +216,19 @@ class BaseData:
 
     def _apply_variance_ops(self):
         """Apply one or more variance operations."""
-        if self.whiten:
+        if self.whiten and not self.standardize_recording:
             self.data /= self.data.std(['trial','sample'], skipna=True)
-        else:
-            self.data /= self.data.std(..., skipna=True)
-
-        if self.standardize_recording:
+        elif self.standardize_recording:
             self.data = self.data.unstack()
             self.data /= self.data.std(['epoch','sample'], skipna=True)
             self.data = self.data.stack(trial=['recording','epoch'])\
                 .dropna("trial", how="all")
+        else:
+            self.data /= self.data.std(..., skipna=True)
 
         if self.common_variance:
             self.data /= self.data.std(['component','sample'], skipna=True)
+
 
     def _crop_reject_epochs(self, #noqa: PLR0912
                             verbose=True):
@@ -378,7 +378,7 @@ def default( # noqa: PLR0913, PLR0917
             reject_amplitude: float = np.inf,
             n_comp: float | None = None,
             whiten: bool = True,
-            common_variance: bool = True,
+            common_variance: bool = False,
             standardize_recording: bool = False,
             verbose: bool = True
     ):
@@ -429,7 +429,7 @@ def default( # noqa: PLR0913, PLR0917
         Default = True
     common_variance : bool, optional
         Standardize variance across trials.
-        Default = True
+        Default = False
     standardize_recording: bool, optional
         Divide each component for each recording by its standard deviation
         Default = False
