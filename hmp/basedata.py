@@ -163,9 +163,9 @@ class BaseData:
         self._apply_variance_ops()
 
     def pca_and_variance(self, n_comp: float = None, method_pca: str='svd',
-                         whiten=True, common_variance=True, recording_zscore=True):
+                         whiten=True, common_variance=True, recording_zscore=True, verbose=True):
         """Apply PCA and variance operations."""
-        self.project(PCA(n_comp=n_comp, method_pca=method_pca))
+        self.project(PCA(n_comp=n_comp, method_pca=method_pca, verbose=verbose))
         self.apply_variance_ops(whiten=whiten, common_variance=common_variance,
                                 recording_zscore=recording_zscore)
 
