@@ -664,23 +664,18 @@ class EventModel(BaseModel):
         time_pars : np.ndarray
             A 2D array of shape (n_stages, 2) with the estimated time parameters (shape and scale).
         """
-        channel_pars = np.zeros((eventprobs.shape[2], self.n_dims))
         # Channel contribution from Expectation, Eq 11 from 2024 paper
-        for event in range(eventprobs.shape[2]):
-            for comp in range(self.n_dims):
-                event_data = np.zeros((len(subset_epochs),
-                                       np.max(pattern_data.durations.values[subset_epochs])))
-                for trial_idx, trial in enumerate(subset_epochs):
-                    start, end = pattern_data.starts[trial], pattern_data.ends[trial]
-                    duration = end - start + 1
-                    event_data[trial_idx, :duration] =\
-                        pattern_data.cross_corr[start : end + 1, comp]
-                channel_pars[event, comp] = np.mean(
-                    np.sum(eventprobs[subset_epochs, :, event] * event_data, axis=1)
-                )
-            # scale cross-correlation with likelihood of the transition
-            # sum by-trial these scaled activation for each transition events
-            # average across trial
+        max_dur = int(np.max(pattern_data.durations.values[subset_epochs]))
+        # padded (n_sub, max_dur, n_dims) data for this subset, sized like eventprobs
+        data = np.zeros((len(subset_epochs), max_dur, self.n_dims),
+                        dtype=pattern_data.cross_corr.dtype)
+        for trial_idx, trial in enumerate(subset_epochs):
+            start, end = pattern_data.starts[trial], pattern_data.ends[trial]
+            data[trial_idx, : end - start + 1, :] = pattern_data.cross_corr[start : end + 1, :]
+
+        ep = eventprobs[subset_epochs]                      # (n_sub, max_dur, n_events)
+        # mean over trials of sum over samples: (n_events, n_dims)
+        channel_pars = np.einsum('tse,tsc->ec', ep, data).astype(np.float64) / len(subset_epochs)
 
         # Time parameters from Expectation Eq 10 from 2024 paper
         # calc averagepos here as mean_d can be group dependent, whereas scale_parameters() assumes
