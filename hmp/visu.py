@@ -279,8 +279,7 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
         topo_size = event_size * magnify
     else:
         timescale = (
-            max_time if max_time else (np.nanmax((np.nanmax(times_to_display), \
-                np.nanmax(times[:, -1]))) * 1.05)
+            max_time if max_time else (np.nanmax(times_to_display) * 1.05)
         ) + time_step
         topo_size = 0.08 * timescale * magnify  # 8% of time scale
 
@@ -424,7 +423,7 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
         )
 
     ax.set_xlim(0, (
-            max_time
+            max_time if max_time else (np.nanmax(times_to_display) * 1.05)
         ))
     # plot ylabels
     if len(ylabels) > 0:
@@ -471,7 +470,8 @@ def plot_components_sensor(
     cmap : str, optional
         Colormap to use for the topomap, by default "Spectral_r".
     """
-    fig, ax = plt.subplots(1, len(weights.component))
+    fig, ax = plt.subplots(1, len(weights.component), squeeze=False)
+    ax = ax.ravel()
     for comp in weights.component:
         plot_topomap(
             weights.values[:, comp],
@@ -624,7 +624,6 @@ def plot_loocv(  # noqa # Refactor?
 
 def plot_latencies(  # noqa  # Refactor?
     estimates,
-    init=None,
     labels=[],
     colors=default_colors,
     figsize=False,
@@ -665,14 +664,13 @@ def plot_latencies(  # noqa  # Refactor?
     as_time : bool
         if true, plot time (ms) instead of sample.
     """
-    if as_time and init is not None:
-        time_step = 1000 / init.sfreq  # time_step still needed below
+    if as_time:
+        time_step = 1000 / estimates.sfreq  # time_step still needed below
     else:
         time_step = 1
 
     # if hmp estimates are provided, calculate time
     if isinstance(estimates, (xr.DataArray, xr.Dataset)):
-        assert init is not None, "If hmp results object provided, init is a required parameter."
         ydim = None
         if (
             "n_events" in estimates.dims and estimates.n_events.count() > 1

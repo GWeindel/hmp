@@ -18,7 +18,6 @@ def event_times(  # noqa: PLR0912
     mean=False,
     add_rt=False,
     as_time=False,
-    errorbars=None,
     estimate_method="max",
     add_stim=False,
     remove_offset=False,
@@ -38,10 +37,6 @@ def event_times(  # noqa: PLR0912
         whether to append the last stage up to the RT
     as_time : bool
         if true, return time (ms) instead of sample
-    errorbars : str
-        calculate 95% confidence interval ('ci'), standard deviation ('std'),
-        standard error ('se') on the times or durations, or None.
-        Note that mean and errorbars cannot both be true.
     estimate_method : string
         'max' or 'mean', either take the max probability of each event on each trial, or the
         weighted average.
@@ -57,7 +52,6 @@ def event_times(  # noqa: PLR0912
         Transition event peak or stage duration with trial*event dimensions or
         only event dimension if mean = True contains nans for missing stages.
     """
-    assert not (mean and errorbars is not None), "Only one of mean and errorbars can be set."
     tstep = 1000 / estimates.sfreq if as_time else 1
 
     if estimate_method is None:
@@ -116,24 +110,13 @@ def event_times(  # noqa: PLR0912
 
     if mean:
         times = times.groupby("group").mean("trial")
-    elif errorbars:
-        errorbars_model = np.zeros((len(np.unique(times["group"])), 2, times.shape[1]))
-        if errorbars == "std":
-            std_errs = times.groupby("group").reduce(np.std, dim="trial").values
-            for c in np.unique(times["group"]):
-                errorbars_model[c, :, :] = np.tile(std_errs[c, :], (2, 1))
-        else:
-            raise ValueError(
-                "Unknown error bars, 'std' is for now the only accepted argument in the "
-                "multigroup models"
-            )
-        times = errorbars_model
+
     return times
 
 def _filter_common_trials_data_fit(epoch_data, estimates):
     if len(epoch_data.dims) == 4:
         epoch_data = epoch_data.stack(trial=("recording", "epoch"))
-    mask = ~epoch_data.data.isel(sample=0, channel=0).squeeze().isnull()
+    mask = ~epoch_data.data.isel(sample=0, channel=0).drop_vars(['sample','channel']).isnull()
     epoch_data = epoch_data.sel(trial=epoch_data.trial.values[mask])
     common_trial = np.intersect1d(
         estimates["trial"].values, epoch_data["trial"].values

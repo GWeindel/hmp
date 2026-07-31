@@ -12,14 +12,13 @@ from pandas import DataFrame
 
 def _defaults_check_epoching(kwargs):
     expected = list(inspect.signature(Epochs).parameters)
-    critical = {"tmin":-.2,"tmax":2}
+    critical = {"tmin":-.2,"tmax":2,"baseline":(None, 0)}
     for key, value in critical.items():
         if key not in kwargs:
             warn(f"No '{key}' provided, using default value of {value} seconds \n"
                 "use 'epoching_kwargs' to override default values")
             kwargs.setdefault(key, value)
     kwargs.setdefault("proj", False)
-    kwargs.setdefault("baseline", (None, 0))
     kwargs.setdefault("detrend", None)
     kwargs.setdefault("on_missing", "warn")
     kwargs.setdefault("event_repeated", "drop")

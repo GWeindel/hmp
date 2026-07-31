@@ -29,14 +29,14 @@ class PCA(Projector):
 
     """
 
-    def __init__(self, method_pca="svd", n_comp=None):
+    def __init__(self, method_pca="svd", n_comp=None, verbose: bool = True):
         self.method_pca = method_pca
         self.n_comp = n_comp
         self.weights = None
+        self.verbose = verbose
 
     def fit(self,
-            data: DataArray,
-            verbose: bool = True):
+            data: DataArray):
         """Estimate PCA weights."""
         #Compute covariance
         recordings = set(data.recording.values)
@@ -57,7 +57,7 @@ class PCA(Projector):
             self.n_comp = self._user_input_n_comp(explained_variance_ratio)
         elif self.n_comp < 1: #return nr of components based on explained variance
             self.n_comp = np.where(np.cumsum(explained_variance_ratio) >= self.n_comp)[0][0] + 1
-            if verbose:
+            if self.verbose:
                 print(f"{self.n_comp} components retained, explaining "
                       f"{np.cumsum(explained_variance_ratio)[self.n_comp]:.5f}% variance")
         self.weights = pca_weights[:,:self.n_comp]

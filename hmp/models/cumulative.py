@@ -45,9 +45,9 @@ class CumulativeMethod(BaseModel):
     end : int, optional
         The maximum time to explore for new solutions. Defaults to the mean duration in the data.
     sequential: bool
-        If True (Default), iteratively test all samples from 0 to `end`, retain times at
+        If True, iteratively test all samples from 0 to `end`, retain times at
         which likelihood increased regardless of whether a subsequent event was found.
-        If False, Testing new starting point solely starting from the last detected event.
+        If False (Default), Testing new starting point solely starting from the last detected event.
     fastforward : bool, optional
         If True when proposal got rejected, start again with the furthest time point explored
         with previous proposition.

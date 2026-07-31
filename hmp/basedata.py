@@ -22,8 +22,8 @@ Includes methods to:
     2. Project channels to new virtual channel, either based on PCA,
         an arbitrary linear combination of channels,
         or the identity of the channels.
-    3. Whiten the components and standardize each trial's variance
-       (`common_variance`) and standardize the components for each recording.
+    3. Whiten the components,  standardize the components for each recording (False by Default)
+        and standardize each trial's variance (`common_variance`).
 """
 
 from copy import deepcopy
@@ -54,9 +54,9 @@ class BaseData:
 
     data: xr.DataArray
 
-    def crop_reject_epochs(self, duration_id: str = 'response_time', offset_start: float = 0,
-                           offset_end: float = 0, center: bool = False,
-                           min_duration: float = 0, max_duration: float = np.inf,
+    def crop_reject_epochs(self, duration_id: str = 'response_time',
+                           offsets: tuple = (0,0), center: bool = True,
+                           min_duration: float = 0, max_duration: float | None = None,
                            reject_amplitude = np.inf, verbose=True):
         """
         Crop and reject epochs, typically before projection.
@@ -65,12 +65,12 @@ class BaseData:
             Name of the variable that contains the trial intervals in the epoch_data
             used for cropping and rejection.
             Default = None
-        offset_start : float, optional
-            Time offset from interval start for cropping. Negative number extends
-            epoch before start.
-            Default = 0
-        offset_end : float, optional
-            Time offset after interval end for cropping.
+        offsets : tuple, optional
+            Seconds of recording to keep before and after end of each epoch duration.
+            First value refers to the times taken before epoch center and second value
+            to the time kept after end. Should be positive. Used for padding the data
+            before crosscorrelation. Adding template width / 2 is recommended.
+            If float apply the offsets symmetrically.
             Default = 0
         center : bool
             Whether to use the median to center over all trials and electrodes using
@@ -89,16 +89,23 @@ class BaseData:
         if duration_id is not None:
             assert duration_id in self.data.coords, 'duration_id not present in data'
             self.duration_id = duration_id
-
-        self.offset_start = offset_start
-        self.offset_end = offset_end
+        if isinstance(offsets, (float,int)):
+            offsets = (offsets, offsets)
+        if (np.array(offsets) < 0).any():
+            raise ValueError('offsets should be positive')
+        self.data.attrs.update({
+            "offset_start": offsets[0],
+            "offset_end": offsets[1],
+        })
+        self.offsets = offsets
         self.center = center
         self.min_duration = min_duration
         self.max_duration = max_duration
         self.reject_amplitude = reject_amplitude
 
         if self.max_duration is float('Inf') or self.max_duration is None:
-            self.max_duration = int(self.data.sample.max()) / self.data.sfreq
+            self.max_duration = int(self.data.sample.max()) / self.data.sfreq\
+                                    - offsets[1]
         if self.min_duration == 0 or self.min_duration is None:
             self.min_duration = 1 / self.data.sfreq
 
@@ -128,21 +135,19 @@ class BaseData:
         self._crop_reject_epochs(verbose)
 
     def project(self,
-                projector: Projector,
-                verbose=True):
+                projector: Projector):
         """
         Project data from channels to components.
 
         projector: Projector
             Module from the projectors class
         """
-        projector.verbose = verbose
         self.data = projector.fit_transform(self.data)
         self.data = self.data.transpose('sample','component','trial')
         self.projector = projector
 
-    def apply_variance_ops(self, whiten: bool = True, common_variance: bool = True,
-                            recording_zscore: bool = True):
+    def apply_variance_ops(self, whiten: bool = True, common_variance: bool = False,
+                            standardize_recording: bool = False):
         """
         Apply three variance operators, typically after projection.
 
@@ -151,23 +156,24 @@ class BaseData:
             Default = True
         common_variance : bool, optional
             Standardize variance across trials.
-            Default = True
-        recording_zscore: bool, optional
-            z-score each component for each recording
-            Default = True
+            Default = False
+        standardize_recording: bool, optional
+            Divide each component for each recording by its standard deviation
+            Default = False
         """
         self._check_order(projected=True)
         self.whiten = whiten
         self.common_variance = common_variance
-        self.recording_zscore = recording_zscore
+        self.standardize_recording = standardize_recording
         self._apply_variance_ops()
 
     def pca_and_variance(self, n_comp: float = None, method_pca: str='svd',
-                         whiten=True, common_variance=True, recording_zscore=True, verbose=True):
+                         whiten=True, common_variance=False, standardize_recording=False,
+                         verbose=True):
         """Apply PCA and variance operations."""
         self.project(PCA(n_comp=n_comp, method_pca=method_pca, verbose=verbose))
         self.apply_variance_ops(whiten=whiten, common_variance=common_variance,
-                                recording_zscore=recording_zscore)
+                                standardize_recording=standardize_recording)
 
     def select_coord(self,
                 value: object,
@@ -210,22 +216,21 @@ class BaseData:
 
     def _apply_variance_ops(self):
         """Apply one or more variance operations."""
-        if self.whiten:
+        if self.whiten and not self.standardize_recording:
             self.data /= self.data.std(['trial','sample'], skipna=True)
+        elif self.standardize_recording:
+            self.data = self.data.unstack()
+            self.data /= self.data.std(['epoch','sample'], skipna=True)
+            self.data = self.data.stack(trial=['recording','epoch'])\
+                .dropna("trial", how="all")
         else:
             self.data /= self.data.std(..., skipna=True)
 
         if self.common_variance:
             self.data /= self.data.std(['component','sample'], skipna=True)
 
-        if self.recording_zscore:
-            self.data = self.data.unstack()
-            self.data -= self.data.mean(['epoch','sample'], skipna=True)
-            self.data /= self.data.std(['epoch','sample'], skipna=True)
-            self.data = self.data.stack(trial=['recording','epoch'])\
-                .dropna("trial", how="all")
 
-    def _crop_reject_epochs(self,
+    def _crop_reject_epochs(self, #noqa: PLR0912
                             verbose=True):
         """
         Crop each epoch from time 0 of the epoch to its interval.
@@ -249,14 +254,18 @@ class BaseData:
             print(f"Found {len(rts_arr[rts_arr > 0])} trials with positively defined durations "
                 f"and {inexistant_dur} trials without durations (0 or nan)")
 
-        rts_arr[rts_arr > self.max_duration] = 0
-        rts_arr[rts_arr < self.min_duration] = 0
-        rt_criteria_rej = len(rts_arr[rts_arr == 0]) - inexistant_dur
-
         # Sample domain
         rts_arr = np.rint(rts_arr * self.data.sfreq).astype(int)
-        offset_end_samples = int(np.rint(self.offset_end * self.data.sfreq))
-        offset_start_samples = int(np.rint(self.offset_start * self.data.sfreq))
+        min_dur = np.rint(self.min_duration * self.data.sfreq).astype(int)
+        max_dur = np.rint(self.max_duration * self.data.sfreq).astype(int)
+        rts_arr[rts_arr <= min_dur] = 0
+        rts_arr[rts_arr > max_dur] = 0
+        rt_criteria_rej = len(rts_arr[rts_arr == 0]) - inexistant_dur
+        offset_start_samples = -int(np.rint(self.offsets[0] * self.data.sfreq))
+        offset_end_samples = int(np.rint(self.offsets[1] * self.data.sfreq))
+
+        if len(rts_arr) == 0:
+            raise ValueError(f"No duration left in {self.duration_id}")
 
         #check nr of samples
         min_rt = min(rts_arr[rts_arr > 0])
@@ -359,19 +368,18 @@ def from_io(epoch_data: xr.Dataset) -> BaseData:
     base_data.data.attrs["sfreq"] = epoch_data.sfreq
     return base_data
 
-def default( # noqa: PLR0913
+def default( # noqa: PLR0913, PLR0917
             epoch_data: xr.Dataset,
             duration_id: str = 'response_time',
-            offset_start: float = 0,
-            offset_end: float = 0,
-            center: bool = False,
+            offsets: tuple | float = (0,0),
+            center: bool = True,
             min_duration: float = 0,
-            max_duration: float = float('Inf'),
+            max_duration: float | None = None,
             reject_amplitude: float = np.inf,
-            n_comp: float = None,
+            n_comp: float | None = None,
             whiten: bool = True,
-            common_variance: bool = True,
-            recording_zscore: bool = True,
+            common_variance: bool = False,
+            standardize_recording: bool = False,
             verbose: bool = True
     ):
     """
@@ -384,7 +392,7 @@ def default( # noqa: PLR0913
 
     Parameters
     ----------
-    data : xr.DataArray
+    epoch_data : xr.DataArray
         Data with dimensions [sample, component, trial], coordinates that
         describe the dataset including recording, subject, epoch, and a trial
         MultiIndex, and attributes sfreq and offset. Typically obtained
@@ -393,12 +401,12 @@ def default( # noqa: PLR0913
         Name of the variable that contains the trial intervals in the epoch_data
         used for cropping.
         Default = 'response_time'.
-    offset_start : float, optional
-        Time offset from interval start for cropping. Negative number extends
-        epoch before start.
-        Default = 0
-    offset_end : float, optional
-        Time offset after interval end for cropping.
+    offsets : tuple, float, optional
+        Seconds of recording to keep before and after end of each epoch duration.
+        First value refers to the times taken before epoch center and second value
+        to the time kept after end. Should be positive. Used for padding the data
+        before crosscorrelation. Adding template width / 2 is recommended.
+        If float apply the offsets symmetrically.
         Default = 0
     center : bool
         Median center the data after cropping including baseline
@@ -421,10 +429,10 @@ def default( # noqa: PLR0913
         Default = True
     common_variance : bool, optional
         Standardize variance across trials.
-        Default = True
-    recording_zscore: bool, optional
-        z-score each component for each recording
-        Default = True
+        Default = False
+    standardize_recording: bool, optional
+        Divide each component for each recording by its standard deviation
+        Default = False
     verbose:
         Provide feedback on the different operations
 
@@ -437,8 +445,7 @@ def default( # noqa: PLR0913
 
     base_data.crop_reject_epochs(
         duration_id=duration_id,
-        offset_start=offset_start,
-        offset_end=offset_end,
+        offsets=offsets,
         center=center,
         min_duration=min_duration,
         max_duration=max_duration,
@@ -451,7 +458,7 @@ def default( # noqa: PLR0913
     base_data.apply_variance_ops(
         whiten=whiten,
         common_variance=common_variance,
-        recording_zscore=recording_zscore,
+        standardize_recording=standardize_recording,
     )
 
     return base_data

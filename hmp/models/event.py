@@ -84,7 +84,7 @@ class EventModel(BaseModel):
         one of 'gamma','lognormal','wald', or 'weibull'
     """
 
-    def __init__(# noqa: PLR0913
+    def __init__(# noqa: PLR0913, PLR0917
         self,
         n_events: int,
         pattern: Pattern = None,
@@ -160,7 +160,7 @@ class EventModel(BaseModel):
             if self.n_events > 1:
                 self.locations[1:-1] = self.pattern.width if location is None else location
 
-        if self.n_events > 1 and any(self.locations[1:-1] < self.pattern.width):
+        if self.n_events > 1 and any(self.locations[1:-1] < np.round(self.pattern.width)):
             warn("For n_event > 1, locations must be greater or equal than pattern.width"
             f" but received locations ({self.locations}) is smaller than  ({self.pattern.width}).")
 
@@ -240,7 +240,6 @@ class EventModel(BaseModel):
             channel_pars = np.zeros((n_groups, self.n_events, self.n_dims), dtype=np.float32)
 
         if channel_pars.ndim < 4:
-            channel_pars = np.squeeze(channel_pars)
             if channel_pars.ndim == 2:
                 channel_pars = np.tile(channel_pars, (n_groups, 1, 1))
 
@@ -829,6 +828,7 @@ class EventModel(BaseModel):
 
         pmf = np.zeros([max_duration, n_stages], dtype=dtype)  # Gamma pmf for each stage scale
         locations_samples = self._time_to_samples(self.locations, pattern_data.sfreq)
+        locations_samples[1:-1] -= self.distribution.shift
         for stage in range(n_stages):
             pmf[:, stage] = np.concatenate(
                 (

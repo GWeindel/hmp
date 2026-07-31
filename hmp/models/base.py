@@ -70,7 +70,7 @@ class BaseModel(ABC):
             Time or times that need to be converted to samples.
         sfreq : sample frequency of data
         """
-        return np.rint(time * sfreq / 1000).astype(int)
+        return np.ceil(time * sfreq / 1000).astype(int)
 
     def _compute_max_events(self, pattern_data : PatternData, location : float):
         """Compute max nr of events that fit in trial.
@@ -82,13 +82,12 @@ class BaseModel(ABC):
         location : float
             Location in ms.
         """
-        min_dur = np.min(pattern_data.durations.values)
+        min_dur = np.min(pattern_data.durations.values) - 2 * self.distribution.shift
         location_samples = self._time_to_samples(location, pattern_data.sfreq)
-        if self.pattern.width < location:
-            return int(np.floor((min_dur - self.pattern.width)/ \
-                            location_samples)) + 1
-        else:
-            return int(np.floor(min_dur / location_samples))
+        n = int(np.floor(min_dur / location_samples)) + 1
+        print('Max event that can be fit given minimum duration of '
+              f'{min_dur} is {n}')
+        return n
 
     @abstractmethod
     def fit(self):

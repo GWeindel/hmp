@@ -43,15 +43,17 @@ def test_fixed_simple():
     # test the difference between electrode values at event times
     assert np.isclose(np.sum(np.abs(true_topos.data - test_topos.data)), 0, atol=1e-4, rtol=0)
     # Test whether likelihood is the expected one
-    expected_lkh = np.array(52.63)
+    expected_lkh = np.array(-8.005786)
     assert np.isclose(lkh_b, expected_lkh, atol=1e-2, rtol=0)
 
     #locations
     locations = np.zeros(n_events+1, dtype=int)
+    locations[1:-1] += 1 #(gamma shift)
     model = EventModel(n_events=n_events, location=locations)
     noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b)
     model = EventModel(n_events=n_events, location=25)
     noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b,)
+    expected_lkh = np.array(-7.9525814)
     assert np.isclose(noloc_loglikelihood, expected_lkh, atol=1e-2, rtol=0)
 
     # testing recovery of attributes

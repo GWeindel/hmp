@@ -128,8 +128,6 @@ def simulate(  # noqa  # Might need to be refactored.
     """
     os.environ["SUBJECTS_DIR"] = op.join(root,'simulation_parameters')
     path = op.join(os.getcwd(), path)
-    if not os.path.isdir(path):
-        os.mkdir(path)
 
     if not verbose:
         mne.set_log_level("warning")
@@ -248,8 +246,6 @@ def simulate(  # noqa  # Might need to be refactored.
             trigger = 2
             generating_events = events
             for s, source in enumerate(sources_subj):
-                if trigger == len(sources_subj) + 1:
-                    source[2] = 1e-20  # Last source defines RT and is not an event per se
                 selected_label = mne.read_labels_from_annot(
                     '', regexp=source[0], subjects_dir=op.join(root,'simulation_parameters'),
                     verbose=verbose
@@ -303,9 +299,11 @@ def simulate(  # noqa  # Might need to be refactored.
                 trigger += 1
                 generating_events = np.concatenate([generating_events, events.copy()])
                 # Shift event to onset when simulating pattern
-                events[random_indices, 0] = events[random_indices, 0] - shift
-                # add these events
-                source_simulator.add_data(label, source_time_series, events[random_indices])
+                # No simulation if last event (duration end)
+                if trigger != len(sources_subj) + 2:
+                    events[random_indices, 0] = events[random_indices, 0] - shift
+                    # add these events
+                    source_simulator.add_data(label, source_time_series, events[random_indices])
 
             generating_events = generating_events[generating_events[:, 0].argsort()]
             # Project the source time series to sensor space and add some noise. The source

@@ -18,8 +18,8 @@ def data():
 @pytest.mark.parametrize("width, template",
                          [(100, None),
                           (None, np.ones(100)),
-                          (20, None),
-                          (20, np.ones(20)),
+                          (30, None),
+                          (30, np.ones(30)),
                          ]
                         )
 def test_patterns(width, template):
@@ -36,8 +36,8 @@ def test_patterns(width, template):
 @pytest.mark.parametrize("width, template",
                          [(100, None),
                           (None, np.ones(100)),
-                          (20, None),
-                          (20, np.ones(20)),
+                          (30, None),
+                          (30, np.ones(30)),
                          ]
                         )
 def test_patterns(width, template):
