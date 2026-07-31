@@ -190,7 +190,7 @@ def cross_correlation(
     crossc = crossc[~np.isnan(crossc[:,0])]
     return crossc, durations
   
-  def get_subset(pattern_data: PatternData, variable: str, values):
+def get_subset(pattern_data: PatternData, variable: str, values):
     """Get subset of values of variable."""
     pattern_data = copy.deepcopy(pattern_data)
     to_remove = ~np.isin(pattern_data.durations[variable].values, values)
