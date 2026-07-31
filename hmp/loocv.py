@@ -43,9 +43,6 @@ class LOOCV():
 
     The reason for using a function instead of a model is if a sequence of operations
     needs to be performed for each subject/recording (e.g., fitting multiple models in sequence).
-    For an example of potential functions, see at the bottom of this file:
-    example_simple_func(..)
-    example_complex_func(..)
 
     Parameters
     ----------
@@ -552,59 +549,3 @@ def get_average_fit_eventprobs(modelfits, data: PatternData):
 
     return all_averages, all_eventprobs
 
-### Example loocv functions
-def example_simple_func(data, n_events, channel_pars=None, time_pars=None, verbose=False):
-    """Demonstrate example of a simple function that fits an n_event model.
-
-    Note that this would normally not be done, as you could just provide
-    this model directly to loocv(..). This is only an example of how a
-    function could be used, see below for a more realistic example.
-
-    Example code
-    -------------
-    loocv_simple_func = hmp.loocv.LOOCV(example_simple_func, function_kwargs={'n_events' : 2})
-    lkh_simple_func, modelfit_simple_func = loocv_simple_func.fit(pattern_data, cpus_cv=4,
-                                            cpus_model=1)
-    """
-    ev_model = hmp.models.EventModel(n_events=n_events)
-    ev_model.fit(data, channel_pars=channel_pars, time_pars=time_pars, verbose=verbose)
-    return ev_model
-
-def example_complex_func(
-    data, max_events=None, n_events=1, channel_map=None, time_map=None, grouping_dict=None):
-    """Demonstrate example of a complex function for LOOCV.
-
-    This function first performs backwards estimation up to max_events,
-    and follows this with a group-based model of n_events, informed
-    by the selected backward model and the provided maps. It returns
-    both models, so for both the likelihood will be computed.
-
-    Example code
-    -------------
-    channel_map = np.array([[0, 0, -1, 0],
-                            [0, 0, 0, 0]])
-    time_map = np.array([[0, 0, -1, 0, 0],
-                     [0, 0, 0, 1, 0]])
-    grouping_dict = {'cue': ['SP', 'AC']}
-    loocv_complex_func = hmp.loocv.LOOCV(example_complex_func, \
-                                     function_kwargs={'max_events' : 5,
-                                                      'channel_map' : channel_map,
-                                                      'time_map': time_map,
-                                                      'grouping_dict': grouping_dict})
-    lkh_complex_func, modelfits_complex_func = loocv_complex_func.fit(pattern_data, \
-                                                            cpus_cv=4, cpus_model=1)
-    """
-    # fit backward model up to max_events
-    eliminative_model = hmp.models.EliminativeMethod(max_events=max_events)
-    eliminative_model.fit(data)
-
-    # fit group model
-    group_model = hmp.models.EventModel(n_events=n_events,
-                                        channel_map=channel_map,
-                                        time_map=time_map,
-                                        grouping_dict=grouping_dict)
-    group_model.fit(data=data,
-                    channel_pars = eliminative_model.submodels[n_events].channel_pars,
-                    time_pars = eliminative_model.submodels[n_events].time_pars)
-
-    return [eliminative_model, group_model]
