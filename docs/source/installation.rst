@@ -20,9 +20,9 @@ Step 3: Install hmp
 
 .. code-block:: bash
 
-    pip install hmp==1.0.0-b3
+    pip install hmp==1.0.0-b4
 
-For the cutting edge version, you can clone the repository using *git* (if git is already installed):
+ONLY IF YOU WANT THE UNSTABLE DEVELOPMENT VERSION, you can clone the repository using *git* (if git is already installed):
 
 Open a terminal and type:
 
@@ -36,6 +36,8 @@ Then move to the cloned repository and run:
 .. code-block:: bash
 
     pip install -e .
+
+But remember that the development branch is not stable and might contain bugs not present in the other versions. Note also that the documentation is not build for the develpment branch but for the `latest` version.
 
 Step 4: Verifying Installation
 -----------------------------

@@ -1,7 +1,7 @@
-Base of all transformers
+Base of all Projectors
 ------------------------
 
-.. automodule:: hmp.transformers.base
+.. automodule:: hmp.projectors.base
    :members:
    :show-inheritance:
    :undoc-members:
@@ -9,7 +9,7 @@ Base of all transformers
 Standard PCA Projection
 ------------------------
 
-.. automodule:: hmp.transformers.pca
+.. automodule:: hmp.projectors.pca
    :members:
    :show-inheritance:
    :undoc-members:
@@ -17,7 +17,7 @@ Standard PCA Projection
 Identity projection
 --------------------------
 
-.. automodule:: hmp.transformers.identity
+.. automodule:: hmp.projectors.identity
    :members:
    :show-inheritance:
    :undoc-members:
@@ -25,7 +25,7 @@ Identity projection
 Custom projection
 ----------------------------
 
-.. automodule:: hmp.transformers.custom
+.. automodule:: hmp.projectors.custom
    :members:
    :show-inheritance:
    :undoc-members:
