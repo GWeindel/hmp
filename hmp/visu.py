@@ -10,6 +10,7 @@ from mne import Info
 from mne.viz import plot_brain_colorbar, plot_topomap
 from scipy import stats
 
+import hmp
 from hmp.utils import event_channels, event_times
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold"]
@@ -18,6 +19,65 @@ unit_map = {
     'FIFF_UNIT_V': "Voltage (V)",
     'FIFF_UNIT_V_M2': "V/m²",
 }
+
+def plot_model(epoch_data, estimates, channel_position, *args, **kwargs):
+    """
+    Plot model results.
+
+    Plot the event topographies at the average time of the onset of the next stage.
+    Either from an EventModel or Eliminative model, based on the number of
+    dimensions of the estimates.
+
+    Parameters
+    ----------
+    epoch_data : xr.DataArray
+        The original EEG data in HMP format.
+    estimates : xr.DataArray
+        The result from a fitted HMP model.
+    channel_position : np.ndarray
+        Either a 2D array with dimensions (channel, [x, y]) storing channel
+        locations in meters or an MNE info object containing digit points for channel locations.
+    *args and **kwargs: arguments for plot_topo_time_course
+    """
+    if estimates.ndim == 3: #EventModels, including group
+        ax = plot_topo_timecourse(epoch_data, estimates, channel_position, *args, **kwargs)
+    elif estimates.ndim == 4: #Eliminative or other 4-dim structure
+        estimates = estimates.copy()
+        estimate_method = kwargs['estimate_method'] if 'estimate_method' in kwargs else None
+        vmax = kwargs['vmax'] if 'vmax' in kwargs else None
+
+        #get max vmax
+        if vmax is None:
+            vmax = 0
+            for estimate in estimates:
+                if "trial" not in epoch_data.dims:
+                    epoch_data = epoch_data.stack(
+                    trial=["recording", "epoch"]
+                )
+                common_trial = np.intersect1d(
+                    estimate["trial"].values, epoch_data["trial"].values
+                )
+                estimate2 = estimate.sel(trial=common_trial)
+                epoch_data = (
+                    epoch_data.sel(trial=common_trial).unstack()
+                )
+                channel_data = event_channels(
+                    epoch_data, estimate2,
+                    estimate_method=estimate_method
+                    ).data  # compute topographies
+
+                vmax = np.max((np.nanmax(np.abs(channel_data[:])),vmax))
+                vmin = -vmax
+
+        fig, axes = plt.subplots(len(estimates.n_events), 1, \
+            figsize=(8, len(estimates.n_events)), sharex=True)
+        for ax, n_event in zip(axes, estimates.n_events):
+            cbar = True if n_event ==  estimates.n_events[-1] else False
+            hmp.visu.plot_topo_timecourse(epoch_data, estimates.sel(n_events=n_event), \
+                channel_position, *args, ax = ax, vmax=vmax, vmin=vmin, \
+                colorbar=cbar, **kwargs)
+            ax.set_ylabel(f"N = {n_event.values}")
+        plt.tight_layout()
 
 def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
     epoch_data: xr.DataArray,
@@ -40,7 +100,7 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
     event_lines: str | bool = "tab:orange",
     colorbar: bool = True,
     topo_size_scaling: bool = False,
-    as_time: bool = False,
+    as_time: bool = True,
     estimate_method: str = None,
     combined: bool = False,
     group_plot: bool = False,
@@ -69,8 +129,8 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
         in the time unit of the fitted data. If 'all', plots the times of all events.
     cmap : str, optional
         Colormap of matplotlib, used to change the colors on topographies
-    ylabels : dict | list, optional
-        Dictionary with {label_name: label_values}, e.g., {'Condition': ['Speed', 'Accuracy']}.
+    ylabels : tuple | list, optional
+        tuple with (label_name, label_values), e.g., ('Condition', ['Speed', 'Accuracy']).
     xlabel : str, optional
         Label of the x-axis. Default is None, which gives "Time (sample)"
         or "Time (ms)" if `as_time` is True.
@@ -124,7 +184,7 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
     # Stacking is necessary to retain the common indices, otherwise absent trial are just Nan'd out
     if "trial" not in epoch_data.dims:
         epoch_data = epoch_data.stack(
-            trial=["participant", "epoch"]
+            trial=["recording", "epoch"]
         )
     common_trial = np.intersect1d(
         estimates["trial"].values, epoch_data["trial"].values
@@ -164,6 +224,8 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
     else:
         group = np.unique(estimates.group)
     n_group = len(np.unique(group))
+    if n_group > 1:
+        group_plot = True
 
     # reverse order, to make correspond to group maps
     channel_data = np.flip(channel_data, axis=1)
@@ -202,7 +264,8 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
 
     # set ylabels to group
     if ylabels == []:
-        ylabels = np.arange(n_group)#estimates.glabels
+        if n_group > 1:
+            ylabels = estimates.group_labels
     return_ax = True
 
     # make axis
@@ -220,9 +283,9 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
     for i, group in enumerate(group):
         times_group = times[i]
         missing_evts = np.where(np.isnan(times_group))[0]
-        times_group = np.delete(times_group, missing_evts)
+        #times_group = np.delete(times_group, missing_evts)
         channel_data_ = channel_data[:, i, :]
-        channel_data_ = np.delete(channel_data_, missing_evts, axis=1)
+        #channel_data_ = np.delete(channel_data_, missing_evts, axis=1)
         ylow = i * rowheight
         # plot topography per event
         for event in np.arange(n_event):
@@ -342,12 +405,12 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
             max_time if max_time else (np.nanmax(times_to_display) * 1.05)
         ))
     # plot ylabels
-    if isinstance(ylabels, dict):
-        tick_labels = [str(x) for x in list(ylabels.values())[0]]
+    if len(ylabels) > 0:
+        tick_labels = [str(x) for x in ylabels[1]]
         if group_plot:
             tick_labels.reverse()
-        ax.set_yticks(np.arange(len(list(ylabels.values())[0])) + 0.5, tick_labels)
-        ax.set_ylabel(str(list(ylabels.keys())[0]))
+        ax.set_yticks(np.arange(n_group) + 0.5, tick_labels)
+        ax.set_ylabel(str(ylabels[0]))
     else:
         ax.set_yticks([])
         ax.spines["left"].set_visible(False)
@@ -386,7 +449,8 @@ def plot_components_sensor(
     cmap : str, optional
         Colormap to use for the topomap, by default "Spectral_r".
     """
-    fig, ax = plt.subplots(1, len(weights.component))
+    fig, ax = plt.subplots(1, len(weights.component), squeeze=False)
+    ax = ax.ravel()
     for comp in weights.component:
         plot_topomap(
             weights.values[:, comp],
@@ -476,7 +540,7 @@ def plot_loocv(  # noqa # Refactor?
         marker_indiv = "."
         means = np.nanmean(loocv_estimates.data, axis=1)[::-1]
         errs = (
-            np.nanstd(loocv_estimates.data, axis=1) / np.sqrt(len(loocv_estimates.participant))
+            np.nanstd(loocv_estimates.data, axis=1) / np.sqrt(len(loocv_estimates.recording))
         )[::-1]
         ax[0].errorbar(x=np.arange(len(means)) + 1, y=means, yerr=errs, marker="o", color="k")
     else:
@@ -539,7 +603,6 @@ def plot_loocv(  # noqa # Refactor?
 
 def plot_latencies(  # noqa  # Refactor?
     estimates,
-    init=None,
     labels=[],
     colors=default_colors,
     figsize=False,
@@ -580,14 +643,13 @@ def plot_latencies(  # noqa  # Refactor?
     as_time : bool
         if true, plot time (ms) instead of sample.
     """
-    if as_time and init is not None:
-        time_step = 1000 / init.sfreq  # time_step still needed below
+    if as_time:
+        time_step = 1000 / estimates.sfreq  # time_step still needed below
     else:
         time_step = 1
 
     # if hmp estimates are provided, calculate time
     if isinstance(estimates, (xr.DataArray, xr.Dataset)):
-        assert init is not None, "If hmp results object provided, init is a required parameter."
         ydim = None
         if (
             "n_events" in estimates.dims and estimates.n_events.count() > 1
@@ -744,7 +806,7 @@ def erp_data(epoched_data, times, channel, n_samples=None, pad=1):
     Parameters
     ----------
         epoched_data: xr.Dataset
-            Epoched physiological data with dims 'participant'X 'epochs' X 'channels'X 'sample'
+            Epoched physiological data with dims 'recording'X 'epochs' X 'channels'X 'sample'
         times: xr.Dataset
             Times between wich to extract or resample the data with dims 'trial' X
             'event'

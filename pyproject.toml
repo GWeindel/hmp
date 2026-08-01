@@ -14,7 +14,7 @@ authors = [
 description = "Package for fitting Hidden Multivariate pattern model to time-series"
 readme = "README.md"
 license = { file="LICENSE.md" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
@@ -27,13 +27,15 @@ classifiers = [
 dependencies=["mne >=1.0.0",
 "numpy",
 "pandas",
-"xarray >= 2023.8.0",
+"xarray >= 2026.1.0",
 "statsmodels",
 "scipy",
 "netcdf4",
 "ipywidgets",
 "nibabel",
-"mne_bids"]
+"mne_bids",
+"joblib",
+"scikit-learn"]
 
 dynamic = ["version"]
 
@@ -47,7 +49,7 @@ keywords = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "ruff"]
+test = ["pytest","pytest-cov", "ruff"]
 docs = [
     "sphinx<9.0.0", "sphinx-rtd-theme", "sphinxcontrib-napoleon","nbsphinx",
     "sphinx-autodoc-typehints", "sphinx_inline_tabs", "sphinx_copybutton",
@@ -81,3 +83,6 @@ max-locals=35
 
 [tool.ruff.lint.pydocstyle]
 convention="numpy"
+
+[tool.coverage.run]
+source = ["hmp"]

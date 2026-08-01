@@ -8,14 +8,16 @@ hidden multivariate pattern models.
 import itertools
 import multiprocessing as mp
 from itertools import product
+from typing import Any
 from warnings import resetwarnings, warn
 
 import numpy as np
 import xarray as xr
-from pandas import MultiIndex
 
+from hmp.basedata import BaseData
 from hmp.models.base import BaseModel
-from hmp.trialdata import TrialData
+from hmp.patterndata import PatternData
+from hmp.patterns import Pattern
 
 try:
     __IPYTHON__
@@ -33,12 +35,39 @@ class EventModel(BaseModel):
     ----------
     n_events : int
         The number of HMP events to estimate.
+    pattern :
+        The pattern and properties to use for cross-correlation. Default is
+        half sine with 50 ms width.
+    location : int | np.ndarray, optional
+        How many milliseconds should be censored in the EM() step of model fitting.
+        Default is width of the pattern template, which by defaul is 50 ms.
+        Shorter values than the width of a pattern allow overlap of neighboring events
+        but might result in the same event being duplicated in several events.
+        Larger values will prevent duplication at the risk of missing neighboring events.
+        If array, should be length n_events+1, setting location for each event.
     fixed_time_pars : list, optional
         List of time parameters to fix during estimation.
         If None, all time parameters are estimated.
     fixed_channel_pars : list, optional
         List of channel parameters to fix during estimation.
         If None, all channel parameters are estimated.
+    grouping_dict : dict, optional
+        Dictionary defining groups for grouping modeling. Keys are group names,
+        and values are lists of groups. If grouping_dict is provided, a channel_map
+        and/or a time_map is also required, and vice versa.
+        If one group, use a dict with the name in the metadata and a list of the
+        levels in the same order as the rows of the maps. E.g., {'cue': ['SP', 'AC']}
+        If multiple gropus need to be crossed, specify them as separate entries in
+        the dictionary. E.g., {'cue': ['SP', 'AC',], 'resp': ['left', 'right']}.
+        These are crossed by repeating the first condition as many times as there are
+        levels in the second condition. E.g., SP-left, SP-right, AC-left, AC-right.
+        Default is {}.
+    channel_map : ndarray, optional
+        2D ndarray (n_groups * n_events) indicating which channel contributions
+        are shared between groups. Default is None.
+    time_map : ndarray, optional
+        2D ndarray (n_groups * n_stages) indicating which time parameters are
+        shared between groups. Default is None.
     tolerance : float, optional
         Convergence tolerance for the expectation maximization algorithm. Default is 1e-4.
     max_iteration : int, optional
@@ -47,27 +76,65 @@ class EventModel(BaseModel):
         Minimum number of iterations for the expectation maximization algorithm. Default is 1.
     starting_points : int, optional
         Number of random starting points to use for initialization. Default is 1.
-    max_scale : float, optional
+    max_duration : float, optional
         Maximum mean distance between events, used when generating random starting points.
         Default is None.
+    distribution : str
+        Probability distribution for the by-trial onset of stages can be
+        one of 'gamma','lognormal','wald', or 'weibull'
     """
 
-    def __init__(
-        self, *args, n_events: int, fixed_time_pars: list = None, fixed_channel_pars: list = None,
+    def __init__(# noqa: PLR0913, PLR0917
+        self,
+        n_events: int,
+        pattern: Pattern = None,
+        location: float | np.ndarray = None,
+        fixed_time_pars: list = [],
+        fixed_channel_pars: list = [],
+        channel_map: np.ndarray = None,
+        time_map: np.ndarray = None,
+        grouping_dict: dict = {},
         tolerance: float = 1e-4,
         max_iteration: int = 1e3,
         min_iteration: int = 1,
         starting_points: int = 1,
-        max_scale: float = None,
-        **kwargs
-    ):
+        max_duration: float = None,
+        distribution: Any = None
+        ):
         assert np.issubdtype(type(n_events), np.integer), \
          (
              f"An integer for the number of expected transition events"
              f" is expected, got {type(n_events).__name__} instead"
          )
+        if grouping_dict != {} or channel_map is not None or time_map is not None:
+            assert isinstance(grouping_dict, dict), "groups have to be specified as a dictionary"
+            assert grouping_dict != {}, \
+                (
+                    "If time_map or channel_map is provided,"
+                    "a grouping_dict is required."
+                )
+            assert channel_map is not None or time_map is not None, \
+                (
+                    "If grouping_dict is provided, time_map or channel_map is required."
+                )
+            assert n_events == (time_map.shape[-1] - 1) or n_events == channel_map.shape[-1], \
+                ("n_events, time_map and channel_map must indicate same number of max events")
 
+            #already add group names
+            group_names = []
+            group_mods = []
+            for group, mod in grouping_dict.items():
+                group_names.append(group)
+                group_mods.append(mod)
+            group_mods = list(product(*group_mods))
+            group_mods = np.array(group_mods, dtype=object)
+            self.group_labels = (str(group_names), group_mods)
+        else:
+            self.group_labels = ("group all", np.array([['']],dtype=object))
+
+        super().__init__(pattern, distribution)
         self.n_events = n_events
+        self._set_locations(location)
         self.n_dims = None
         self.fixed_time_pars = fixed_time_pars
         self.fixed_channel_pars = fixed_channel_pars
@@ -75,94 +142,158 @@ class EventModel(BaseModel):
         self.max_iteration = max_iteration
         self.min_iteration = min_iteration
         self.starting_points = starting_points
-        self.max_scale = max_scale
-        self.grouping_dict = {}
-        self.time_map = np.zeros((1, self.n_events + 1))
-        self.channel_map = np.zeros((1, self.n_events))
+        self.max_duration = max_duration
+        self.grouping_dict = grouping_dict
+        self.time_map = np.zeros((1, self.n_events + 1)) if time_map is None else time_map
+        self.channel_map = np.zeros((1, self.n_events)) if channel_map is None else channel_map
         self.n_cor = 30
-        super().__init__(*args, **kwargs)
 
-        if n_events > 1 and self.pattern.location < self.pattern.width:
-             warn("For n_event > 1, pattern.location must be greater or equal than pattern.width"
-             f" but received pattern.location ({self.pattern.location}) is smaller than"
-             f" but received pattern.width ({self.pattern.width})."
-         )
+    def _set_locations(self, location):
+        """Set minimum distance between successive events."""
+        #array, must be array of length n_events + 1
+        if location is not None and isinstance(location,np.ndarray) and len(location) > 0:
+            assert len(location) == self.n_events + 1, \
+                "If location is np:array, should have length n_events + 1."
+            self.locations = location
+        else:
+            self.locations = np.zeros(self.n_events+1, dtype=int)
+            if self.n_events > 1:
+                self.locations[1:-1] = self.pattern.width if location is None else location
 
-    def fit(  # noqa: PLR0912, PLR0915
+        if self.n_events > 1 and any(self.locations[1:-1] < np.round(self.pattern.width)):
+            warn("For n_event > 1, locations must be greater or equal than pattern.width"
+            f" but received locations ({self.locations}) is smaller than  ({self.pattern.width}).")
+
+    def _format_parameters(# noqa: PLR0912, PLR0915
+        self, channel_pars, time_pars, groups, n_groups,
+                          durations, sfreq):
+
+        # Formatting parameters
+        if isinstance(time_pars, (xr.DataArray, xr.Dataset)):
+            time_pars = time_pars.dropna(dim="stage").values
+        elif isinstance(time_pars, np.ndarray):
+            time_pars = time_pars.copy()
+        if isinstance(channel_pars, (xr.DataArray, xr.Dataset)):
+            channel_pars = channel_pars.dropna(dim="event").values
+        elif isinstance(channel_pars, np.ndarray):
+            channel_pars = channel_pars.copy()
+
+        if time_pars is None:
+            # If no time parameters starting points are provided generate standard ones
+            # Or random ones if starting_points > 1
+            time_pars = (
+                np.zeros((n_groups, self.n_events + 1, 2)) * np.nan
+            )  # by default nan for missing stages
+            for cur_group in range(n_groups):
+                time_group = np.where(self.time_map[cur_group, :] >= 0)[0]
+                n_stage_group = len(time_group)
+                # by default starting point is to split the average duration in equal bins
+                time_pars[cur_group, time_group, :] = np.tile(
+                    [
+                        self.distribution.shape,
+                        self.distribution.mean_to_scale(
+                        np.mean(durations.values[groups == cur_group])\
+                            / (n_stage_group)
+                        ),
+                    ],
+                    (n_stage_group, 1)
+                )
+
+            initial_p = time_pars
+            time_pars = [initial_p]
+
+            #deal with multiple random starting pionts
+            if self.starting_points > 1:
+                if self.max_duration is None:
+                    self.max_duration = durations.mean()
+                for _ in np.arange(self.starting_points):
+                    proposal_p = (
+                        np.zeros((n_groups, self.n_events + 1, 2)) * np.nan
+                    )  # by default nan for missing stages
+                    for cur_group in range(n_groups):
+                        time_group = np.where(self.time_map[cur_group, :] >= 0)[0]
+                        n_stage_group = len(time_group)
+                        proposal_p[cur_group, time_group, :] = self.gen_random_stages(
+                            n_stage_group - 1, sfreq)
+                        proposal_p[cur_group, self.fixed_time_pars, :] = \
+                            initial_p[0, self.fixed_time_pars]
+                    time_pars.append(proposal_p)
+                time_pars = np.array(time_pars)
+
+        elif time_pars.ndim < 4:
+            #if 3 dims, and first dim is empty, might be groups
+            #or starting points. Add groups to make sure and wrap
+            #again for starting points.
+            time_pars = np.squeeze(time_pars)
+            if time_pars.ndim == 2:
+                time_pars = np.array([np.tile(time_pars, (n_groups, 1, 1))])
+            else:
+                time_pars = np.array([time_pars])
+
+            #set params missing stages to nan to make it obvious in the results
+            if (self.time_map < 0).any():
+                for c in range(n_groups):
+                    time_pars[0, c, np.where(self.time_map[c,:]<0)[0],:] = np.nan
+
+        if channel_pars is None:
+            # By defaults c_pars are initiated to 0
+            channel_pars = np.zeros((n_groups, self.n_events, self.n_dims), dtype=np.float32)
+
+        if channel_pars.ndim < 4:
+            if channel_pars.ndim == 2:
+                channel_pars = np.tile(channel_pars, (n_groups, 1, 1))
+
+            if (self.channel_map < 0).any():  # set missing c_pars to nan
+                for cur_group in range(n_groups):
+                    channel_pars[cur_group, \
+                        np.where(self.channel_map[cur_group, :] < 0)[0], :] = np.nan
+
+            initial_m = channel_pars
+            channel_pars = np.tile(initial_m, (self.starting_points, 1, 1, 1))
+
+        return channel_pars, time_pars
+
+    def fit(
         self,
-        trial_data: TrialData,
+        data: BaseData | PatternData,
         channel_pars: np.ndarray = None,
         time_pars: np.ndarray = None,
-        fixed_time_pars: list = None,
-        fixed_channel_pars: list = None,
         verbose: bool = True,
-        cpus: int = 1,
-        channel_map: np.ndarray = None,
-        time_map: np.ndarray = None,
-        grouping_dict: dict = None,
+        cpus: int = 1
     ):
         """
         Fit HMP for a single n_events model.
 
         Parameters
         ----------
-        trial_data : TrialData
-            The trial data to fit the model to.
+        data : Data to fit the model on. One of two options:
+            1. data from BasePreprocessor or xr.DataArray containing preprocessed data.
+            2. PatternData object.
+            In case of option 1, data is cross-correlated with the pattern in self.pattern.
         channel_pars : ndarray, optional
-            2D ndarray (n_groups * n_events * n_channels) or
-            4D (starting_points * n_groups * n_groups * n_events * n_channels),
+            3D ndarray (n_groups * n_events * n_channels) or
+            4D (starting_points * n_groups * n_events * n_channels)
             initial conditions for event channel contributions. Default is None.
         time_pars : ndarray, optional
-            3D ndarray (n_groups * n_stages * 2) or 4D (starting_points * n_groups * n_stages * 2),
+            3D ndarray (n_groups * n_stages * 2) or 4D (starting_points * n_groups * n_stages * 2)
             initial conditions for time distribution parameters. Default is None.
-        fixed_time_pars : list, optional
-            Indices of time parameters to fix during estimation. Default is None.
-        fixed_channel_pars : list, optional
-            Indices of channel parameters to fix during estimation. Default is None.
-        tolerance : float, optional
-            Convergence tolerance for the expectation maximization algorithm. Default is 1e-4.
-        max_iteration : int, optional
-            Maximum number of iterations for the expectation maximization algorithm. Default is 1e3.
-        min_iteration : int, optional
-            Minimum number of iterations for the expectation maximization algorithm. Default is 1.
         verbose : bool, optional
             If True, displays output useful for debugging. Default is True.
         cpus : int, optional
             Number of cores to use in multiprocessing functions. Default is 1.
-        channel_map : ndarray, optional
-            2D ndarray (n_groups * n_events) indicating which channel contributions
-            are shared between groups. Default is None.
-        time_map : ndarray, optional
-            2D ndarray (n_groups * n_stages) indicating which time parameters are
-            shared between groups. Default is None.
-        grouping_dict : dict, optional
-            Dictionary defining groups for grouping modeling. Keys are group names,
-            and values are lists of groups.
-            Default is None.
 
         Returns
         -------
         None
         """
-        # A dict containing all the info we want to keep, populated along the func
-        infos_to_store = {}
-        infos_to_store["sfreq"] = self.sfreq
-        infos_to_store["event_width"] = self.event_width
-        infos_to_store["tolerance"] = self.tolerance
+        pattern_data = self._instantiate_data_pattern(data)
+        self.n_dims = pattern_data.cross_corr.shape[1]
+        n_groups, groups, self.group_labels = self.group_constructor(
+            pattern_data.durations, verbose)
 
-        self.n_dims = trial_data.n_dims
+        channel_pars, time_pars = self._format_parameters(channel_pars, time_pars, groups,
+                                            n_groups, pattern_data.durations, pattern_data.sfreq)
 
-        if grouping_dict is None:
-            grouping_dict = self.grouping_dict
-            channel_map = self.channel_map
-            time_map = self.time_map
-        n_groups, groups, glabels = self.group_constructor(
-            trial_data, grouping_dict, channel_map, time_map, verbose
-        )
-        infos_to_store["channel_map"] = channel_map
-        infos_to_store["time_map"] = time_map
-        infos_to_store["glabels"] = glabels
-        infos_to_store["grouping_dict"] = grouping_dict
         if verbose:
             if time_pars is None:
                 print(
@@ -172,95 +303,14 @@ class EventModel(BaseModel):
             else:
                 print(f"Estimating {self.n_events} events model")
 
-        # Formatting parameters
-        if isinstance(time_pars, (xr.DataArray, xr.Dataset)):
-            time_pars = time_pars.dropna(dim="stage").values
-        if isinstance(channel_pars, (xr.DataArray, xr.Dataset)):
-            channel_pars = channel_pars.dropna(dim="event").values
-        if isinstance(channel_pars, np.ndarray):
-            channel_pars = channel_pars.copy()
-        if isinstance(time_pars, np.ndarray):
-            time_pars = time_pars.copy()
-        if self.fixed_time_pars is None:
-            fixed_time_pars = []
-        else:
-            fixed_time_pars = self.fixed_time_pars
-            infos_to_store["fixed_time_pars"] = fixed_time_pars
-        if self.fixed_channel_pars is None:
-            fixed_channel_pars = []
-        else:
-            fixed_channel_pars = self.fixed_channel_pars
-            infos_to_store["fixed_channel_pars"] = fixed_channel_pars
-
-        if time_pars is None:
-            # If no time parameters starting points are provided generate standard ones
-            # Or random ones if starting_points > 1
-            time_pars = (
-                np.zeros((n_groups, self.n_events + 1, 2)) * np.nan
-            )  # by default nan for missing stages
-            for cur_group in range(n_groups):
-                time_group = np.where(time_map[cur_group, :] >= 0)[0]
-                n_stage_group = len(time_group)
-                # by default starting point is to split the average duration in equal bins
-                time_pars[cur_group, time_group, :] = np.tile(
-                    [
-                        self.distribution.shape,
-                        self.distribution.mean_to_scale(
-                            np.mean(trial_data.durations[groups == cur_group]) / (n_stage_group)
-                        ),
-                    ],
-                    (n_stage_group, 1),
-                )
-            initial_p = time_pars
-            time_pars = [initial_p]
-            if self.starting_points > 1:
-                if self.max_scale is None:
-                    raise ValueError(
-                            "If using multiple starting points, a maximum distance between events"
-                            " needs to be provided using the max_scale argument."
-                        )
-                infos_to_store["starting_points"] = self.starting_points
-                for _ in np.arange(self.starting_points):
-                    proposal_p = (
-                        np.zeros((n_groups, self.n_events + 1, 2)) * np.nan
-                    )  # by default nan for missing stages
-                    for cur_group in range(n_groups):
-                        time_group = np.where(time_map[cur_group, :] >= 0)[0]
-                        n_stage_group = len(time_group)
-                        proposal_p[cur_group, time_group, :] = self.gen_random_stages(
-                            n_stage_group - 1)
-                        proposal_p[cur_group, fixed_time_pars, :] = initial_p[0, fixed_time_pars]
-                    time_pars.append(proposal_p)
-                time_pars = np.array(time_pars)
-        else:
-            infos_to_store["sp_time_pars"] = time_pars
-
-        if channel_pars is None:
-            # By defaults c_pars are initiated to 0
-            channel_pars = np.zeros((n_groups, self.n_events, self.n_dims), dtype=np.float64)
-            if (channel_map < 0).any():  # set missing c_pars to nan
-                for cur_group in range(n_groups):
-                    channel_pars[cur_group, np.where(channel_map[cur_group, :] < 0)[0], :] = np.nan
-            initial_m = channel_pars
-            channel_pars = np.tile(initial_m, (self.starting_points + 1, 1, 1, 1))
-        else:
-            infos_to_store["sp_channel_pars"] = channel_pars
 
         if cpus > 1:
             inputs = zip(
-                itertools.repeat(trial_data),
+                itertools.repeat(pattern_data),
                 channel_pars,
                 time_pars,
-                itertools.repeat(fixed_channel_pars),
-                itertools.repeat(fixed_time_pars),
-                itertools.repeat(self.max_iteration),
-                itertools.repeat(self.tolerance),
-                itertools.repeat(self.min_iteration),
-                itertools.repeat(channel_map),
-                itertools.repeat(time_map),
                 itertools.repeat(groups),
                 itertools.repeat(1),
-                itertools.repeat(self.n_cor),
             )
             with mp.Pool(processes=cpus) as pool:
                 if self.starting_points > 1:
@@ -274,19 +324,11 @@ class EventModel(BaseModel):
             for t_pars, c_pars in zip(time_pars, channel_pars):
                 estimates.append(
                     self.EM(
-                        trial_data,
+                        pattern_data,
                         c_pars,
                         t_pars,
-                        fixed_channel_pars,
-                        fixed_time_pars,
-                        self.max_iteration,
-                        self.tolerance,
-                        self.min_iteration,
-                        channel_map,
-                        time_map,
                         groups,
                         1,
-                        self.n_cor,
                     )
                 )
             resetwarnings()
@@ -305,20 +347,21 @@ class EventModel(BaseModel):
         self.channel_pars =  np.array(estimates[max_lkhs][1])
         self.time_pars = np.array(estimates[max_lkhs][2])
         self.traces = np.array(estimates[max_lkhs][3])
-        self.time_pars_dev = np.array(estimates[max_lkhs][4])
-        self.grouping_dict = grouping_dict
+        self.traces_group = np.array(estimates[max_lkhs][4])
+        self.time_pars_dev = np.array(estimates[max_lkhs][5])
         self.group = groups
-        self.channel_map = channel_map
-        self.time_map = time_map
 
-    def transform(self, trial_data: TrialData) -> tuple[np.ndarray, xr.DataArray]:
+    def transform(self, data: Any, cpus: int = 1) -> tuple[np.ndarray, xr.DataArray]:
         """
         Transform the trial data using the fitted model.
 
         Parameters
         ----------
-        trial_data : TrialData
-            The trial data to transform.
+        data : Data to fit the model on. One of two options:
+            1. data from BasePreprocessor or xr.DataArray containing preprocessed data.
+            2. PatternData object.
+            In case of option 1, data is cross-correlated with the pattern in self.pattern.
+        cpus : int, nr of cpus to use
 
         Returns
         -------
@@ -327,16 +370,15 @@ class EventModel(BaseModel):
         xr_eventprobs : xr.DataArray
             Concatenated event probability arrays for all submodels, indexed by number of events.
         """
-        _, groups, glabels = self.group_constructor(
-                trial_data, self.grouping_dict
-            )
-        likelihoods, xreventprobs = self._distribute_groups(
-            trial_data, self.channel_pars, self.time_pars,
-            self.channel_map, self.time_map, groups, False
+        pattern_data = self._instantiate_data_pattern(data)
+
+        _, groups, _ = self.group_constructor(pattern_data.durations)
+        likelihoods, xreventprobs = self._estim_probs_groups(
+            pattern_data,
+            self.channel_pars, self.time_pars, groups, cpus=cpus
         )
+
         return likelihoods, xreventprobs
-
-
 
     @property
     def xrtraces(self):
@@ -351,12 +393,12 @@ class EventModel(BaseModel):
         """
         self._check_fitted("get traces")
         return xr.DataArray(
-            self.traces,
+            self.traces_group,
             dims=("em_iteration", "group"),
             name="traces",
             coords={
-                "em_iteration": range(self.traces.shape[0]),
-                "group": range(self.traces.shape[1]),
+                "em_iteration": range(self.traces_group.shape[0]),
+                "group": range(self.traces_group.shape[1]),
             }
         )
 
@@ -448,92 +490,60 @@ class EventModel(BaseModel):
 
     def EM(  # noqa
         self,
-        trial_data: TrialData,
+        pattern_data: PatternData,
         initial_channel_pars: np.ndarray,
         initial_time_pars: np.ndarray,
-        fixed_channel_pars: list[int] = None,
-        fixed_time_pars: list[int] = None,
-        max_iteration: int = 1000,
-        tolerance: float = 1e-4,
-        min_iteration: int = 1,
-        channel_map: np.ndarray = None,
-        time_map: np.ndarray = None,
         groups: np.ndarray = None,
         cpus: int = 1,
-        n_cor: int = 30,
     ) -> tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Fit using expectation maximization.
 
         Parameters
         ----------
-        trial_data : TrialData
-            The trial data to fit the model to.
+        pattern_data : PatternData
+            Preprocessed data cross-correlated with the pattern of the model
         initial_channel_pars : np.ndarray
             2D ndarray (n_events * n_channels) or 3D (iteration * n_events * n_channels),
             initial conditions for event channel contributions.
         initial_time_pars : np.ndarray
             2D ndarray (n_stages * n_parameters) or 3D (iteration * n_stages * n_parameters),
             initial conditions for time distribution parameters.
-        fixed_channel_pars : list[int], optional
-            Indices of channel parameters to fix during estimation.
-        fixed_time_pars : list[int], optional
-            Indices of time parameters to fix during estimation.
-        max_iteration : int, optional
-            Maximum number of iterations for the expectation maximization algorithm.
-            Default is 1000.
-        tolerance : float, optional
-            Convergence tolerance for the expectation maximization algorithm. Default is 1e-4.
-        min_iteration : int, optional
-            Minimum number of iterations for the expectation maximization algorithm. Default is 1.
-        channel_map : np.ndarray, optional
-            2D array mapping channel parameters to groups. Default is None.
-        time_map : np.ndarray, optional
-            2D array mapping time parameters to groups. Default is None.
         groups : np.ndarray, optional
             Array indicating the groups for grouping modeling. Default is None.
         cpus : int, optional
             Number of cores to use in multiprocessing functions. Default is 1.
-        n_cor: int, optional
-            In case the log-likelihood becomes invalid after completing the M step, the parameter
-            update vector will be halved for a maximum of ``n_cor`` times to try and recover
-            a valid update before giving up and falling back to the parameter estimates from the
-            previous iteration.
 
         Returns
         -------
         lkh : float
-        Summed log probabilities.
+            Summed log probabilities.
         channel_pars : np.ndarray
-        Estimated channel contributions for each event.
+            Estimated channel contributions for each event.
         time_pars : np.ndarray
-        Estimated time distribution parameters for each stage.
+            Estimated time distribution parameters for each stage.
         traces : np.ndarray
-        Log-likelihood values for each EM iteration.
+            Log-likelihood values for each EM iteration.
         time_pars_dev : np.ndarray
-        Time parameters for each iteration of the EM algorithm.
+            Time parameters for each iteration of the EM algorithm.
         """
-        assert channel_map.shape[0] == time_map.shape[0], (
-            "Both maps need to indicate the same number of groups."
-        )
-
-        lkh, eventprobs = self._distribute_groups(
-            trial_data, initial_channel_pars, initial_time_pars,
-            channel_map, time_map, groups, cpus=cpus
+        lkh, eventprobs = self._estim_probs_groups(
+            pattern_data,
+            initial_channel_pars, initial_time_pars,
+            groups, cpus=cpus
         )
         data_groups = np.unique(groups)
         channel_pars = initial_channel_pars.copy()
         time_pars = initial_time_pars.copy()
         traces = [lkh]
+        traces_group = [eventprobs.group_lkh]
         time_pars_dev = [time_pars.copy()]
         i = 0
 
         lkh_prev = lkh.copy()
-        while i < max_iteration:  # Expectation-Maximization algorithm
-            if i >= min_iteration and (
-                np.isneginf(lkh.sum()) or \
-                tolerance > (lkh.sum() - lkh_prev.sum()) / np.abs(lkh_prev.sum())
-            ):
+        while i < self.max_iteration:  # Expectation-Maximization algorithm
+            if i >= self.min_iteration and (
+                np.isneginf(lkh) or self.tolerance > (lkh - lkh_prev) / np.abs(lkh_prev)):
                 break
 
             # As long as new run gives better likelihood, go on
@@ -544,47 +554,42 @@ class EventModel(BaseModel):
             new_time_pars = time_pars.copy()
 
             for cur_group in data_groups:  # get params/c_pars
-                channel_map_group = np.where(channel_map[cur_group, :] >= 0)[0]
-                time_map_group = np.where(time_map[cur_group, :] >= 0)[0]
+                channel_map_group = np.where(self.channel_map[cur_group, :] >= 0)[0]
+                time_map_group = np.where(self.time_map[cur_group, :] >= 0)[0]
                 epochs_group = np.where(groups == cur_group)[0]
 
                 # get c_pars/t_pars by group
-                c_par, t_par = self.get_channel_time_parameters_expectation(
-                        trial_data,
-                        eventprobs.values[:, :np.max(trial_data.durations[epochs_group]),
-                                          channel_map_group],
-                        subset_epochs=epochs_group,
-                )
+                c_par, t_par = self.get_channel_time_parameters_expectation(pattern_data,
+                        eventprobs.values[:, :np.max(pattern_data.durations.values[epochs_group]),
+                                        channel_map_group],
+                                        subset_epochs=epochs_group)
                 new_channel_pars[cur_group, channel_map_group, :] = c_par
                 new_time_pars[cur_group, time_map_group, :] = t_par
 
-                new_channel_pars[cur_group, fixed_channel_pars, :] = initial_channel_pars[
-                    cur_group, fixed_channel_pars, :
-                ].copy()
-                new_time_pars[cur_group, fixed_time_pars, :] = initial_time_pars[
-                    cur_group, fixed_time_pars, :
-                ].copy()
+                new_channel_pars[cur_group, self.fixed_channel_pars, :] = \
+                    initial_channel_pars[cur_group, self.fixed_channel_pars, :].copy()
+                new_time_pars[cur_group, self.fixed_time_pars, :] = \
+                    initial_time_pars[cur_group, self.fixed_time_pars, :].copy()
 
             # set c_pars to mean if requested in map
             for m in range(self.n_events):
-                for m_set in np.unique(channel_map[:, m]):
+                for m_set in np.unique(self.channel_map[:, m]):
                     if m_set >= 0:
-                        new_channel_pars[channel_map[:, m] == m_set, m, :] = np.mean(
-                            new_channel_pars[channel_map[:, m] == m_set, m, :], axis=0
+                        new_channel_pars[self.channel_map[:, m] == m_set, m, :] = np.mean(
+                            new_channel_pars[self.channel_map[:, m] == m_set, m, :], axis=0
                         )
 
             # set param to mean if requested in map
             for p in range(self.n_events + 1):
-                for p_set in np.unique(time_map[:, p]):
+                for p_set in np.unique(self.time_map[:, p]):
                     if p_set >= 0:
-                        new_time_pars[time_map[:, p] == p_set, p, :] = np.mean(
-                            new_time_pars[time_map[:, p] == p_set, p, :], axis=0
+                        new_time_pars[self.time_map[:, p] == p_set, p, :] = np.mean(
+                            new_time_pars[self.time_map[:, p] == p_set, p, :], axis=0
                         )
 
             # Step length control to ensure parameter updates result in valid llk
-            for icor in range(n_cor + 1):
-
-                if icor == n_cor:  # just reset
+            for icor in range(self.n_cor + 1):
+                if icor == self.n_cor:  # just reset
                     warn(
                         (
                             "M step failed, after step halvings. "
@@ -592,15 +597,15 @@ class EventModel(BaseModel):
                         ),
                         RuntimeWarning,
                     )
-
                     new_channel_pars = channel_pars
                     new_time_pars = time_pars
 
                 # Compute llk under new parameters
                 with np.errstate(divide='ignore', invalid='ignore'):
-                    lkh, eventprobs = self._distribute_groups(
-                        trial_data, new_channel_pars, new_time_pars,
-                        channel_map, time_map, groups, cpus=cpus
+                    lkh, eventprobs = self._estim_probs_groups(
+                        pattern_data,
+                        new_channel_pars, new_time_pars,
+                        groups, cpus=cpus
                     )
 
                 # Stop if no update
@@ -608,7 +613,7 @@ class EventModel(BaseModel):
                     break
 
                 # Half step in case the llk is ill-defined
-                if np.isneginf(lkh.sum()):
+                if np.isneginf(lkh):
                     new_channel_pars = (new_channel_pars + channel_pars)/2
                     new_time_pars = (new_time_pars + time_pars)/2
                 else:
@@ -620,20 +625,22 @@ class EventModel(BaseModel):
             channel_pars = new_channel_pars
 
             traces.append(lkh)
+            traces_group.append(eventprobs.group_lkh)
             time_pars_dev.append(time_pars.copy())
             i += 1
 
-        if i == max_iteration:
+        if i == self.max_iteration:
             warn(
                 f"Convergence failed, estimation hit the maximum number of iterations: "
-                f"({int(max_iteration)})",
+                f"({int(self.max_iteration)})",
                 RuntimeWarning,
             )
-        return lkh, channel_pars, time_pars, np.array(traces), np.array(time_pars_dev)
+        return lkh, channel_pars, time_pars, np.array(traces), \
+            np.array(traces_group), np.array(time_pars_dev)
 
     def get_channel_time_parameters_expectation(
         self,
-        trial_data: TrialData,
+        pattern_data: PatternData,
         eventprobs: np.ndarray,
         subset_epochs: list[int] = None
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -642,8 +649,8 @@ class EventModel(BaseModel):
 
         Parameters
         ----------
-        trial_data : TrialData
-            The trial data containing cross-correlation and event information.
+        pattern_data : PatternData
+            Preprocessed data cross-correlated with the pattern of the model
         eventprobs : np.ndarray
             A 3D array of shape (n_trials, max_duration, n_events) containing the event
             probabilities.
@@ -662,11 +669,12 @@ class EventModel(BaseModel):
         for event in range(eventprobs.shape[2]):
             for comp in range(self.n_dims):
                 event_data = np.zeros((len(subset_epochs),
-                                       np.max(trial_data.durations[subset_epochs])))
+                                       np.max(pattern_data.durations.values[subset_epochs])))
                 for trial_idx, trial in enumerate(subset_epochs):
-                    start, end = trial_data.starts[trial], trial_data.ends[trial]
+                    start, end = pattern_data.starts[trial], pattern_data.ends[trial]
                     duration = end - start + 1
-                    event_data[trial_idx, :duration] = trial_data.cross_corr[start : end + 1, comp]
+                    event_data[trial_idx, :duration] =\
+                        pattern_data.cross_corr[start : end + 1, comp]
                 channel_pars[event, comp] = np.mean(
                     np.sum(eventprobs[subset_epochs, :, event] * event_data, axis=1)
                 )
@@ -679,15 +687,15 @@ class EventModel(BaseModel):
         # it's general
         event_times_mean = np.concatenate(
             [
-                np.arange(np.max(trial_data.durations[subset_epochs])) @ eventprobs[
+                np.arange(np.max(pattern_data.durations.values[subset_epochs])) @ eventprobs[
                     subset_epochs].mean(axis=0),
-                [np.mean(trial_data.durations[subset_epochs]) - 1],
+                [np.mean(pattern_data.durations.values[subset_epochs]) - 1],
             ]
         )
         time_pars = self.scale_parameters(averagepos=event_times_mean)
         return channel_pars, time_pars
 
-    def gen_random_stages(self, n_events: int) -> np.ndarray:
+    def gen_random_stages(self, n_events: int, sfreq) -> np.ndarray:
         """
         Compute random stage durations.
 
@@ -707,12 +715,12 @@ class EventModel(BaseModel):
             A 2D array where each row contains the shape and scale parameters for a stage.
         """
         rnd_durations = np.zeros(n_events + 1)
-        while any(rnd_durations < self.location):  # at least equal to the location
+        while any(rnd_durations < max(self._time_to_samples(self.locations,sfreq))):
             rnd_events = np.random.default_rng().integers(
-                low=0, high=self.max_scale, size=n_events
+                low=0, high=self.max_duration, size=n_events
             )  # n_events between 0 and mean_d
             rnd_events = np.sort(rnd_events)
-            rnd_durations = np.hstack((rnd_events, self.max_scale)) - np.hstack(
+            rnd_durations = np.hstack((rnd_events, self.max_duration)) - np.hstack(
                 (0, rnd_events)
             )  # associated durations
         random_stages = np.array(
@@ -740,7 +748,7 @@ class EventModel(BaseModel):
             A 2D array where each row contains the shape and scale parameters
             for the corresponding event distribution.
         """
-        params = np.zeros((len(averagepos), 2), dtype=np.float64)
+        params = np.zeros((len(averagepos), 2), dtype=np.float32)
         params[:, 0] = self.distribution.shape
         params[:, 1] = np.diff(averagepos, prepend=0)
         params[:, 1] = self.distribution.mean_to_scale(params[:, 1])
@@ -748,10 +756,9 @@ class EventModel(BaseModel):
 
     def estim_probs(
         self,
-        trial_data: TrialData,
+        pattern_data : PatternData,
         channel_pars: np.ndarray,
         time_pars: np.ndarray,
-        location: bool = True,
         subset_epochs: list[int] | None = None,
     ) -> tuple[float, np.ndarray]:
         """
@@ -759,8 +766,8 @@ class EventModel(BaseModel):
 
         Parameters
         ----------
-        trial_data : TrialData
-            The trial data containing cross-correlation and event information.
+        pattern_data : PatternData
+            Preprocessed data cross-correlated with the pattern of the model
         channel_pars : np.ndarray
             A 2D array of shape (n_events, n_channels) or a 3D array of shape
             (iteration, n_events, n_channels) containing initial conditions for
@@ -769,9 +776,6 @@ class EventModel(BaseModel):
             A 2D array of shape (n_stages, n_parameters) or a 3D array of shape
             (iteration, n_stages, n_parameters) containing initial conditions for
             the distribution parameters.
-        location : bool, optional
-            Whether to add a minimum distance between events to avoid event collapse
-            during the expectation-maximization algorithm. Default is True.
         subset_epochs : list[int] or None, optional
             A list of trial indices to consider for the computation. If None, all trials
             are used. Default is None.
@@ -786,54 +790,58 @@ class EventModel(BaseModel):
         """
         n_events = channel_pars.shape[0]
         n_stages = n_events + 1
-        locations = np.zeros(n_stages, dtype=int)
-        if location:
-            locations[1:-1] = self.location
         if subset_epochs is not None:
-            if len(subset_epochs) == trial_data.n_trials:  # boolean indices
+            if len(subset_epochs) == len(pattern_data.starts):  # boolean indices
                 subset_epochs = np.where(subset_epochs)[0]
         n_trials = len(subset_epochs)
-        durations = trial_data.durations[subset_epochs]
-        starts = trial_data.starts[subset_epochs]
-        ends = trial_data.ends[subset_epochs]
+        starts = pattern_data.starts[subset_epochs]
+        ends = pattern_data.ends[subset_epochs]
+        durations = ends - starts + 1
+        cross_corr = np.vstack(
+                [pattern_data.cross_corr[s:e+1] for s, e in zip(starts, ends)]
+        )
+        dtype = pattern_data.cross_corr.dtype
         max_duration = np.max(durations)
-        gains = np.zeros((trial_data.n_samples, n_events), dtype=np.float64)
-        for i in range(trial_data.n_dims):
+        gains = np.zeros((cross_corr.shape[0], n_events), dtype=dtype)
+        for i in range(cross_corr.shape[1]):
             # computes the gains, i.e. congruence between the pattern shape
             # and the data given the magnitudes of the sensors
             gains = (
                 gains
-                + trial_data.cross_corr[:, i][np.newaxis].T * channel_pars[:, i]
+                + cross_corr[:, i][np.newaxis].T * channel_pars[:, i]
                 - channel_pars[:, i] ** 2 / 2
             )
         gains = np.exp(gains)
-        probs = np.zeros([max_duration, n_trials, n_events], dtype=np.float64)  # prob per trial
+        probs = np.zeros([max_duration, n_trials, n_events], dtype=dtype)  # prob per trial
         probs_b = np.zeros(
-            [max_duration, n_trials, n_events], dtype=np.float64
+            [max_duration, n_trials, n_events], dtype=dtype
         )  # Sample and state reversed
+
+        trial_slice = np.cumsum(durations)
         for trial in np.arange(n_trials):
             # Following assigns gain per trial to variable probs
-            probs[: durations[trial], trial, :] = gains[starts[trial] : ends[trial] + 1, :]
+            probs[: durations[trial], trial, :] = gains[trial_slice[trial] - durations[trial]\
+                    : trial_slice[trial], :]
             # Same but sample and events are reversed, this allows to compute
             # fwd and bwd in the same way in the following steps
-            probs_b[: durations[trial], trial, :] = gains[starts[trial] : ends[trial] + 1, :][
-                ::-1, ::-1
-            ]
+            probs_b[: durations[trial], trial, :] = probs[: durations[trial], trial, :][::-1, ::-1]
 
-        pmf = np.zeros([max_duration, n_stages], dtype=np.float64)  # Gamma pmf for each stage scale
+        pmf = np.zeros([max_duration, n_stages], dtype=dtype)  # Gamma pmf for each stage scale
+        locations_samples = self._time_to_samples(self.locations, pattern_data.sfreq)
+        locations_samples[1:-1] -= self.distribution.shift
         for stage in range(n_stages):
             pmf[:, stage] = np.concatenate(
                 (
-                    np.repeat(0, locations[stage]),
-                    self.distribution_pdf(time_pars[stage, 0], time_pars[stage, 1], max_duration)[
-                        locations[stage] :
+                    np.repeat(0, locations_samples[stage]),
+                    self.distribution_pdf(time_pars[stage, 0], time_pars[stage, 1], \
+                        max_duration)[locations_samples[stage] :
                     ],
                 )
             )
         pmf_b = pmf[:, ::-1]  # Stage reversed gamma pmf, same order as prob_b
 
-        forward = np.zeros((max_duration, n_trials, n_events), dtype=np.float64)
-        backward = np.zeros((max_duration, n_trials, n_events), dtype=np.float64)
+        forward = np.zeros((max_duration, n_trials, n_events), dtype=dtype)
+        backward = np.zeros((max_duration, n_trials, n_events), dtype=dtype)
         # Computing forward and backward helper variable
         #  when stage = 0:
         forward[:, :, 0] = (
@@ -871,15 +879,12 @@ class EventModel(BaseModel):
         eventprobs = eventprobs.transpose((1,0,2))
         return [likelihood, eventprobs]
 
-    def _distribute_groups(
+    def _estim_probs_groups(
         self,
-        trial_data: TrialData,
+        pattern_data: PatternData,
         channel_pars: np.ndarray,
         time_pars: np.ndarray,
-        channel_map: np.ndarray,
-        time_map: np.ndarray,
         groups: np.ndarray,
-        location: bool = True,
         cpus: int = 1,
     ) -> tuple[np.ndarray, xr.DataArray]:
         """
@@ -890,25 +895,16 @@ class EventModel(BaseModel):
 
         Parameters
         ----------
-        trial_data : TrialData
-            The trial data containing cross-correlation and event information.
+        pattern_data : PatternData
+            Preprocessed data cross-correlated with the pattern of the model
         channel_pars : np.ndarray
-            A 2D array of shape (n_events, n_channels) or a 3D array of shape
-            (iteration, n_events, n_channels) containing initial conditions for
-            channel contributions to events.
+            A 3D array of shape (groups, n_events, n_channels) containing
+            initial channel contributions to events.
         time_pars : np.ndarray
-            A 2D array of shape (n_stages, n_parameters) or a 3D array of shape
-            (iteration, n_stages, n_parameters) containing initial conditions for
-            the distribution parameters.
-        channel_map : np.ndarray
-            A 2D array mapping channel parameters to groups.
-        time_map : np.ndarray
-            A 2D array mapping time parameters to groups.
+            A 3D array of shape (n_groups, n_stages, n_parameters) containing
+            initial distribution parameters.
         groups : np.ndarray
             An array indicating the groups for grouping modeling.
-        location : bool, optional
-            Whether to add a minimum distance between events to avoid event collapse
-            during the expectation-maximization algorithm. Default is True.
         cpus : int, optional
             Number of cores to use in multiprocessing functions. Default is 1.
 
@@ -922,62 +918,60 @@ class EventModel(BaseModel):
         """
         data_groups = np.unique(groups)
         likes_events_group = []
-        all_xreventprobs = []
         if cpus > 1:
             with mp.Pool(processes=cpus) as pool:
                 likes_events_group = pool.starmap(
                     self.estim_probs,
                     zip(
-                        itertools.repeat(trial_data),
-                        [channel_pars[cur_group, channel_map[cur_group, :] >= 0, :]
+                        itertools.repeat(pattern_data),
+                        [channel_pars[cur_group, self.channel_map[cur_group, :] >= 0, :]
                          for cur_group in data_groups],
-                        [time_pars[cur_group, time_map[cur_group, :] >= 0, :]
+                        [time_pars[cur_group, self.time_map[cur_group, :] >= 0, :]
                          for cur_group in data_groups],
-                        itertools.repeat(location),
-                        [groups == cur_group for cur_group in data_groups],
-                        itertools.repeat(False),
-                    ),
+                        [groups == cur_group for cur_group in data_groups]
+                    )
                 )
         else:
             for cur_group in data_groups:
                 channel_pars_group = channel_pars[
-                    cur_group, channel_map[cur_group, :] >= 0, :
+                    cur_group, self.channel_map[cur_group, :] >= 0, :
                 ]  # select existing magnitudes
                 # select existing params
-                time_pars_group = time_pars[cur_group, time_map[cur_group, :] >= 0, :]
+                time_pars_group = time_pars[cur_group, self.time_map[cur_group, :] >= 0, :]
                 likes_events_group.append(
                     self.estim_probs(
-                        trial_data,
+                        pattern_data,
                         channel_pars_group,
                         time_pars_group,
-                        location,
-                        subset_epochs=(groups == cur_group),
+                        subset_epochs=(groups == cur_group)
                     )
                 )
 
         likelihood = np.array([x[0] for x in likes_events_group])
 
-        for i, cur_group in enumerate(data_groups):
-            part = trial_data.xrdurations.coords["participant"].values[(groups == cur_group)]
-            epoch = trial_data.xrdurations.coords["epoch"].values[(groups == cur_group)]
-            data_events =  channel_map[cur_group, :] >= 0
-            trial_x_part = xr.Coordinates.from_pandas_multiindex(
-                MultiIndex.from_arrays([part, epoch], names=("participant", "epoch")),
-                "trial",
-            )
-            xreventprobs = xr.DataArray(likes_events_group[i][1], dims=("trial", "sample", "event"),
-                coords={
-                    "event": ("event", np.arange(self.n_events)[data_events]),
-                    "sample": ("sample", range(np.shape(likes_events_group[i][1])[1])),
-                },
-            )
-            xreventprobs = xreventprobs.assign_coords(trial_x_part)
-            xreventprobs = xreventprobs.assign_coords(group=("trial", groups[groups == cur_group],))
-            all_xreventprobs.append(xreventprobs)
-        all_xreventprobs = xr.concat(all_xreventprobs, dim="trial", join='outer')
-        all_xreventprobs.attrs['sfreq'] = self.sfreq
-        all_xreventprobs.attrs['event_width'] = self.event_width
-        return [np.array(likelihood), all_xreventprobs]
+        # all_xreventprobs must have same order as pattern_data because
+        # subset_epochs is used later on eventprobs!
+        all_xreventprobs = xr.DataArray(np.zeros((len(pattern_data.durations), \
+                                          np.max(pattern_data.durations.values), \
+                                          self.n_events)),
+                                          dims=('trial', 'sample', 'event'),
+                                          coords=pattern_data.durations.coords)
+        all_xreventprobs = all_xreventprobs.assign_coords( \
+                                    group=("trial", groups), \
+                                    event=("event", np.arange(self.n_events)),
+                                    sample=("sample", range(np.max(pattern_data.durations.values))))
+        for cur_group in data_groups:
+            all_xreventprobs.data[np.ix_(groups == cur_group, \
+                range(likes_events_group [cur_group][1].shape[1]), \
+                self.channel_map[cur_group, :] >= 0)] = likes_events_group[cur_group][1]
+
+        all_xreventprobs.attrs['sfreq'] = pattern_data.sfreq
+        all_xreventprobs.attrs['event_width'] = len(pattern_data.template)
+        all_xreventprobs.attrs['likelihood'] = np.sum(np.array(likelihood))
+        all_xreventprobs.attrs['group_lkh'] = np.array(likelihood)
+        all_xreventprobs.attrs['group_labels'] = self.group_labels
+
+        return [likelihood.sum(), all_xreventprobs]
 
     def distribution_pdf(
         self,
@@ -1015,10 +1009,7 @@ class EventModel(BaseModel):
 
     def group_constructor(  # noqa: PLR0912
         self,
-        trial_data: TrialData,
-        grouping_dict: dict,
-        channel_map: np.ndarray = None,
-        time_map: np.ndarray = None,
+        durations: xr.DataArray,
         verbose: bool = False
     ) -> tuple[int, np.ndarray, dict]:
         """
@@ -1026,15 +1017,9 @@ class EventModel(BaseModel):
 
         Parameters
         ----------
-        trial_data : TrialData
-            The trial data containing trial-group information.
-        grouping_dict : dict
-            A dictionary defining groups for grouping modeling. Keys are group names,
-            and values are lists of groups.
-        channel_map : np.ndarray, optional
-            A 2D array mapping channel parameters to groups. Default is None.
-        time_map : np.ndarray, optional
-            A 2D array mapping time parameters to groups. Default is None.
+        durations : xr.DataArray
+            By-trial durations as obtained with PatternData.durations, which include
+            condition information
         verbose : bool, optional
             If True, prints detailed information about the group construction process.
             Default is False.
@@ -1048,18 +1033,19 @@ class EventModel(BaseModel):
         glabels : dict
             A dictionary containing group names and their corresponding modalities.
         """
-        ## groups
-        assert isinstance(grouping_dict, dict), "groups have to be specified as a dictionary"
-        if len(grouping_dict.keys()) == 0:
-            verbose = False
+        ## if no groups, directly return
+        if len(self.grouping_dict.keys()) == 0:
+            return 1, np.zeros(len(durations.values),dtype=np.int8), \
+                ("group all", np.array([['']],dtype=object))
+
         # collect group names, groups, and trial coding
         group_names = []
         group_mods = []
         group_trials = []
-        for group, mod in grouping_dict.items():
+        for group, mod in self.grouping_dict.items():
             group_names.append(group)
             group_mods.append(mod)
-            group_trials.append(trial_data.xrdurations.coords[group])
+            group_trials.append(durations.coords[group])
             if verbose:
                 print('group "' + group_names[-1] + '" analyzed, with groups:', group_mods[-1])
 
@@ -1074,63 +1060,58 @@ class EventModel(BaseModel):
             if verbose:
                 print("\nCoded as follows: ")
             for i, mod in enumerate(group_mods):
-                # assert len(np.where((group_trials == mod).all(axis=1))[0]) > 0, (
-                #     f"Modality {mod} of group does not occur in the data"
-                # )
+                assert len(np.where((group_trials == mod).all(axis=1))[0]) > 0, (
+                    f"Group {mod} does not occur in the data."
+                )
                 groups[np.where((group_trials == mod).all(axis=1))] = i
                 if verbose:
                     print(str(i) + ": " + str(mod))
-        else:
-            groups = np.zeros(trial_data.n_trials)
+        else: #in case dict provided but only one group
+            groups = np.zeros(len(durations.values))
         groups = np.int8(groups)
-        glabels = {"group " + str(group_names): group_mods}
+        glabels = (str(group_names), group_mods)
 
-        # check maps if provided
-        if channel_map is not None and time_map is not None:
-            n_groups_mags = 0 if channel_map is None else channel_map.shape[0]
-            n_groups_pars = 0 if time_map is None else time_map.shape[0]
-            if (
-                n_groups_mags > 0 and n_groups_pars > 0
-            ):  # either both maps should have the same number of groups, or 0
-                assert n_groups_mags == n_groups_pars, (
-                    "Channel and time parameter maps have to indicate the same number of groups"
+        # check maps
+        n_groups_channel = 0 if self.channel_map is None else self.channel_map.shape[0]
+        n_groups_time = 0 if self.time_map is None else self.time_map.shape[0]
+        #either both maps should have the same number of groups, or 0
+        if n_groups_channel > 0 and n_groups_time > 0:
+            assert n_groups_channel == n_groups_time, (
+                "Channel and time parameter maps have to indicate the same number of groups."
+            )
+            # make sure nr of events correspond per row
+            for cur_group in range(n_groups):
+                assert (sum(self.channel_map[cur_group, :] >= 0) + 1
+                        == sum(self.time_map[cur_group, :] >= 0)), (
+                    "Nr of events in channel map and time map do not correspond on row "
+                    + str(cur_group)
                 )
-                # make sure nr of events correspond per row
+        elif n_groups_channel == 0:
+            assert not (self.time_map < 0).any(), (
+                "If negative time parameter are provided, channel map is required."
+            )
+            self.channel_map = np.zeros((n_groups, self.time_map.shape[1] - 1), dtype=int)
+        else: #n_groups_time == 0
+            self.time_map = np.zeros((n_groups, self.channel_map.shape[1] + 1), dtype=int)
+            if (self.channel_map < 0).any():
                 for cur_group in range(n_groups):
-                    assert (sum(channel_map[cur_group, :] >= 0) + 1
-                            == sum(time_map[cur_group, :] >= 0)), (
-                        "nr of events in channel map and time map do not correspond on row "
-                        + str(cur_group)
-                    )
-            elif n_groups_mags == 0:
-                assert not (time_map < 0).any(), (
-                    "If negative time parameter are provided, channel map is required."
-                )
-                channel_map = np.zeros((n_groups, time_map.shape[1] - 1), dtype=int)
-            else:
-                time_map = np.zeros((n_groups, channel_map.shape[1] + 1), dtype=int)
-                if (channel_map < 0).any():
-                    for cur_group in range(n_groups):
-                        time_map[cur_group, np.where(channel_map[cur_group, :] < 0)[0]] = -1
-                        time_map[cur_group, np.where(channel_map[cur_group, :] < 0)[0] + 1] = 1
+                    self.time_map[cur_group, \
+                        np.where(self.channel_map[cur_group, :] < 0)[0]] = -1
+                    self.time_map[cur_group, \
+                        np.where(self.channel_map[cur_group, :] < 0)[0] + 1] = 1
 
-            # at this point, all should indicate the same number of groups
-            assert n_groups == channel_map.shape[0] == time_map.shape[0], (
-                "number of unique groups should correspond to number of rows in map(s)"
-            )
+        # at this point, all should indicate the same number of groups
+        assert n_groups == self.channel_map.shape[0] == self.time_map.shape[0], (
+            "number of unique groups should correspond to number of rows in map(s)"
+        )
 
-            if verbose:
-                print("\nChannel map:")
-                for cnt in range(n_groups):
-                    print(str(cnt) + ": ", channel_map[cnt, :])
+        if verbose:
+            print("\nChannel map:")
+            for cnt in range(n_groups):
+                print(str(cnt) + ": ", self.channel_map[cnt, :])
 
-                print("\nTime map:")
-                for cnt in range(n_groups):
-                    print(str(cnt) + ": ", time_map[cnt, :])
-
-            # at this point, all should indicate the same number of groups
-            assert n_groups == channel_map.shape[0] == time_map.shape[0], (
-                "number of unique groups should correspond to number of rows in map(s)"
-            )
+            print("\nTime map:")
+            for cnt in range(n_groups):
+                print(str(cnt) + ": ", self.time_map[cnt, :])
 
         return n_groups, groups, glabels

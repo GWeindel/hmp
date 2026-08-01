@@ -1,14 +1,17 @@
 """Estimate all possible number events starting from a base model or the maximum possible."""
 
 import gc
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import xarray as xr
 
+from hmp.basedata import BaseData
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
-from hmp.trialdata import TrialData
+from hmp.patterndata import PatternData
+from hmp.patterns import Pattern
 
 default_colors = ["cornflowerblue", "indianred", "orange", "darkblue", "darkgreen", "gold", "brown"]
 
@@ -18,6 +21,15 @@ class EliminativeMethod(BaseModel):
 
     Parameters
     ----------
+    pattern : PatternData
+        The pattern and properties to use for cross-correlation. Default is
+        half sine with 50 ms width.
+    location : int, optional
+        How many milliseconds should be censored in the EM() step of model fitting.
+        Default is width of the event, which is by default 50 ms.
+        Shorter values than the width of a pattern allow overlap of neighboring events
+        but might result in the same event being duplicated in several events.
+        Larger values will prevent duplication at the risk of missing neighboring events
     max_events : int, optional
         Maximum number of events to be estimated. By default, it is inferred using
         `compute_max_events()` if not provided.
@@ -30,29 +42,36 @@ class EliminativeMethod(BaseModel):
         Tolerance for the expectation maximization algorithm. Defaults to 1e-4.
     max_iteration : int, optional
         Maximum number of iterations for the expectation maximization algorithm. Defaults to 1000.
+    distribution : str
+        Probability distribution for the by-trial onset of stages can be
+        one of 'gamma','lognormal','wald', or 'weibull'
     """
 
     def __init__(
         self,
-        *args,
+        pattern: Pattern = None,
+        location: float = None,
         max_events: int | None = None,
-        min_events: int = 0,
+        min_events: int = 1,
         base_fit: EventModel | None = None,
         tolerance: float = 1e-4,
         max_iteration: int = 1000,
-        **kwargs,
+        distribution: Any = None
     ):
+        super().__init__(pattern, distribution)
+        if location is None:
+            location = self.pattern.width
+        self.location = location
         self.max_events: int = max_events
         self.min_events: int = min_events
         self.base_fit: EventModel | None = base_fit
         self.tolerance: float = tolerance
         self.max_iteration: int = max_iteration
         self.submodels: dict[int, EventModel] = {}
-        super().__init__(*args, **kwargs)
 
     def fit(
         self,
-        trial_data: TrialData,
+        data: PatternData | BaseData | xr.DataArray,
         cpus: int = 1,
     ) -> None:
         """Perform the eliminative estimation.
@@ -63,8 +82,10 @@ class EliminativeMethod(BaseModel):
 
         Parameters
         ----------
-        trial_data : TrialData
-            The dataset containing the crosscorrelated data and infos on durations and trials.
+        data : Data to fit the model on. One of two options:
+            1. BaseData object or xr.DataArray containing preprocessed data.
+            2. PatternData object.
+            In case of option 1, data is cross-correlated with the pattern in self.pattern.
         cpus : int, optional
             Number of CPUs to use for parallel processing. Defaults to 1.
 
@@ -72,11 +93,13 @@ class EliminativeMethod(BaseModel):
         -------
         None
         """
+        pattern_data = self._instantiate_data_pattern(data)
+
         if self.max_events is None:
-            max_events = self.compute_max_events(trial_data)
+            max_events = self._compute_max_events(pattern_data, self.location)
         else:
             max_events = self.max_events
-
+        print(max_events)
         min_events = self.min_events
 
         if not self.base_fit:
@@ -84,13 +107,13 @@ class EliminativeMethod(BaseModel):
                 f"Estimating all solutions for maximal number of events ({max_events})"
             )
             base_fit = self.get_event_model(n_events=max_events, starting_points=1)
-            base_fit.fit(trial_data, verbose=False, cpus=cpus)
+            base_fit.fit(pattern_data, verbose=False, cpus=cpus)
         else:
             base_fit = self.base_fit
         max_events = base_fit.n_events
         self.submodels[max_events] = base_fit
 
-        for n_events in np.arange(max_events - 1, min_events, -1):
+        for n_events in np.arange(max_events - 1, min_events-1, -1):
             event_model = self.get_event_model(n_events, starting_points=n_events+1)
 
             print(f"Estimating all solutions for {n_events} events")
@@ -109,8 +132,7 @@ class EliminativeMethod(BaseModel):
                 )  # combine two stages into one
                 temp_pars = np.delete(temp_pars, event + 1, axis=1)
                 pars_temp.append(temp_pars)
-            event_model.fit(
-                            trial_data,
+            event_model.fit(data=pattern_data,
                             channel_pars=np.array(events_temp),
                             time_pars=np.array(pars_temp),
                             verbose=False,
@@ -121,14 +143,21 @@ class EliminativeMethod(BaseModel):
             self.submodels[n_events] = event_model
         self._fitted = True
 
-    def transform(self, trial_data):
+    def transform(self,
+                  data: PatternData | BaseData | xr.DataArray,
+                  cpus: int = 1
+                  ):
         """
-        Apply all fitted submodels to the provided trial data.
+        Apply all fitted submodels to the provided data.
 
         Parameters
         ----------
-        trial_data : TrialData
-            The dataset containing the crosscorrelated data and information on durations and trials.
+        data : Data to fit the model on. One of two options:
+            1. BaseData object or xr.DataArray containing preprocessed data.
+            2. PatternData object.
+            In case of option 1, data is cross-correlated with the pattern in self.pattern.
+        cpus : int
+            nr of cpus to use
 
         Returns
         -------
@@ -137,12 +166,14 @@ class EliminativeMethod(BaseModel):
         xr_eventprobs : xarray.DataArray
             Concatenated event probability arrays for all submodels, indexed by number of events.
         """
+        pattern_data = self._instantiate_data_pattern(data)
+
         if len(self.submodels) == 0:
             raise ValueError("Model has not been (succesfully) fitted yet, no fixed models.")
         likelihoods = []
         event_probs = []
-        for n_events, event_model in self.submodels.items():
-            lkh, prob = event_model.transform(trial_data)
+        for _, event_model in self.submodels.items():
+            lkh, prob = event_model.transform(pattern_data, cpus=cpus)
             likelihoods.append(lkh)
             event_probs.append(prob)
         xr_eventprobs = xr.concat(event_probs, dim=pd.Index(list(self.submodels), name="n_events"))
@@ -167,7 +198,10 @@ class EliminativeMethod(BaseModel):
 
     def get_event_model(self, n_events, starting_points):
         return EventModel(
-            self.pattern, self.distribution, n_events=n_events,
+            n_events=n_events,
+            pattern=self.pattern,
+            location=self.location,
             starting_points=starting_points,
             tolerance=self.tolerance,
-            max_iteration=self.max_iteration)
+            max_iteration=self.max_iteration,
+            distribution=self.distribution)

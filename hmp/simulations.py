@@ -10,9 +10,10 @@ import numpy as np
 import xarray as xr
 from scipy.stats import gamma
 
-from hmp.io import read_mne_data
+from hmp.io import read_mne_raw
 from hmp.models.event import EventModel
-from hmp.trialdata import TrialData
+from hmp.patterndata import PatternData
+from hmp.utils import _define_random_state
 
 root = os.path.dirname(os.path.abspath(__file__))
 
@@ -132,10 +133,7 @@ def simulate(  # noqa  # Might need to be refactored.
         mne.set_log_level("warning")
     else:
         mne.set_log_level(True)
-    if seed is not None:
-        random_state = np.random.RandomState(seed)
-    else:
-        random_state = np.random.RandomState(np.random.randint(low=0, high=3000))
+    random_state = _define_random_state(seed)
     sources = np.array(sources, dtype=object)
     if len(np.shape(sources)) == 2:
         sources = [sources]  # If only one subject
@@ -216,7 +214,7 @@ def simulate(  # noqa  # Might need to be refactored.
             subj_file = file + f"_{subj}_raw.fif"
         if subj_file in os.listdir(path) and not overwrite:
             subj_file = op.join(path, subj_file)
-            warn(f"{subj_file} exists no new simulation performed", UserWarning)
+            warn(f"{subj}_raw.fif exists no new simulation performed", UserWarning)
             files_subj.append(subj_file)
             files_subj.append(subj_file.split(".fif")[0] + "_generating_events.npy")
             if save_snr:
@@ -226,7 +224,7 @@ def simulate(  # noqa  # Might need to be refactored.
             files.append(files_subj)
         else:
             subj_file = op.join(path, subj_file)
-            print(f"Simulating {subj_file}")
+            print(f"Simulating {subj}_raw.fif")
             # stim_onset occurs every x samples.
             events = np.zeros((n_trials, 3), int)
             stim_onsets = 1 + trial_time  # offset of first stim is 1 s
@@ -248,8 +246,6 @@ def simulate(  # noqa  # Might need to be refactored.
             trigger = 2
             generating_events = events
             for s, source in enumerate(sources_subj):
-                if trigger == len(sources_subj) + 1:
-                    source[2] = 1e-20  # Last source defines RT and is not an event per se
                 selected_label = mne.read_labels_from_annot(
                     '', regexp=source[0], subjects_dir=op.join(root,'simulation_parameters'),
                     verbose=verbose
@@ -303,9 +299,11 @@ def simulate(  # noqa  # Might need to be refactored.
                 trigger += 1
                 generating_events = np.concatenate([generating_events, events.copy()])
                 # Shift event to onset when simulating pattern
-                events[random_indices, 0] = events[random_indices, 0] - shift
-                # add these events
-                source_simulator.add_data(label, source_time_series, events[random_indices])
+                # No simulation if last event (duration end)
+                if trigger != len(sources_subj) + 2:
+                    events[random_indices, 0] = events[random_indices, 0] - shift
+                    # add these events
+                    source_simulator.add_data(label, source_time_series, events[random_indices])
 
             generating_events = generating_events[generating_events[:, 0].argsort()]
             # Project the source time series to sensor space and add some noise. The source
@@ -353,10 +351,8 @@ def simulate(  # noqa  # Might need to be refactored.
             files.append(files_subj)
             if save_noiseless:
                 files_subj.append(file + "_noiseless_raw.fif")
-            print(f"{subj_file} simulated")
+            print(f"{subj}_raw.fif simulated")
 
-    if n_subj == 1:
-        files = files[0]
     return files
 
 
@@ -396,8 +392,9 @@ def demo():
         sources, n_trials, cpus, file, path='sample_data', overwrite=overwrite, seed=seed,
         noise=True, sfreq=sfreq
     )
-
-    generating_events = np.load(files[1])
+    eeg_file = [files[0][0]]
+    event_file = files[0][1]
+    generating_events = np.load(event_file)
 
     number_of_sources = len(np.unique(generating_events[:, 2])[1:])  # one trigger = one source
     random_source_times = np.reshape(
@@ -408,22 +405,32 @@ def demo():
     resp_trigger = int(
         np.max(np.unique(generating_events[:, 2]))
     )  # Resp trigger is the last source in each trial
-    event_id = {"stimulus": 1}
-    resp_id = {"response": resp_trigger}
+    event_id = {"stimulus/dummy": 1}
+    resp_id = {"response/dummy": resp_trigger}
     events = generating_events[
         (generating_events[:, 2] == 1) | (generating_events[:, 2] == resp_trigger)
     ]  # only retain stimulus and response triggers
 
     # Reading the data
-    eeg_dat = read_mne_data(files[0], event_id, resp_id, events_provided=events,
-                            verbose=False)
+    montage = sim_info().get_montage()
+    preprocessing = dict(sfreq=sfreq, highpass=None, lowpass=40,
+                            pick_channels='eeg', reference='average')
+    epochin = dict(tmin=-.1, tmax=2)
+
+    eeg_dat, info = read_mne_raw(eeg_file,
+                                 centering_id=event_id,
+                                 event_id=resp_id,
+                                 events_provided=[events],
+                                 montage = montage,
+                                 preprocessing_kwargs=preprocessing,
+                                 epoching_kwargs = epochin,
+                                )
 
     all_other_chans = range(len(positions.ch_names[:-61]))  # non-eeg
     chan_list = list(np.arange(len(positions.ch_names)))
     chan_list = [e for e in chan_list if e not in all_other_chans]
     chan_list.pop(52)  # Bad elec
-    positions = mne.pick_info(positions, sel=chan_list)
-    return eeg_dat, random_source_times, positions
+    return eeg_dat, random_source_times, info
 
 
 def classification_true(
@@ -484,7 +491,7 @@ def classification_true(
 def simulated_times_and_parameters(
     generating_events: np.ndarray,
     model: EventModel,
-    trial_data: TrialData,
+    pattern_data: PatternData,
     resampling_freq: float = None,
     data: np.ndarray = None,
 ) -> tuple[np.ndarray, list, np.ndarray, np.ndarray]:
@@ -497,13 +504,13 @@ def simulated_times_and_parameters(
         Times of the simulated events created by the function simulate().
     model : hmp
         Initialized EventModel.
-    trial_data : TrialData
+    pattern_data : PatternData
         Object containing trial-specific data such as starts, ends, and cross-correlation.
     resampling_freq : float, optional
         Value of the new sampling frequency if there is a difference between the initialized HMP
         object and the generating_events. Default is None.
     data : np.ndarray, optional
-        Alternative data to use instead of cross-correlation contained in trial_data.crosscorr.
+        Alternative data to use instead of cross-correlation contained in pattern_data.crosscorr.
         Default is None.
 
     Returns
@@ -517,7 +524,7 @@ def simulated_times_and_parameters(
     true_activities : np.ndarray
         Actual values at simulated event times.
     """
-    sfreq = model.sfreq
+    sfreq = pattern_data.sfreq
     n_stages = len(np.unique(generating_events[:, 2])[1:])  # one trigger = one source
     n_events = n_stages - 1
     if resampling_freq is None:
@@ -539,16 +546,17 @@ def simulated_times_and_parameters(
     true_time_pars[true_time_pars[:, 1] <= 0, 1] = 1e-3  # Can happen in corner cases
     random_source_times = random_source_times * (1000 / sfreq) / (1000 / resampling_freq)
     ## Recover magnitudes
-    sample_times = np.zeros((trial_data.n_trials, n_events), dtype=int)
+    sample_times = np.zeros((len(pattern_data.starts), n_events), dtype=int)
     for event in range(n_events):
-        for trial in range(trial_data.n_trials):
-            trial_time = trial_data.starts[trial] + np.sum(random_source_times[trial, : event + 1])
-            if trial_data.ends[trial] >= trial_time:  # exceeds RT
+        for trial in range(len(pattern_data.starts)):
+            trial_time = pattern_data.starts[trial] +\
+                np.sum(random_source_times[trial, : event + 1])
+            if pattern_data.ends[trial] >= trial_time:  # exceeds RT
                 sample_times[trial, event] = trial_time
             else:
-                sample_times[trial, event] = trial_data.ends[trial]
+                sample_times[trial, event] = pattern_data.ends[trial]
     if data is None:  # use crosscorrelated data
-        true_activities = trial_data.cross_corr[sample_times[:, :]]
+        true_activities = pattern_data.cross_corr[sample_times[:, :]]
     else:
         true_activities = data[sample_times[:, :]]
     true_channel_pars = np.mean(true_activities, axis=0)
