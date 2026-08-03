@@ -137,7 +137,50 @@ def test_fixed_grouping():
     model.channel_pars = np.array([true_magnitudes])
 
     lkh_comb, estimates_comb = model.fit_transform(pdata)
-    
+
+def test_grouping_absent_group():
+    """A declared group without any trial should not shift the results of the other groups."""
+    _, _, _, hmp_data, _, _, n_events = data()
+    pdata = PatternData.from_basedata(hmp_data)
+    n_trials = len(pdata.durations)
+    n_dims = pdata.cross_corr.shape[1]
+
+    def grouping_model(groups_declared):
+        # Every group gets its own parameters so that groups cannot influence each other
+        channel_map = np.array([np.arange(n_events) + g * n_events for g in groups_declared])
+        time_map = np.array([np.arange(n_events + 1) + g * (n_events + 1) \
+            for g in groups_declared])
+        model = EventModel(n_events=n_events, time_map=time_map, channel_map=channel_map,
+            grouping_dict={'condition': [str(g) for g in groups_declared]})
+        model.n_dims = n_dims
+        return model
+
+    # Same two sets of trials, coded 0 and 2 with the declared group 1 left without any trial,
+    # and coded 0 and 1 with only the two groups that do occur declared
+    groups = np.where(np.arange(n_trials) < n_trials // 2, 0, 2).astype(np.int8)
+    reference_groups = np.where(np.arange(n_trials) < n_trials // 2, 0, 1).astype(np.int8)
+    model = grouping_model([0, 1, 2])
+    reference_model = grouping_model([0, 2])
+
+    # Distinct starting points per group, so that swapping two groups changes the estimates
+    mean_stage = pdata.durations.values.mean() / (n_events + 1)
+    channel_pars = np.zeros((3, n_events, n_dims))
+    time_pars = np.array([np.tile([model.distribution.shape,
+        model.distribution.mean_to_scale(mean_stage * scaling)], (n_events + 1, 1))
+        for scaling in [.8, 1., 1.2]])
+
+    lkh, group_channel_pars, group_time_pars, _, traces_group, _ = \
+        model.EM(pdata, channel_pars, time_pars, groups)
+    reference_lkh, reference_channel_pars, reference_time_pars, _, _, _ = \
+        reference_model.EM(pdata, channel_pars[[0, 2]], time_pars[[0, 2]], reference_groups)
+
+    assert np.isclose(lkh, reference_lkh)
+    assert np.allclose(group_channel_pars[[0, 2]], reference_channel_pars)
+    assert np.allclose(group_time_pars[[0, 2]], reference_time_pars)
+    # Group likelihoods are reported for every declared group, nan for the one without trials
+    assert traces_group.shape[1] == 3
+    assert np.isnan(traces_group[:, 1]).all()
+
 def test_starting_points():
     _, _, epoch_data, hmp_data, positions, sfreq, n_events = data()
     pattern = HalfSine()

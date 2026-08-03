@@ -947,7 +947,11 @@ class EventModel(BaseModel):
                     )
                 )
 
-        likelihood = np.array([x[0] for x in likes_events_group])
+        # likes_events_group is ordered by position in data_groups while the maps and
+        # group_labels are indexed by group. Both only coincide when every declared group
+        # occurs in the data, hence the two are kept apart below. Groups declared in the maps
+        # but without any trial (e.g. after trial rejection) keep a nan likelihood.
+        likelihood = np.zeros(self.channel_map.shape[0]) * np.nan
 
         # all_xreventprobs must have same order as pattern_data because
         # subset_epochs is used later on eventprobs!
@@ -960,18 +964,19 @@ class EventModel(BaseModel):
                                     group=("trial", groups), \
                                     event=("event", np.arange(self.n_events)),
                                     sample=("sample", range(np.max(pattern_data.durations.values))))
-        for cur_group in data_groups:
+        for cur_pos, cur_group in enumerate(data_groups):
+            likelihood[cur_group] = likes_events_group[cur_pos][0]
             all_xreventprobs.data[np.ix_(groups == cur_group, \
-                range(likes_events_group [cur_group][1].shape[1]), \
-                self.channel_map[cur_group, :] >= 0)] = likes_events_group[cur_group][1]
+                range(likes_events_group[cur_pos][1].shape[1]), \
+                self.channel_map[cur_group, :] >= 0)] = likes_events_group[cur_pos][1]
 
         all_xreventprobs.attrs['sfreq'] = pattern_data.sfreq
         all_xreventprobs.attrs['event_width'] = len(pattern_data.template)
-        all_xreventprobs.attrs['likelihood'] = np.sum(np.array(likelihood))
-        all_xreventprobs.attrs['group_lkh'] = np.array(likelihood)
+        all_xreventprobs.attrs['likelihood'] = np.nansum(likelihood)
+        all_xreventprobs.attrs['group_lkh'] = likelihood
         all_xreventprobs.attrs['group_labels'] = self.group_labels
 
-        return [likelihood.sum(), all_xreventprobs]
+        return [np.nansum(likelihood), all_xreventprobs]
 
     def distribution_pdf(
         self,
