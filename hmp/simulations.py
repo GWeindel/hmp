@@ -480,7 +480,7 @@ def classification_true(
     for test_idx, (idx, val) in enumerate(zip(classif, classif_vals)):
         if idx > 0 and (idx not in mapping_true or val < mapping_true[idx][0]):
             mapping_true[idx] = (val, test_idx)
-    
+
     corresp_true_idx = np.array(list(mapping_true.keys())) - 1
     idx_true_positive = np.array([test_idx for _, test_idx in mapping_true.values()])
     return idx_true_positive, corresp_true_idx
