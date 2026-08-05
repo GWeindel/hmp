@@ -16,6 +16,12 @@ Outline of the documentation:
    README
 
 .. toctree::
+   :caption: FAQ
+   :maxdepth: 1
+
+   notebooks/demo/FAQ
+
+.. toctree::
    :caption: Installation
    :maxdepth: 2
 
