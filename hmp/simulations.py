@@ -128,6 +128,7 @@ def simulate(  # noqa  # Might need to be refactored.
     """
     os.environ["SUBJECTS_DIR"] = op.join(root,'simulation_parameters')
     path = op.join(os.getcwd(), path)
+    os.makedirs(path, exist_ok=True)
 
     if not verbose:
         mne.set_log_level("warning")
@@ -434,18 +435,18 @@ def demo():
 
 
 def classification_true(
-    true_topologies: xr.DataArray, test_topologies: xr.DataArray
+    true_topo: xr.DataArray, test_topo: xr.DataArray
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Classifies events as belonging to one of the true events.
 
     Parameters
     ----------
-    true_topologies : xarray.DataArray
-        Topologies for the true events simulated, obtained from
+    true_topo : xarray.DataArray
+        Topographies for the true events simulated, obtained from
         `utils.event_channels(epoch_data, test_estimates, mean=True)`.
-    test_topologies : xarray.DataArray
-        Topologies for the events found in the estimation procedure, obtained from
+    test_topo : xarray.DataArray
+        Topographies for the events found in the estimation procedure, obtained from
         `utils.event_channels(epoch_data, true_estimates, true_init, mean=True)`.
 
     Returns
@@ -455,20 +456,20 @@ def classification_true(
     corresp_true_idx : np.ndarray
         Indices in the test estimate that correspond to the true events.
     """
-    test_topologies = (test_topologies.copy() - test_topologies.mean(axis=1)) / test_topologies.std(
+    test_topo = (test_topo.copy() - test_topo.mean(axis=1)) / test_topo.std(
         axis=1
     )
-    true_topologies = (true_topologies.copy() - true_topologies.mean(axis=1)) / true_topologies.std(
+    true_topo = (true_topo.copy() - true_topo.mean(axis=1)) / true_topo.std(
         axis=1
     )
     true0 = np.vstack(
-        (np.zeros(true_topologies.shape[1]), true_topologies)
+        (np.zeros(true_topo.shape[1]), true_topo)
     )  # add a zero electrode event
     classif = np.zeros(
-        test_topologies.shape[0], dtype=int
+        test_topo.shape[0], dtype=int
     )  # array of categorization in true events
-    classif_vals = np.zeros(test_topologies.shape[0])  # values of the squared diff
-    for i, test_ev in enumerate(test_topologies):
+    classif_vals = np.zeros(test_topo.shape[0])  # values of the squared diff
+    for i, test_ev in enumerate(test_topo):
         all_distances = np.zeros(len(true0))
         for j, true_ev in enumerate(true0):
             all_distances[j] = np.median(np.abs(true_ev - test_ev))
