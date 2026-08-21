@@ -3,7 +3,6 @@
 This module provides functions for reading BIDS data format
 """
 
-import multiprocessing as mp
 import re
 from copy import deepcopy
 from typing import Callable, Optional
@@ -17,6 +16,7 @@ from numpy.typing import DTypeLike
 from xarray import Dataset
 
 from hmp.io import preprocessing, utils
+from hmp.utils import _get_mp_context
 
 
 def read_bids_raw(
@@ -157,7 +157,8 @@ def read_bids_raw(
                 for recording in recordings
             ]
     else:
-        with mp.Pool(processes=cpus) as pool:
+        ctx = _get_mp_context()
+        with ctx.Pool(processes=cpus) as pool:
             epochs_list = pool.starmap(
                 _process_bids_dataset,
                 [(recording, montage, centering_id, event_id, verbose,

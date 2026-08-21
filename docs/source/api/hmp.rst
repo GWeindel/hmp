@@ -12,22 +12,29 @@ Models
    hmp.models
 
 
-Transformer module
+Basedata module
 ------------------------
 
-.. toctree::
-   :maxdepth: 2
-
-   hmp.transformers
-
-Input/output module
--------------
-
-.. automodule:: hmp.io
+.. automodule:: hmp.basedata
    :members:
    :show-inheritance:
    :undoc-members:
 
+Projections module
+-------------
+
+.. toctree::
+   :maxdepth: 2
+
+   hmp.projectors
+
+Input/output module
+-------------
+
+.. toctree::
+   :maxdepth: 2
+
+   hmp.io
 
 Distributions module
 -------------
@@ -45,10 +52,10 @@ Patterns module
    :show-inheritance:
    :undoc-members:
 
-TrialData module
+PatternData module
 --------------------
 
-.. automodule:: hmp.trialdata
+.. automodule:: hmp.patterndata
    :members:
    :show-inheritance:
    :undoc-members:

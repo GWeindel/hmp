@@ -360,7 +360,7 @@ def from_io(epoch_data: xr.Dataset) -> BaseData:
     BaseData
         An instance of BaseData
     """
-    base_data = BaseData(data=epoch_data.copy())
+    base_data = BaseData(data=epoch_data)
     #process data from io
     base_data.data = base_data.data.data.stack(trial=["recording", "epoch"])\
         .dropna("trial", how="all")

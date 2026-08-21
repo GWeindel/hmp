@@ -3,7 +3,6 @@
 This module provides functions for reading MNE epoched data format (.fif only)
 """
 
-import multiprocessing as mp
 from copy import deepcopy
 from pathlib import Path
 from typing import Callable, Optional
@@ -15,6 +14,7 @@ from numpy.typing import DTypeLike
 from xarray import Dataset
 
 from hmp.io import preprocessing, utils
+from hmp.utils import _get_mp_context
 
 
 def read_mne_epochs(
@@ -100,7 +100,8 @@ def read_mne_epochs(
             for recording in recordings
         ]
     else:
-        with mp.Pool(processes=cpus) as pool:
+        ctx = _get_mp_context()
+        with ctx.Pool(processes=cpus) as pool:
             epochs_list = pool.starmap(
                 _process_epoch_dataset,
                 [(recording, montage, verbose,
@@ -109,28 +110,32 @@ def read_mne_epochs(
                 ],
             )
 
-    epoch_data = [
-        utils.hmp_data_format(
-            epochs.get_data(copy=False).astype(dtype),
-            epochs.info['sfreq'],
-            epochs.tmin,
-            epochs.tmax,
-            epochs=[int(x) for x in valid_epoch_index],
-            channel=epochs.ch_names,
-            metadata=epochs.metadata,
-        )
-        for epochs, valid_epoch_index in epochs_list
-    ]
-
     # Recover info from first epochs object
     info = epochs_list[0][0].info
     final_prep_kwargs = deepcopy(preprocessing_kwargs)
     final_prep_kwargs['sfreq'] = epochs_list[0][0].info['sfreq']
     final_prep_kwargs['lowpass'] = epochs_list[0][0].info['lowpass']
     final_prep_kwargs['highpass'] = epochs_list[0][0].info['highpass']
+
+    epoch_data = []
+    while epochs_list:
+        epochs, valid_epoch_index = epochs_list.pop(0)
+        epoch_data.append(
+            utils.hmp_data_format(
+                epochs.get_data(copy=False).astype(dtype),
+                epochs.info['sfreq'],
+                epochs.tmin,
+                epochs.tmax,
+                epochs=[int(x) for x in valid_epoch_index],
+                channel=epochs.ch_names,
+                metadata=epochs.metadata,
+            )
+        )
+        del epochs, valid_epoch_index
+
+
     epoch_data = utils._concat_recordings(epoch_data, recordings,
                       {}, final_prep_kwargs, subj_name)
-
     return epoch_data, info
 
 def _process_epoch_dataset(recording, montage, verbose,

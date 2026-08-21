@@ -5,7 +5,6 @@ from warnings import warn
 
 import numpy as np
 import xarray as xr
-from joblib import Parallel, delayed
 
 from hmp.basedata import BaseData
 from hmp.crossvalidation import pseudo_kfold
@@ -244,12 +243,11 @@ class CumulativeMethod(BaseModel):
                                  tolerance=self.tolerance, distribution=self.distribution)
         if kfold > 1:
             folds = list(pseudo_kfold(pattern_data, kfold))
-
-            results = Parallel(n_jobs=cpus)(
-                delayed(self.run_fold)(n_events, train_td, test_td,
-                                       channel_pars_props, time_pars_props)
+            results = [
+                self.run_fold(n_events, train_td, test_td,
+                             channel_pars_props, time_pars_props, cpus)
                 for train_td, test_td in folds
-            )
+            ]
             llk, channel_pars_res, time_pars_res, max_scale = zip(*results)
             llk = np.array(llk)
             channel_pars_res = np.median(np.array(channel_pars_res), axis=0)
@@ -340,7 +338,7 @@ class CumulativeMethod(BaseModel):
             return getattr(self.submodels[-1], attr)
         return super().__getattribute__(attr)
 
-    def run_fold(self, n_events, train_td, test_td, channel_pars_props, time_pars_props):
+    def run_fold(self, n_events, train_td, test_td, channel_pars_props, time_pars_props, cpus):
         event_model = EventModel(n_events=n_events, pattern=self.pattern, location=self.location,
                                  tolerance=self.tolerance, distribution=self.distribution)
 
@@ -349,7 +347,7 @@ class CumulativeMethod(BaseModel):
             channel_pars_props,
             time_pars_props,
             verbose=False,
-            cpus=1
+            cpus=cpus
         )
 
         llk = event_model.transform(test_td)[0]

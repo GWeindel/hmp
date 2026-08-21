@@ -382,10 +382,10 @@ class LOOCV():
             if not hasattr(data,'projector') or isinstance(data.projector, Identity): #pca_cv
                 whiten = self.pca_kwargs.get('whiten', True)
                 common_variance = self.pca_kwargs.get('common_variance', True)
-                recording_zscore = self.pca_kwargs.get('recording_zscore', True)
+                standardize_recording = self.pca_kwargs.get('standardize_recording', True)
                 data.project(Custom(weights=modelfit.pca_weights))
                 data.apply_variance_ops(whiten=whiten, common_variance=common_variance,
-                                        recording_zscore=recording_zscore)
+                                        standardize_recording=standardize_recording)
 
         # Calculate loglikelihood of model applied on data of participant
         likelihood, _ = modelfit.transform(data, cpus=cpus_model)

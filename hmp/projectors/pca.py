@@ -39,11 +39,10 @@ class PCA(Projector):
             data: DataArray):
         """Estimate PCA weights."""
         #Compute covariance
-        recordings = set(data.recording.values)
-        group_cov = np.zeros((len(recordings), data.sizes["channel"],
+        groups = data.groupby("recording")
+        group_cov = np.zeros((len(groups), data.sizes["channel"],
                               data.sizes["channel"]), dtype=np.float64)
-        for j, recording in enumerate(recordings):
-            part_data = data.where(data.recording == recording, drop=True)
+        for j, (_, part_data) in enumerate(groups):
             group_cov[j] = self._compute_covariance(part_data)
         vcov_mat = np.mean(group_cov, axis=0)
 
@@ -121,21 +120,21 @@ class PCA(Projector):
     @staticmethod
     def _compute_covariance(data):
         """Compute covariance of data trial by trial."""
-        vcov_mat = np.zeros((data.sizes["channel"], data.sizes["channel"]), dtype=np.float64)
-        # Iteratively for memory efficiency
+        arr = data.values  # (trial, channel, sample)
+        n_ch = arr.shape[1]
+        vcov_mat = np.zeros((n_ch, n_ch), dtype=np.float64)
         count = 0
-        for i in data.trial:
-            x_i = np.squeeze(data.sel(trial=i).values)
+        for x_i in arr:
             x_i = x_i[:, ~np.isnan(x_i[0, :])]
             if x_i.shape[1] > x_i.shape[0]:
                 count += 1
-                cov_i = (x_i @ x_i.T) / (x_i.shape[1]-1)
+                cov_i = (x_i @ x_i.T) / (x_i.shape[1] - 1)
                 # Regularization using MNE python's default
                 sigma = np.mean(np.diag(cov_i))
-                cov_i.flat[:: len(cov_i) + 1] += 0.1 * sigma
+                cov_i.flat[:: n_ch + 1] += 0.1 * sigma
                 vcov_mat += cov_i
-        if count < len(data.trial)/10:
+        if count < len(arr) / 10:
             warn(f"Less than 10% of the trials used to compute covariance for"
                  f"{np.unique(data.recording.values)}. Covariance matrix might be unreliable")
-        return vcov_mat/count
+        return vcov_mat / count
 

@@ -189,9 +189,17 @@ def create_info_hmp(ch_names: list[str],
 
 def _concat_recordings(epoch_data, recordings,
                       epoching_kwargs={}, preprocessing_kwargs={}, subj_names=None):
-    """Concatenate list of xr.Datasets into a common xr.Dataset."""
-    recordings = ["_".join(str(recording.name).split("_")[:-1])
+    """Concatenate list of xr.Datasets into a common xr.Dataset.
+
+    If subj_names is provided, it will be used as the recording dimension,
+    otherwise recording names will be inferred from the recordings list.
+    """
+    if subj_names is None:
+        recordings = ["_".join(str(recording.name).split("_")[:-1])
                   for recording in recordings]
+    else:
+        recordings = subj_names
+
     # Data
     epoch_data = xr.concat(
         epoch_data,

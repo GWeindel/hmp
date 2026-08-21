@@ -3,7 +3,6 @@
 This module provides functions for reading MNE raw data format
 """
 
-import multiprocessing as mp
 from copy import deepcopy
 from pathlib import Path
 from typing import Callable, Optional
@@ -16,6 +15,7 @@ from numpy.typing import DTypeLike
 from xarray import Dataset
 
 from hmp.io import preprocessing, utils
+from hmp.utils import _get_mp_context
 
 
 def read_mne_raw(# noqa: PLR0913, PLR0917
@@ -141,7 +141,8 @@ def read_mne_raw(# noqa: PLR0913, PLR0917
             for recording, event in zip(recordings, events_provided)
         ]
     else:
-        with mp.Pool(processes=cpus) as pool:
+        ctx = _get_mp_context()
+        with ctx.Pool(processes=cpus) as pool:
             epochs_list = pool.starmap(
                 _process_raw_dataset,
                 [(recording, montage, centering_id, event_id, event,

@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development",
     "Topic :: Scientific/Engineering",
 ]
-dependencies=["mne >=1.0.0",
+dependencies=["mne >=1.11.0",
 "numpy",
 "pandas",
 "xarray >= 2026.1.0",

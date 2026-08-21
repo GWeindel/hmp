@@ -124,7 +124,6 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
     as_time: bool = True,
     estimate_method: str = None,
     combined: bool = False,
-    group_plot: bool = False,
 ) -> plt.Axes:
     """
     Plot the event topographies at the average time of the onset of the next stage.
