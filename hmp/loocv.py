@@ -229,8 +229,8 @@ class LOOCV():
                     all_modelfits.append([modelfit[est_idx] for modelfit in modelfits])
         elif isinstance(modelfits[0], EliminativeMethod):
             all_modelfits = []
-            for est_idx in range(modelfits[0].max_events):
-                all_modelfits.append([modelfit.submodels[est_idx+1] for modelfit in modelfits])
+            for est_idx in range(modelfits[0].min_events, modelfits[0].max_events + 1):
+                all_modelfits.append([modelfit.submodels[est_idx] for modelfit in modelfits])
         elif isinstance(modelfits[0], CumulativeMethod):
             all_modelfits = [[modelfit.submodels[-1] for modelfit in modelfits]]
         elif isinstance(modelfits[0], EventModel):
