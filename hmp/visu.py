@@ -538,7 +538,7 @@ def plot_loocv(  # noqa # Refactor?
     # stats
     diffs, diff_bin, labels = [], [], []
     pvalues = []
-    for n_event in np.arange(2, loocv_estimates.n_event.max() + 1):
+    for n_event in np.arange(loocv_estimates.n_event.min() + 1, loocv_estimates.n_event.max() + 1):
         diffs.append(
             loocv_estimates.sel(n_event=n_event).data
             - loocv_estimates.sel(n_event=n_event - 1).data
@@ -561,8 +561,8 @@ def plot_loocv(  # noqa # Refactor?
         means = np.nanmean(loocv_estimates.data, axis=1)
         errs = (
             np.nanstd(loocv_estimates.data, axis=1) / np.sqrt(loocv_estimates.shape[1])
-        )[::-1]
-        ax[0].errorbar(x=np.arange(len(means)) + 1, y=means, yerr=errs, marker="o", color="k")
+        )
+        ax[0].errorbar(x=loocv_estimates.n_event, y=means, yerr=errs, marker="o", color="k")
     else:
         alpha = 1
         marker_indiv = "o"
@@ -588,8 +588,8 @@ def plot_loocv(  # noqa # Refactor?
     diffs[np.isinf(diffs)] = np.nan
 
     ax[1].plot(diffs, ".-", alpha=0.6)
-    ax[1].set_xticks(ticks=np.arange(0, loocv_estimates.n_event.max() - 1), labels=labels)
-    ax[1].hlines(0, 0, len(np.arange(2, loocv_estimates.n_event.max())), color="lightgrey", ls="--")
+    ax[1].set_xticks(ticks=np.arange(len(labels)), labels=labels)
+    ax[1].hlines(0, 0, len(labels) - 1, color="lightgrey", ls="--")
     ax[1].set_ylabel("Change in likelihood")
     ax[1].set_xlabel("")
 
@@ -598,15 +598,15 @@ def plot_loocv(  # noqa # Refactor?
         ymintext = ymin - (np.nanmax(diffs[:]) - ymin) * 0.05
         ymin = ymin - (np.nanmax(diffs[:]) - ymin) * 0.1
         ax[1].set_ylim(bottom=ymin)
-        for n_event in np.arange(2, loocv_estimates.n_event.max() + 1):
+        for i in range(len(labels)):
             ax[1].text(
-                x=n_event - 2,
+                x=i,
                 y=ymintext,
-                s=str(int(np.nansum(diff_bin[n_event - 2])))
+                s=str(int(np.nansum(diff_bin[i])))
                 + "/"
                 + str(len(diffs[-1]))
                 + ": "
-                + str(np.around(pvalues[n_event - 2][-1], 3)),
+                + str(np.around(pvalues[i][-1], 3)),
                 ha="center",
             )
 
