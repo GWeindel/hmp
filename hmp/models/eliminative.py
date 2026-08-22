@@ -186,19 +186,6 @@ class EliminativeMethod(BaseModel):
         return xr.concat([getattr(model, attr_name) for model in self.submodels.values()],
                          dim=pd.Index(list(self.submodels), name="n_events"))
 
-    def __getattribute__(self, attr):
-        property_list = {
-            "xrtraces": "get traces",
-            "xrlikelihoods": "get likelihoods",
-            "xrtime_pars_dev": "get dev time pars",
-            "xrchannel_pars": "get xrchannel_pars",
-            "xrtime_pars": "get xrtime_pars"
-        }
-        if attr in property_list:
-            self._check_fitted(property_list[attr])
-            return self._concatted_attr(attr)
-        return super().__getattribute__(attr)
-
     def get_event_model(self, n_events, starting_points):
         return EventModel(
             n_events=n_events,
