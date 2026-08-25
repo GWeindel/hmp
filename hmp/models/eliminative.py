@@ -36,7 +36,7 @@ class EliminativeMethod(BaseModel):
     min_events : int, optional
         The minimum number of events to be estimated. Defaults to 1.
     base_fit : EventModel, optional
-        To start the elimination from a specfic model this argument can
+        To start the elimination from a specific model this argument can
         be provided with a fitted EventModel. Defaults to None.
     tolerance : float, optional
         Tolerance for the expectation maximization algorithm. Defaults to 1e-4.
@@ -73,12 +73,13 @@ class EliminativeMethod(BaseModel):
         self,
         data: PatternData | BaseData | xr.DataArray,
         cpus: int = 1,
+        verbose: bool = True
     ) -> None:
         """Perform the eliminative estimation.
 
-        First, read or estimate the max_event solution, then estimate the max_event - 1 solution
-        by iteratively removing one of the events and picking the one with the highest
-        log-likelihood.
+        First, read or estimate the max_event solution, then estimate the
+        max_event - 1 solution by iteratively removing one of the events
+        and picking the one with the highest log-likelihood.
 
         Parameters
         ----------
@@ -99,13 +100,14 @@ class EliminativeMethod(BaseModel):
             max_events = self._compute_max_events(pattern_data, self.location)
         else:
             max_events = self.max_events
-        print(max_events)
+
         min_events = self.min_events
 
         if not self.base_fit:
-            print(
-                f"Estimating all solutions for maximal number of events ({max_events})"
-            )
+            if verbose:
+                print(
+                    f"Estimating all solutions for maximal number of events ({max_events})"
+                )
             base_fit = self.get_event_model(n_events=max_events, starting_points=1)
             base_fit.fit(pattern_data, verbose=False, cpus=cpus)
         else:
@@ -116,7 +118,8 @@ class EliminativeMethod(BaseModel):
         for n_events in np.arange(max_events - 1, min_events-1, -1):
             event_model = self.get_event_model(n_events, starting_points=n_events+1)
 
-            print(f"Estimating all solutions for {n_events} events")
+            if verbose:
+                print(f"Estimating all solutions for {n_events} events")
 
             time_pars_prev = self.submodels[n_events+1].xrtime_pars.dropna("stage").values
             channel_pars_prev = self.submodels[n_events+1].xrchannel_pars.dropna("event").values
@@ -182,19 +185,6 @@ class EliminativeMethod(BaseModel):
     def _concatted_attr(self, attr_name):
         return xr.concat([getattr(model, attr_name) for model in self.submodels.values()],
                          dim=pd.Index(list(self.submodels), name="n_events"))
-
-    def __getattribute__(self, attr):
-        property_list = {
-            "xrtraces": "get traces",
-            "xrlikelihoods": "get likelihoods",
-            "xrtime_pars_dev": "get dev time pars",
-            "xrchannel_pars": "get xrchannel_pars",
-            "xrtime_pars": "get xrtime_pars"
-        }
-        if attr in property_list:
-            self._check_fitted(property_list[attr])
-            return self._concatted_attr(attr)
-        return super().__getattribute__(attr)
 
     def get_event_model(self, n_events, starting_points):
         return EventModel(

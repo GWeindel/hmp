@@ -8,6 +8,7 @@ from . import (
     distributions,
     estimators,
     io,
+    loocv,
     models,
     patterndata,
     patterns,
@@ -22,6 +23,7 @@ except PackageNotFoundError:
     __version__ = "unknown"
 
 
-__all__ = ["models", "simulations", "utils", "visu", "io", "patterns", "projectors",
-           "patterndata", "basedata", "distributions" ,"crossvalidation", "estimators",
+__all__ = ["basedata", "patterndata", "projectors", "loocv", "models",
+           "simulations", "utils", "visu", "io", "patterns",
+           "distributions" ,"crossvalidation", "estimators",
            "__version__"]

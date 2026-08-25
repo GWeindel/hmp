@@ -210,8 +210,10 @@ class BaseData:
             bdata = deepcopy(self)
         else:
             bdata = self
+        dim_order = bdata.data.dims
         bdata.data = (_sel_method(bdata.data.unstack(), value, variable, method)
             .stack(trial=["recording", "epoch"]).dropna(dim="trial", how="all"))
+        bdata.data = bdata.data.transpose(*dim_order)
         return bdata
 
     def _apply_variance_ops(self):

@@ -20,7 +20,8 @@ unit_map = {
     'FIFF_UNIT_V_M2': "V/m²",
 }
 
-def plot_model(epoch_data, estimates, channel_position, *args, **kwargs):
+def plot_model( #noqa PLR0912
+    epoch_data, estimates, channel_position, *args, **kwargs):
     """
     Plot model results.
 
@@ -32,16 +33,27 @@ def plot_model(epoch_data, estimates, channel_position, *args, **kwargs):
     ----------
     epoch_data : xr.DataArray
         The original EEG data in HMP format.
-    estimates : xr.DataArray
-        The result from a fitted HMP model.
+    estimates : xr.DataArray | list
+        The estimates from a fitted and transformed HMP model, or a list (or list of lists)
+        of estimates
     channel_position : np.ndarray
         Either a 2D array with dimensions (channel, [x, y]) storing channel
         locations in meters or an MNE info object containing digit points for channel locations.
     *args and **kwargs: arguments for plot_topo_time_course
     """
-    if estimates.ndim == 3: #EventModels, including group
+    if isinstance(estimates, list):
+        if isinstance(estimates[0], list):
+            newlist = []
+            for estimate_list in estimates:
+                for estimate in estimate_list:
+                    newlist.append(estimate)
+            estimates = newlist
+        if len(estimates) == 1:
+            estimates = estimates[0]
+
+    if not isinstance(estimates, list) and estimates.ndim == 3: #EventModels, including group
         ax = plot_topo_timecourse(epoch_data, estimates, channel_position, *args, **kwargs)
-    elif estimates.ndim == 4: #Eliminative or other 4-dim structure
+    elif isinstance(estimates, list) or estimates.ndim == 4: #Eliminative or other 4-dim structure
         estimates = estimates.copy()
         estimate_method = kwargs['estimate_method'] if 'estimate_method' in kwargs else None
         vmax = kwargs['vmax'] if 'vmax' in kwargs else None
@@ -69,14 +81,23 @@ def plot_model(epoch_data, estimates, channel_position, *args, **kwargs):
                 vmax = np.max((np.nanmax(np.abs(channel_data[:])),vmax))
                 vmin = -vmax
 
-        fig, axes = plt.subplots(len(estimates.n_events), 1, \
-            figsize=(8, len(estimates.n_events)), sharex=True)
-        for ax, n_event in zip(axes, estimates.n_events):
-            cbar = True if n_event ==  estimates.n_events[-1] else False
-            hmp.visu.plot_topo_timecourse(epoch_data, estimates.sel(n_events=n_event), \
-                channel_position, *args, ax = ax, vmax=vmax, vmin=vmin, \
-                colorbar=cbar, **kwargs)
-            ax.set_ylabel(f"N = {n_event.values}")
+        nr_plots = len(estimates) #len(estimates.n_events)
+        fig, axes = plt.subplots(nr_plots, 1,
+            figsize=(8, nr_plots), sharex=True)
+
+        if not isinstance(estimates,list):
+            for ax, n_event in zip(axes, estimates.n_events):
+                cbar = True if n_event ==  estimates.n_events[-1] else False
+                hmp.visu.plot_topo_timecourse(epoch_data, estimates.sel(n_events=n_event), \
+                    channel_position, *args, ax = ax, vmax=vmax, vmin=vmin, \
+                    colorbar=cbar, **kwargs)
+                ax.set_ylabel(f"N = {n_event.values}")
+        else:
+            for ax, estimate_idx in zip(axes, range(len(estimates))):
+                cbar = True if estimate_idx ==  len(estimates)-1 else False
+                hmp.visu.plot_topo_timecourse(epoch_data, estimates[estimate_idx], \
+                    channel_position, *args, ax = ax, vmax=vmax, vmin=vmin, \
+                    colorbar=cbar, **kwargs)
         plt.tight_layout()
 
 def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
@@ -519,7 +540,7 @@ def plot_loocv(  # noqa # Refactor?
     # stats
     diffs, diff_bin, labels = [], [], []
     pvalues = []
-    for n_event in np.arange(2, loocv_estimates.n_event.max() + 1):
+    for n_event in np.arange(loocv_estimates.n_event.min() + 1, loocv_estimates.n_event.max() + 1):
         diffs.append(
             loocv_estimates.sel(n_event=n_event).data
             - loocv_estimates.sel(n_event=n_event - 1).data
@@ -539,11 +560,11 @@ def plot_loocv(  # noqa # Refactor?
     if mean:
         alpha = 0.4  # for the indiv plot
         marker_indiv = "."
-        means = np.nanmean(loocv_estimates.data, axis=1)[::-1]
+        means = np.nanmean(loocv_estimates.data, axis=1)
         errs = (
-            np.nanstd(loocv_estimates.data, axis=1) / np.sqrt(len(loocv_estimates.recording))
-        )[::-1]
-        ax[0].errorbar(x=np.arange(len(means)) + 1, y=means, yerr=errs, marker="o", color="k")
+            np.nanstd(loocv_estimates.data, axis=1) / np.sqrt(loocv_estimates.shape[1])
+        )
+        ax[0].errorbar(x=loocv_estimates.n_event, y=means, yerr=errs, marker="o", color="k")
     else:
         alpha = 1
         marker_indiv = "o"
@@ -569,8 +590,8 @@ def plot_loocv(  # noqa # Refactor?
     diffs[np.isinf(diffs)] = np.nan
 
     ax[1].plot(diffs, ".-", alpha=0.6)
-    ax[1].set_xticks(ticks=np.arange(0, loocv_estimates.n_event.max() - 1), labels=labels)
-    ax[1].hlines(0, 0, len(np.arange(2, loocv_estimates.n_event.max())), color="lightgrey", ls="--")
+    ax[1].set_xticks(ticks=np.arange(len(labels)), labels=labels)
+    ax[1].hlines(0, 0, len(labels) - 1, color="lightgrey", ls="--")
     ax[1].set_ylabel("Change in likelihood")
     ax[1].set_xlabel("")
 
@@ -579,15 +600,15 @@ def plot_loocv(  # noqa # Refactor?
         ymintext = ymin - (np.nanmax(diffs[:]) - ymin) * 0.05
         ymin = ymin - (np.nanmax(diffs[:]) - ymin) * 0.1
         ax[1].set_ylim(bottom=ymin)
-        for n_event in np.arange(2, loocv_estimates.n_event.max() + 1):
+        for i in range(len(labels)):
             ax[1].text(
-                x=n_event - 2,
+                x=i,
                 y=ymintext,
-                s=str(int(np.nansum(diff_bin[n_event - 2])))
+                s=str(int(np.nansum(diff_bin[i])))
                 + "/"
                 + str(len(diffs[-1]))
                 + ": "
-                + str(np.around(pvalues[n_event - 2][-1], 3)),
+                + str(np.around(pvalues[i][-1], 3)),
                 ha="center",
             )
 

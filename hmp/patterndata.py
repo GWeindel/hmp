@@ -1,4 +1,5 @@
 """Builds the data to be used in HMP model estimation."""
+import copy
 from dataclasses import dataclass
 from warnings import warn
 
@@ -46,7 +47,7 @@ class PatternData:
                     pattern: Pattern | None = None,
                     dtype: DTypeLike | None = None):
         """
-        Create a TrialData instance from preprocessed data and a given pattern.
+        Create a PatternData instance from preprocessed data and a given pattern.
 
         Parameters
         ----------
@@ -188,3 +189,20 @@ def cross_correlation(
 
     crossc = crossc[~np.isnan(crossc[:,0])]
     return crossc, durations
+  
+def get_subset(pattern_data: PatternData, variable: str, values):
+    """Get subset of values of variable."""
+    pattern_data = copy.deepcopy(pattern_data)
+    to_remove = ~np.isin(pattern_data.durations[variable].values, values)
+    to_remove_starts = pattern_data.starts[to_remove]
+    to_remove_ends = pattern_data.ends[to_remove]
+
+    for start, end in zip(to_remove_starts, to_remove_ends):
+        pattern_data.cross_corr[start:end+1,:] = np.nan
+    pattern_data.cross_corr = pattern_data.cross_corr[~np.isnan(pattern_data.cross_corr[:,0]),:]
+    pattern_data.durations = pattern_data.durations.sel(trial=~to_remove)
+    pattern_data.starts = np.roll(np.cumsum(pattern_data.durations),1)
+    pattern_data.starts[0] = 0
+    pattern_data.ends = np.cumsum(pattern_data.durations).data - 1
+
+    return pattern_data
