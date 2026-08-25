@@ -225,6 +225,8 @@ def plot_topo_timecourse(  # noqa  # Might need some serious refactoring.
     n_group = len(np.unique(group))
     if n_group > 1:
         group_plot = True
+    else:
+        group_plot = False
 
     # reverse order, to make correspond to group maps
     channel_data = np.flip(channel_data, axis=1)
