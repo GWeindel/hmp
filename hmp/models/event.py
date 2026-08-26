@@ -458,7 +458,7 @@ class EventModel(BaseModel):
             An xarray DataArray with dimensions ("em_iteration", "group") containing
             the log-likelihood traces.
         """
-        self._check_fitted("get traces")
+        self._check_iterative("get traces", "traces_group")
         return xr.DataArray(
             self.traces_group,
             dims=("em_iteration", "group"),
@@ -493,7 +493,7 @@ class EventModel(BaseModel):
             An xarray DataArray with dimensions ("em_iteration", "group", "stage", "time_pars")
             containing the time parameter deviations.
         """
-        self._check_fitted("get dev time pars")
+        self._check_iterative("get dev time pars", "time_pars_dev")
         return xr.DataArray(
             self.time_pars_dev,
             dims=("em_iteration", "group", "stage", "time_pars"),
@@ -575,19 +575,23 @@ class EventModel(BaseModel):
         time_pars : np.ndarray
             A 2D array of shape (n_stages, 2) with the estimated time parameters (shape and scale).
         """
+        channel_pars = np.zeros((eventprobs.shape[2], self.n_dims))
         # Channel contribution from Expectation, Eq 11 from 2024 paper
-        max_dur = int(np.max(pattern_data.durations.values[subset_epochs]))
-        # padded (n_sub, max_dur, n_dims) data for this subset, sized like eventprobs
-        data = np.zeros(
-            (len(subset_epochs), max_dur, self.n_dims), dtype=pattern_data.cross_corr.dtype
-        )
-        for trial_idx, trial in enumerate(subset_epochs):
-            start, end = pattern_data.starts[trial], pattern_data.ends[trial]
-            data[trial_idx, : end - start + 1, :] = pattern_data.cross_corr[start : end + 1, :]
-
-        ep = eventprobs[subset_epochs]  # (n_sub, max_dur, n_events)
-        # mean over trials of sum over samples: (n_events, n_dims)
-        channel_pars = np.einsum("tse,tsc->ec", ep, data).astype(np.float64) / len(subset_epochs)
+        for event in range(eventprobs.shape[2]):
+            for comp in range(self.n_dims):
+                event_data = np.zeros((len(subset_epochs),
+                                       np.max(pattern_data.durations.values[subset_epochs])))
+                for trial_idx, trial in enumerate(subset_epochs):
+                    start, end = pattern_data.starts[trial], pattern_data.ends[trial]
+                    duration = end - start + 1
+                    event_data[trial_idx, :duration] =\
+                        pattern_data.cross_corr[start : end + 1, comp]
+                channel_pars[event, comp] = np.mean(
+                    np.sum(eventprobs[subset_epochs, :, event] * event_data, axis=1)
+                )
+            # scale cross-correlation with likelihood of the transition
+            # sum by-trial these scaled activation for each transition events
+            # average across trial
 
         # Time parameters from Expectation Eq 10 from 2024 paper
         # calc averagepos here as mean_d can be group dependent, whereas scale_parameters() assumes
@@ -621,8 +625,9 @@ class EventModel(BaseModel):
         np.ndarray
             A 2D array where each row contains the shape and scale parameters for a stage.
         """
-        rnd_durations = np.zeros(n_events + 1)
-        while any(rnd_durations < max(self._time_to_samples(self.locations, sfreq))):
+        # at least one sample: a zero-length stage has a zero scale
+        minimum_duration = max(1, *self._time_to_samples(self.locations, sfreq))
+        while True:
             rnd_events = np.random.default_rng().integers(
                 low=0, high=self.max_duration, size=n_events
             )  # n_events between 0 and mean_d
@@ -630,6 +635,8 @@ class EventModel(BaseModel):
             rnd_durations = np.hstack((rnd_events, self.max_duration)) - np.hstack(
                 (0, rnd_events)
             )  # associated durations
+            if not any(rnd_durations < minimum_duration):
+                break
         random_stages = np.array(
             [[self.distribution.shape, self.distribution.mean_to_scale(x)] for x in rnd_durations]
         )
@@ -666,8 +673,8 @@ class EventModel(BaseModel):
         channel_pars: np.ndarray,
         time_pars: np.ndarray,
         subset_epochs: list[int] | None = None,
-        max_duration: int | None = None,
-    ) -> tuple[float, np.ndarray, np.ndarray]:
+        intermediates: dict | None = None,
+    ) -> tuple[float, np.ndarray]:
         """
         Estimate probabilities for events and compute the log-likelihood.
 
@@ -686,6 +693,10 @@ class EventModel(BaseModel):
         subset_epochs : list[int] or None, optional
             A list of trial indices to consider for the computation. If None, all trials
             are used. Default is None.
+        intermediates : dict or None, optional
+            If given, is filled with the internal arrays of the forward-backward pass.
+            Only intended for checking a reimplementation of this function stage by
+            stage, and has no effect on the returned values.
 
         Returns
         -------
@@ -779,12 +790,22 @@ class EventModel(BaseModel):
         backward = backward[:, :, ::-1]  # undoes stage inversion
         for trial in np.arange(n_trials):  # Undoes sample inversion
             backward[: durations[trial], trial, :] = backward[: durations[trial], trial, :][::-1]
-        eventprobs = forward * backward
-        eventprobs = np.clip(eventprobs, 0, None)  # floating point precision error
+        eventprobs_raw = forward * backward
+        eventprobs = np.clip(eventprobs_raw, 0, None)  # floating point precision error
         trial_likelihood = np.log(
             eventprobs[:, :, 0].sum(axis=0)
         )  # sum over max_samples to avoid 0s in log
         likelihood = np.sum(trial_likelihood)
+
+        if intermediates is not None:
+            intermediates.update(
+                gains=gains, probs=probs, probs_b=probs_b, pmf=pmf, pmf_b=pmf_b,
+                forward=forward, backward=backward, eventprobs_unnormalised=eventprobs,
+                trial_likelihood=trial_likelihood, likelihood=likelihood,
+                durations=durations, max_duration=max_duration,
+                locations_samples=locations_samples,
+                n_clipped=int(np.sum(eventprobs_raw < 0)),
+            )
         eventprobs = eventprobs / eventprobs.sum(axis=0)
         eventprobs[np.isnan(eventprobs)] = 0
         eventprobs = eventprobs.transpose((1, 0, 2))

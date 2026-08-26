@@ -8,7 +8,12 @@ import xarray as xr
 
 from hmp.basedata import BaseData
 from hmp.crossvalidation import pseudo_kfold
-from hmp.models.base import BaseModel
+from hmp.models.base import (
+    BaseModel,
+    fit_likelihoods,
+    max_explored_scale,
+    select_by_loo,
+)
 from hmp.models.event import EventModel
 from hmp.patterndata import PatternData
 from hmp.patterns import Pattern
@@ -50,6 +55,10 @@ class CumulativeMethod(BaseModel):
     fastforward : bool, optional
         If True when proposal got rejected, start again with the furthest time point explored
         with previous proposition.
+    estimator : BaseEstimator, optional
+        Estimator used for every submodel. Given here rather than to ``fit``
+        because the search fits many submodels. Defaults to expectation
+        maximization.
     tolerance : float, optional
         The tolerance used for convergence in the EM() function for the cumulative step.
         Defaults to 1e-4.
@@ -64,7 +73,7 @@ class CumulativeMethod(BaseModel):
         one of 'gamma','lognormal','wald', or 'weibull'
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913, PLR0917
         self,
         pattern: Pattern = None,
         location: float = None,
@@ -73,6 +82,7 @@ class CumulativeMethod(BaseModel):
         sequential: bool = True,
         fastforward: bool = True,
         tolerance: float = 1e-4,
+        estimator=None,
         base_fit: EventModel | None = None,
         max_events: int | None = None,
         distribution: Any = None
@@ -86,6 +96,7 @@ class CumulativeMethod(BaseModel):
         self.sequential = sequential
         self.fastforward = fastforward
         self.tolerance = tolerance
+        self.estimator = estimator
         self.base_fit = base_fit
         self.max_events = max_events
         self.submodels = []
@@ -214,12 +225,37 @@ class CumulativeMethod(BaseModel):
                 channel_pars=channel_pars[:n_events, :],
                 time_pars=time_pars[: n_events + 1, :],
                 verbose=False,
-                cpus=cpus
+                cpus=cpus,
+                estimator=self.estimator,
             )
             self.submodels.append(event_model)
         else:
             warn("Failed to find more than two stages, returning None")
             self._fitted = False
+
+    def select(self, threshold: float = 2.0):
+        """Choose among the models kept on the way up, by out-of-sample density.
+
+        The walk stops when the likelihood stops improving by more than a
+        tolerance, which is a judgement about the data the model was fitted to.
+        This asks the same question of data it was not.
+
+        Parameters
+        ----------
+        threshold : float, optional
+            How many standard errors of the difference a larger model has to be
+            better by to be worth keeping. Default is 2.
+
+        Returns
+        -------
+        n_events : int
+            Number of events in the chosen model.
+        comparison : pandas.DataFrame
+            The comparison across the models kept.
+        """
+        self._check_fitted("select a submodel")
+        ladder = {model.n_events: model for model in self.submodels}
+        return select_by_loo(ladder, threshold=threshold)
 
     def transform(self, *args, **kwargs):
         """
@@ -259,14 +295,13 @@ class CumulativeMethod(BaseModel):
                 channel_pars_props,
                 time_pars_props,
                 verbose=False,
-                cpus=cpus
+                cpus=cpus,
+                estimator=self.estimator,
             )
             channel_pars_res = event_model.channel_pars
             time_pars_res = event_model.time_pars
-            llk = event_model.lkhs
-            max_scale = np.max(
-                [np.sum(x[0, :n_events-1, 1]) for x in event_model.time_pars_dev]
-            )
+            llk = fit_likelihoods(event_model)
+            max_scale = max_explored_scale(event_model, n_events)
         return channel_pars_res, time_pars_res, llk, max_scale
 
     def _propose_fit_params(self, n_events, j, channel_pars, time_pars):
@@ -347,11 +382,10 @@ class CumulativeMethod(BaseModel):
             channel_pars_props,
             time_pars_props,
             verbose=False,
-            cpus=cpus
+            cpus=1,
+            estimator=self.estimator,
         )
 
         llk = event_model.transform(test_td)[0]
-        max_scale = np.max(
-                    [np.sum(x[0, :n_events-1, 1]) for x in event_model.time_pars_dev]
-                )
+        max_scale = max_explored_scale(event_model, n_events)
         return llk, event_model.channel_pars, event_model.time_pars, max_scale

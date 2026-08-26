@@ -381,5 +381,61 @@ class TestParallelExecution:
         assert np.array_equal(serial.channel_pars, parallel.channel_pars)
 
 
+class TestSearchStrategyEstimator:
+    """The search strategies take an estimator and have to pass it on.
+
+    They fit many submodels, so the estimator arrives in the constructor rather
+    than in ``fit``. Nothing exercised that, which left the passthrough free to
+    be deleted without a test noticing.
+    """
+
+    @pytest.mark.parametrize("cls_name", ["CumulativeMethod", "EliminativeMethod"])
+    def test_estimator_reaches_every_submodel(self, pdata, cls_name):
+        from hmp.models import CumulativeMethod, EliminativeMethod
+
+        pdata_b, n_events = pdata
+        cls = {"CumulativeMethod": CumulativeMethod,
+               "EliminativeMethod": EliminativeMethod}[cls_name]
+        mock = MockEstimator()
+        kwargs = {"estimator": mock}
+        if cls is EliminativeMethod:
+            kwargs.update(max_events=n_events, min_events=max(1, n_events - 1))
+        method = cls(**kwargs)
+        method.fit(pdata_b)
+
+        assert mock.fit_called, f"{cls_name} did not use the estimator it was given"
+
+    def test_default_estimator_is_em(self, pdata):
+        """Omitting it must still fit, so the passthrough cannot become required."""
+        from hmp.models import CumulativeMethod
+
+        pdata_b, _ = pdata
+        method = CumulativeMethod()
+        method.fit(pdata_b, verbose=False)
+        assert method.submodels
+
+
+class TestRandomStartingPoints:
+    """`gen_random_stages` has to return usable stages for any event count.
+
+    Testing the duration condition before drawing left every duration at zero
+    whenever all locations are zero, which is the case for a single event, and a
+    zero-length stage has no usable scale.
+    """
+
+    @pytest.mark.parametrize("n_events", [1, 2, 5])
+    def test_stages_are_positive(self, pdata, n_events):
+        pdata_b, _ = pdata
+        model = EventModel(n_events=n_events)
+        model.max_duration = int(pdata_b.durations.max())
+        stages = model.gen_random_stages(n_events, pdata_b.sfreq)
+
+        assert stages.shape == (n_events + 1, 2)
+        assert (stages[:, 1] > 0).all(), "a zero scale is not a usable parameter"
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])
+
 if __name__ == "__main__":
     pytest.main([__file__])
