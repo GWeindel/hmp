@@ -89,3 +89,41 @@ def test_basic_operations(sfreq, width):
             'Incorrect topo calculation from estimates'
         assert model._compute_max_events(trial_data, location=width) == 3, \
             'Incorrect max event calculation'
+
+    if (sfreq, width) == (100, 50):
+        starts = trial_data.starts
+        ends = trial_data.ends
+        durations = ends - starts + 1
+        max_duration = np.max(durations)
+
+        # Compute pmf with locations enforced as called by model during estim_probs:
+        pmf = model.location_pdf(model.time_pars[0],
+                                max_duration,
+                                model.n_events+1,
+                                trial_data.sfreq,
+                                trial_data.cross_corr.dtype)
+
+        # Compute pmf for intervals 1 and 2 manually and extract the fifth density
+        # which should be set to zero by `location_pdf` for a location of five but is not!
+        pmf1 = model.distribution.pdf(np.arange(max_duration),
+                                    model.time_pars[0][1,0],
+                                    scale=model.time_pars[0][1,1])
+        pmf1 /= np.sum(pmf1)
+        m14 = pmf1[4]
+        pmf2 = model.distribution.pdf(np.arange(max_duration),
+                                    model.time_pars[0][2,0],
+                                    scale=model.time_pars[0][2,1])
+        pmf2 /= np.sum(pmf2)
+        m24 = pmf2[4]
+
+        # Assert that default location is [0,5,5,0]
+        locations_samples = model._time_to_samples(model.locations, sfreq)
+        assert np.all(locations_samples == [0,5,5,0])
+
+        # These two succeed but should fail
+        assert np.all(pmf[:5,1] == np.array([0, 0, 0, 0, m14],dtype=pmf.dtype))
+        assert np.all(pmf[:5,2] == np.array([0, 0, 0, 0, m24],dtype=pmf.dtype))
+
+        # These two fail but should succeed
+        assert np.all(pmf[:5,1] == [0 for _ in range(locations_samples[1])])
+        assert np.all(pmf[:5,2] == [0 for _ in range(locations_samples[2])])

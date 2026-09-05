@@ -736,18 +736,7 @@ class EventModel(BaseModel):
             # fwd and bwd in the same way in the following steps
             probs_b[: durations[trial], trial, :] = probs[: durations[trial], trial, :][::-1, ::-1]
 
-        pmf = np.zeros([max_duration, n_stages], dtype=dtype)  # Gamma pmf for each stage scale
-        locations_samples = self._time_to_samples(self.locations, pattern_data.sfreq)
-        locations_samples[1:-1] -= self.distribution.shift
-        for stage in range(n_stages):
-            pmf[:, stage] = np.concatenate(
-                (
-                    np.repeat(0, locations_samples[stage]),
-                    self.distribution_pdf(time_pars[stage, 0], time_pars[stage, 1], max_duration)[
-                        locations_samples[stage] :
-                    ],
-                )
-            )
+        pmf = self.location_pdf(time_pars, max_duration, n_stages, pattern_data.sfreq, dtype)
         pmf_b = pmf[:, ::-1]  # Stage reversed gamma pmf, same order as prob_b
 
         forward = np.zeros((max_duration, n_trials, n_events), dtype=dtype)
@@ -968,6 +957,46 @@ class EventModel(BaseModel):
         all_xreventprobs.attrs["group_labels"] = self.group_labels
 
         return [likelihood.sum(), all_xreventprobs]
+
+    def location_pdf(
+        self, time_pars: np.ndarray, max_duration: int, n_stages: int, sfreq: float, dtype: Any
+    ) -> np.ndarray:
+        """
+        Compute pmf with locations enforced.
+
+        Parameters
+        ----------
+        time_pars : np.ndarray
+            A 2D array of shape (n_stages, n_parameters) containing current estimates for
+            the distribution parameters.
+        max_duration: int
+            The maximum trial length (in samples).
+        n_stages: int
+            The number of intervals (number of events + 1).
+        sfreq: float
+            The sampling frequency of the data.
+        dtype: Any
+            The desired ``dtype`` of the return array
+
+        Returns
+        -------
+        pmf : np.ndarray
+            The probability mass function of dimension (max_duration, n_stages) censored
+            appropriately based on the location parameter specified for the model.
+        """
+        pmf = np.zeros([max_duration, n_stages], dtype=dtype)  # Gamma pmf for each stage scale
+        locations_samples = self._time_to_samples(self.locations, sfreq)
+        locations_samples[1:-1] -= self.distribution.shift
+        for stage in range(n_stages):
+            pmf[:, stage] = np.concatenate(
+                (
+                    np.repeat(0, locations_samples[stage]),
+                    self.distribution_pdf(time_pars[stage, 0], time_pars[stage, 1], max_duration)[
+                        locations_samples[stage] :
+                    ],
+                )
+            )
+        return pmf
 
     def distribution_pdf(self, shape: float, scale: float, max_duration: int) -> np.ndarray:
         """
