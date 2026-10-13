@@ -124,7 +124,7 @@ class LOOCV():
                         print("procedure and is relatively quick.")
 
                 if self.model_class == CumulativeMethod:
-                    if verbose and quick:
+                    if verbose:
                         print("NB: quick estimation is not possible with CumulativeMethod")
                         print("    Continuing slowly.")
                     self.quick = False
