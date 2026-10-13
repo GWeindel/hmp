@@ -56,9 +56,9 @@ class LOOCV():
     function_kwargs : dict, optional
         additional arguments to pass on to self-defined function.
         Default = None.
-    quick : bool, optional
-        Toggle for quick LOOCV using parameters of fitted model.
-        Typically incorrect, see info message. Requires fitted model.
+    informed : bool, optional
+        Toggle for informed LOOCV using parameters of fitted model. This incduces leak across folds
+        and thus an incorrect LOOCV, see info message. Requires fitted model.
         Not possible for function or CumulativeMethods, as params
         cannot be provided (unless through function_params).
         Default = False.
@@ -79,7 +79,7 @@ class LOOCV():
     verbose: bool, optional
         Default = True
     print_warning : bool, optional
-        print warning when using 'quick' LOOCV the loocv 'incorrectness' warning
+        print warning when using 'informed' LOOCV the loocv 'incorrectness' warning
     """
 
     def __init__( #noqa PLR0912
@@ -87,7 +87,7 @@ class LOOCV():
         model: BaseModel | Callable,
         dimension: str = 'subject',
         function_kwargs: dict = None,
-        quick: bool = False,
+        informed: bool = False,
         pattern: Pattern = None,
         pca_cv: bool = False,
         pca_kwargs : dict = None,
@@ -97,7 +97,7 @@ class LOOCV():
         self.model = model
         self.dimension = dimension
         self.function_kwargs = function_kwargs
-        self.quick = quick
+        self.informed = informed
         self.pca_cv = pca_cv
         self.pca_kwargs = pca_kwargs
 
@@ -105,36 +105,36 @@ class LOOCV():
         if isinstance(model, BaseModel):
             self.model_class = type(model)
 
-            if quick:
+            if informed:
                 assert self.model._fitted, \
-                    "For quick estimation, a fitted HMP model is required, but not provided."
+                    "For informed estimation, a fitted HMP model is required, but not provided."
 
                 if verbose:
                     if print_warning:
                         print()
-                        print("IMPORTANT: 'quick' set to true, requesting a fast LOOCV procedure.")
+                        print("IMPORTANT: 'informed' set to true, requesting a fast LOOCV procedure.")
                         print()
-                        print("Note that the quick procedure is typically incorrect in the sense")
+                        print("Note that the informed procedure is typically incorrect in the sense")
                         print("that an initial model fit is used to inform both the fit of the")
                         print("left-out participant and the other participants.")
                         print()
                         print("This means that the fits are not independent, unless the initial")
                         print("model fit is based on the literature or another task. However, it")
                         print("typically provides a good initial model fit of the correct LOOCV")
-                        print("procedure and is relatively quick.")
+                        print("procedure and is relatively informed.")
 
                 if self.model_class == CumulativeMethod:
-                    if verbose:
-                        print("NB: quick estimation is not possible with CumulativeMethod")
+                    if verbose and informed:
+                        print("NB: informed estimation is not possible with CumulativeMethod")
                         print("    Continuing slowly.")
-                    self.quick = False
+                    self.informed = False
 
         #assume it's a function that will return a fitted hmp model
         elif inspect.isfunction(model):
-            if verbose and quick:
-                print("NB: quick estimation is not possible in combination with a function.")
+            if verbose and informed:
+                print("NB: informed estimation is not possible in combination with a function.")
                 print("    Continuing slowly.")
-            self.quick = False
+            self.informed = False
             self.model_class = "function"
 
         if pattern is None: #no pattern given
@@ -214,7 +214,7 @@ class LOOCV():
         # each item of all_modelfits will contain one modelfit for each subject.
         # So for eliminative, all_modelfits[0] will have all n-stage subject
         # models.
-        if isinstance(modelfits[0], list): #from a function or quick elim
+        if isinstance(modelfits[0], list): #from a function or informed elim
             all_modelfits = []
             for est_idx in range(len(modelfits[0])):
                 #each modelfit can also be eliminative or cumulative
@@ -255,7 +255,8 @@ class LOOCV():
         if len(all_modelfits) == 1:
             all_modelfits = all_modelfits[0]
 
-        return all_likelihoods, all_modelfits
+        #average_modelfit = get_average_modelfit_eventprobs(data, all_modelfits)
+        return all_likelihoods, all_modelfits #, average_modelfit, average_eventprobs
 
 
     def loocv_modelfit( #noqa PLR0912
@@ -301,7 +302,7 @@ class LOOCV():
         # Fit model on data
         if self.model_class == "function":
             fitted_model = self.model(data, **self.function_kwargs)
-        elif not self.quick: #same for Event and Eliminative
+        elif not self.informed: #same for Event and Eliminative
             fitted_model = copy.deepcopy(self.model)
             fitted_model.fit(data=data, cpus=cpus_model, verbose= False)
         elif self.model_class == hmp.models.EventModel: #use prev params
@@ -327,9 +328,9 @@ class LOOCV():
             elif isinstance(fitted_model, hmp.models.EliminativeMethod):
                 for est_idx in range(fitted_model.max_events):
                     fitted_model.submodels[est_idx+1].pca_weights = data.projector.weights
-            elif isinstance(fitted_model, list): #from a function or quick elim
+            elif isinstance(fitted_model, list): #from a function or informed elim
                 for est_idx in range(len(fitted_model)):
-                    #each fitted model can also be eliminative or cumulative
+                    #each fitte can also be eliminative or cumulative
                     if isinstance(fitted_model[est_idx], hmp.models.EliminativeMethod):
                         for est_idx2 in range(fitted_model[est_idx].max_events):
                             fitted_model[est_idx].submodels[est_idx2+1].pca_weights =\
@@ -491,7 +492,7 @@ class LOOCV():
             likelihoods.attrs['n_events'] = np.array([modelfit.n_events for modelfit in modelfits])
             if not np.all(likelihoods.n_events==likelihoods.n_events[0]):
                 likelihoods['n_event'] = 'variable'
-            likelihoods.attrs['quick'] = self.quick
+            likelihoods.attrs['informed'] = self.informed
 
             modelfits_xr = likelihoods.copy()
             modelfits_xr.data = np.expand_dims(np.array(modelfits), axis=0)
