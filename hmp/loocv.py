@@ -88,7 +88,7 @@ class LOOCV():
         function_kwargs: dict = None,
         informed: bool = False,
         pattern: Pattern = None,
-        pca_cv: bool = False,
+        pca_cv: bool = True,
         pca_kwargs : dict = None,
         verbose: bool = True,
     ):
@@ -111,7 +111,6 @@ class LOOCV():
                     """
                     'informed=True' requests a fast approximate LOOCV procedure.
                     
-                    WARNING:
                     The informed procedure is generally not a statistically valid LOOCV
                     implementation because an initial model fit is used to inform both the
                     left-out participant and the remaining participants.
