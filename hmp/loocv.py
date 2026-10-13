@@ -11,6 +11,7 @@ import copy
 import inspect
 import itertools
 import multiprocessing as mp
+from warnings import warn
 from collections.abc import Callable
 
 import numpy as np
@@ -78,8 +79,6 @@ class LOOCV():
         Default = None.
     verbose: bool, optional
         Default = True
-    print_warning : bool, optional
-        print warning when using 'informed' LOOCV the loocv 'incorrectness' warning
     """
 
     def __init__( #noqa PLR0912
@@ -92,7 +91,6 @@ class LOOCV():
         pca_cv: bool = False,
         pca_kwargs : dict = None,
         verbose: bool = True,
-        print_warning: bool = True
     ):
         self.model = model
         self.dimension = dimension
@@ -109,31 +107,49 @@ class LOOCV():
                 assert self.model._fitted, \
                     "For informed estimation, a fitted HMP model is required, but not provided."
 
-                if verbose:
-                    if print_warning:
-                        print()
-                        print("IMPORTANT: 'informed' set to true, requesting a fast LOOCV procedure.")
-                        print()
-                        print("Note that the informed procedure is typically incorrect in the sense")
-                        print("that an initial model fit is used to inform both the fit of the")
-                        print("left-out participant and the other participants.")
-                        print()
-                        print("This means that the fits are not independent, unless the initial")
-                        print("model fit is based on the literature or another task. However, it")
-                        print("typically provides a good initial model fit of the correct LOOCV")
-                        print("procedure and is relatively informed.")
+                warn(
+                    """
+                    'informed=True' requests a fast approximate LOOCV procedure.
+                    
+                    WARNING:
+                    The informed procedure is generally not a statistically valid LOOCV
+                    implementation because an initial model fit is used to inform both the
+                    left-out participant and the remaining participants.
+                    
+                    As a result, the fits are not independent and information leakage may
+                    occur. This is only acceptable if the initial model fit is based on
+                    external information, such as prior literature or an independent task.
+                    
+                    While computationally efficient, the results should be interpreted as an
+                    approximation to proper LOOCV rather than a fully unbiased estimate of
+                    out-of-sample performance.
+                    """,
+                    UserWarning,
+                    stacklevel=2,
+                )
+
 
                 if self.model_class == CumulativeMethod:
-                    if verbose and informed:
-                        print("NB: informed estimation is not possible with CumulativeMethod")
-                        print("    Continuing slowly.")
+                    if informed:
+                        warn(
+                            "'informed=True' is not supported when using CumulativeMethod. "
+                            "Falling back to the standard estimation procedure, which may be "
+                            "substantially slower.",
+                            UserWarning,
+                            stacklevel=2,
+                        )
                     self.informed = False
 
         #assume it's a function that will return a fitted hmp model
         elif inspect.isfunction(model):
-            if verbose and informed:
-                print("NB: informed estimation is not possible in combination with a function.")
-                print("    Continuing slowly.")
+            if informed:
+                warn(
+                    "'informed=True' is not supported when a custom function is "
+                    "provided. Falling back to the standard estimation procedure, "
+                    "which may be substantially slower.",
+                    UserWarning,
+                    stacklevel=2,
+                )
             self.informed = False
             self.model_class = "function"
 
@@ -144,15 +160,19 @@ class LOOCV():
                 self.pattern = None
         elif self.model_class != "function":
             if not np.array_equal(pattern.template, self.model.pattern.template):
-                print("Different pattern provided for LOOCV than in model.")
-                print("Proceeding with model Pattern.")
+                warn(
+                    "The pattern provided for LOOCV differs from the pattern used to fit "
+                    "the model. The model's pattern will be used and the supplied pattern "
+                    "will be ignored.",
+                    UserWarning,
+                    stacklevel=2,
+                )
             self.pattern = self.model.pattern
         else:
             self.pattern = pattern
 
         if self.pca_cv:
-            assert pca_kwargs is not None, "If pca_cv == True, pca_kwargs have to be provided"
-            assert 'n_comp' in pca_kwargs, "n_comp required for pca"
+            _validate_pca_kwargs(self.pca_kwargs)
 
     def fit( #noqa PLR0912
         self,
@@ -237,7 +257,6 @@ class LOOCV():
             all_modelfits = [modelfits]
 
         # Step 2, get loglikelihood from left out subjects
-        print()
         all_likelihoods = self._get_likelihoods(data, all_modelfits, cpus_cv,
                                                 cpus_model, verbose)
 
@@ -398,29 +417,43 @@ class LOOCV():
     def _prepare_data(self, data, verbose):
         if isinstance(data, BaseData) and (not hasattr(data,'projector') \
             or isinstance(data.projector, Identity)): #PCA not applied
-            assert self.pca_kwargs is not None, \
-                "If non-projected data are provided, pca_kwargs are required"
-            assert 'n_comp' in self.pca_kwargs, "n_comp required for pca"
+            _validate_pca_kwargs(self.pca_kwargs)
 
         if self.pca_cv:
-            assert isinstance(data, BaseData) and \
-                (not hasattr(data,'projector') or isinstance(data.projector, Identity)),\
-                "If PCA cross-validation, data must be provided as non-projected BaseData."
+            if not (
+                isinstance(data, BaseData)
+                and (
+                    not hasattr(data, "projector")
+                    or isinstance(data.projector, Identity)
+                )
+            ):
+                raise ValueError(
+                    "If PCA cross-validation is enabled, data must be provided as "
+                    "a non-projected BaseData instance."
+                )
         elif isinstance(data, BaseData) and \
             (not hasattr(data,'projector') or isinstance(data.projector, Identity)):
             #warn and apply pca
-            print("Non-projected BaseData provided but PCA cross validation not requested.")
-            print("Continuing by performing PCA on all data, NOT in folds.")
+            warn(
+                "Non-projected BaseData provided but PCA cross validation not requested. "
+                "Continuing by performing PCA on all data, NOT in folds.",
+                UserWarning,
+                stacklevel=2,
+            )
             data.pca_and_variance(**self.pca_kwargs)
 
         if isinstance(data, BaseData) and \
             not (not hasattr(data,'projector') or isinstance(data.projector, Identity)):
             if self.pattern is not None:
                 data = PatternData.from_basedata(data, self.pattern)
-            elif verbose:
-                print("NOTE: 'function' provided for LOOCV without PatternData or Pattern")
-                print("While this is possible, it roughly doubles RAM usage. If")
-                print("using a function, it is recommended to provide PatternData or pattern.")
+            else:
+                warn(
+                    "'function' provided for LOOCV without PatternData or Pattern.\n"
+                    "While this is possible, it roughly doubles RAM usage. When\n"
+                    "using a function, it is recommended to provide PatternData or pattern.",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
         return data
 
@@ -549,3 +582,13 @@ def get_average_fit_eventprobs(modelfits, data: PatternData):
 
     return all_averages, all_eventprobs
 
+def _validate_pca_kwargs(pca_kwargs):
+    if pca_kwargs is None:
+        raise ValueError(
+            "pca_kwargs must be provided when pca_cv=True."
+        )
+
+    if "n_comp" not in pca_kwargs:
+        raise ValueError(
+            "pca_kwargs must contain 'n_comp' when pca_cv=True."
+        )
