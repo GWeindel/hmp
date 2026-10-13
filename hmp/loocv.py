@@ -330,7 +330,7 @@ class LOOCV():
                     fitted_model.submodels[est_idx+1].pca_weights = data.projector.weights
             elif isinstance(fitted_model, list): #from a function or quick elim
                 for est_idx in range(len(fitted_model)):
-                    #each fitte can also be eliminative or cumulative
+                    #each fitted model can also be eliminative or cumulative
                     if isinstance(fitted_model[est_idx], hmp.models.EliminativeMethod):
                         for est_idx2 in range(fitted_model[est_idx].max_events):
                             fitted_model[est_idx].submodels[est_idx2+1].pca_weights =\
