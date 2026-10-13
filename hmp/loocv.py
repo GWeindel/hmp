@@ -128,28 +128,17 @@ class LOOCV():
                 )
 
 
-                if self.model_class == CumulativeMethod:
-                    if informed:
-                        warn(
-                            "'informed=True' is not supported when using CumulativeMethod. "
-                            "Falling back to the standard estimation procedure, which may be "
-                            "substantially slower.",
-                            UserWarning,
-                            stacklevel=2,
-                        )
-                    self.informed = False
+                if self.model_class == CumulativeMethod and informed:
+                    raise ValueError(
+                        "'informed=True' is not supported when using CumulativeMethod. "
+                    )
 
         #assume it's a function that will return a fitted hmp model
         elif inspect.isfunction(model):
             if informed:
-                warn(
-                    "'informed=True' is not supported when a custom function is "
-                    "provided. Falling back to the standard estimation procedure, "
-                    "which may be substantially slower.",
-                    UserWarning,
-                    stacklevel=2,
+                raise ValueError(
+                    "'informed=True' is not supported when using Function. "
                 )
-            self.informed = False
             self.model_class = "function"
 
         if pattern is None: #no pattern given
