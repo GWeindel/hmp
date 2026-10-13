@@ -74,7 +74,7 @@ class LOOCV():
         LOOCV. Requires un-projected BaseData object, with cropping and rejecting
         epochs already applied. LOOCV will call BaseData.pca_and_variance(**pca_kwargs).
         Default = False
-    pca_kwargs : dict, optional/required if pca = True
+    pca_kwargs : dict, optional/required if unprojected base_data is passed during fit
         arguments to be passed to BaseData.pca_and_variance(), n_comp is required.
         Default = None.
     verbose: bool, optional
@@ -416,6 +416,7 @@ class LOOCV():
     def _prepare_data(self, data, verbose):
         if isinstance(data, BaseData) and (not hasattr(data,'projector') \
             or isinstance(data.projector, Identity)): #PCA not applied
+            data = copy.deepcopy(data)
             _validate_pca_kwargs(self.pca_kwargs, self.informed)
 
         if self.pca_cv:
@@ -584,7 +585,7 @@ def get_average_fit_eventprobs(modelfits, data: PatternData):
 def _validate_pca_kwargs(pca_kwargs, informed):
     if pca_kwargs is None:
         raise ValueError(
-            "pca_kwargs must be provided when pca_cv=True."
+            "pca_kwargs must be provided when passing unprojected base_data."
         )
 
     if "n_comp" not in pca_kwargs:
