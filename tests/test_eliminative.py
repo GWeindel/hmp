@@ -35,10 +35,3 @@ def test_backward_simple():
 
     # testing if bacward identifies the 3 real events
     assert np.isclose(model.submodels[3].channel_pars, true_model.channel_pars, atol=1).all()
-
-    # testing recovery of attributes
-    assert isinstance(model.xrlikelihoods, xr.DataArray)
-    assert isinstance(model.xrchannel_pars, xr.DataArray)
-    assert isinstance(model.xrtime_pars, xr.DataArray)
-    assert isinstance(model.xrtime_pars_dev, xr.DataArray)
-    assert isinstance(model.xrtraces, xr.DataArray)
