@@ -171,7 +171,7 @@ class LOOCV():
             self.pattern = pattern
 
         if self.pca_cv:
-            _validate_pca_kwargs(self.pca_kwargs)
+            _validate_pca_kwargs(self.pca_kwargs, self.informed)
 
     def fit( #noqa PLR0912
         self,
@@ -416,7 +416,7 @@ class LOOCV():
     def _prepare_data(self, data, verbose):
         if isinstance(data, BaseData) and (not hasattr(data,'projector') \
             or isinstance(data.projector, Identity)): #PCA not applied
-            _validate_pca_kwargs(self.pca_kwargs)
+            _validate_pca_kwargs(self.pca_kwargs, self.informed)
 
         if self.pca_cv:
             if not (
@@ -581,7 +581,7 @@ def get_average_fit_eventprobs(modelfits, data: PatternData):
 
     return all_averages, all_eventprobs
 
-def _validate_pca_kwargs(pca_kwargs):
+def _validate_pca_kwargs(pca_kwargs, informed):
     if pca_kwargs is None:
         raise ValueError(
             "pca_kwargs must be provided when pca_cv=True."
@@ -590,4 +590,8 @@ def _validate_pca_kwargs(pca_kwargs):
     if "n_comp" not in pca_kwargs:
         raise ValueError(
             "pca_kwargs must contain 'n_comp' when pca_cv=True."
+        )
+    if informed:
+        raise ValueError(
+            "Cannot recompute PCA and use an informed LOOCV."
         )
