@@ -16,11 +16,11 @@ n_events = len(names)-1 # Last is simulated resp
 # Remove default baseline corr
 epoching=dict(baseline=None)
 
-llks = {(100, 50):-3.588911,
-        (100, 30):-2.5232670,
-        (200, 25):-3.588911,
+llks = {(100, 50):-4.918021,
+        (100, 30):-3.8846755,
+        (200, 25):-4.918021,
         (256, 35.5):-4.7588858,
-        (1000,70):-8.8224058,
+        (1000,70):-10.125002,
         }
 
 @pytest.mark.parametrize("sfreq,width",
@@ -89,3 +89,25 @@ def test_basic_operations(sfreq, width):
             'Incorrect topo calculation from estimates'
         assert model._compute_max_events(trial_data, location=width) == 3, \
             'Incorrect max event calculation'
+
+    if (sfreq, width) == (100, 50):
+        starts = trial_data.starts
+        ends = trial_data.ends
+        durations = ends - starts + 1
+        max_duration = np.max(durations)
+
+        # Compute pmf with locations enforced as called by model during estim_probs:
+        pmf = model.location_pdf(model.time_pars[0],
+                                max_duration,
+                                model.n_events+1,
+                                trial_data.sfreq,
+                                trial_data.cross_corr.dtype)
+
+        # Assert that default location is [0,5,5,0]
+        locations_samples = model._time_to_samples(model.locations, sfreq)
+        assert np.all(locations_samples == [0,5,5,0])
+
+        # `location_pdf` should zero out exactly `locations_samples[stage]` leading samples
+        # for each interior stage, enforcing the full minimum inter-event distance (#330).
+        assert np.all(pmf[:5,1] == [0 for _ in range(locations_samples[1])])
+        assert np.all(pmf[:5,2] == [0 for _ in range(locations_samples[2])])

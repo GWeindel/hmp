@@ -81,6 +81,9 @@ class BaseModel(ABC):
         location : float
             Location in ms.
         """
+        # TODO(#330): `distribution.shift` only zeroes the pdf's first `shift` sample(s), it does
+        # not actually shorten the distribution's support, so why are we subtracting
+        # 2 * self.distribution.shift here?
         min_dur = np.min(pattern_data.durations.values) - 2 * self.distribution.shift
         location_samples = self._time_to_samples(location, pattern_data.sfreq)
         n = int(np.floor(min_dur / location_samples)) + 1
