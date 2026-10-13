@@ -255,8 +255,7 @@ class LOOCV():
         if len(all_modelfits) == 1:
             all_modelfits = all_modelfits[0]
 
-        #average_modelfit = get_average_modelfit_eventprobs(data, all_modelfits)
-        return all_likelihoods, all_modelfits #, average_modelfit, average_eventprobs
+        return all_likelihoods, all_modelfits
 
 
     def loocv_modelfit( #noqa PLR0912
