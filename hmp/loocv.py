@@ -181,9 +181,9 @@ class LOOCV():
         verbose: bool = True):
         """Calculate LOOCV.
 
-        First fits n-1 models and then calculates the
-        loglikelihood of the nth subject/recordings,
-        rotating over subjects/recordings.
+        Rotates over all modalities from the requested dimension.
+        First fits models on data without the given modalities and 
+        then calculates the loglikelihood on the left out modalities.
 
         Parameters
         ----------
@@ -231,7 +231,7 @@ class LOOCV():
 
         # if multiple modelfits are returned per subject, rearrange data so
         # each item of all_modelfits will contain one modelfit for each subject.
-        # So for eliminative, all_modelfits[0] will have all n-stage subject
+        # So for eliminative, all_modelfits[0] will have all n-event subject
         # models.
         if isinstance(modelfits[0], list): #from a function or informed elim
             all_modelfits = []
