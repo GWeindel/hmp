@@ -160,7 +160,7 @@ class LOOCV():
             self.pattern = pattern
 
         if self.pca_cv:
-            _validate_pca_kwargs(self.pca_kwargs, self.informed)
+            self._validate_pca_kwargs()
 
     def fit( #noqa PLR0912
         self,
@@ -406,7 +406,7 @@ class LOOCV():
         if isinstance(data, BaseData) and (not hasattr(data,'projector') \
             or isinstance(data.projector, Identity)): #PCA not applied
             data = copy.deepcopy(data)
-            _validate_pca_kwargs(self.pca_kwargs, self.informed)
+            self._validate_pca_kwargs()
 
         if self.pca_cv:
             if not (
@@ -522,6 +522,24 @@ class LOOCV():
             all_likelihoods.append(likelihoods)
 
         return all_likelihoods
+    
+    def _validate_pca_kwargs(self):
+        if self.informed:
+            warn(
+                "Passewd informed model, skipping PCA computation."
+            )
+            self.pca_cv = False
+        else:
+            if self.pca_kwargs is None:
+                raise ValueError(
+                    "pca_kwargs must be provided when passing unprojected base_data."
+                )
+        
+            if "n_comp" not in self.pca_kwargs:
+                raise ValueError(
+                    "pca_kwargs must contain 'n_comp' when pca_cv=True."
+                )
+
 
 def get_average_fit_eventprobs(modelfits, data: PatternData):
     """
@@ -570,18 +588,3 @@ def get_average_fit_eventprobs(modelfits, data: PatternData):
             all_eventprobs.append(eventprobs)
 
     return all_averages, all_eventprobs
-
-def _validate_pca_kwargs(pca_kwargs, informed):
-    if pca_kwargs is None:
-        raise ValueError(
-            "pca_kwargs must be provided when passing unprojected base_data."
-        )
-
-    if "n_comp" not in pca_kwargs:
-        raise ValueError(
-            "pca_kwargs must contain 'n_comp' when pca_cv=True."
-        )
-    if informed:
-        raise ValueError(
-            "Cannot recompute PCA and use an informed LOOCV."
-        )
