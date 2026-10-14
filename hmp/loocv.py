@@ -8,7 +8,6 @@ LOOCV
 """
 
 import copy
-import inspect
 import itertools
 import multiprocessing as mp
 from warnings import warn
@@ -104,9 +103,10 @@ class LOOCV():
             self.model_class = type(model)
 
             if informed:
-                assert self.model._fitted, \
-                    "For informed estimation, a fitted HMP model is required, but not provided."
-
+                if not self.model._fitted:
+                    raise ValueError(
+                        "For informed estimation, a fitted HMP model is required."
+                    )
                 warn(
                     """
                     'informed=True' requests a fast approximate LOOCV procedure.
@@ -128,18 +128,22 @@ class LOOCV():
                 )
 
 
-                if self.model_class == CumulativeMethod and informed:
+                if self.model_class is CumulativeMethod and informed:
                     raise ValueError(
                         "'informed=True' is not supported when using CumulativeMethod. "
                     )
 
         #assume it's a function that will return a fitted hmp model
-        elif inspect.isfunction(model):
+        elif callable(model):
             if informed:
                 raise ValueError(
                     "'informed=True' is not supported when using Function. "
                 )
             self.model_class = "function"
+        else:
+            raise TypeError(
+                "model must be a BaseModel or function."
+            )
 
         if pattern is None: #no pattern given
             if self.model_class != "function":
@@ -159,8 +163,12 @@ class LOOCV():
         else:
             self.pattern = pattern
 
-        if self.pca_cv:
-            _validate_pca_kwargs(self.pca_kwargs, self.informed)
+        if self.pca_cv and informed:
+            warn(
+                "Cannot recompute PCA and use an informed LOOCV. "
+                "Turning PCA computation off"
+            )
+            self.pca_cv = False
 
     def fit( #noqa PLR0912
         self,
@@ -198,7 +206,7 @@ class LOOCV():
             cpus_model = 1
 
         # Prep data
-        data = self._prepare_data(data, verbose)
+        data = self._prepare_data(data)
 
         #if Eliminative/Cumulative, set max_events based on all data
         if self.model_class in [EliminativeMethod, CumulativeMethod]:
@@ -249,7 +257,7 @@ class LOOCV():
                                                 cpus_model, verbose)
 
         #In case of eliminative, we can concat likelihoods and modelfits
-        if self.model_class == EliminativeMethod:
+        if self.model_class is EliminativeMethod:
             all_likelihoods = xr.concat(all_likelihoods, dim="n_event")
             all_likelihoods.attrs['n_event'] = np.zeros(all_likelihoods.data.shape).astype(int)
             for ev in range(all_likelihoods.data.shape[0]):
@@ -262,8 +270,7 @@ class LOOCV():
         if len(all_modelfits) == 1:
             all_modelfits = all_modelfits[0]
 
-        #average_modelfit = get_average_modelfit_eventprobs(data, all_modelfits)
-        return all_likelihoods, all_modelfits #, average_modelfit, average_eventprobs
+        return all_likelihoods, all_modelfits
 
 
     def loocv_modelfit( #noqa PLR0912
@@ -303,7 +310,7 @@ class LOOCV():
         elif isinstance(data, BaseData):
             data = data.select_coord(variable=self.dimension, value=dim,
                     method=lambda dim, variable: ~dim.isin(variable))
-            if not hasattr(data,'projector') or isinstance(data.projector, Identity):
+            if _is_unprojected(data):
                 data.pca_and_variance(**self.pca_kwargs)
 
         # Fit model on data
@@ -312,11 +319,11 @@ class LOOCV():
         elif not self.informed: #same for Event and Eliminative
             fitted_model = copy.deepcopy(self.model)
             fitted_model.fit(data=data, cpus=cpus_model, verbose= False)
-        elif self.model_class == hmp.models.EventModel: #use prev params
+        elif self.model_class is EventModel: #use prev params
             fitted_model = copy.deepcopy(self.model)
             fitted_model.fit(data=data, channel_pars=fitted_model.channel_pars,\
                  time_pars=fitted_model.time_pars, cpus=cpus_model, verbose= False)
-        elif self.model_class == hmp.models.EliminativeMethod:
+        elif self.model_class is EliminativeMethod:
         #use prev params per model
             fitted_model = []
             for n_events in range(1, self.model.max_events + 1):
@@ -386,7 +393,7 @@ class LOOCV():
         elif isinstance(data, BaseData):
             data = data.select_coord(variable=self.dimension, value=dim)
 
-            if not hasattr(data,'projector') or isinstance(data.projector, Identity): #pca_cv
+            if _is_unprojected(data): #pca_cv
                 whiten = self.pca_kwargs.get('whiten', True)
                 common_variance = self.pca_kwargs.get('common_variance', True)
                 standardize_recording = self.pca_kwargs.get('standardize_recording', True)
@@ -402,26 +409,29 @@ class LOOCV():
         else:
             return likelihood
 
-    def _prepare_data(self, data, verbose):
-        if isinstance(data, BaseData) and (not hasattr(data,'projector') \
-            or isinstance(data.projector, Identity)): #PCA not applied
+    def _prepare_data(self, data):
+        if isinstance(data, BaseData) and _is_unprojected(data): #PCA not applied
+            if self.pca_kwargs is None:
+                raise ValueError(
+                    "pca_kwargs must be provided whenever PCA needs to be applied"
+                )
+        
+            if "n_comp" not in self.pca_kwargs:
+                raise ValueError(
+                    "pca_kwargs must contain 'n_comp' when pca_cv=True."
+                )
             data = copy.deepcopy(data)
-            _validate_pca_kwargs(self.pca_kwargs, self.informed)
 
         if self.pca_cv:
             if not (
                 isinstance(data, BaseData)
-                and (
-                    not hasattr(data, "projector")
-                    or isinstance(data.projector, Identity)
-                )
+                and _is_unprojected(data)
             ):
                 raise ValueError(
                     "If PCA cross-validation is enabled, data must be provided as "
                     "a non-projected BaseData instance."
                 )
-        elif isinstance(data, BaseData) and \
-            (not hasattr(data,'projector') or isinstance(data.projector, Identity)):
+        elif isinstance(data, BaseData) and _is_unprojected(data):
             #warn and apply pca
             warn(
                 "Non-projected BaseData provided but PCA cross validation not requested. "
@@ -432,7 +442,7 @@ class LOOCV():
             data.pca_and_variance(**self.pca_kwargs)
 
         if isinstance(data, BaseData) and \
-            not (not hasattr(data,'projector') or isinstance(data.projector, Identity)):
+            not _is_unprojected(data):
             if self.pattern is not None:
                 data = PatternData.from_basedata(data, self.pattern)
             else:
@@ -571,17 +581,8 @@ def get_average_fit_eventprobs(modelfits, data: PatternData):
 
     return all_averages, all_eventprobs
 
-def _validate_pca_kwargs(pca_kwargs, informed):
-    if pca_kwargs is None:
-        raise ValueError(
-            "pca_kwargs must be provided when passing unprojected base_data."
-        )
-
-    if "n_comp" not in pca_kwargs:
-        raise ValueError(
-            "pca_kwargs must contain 'n_comp' when pca_cv=True."
-        )
-    if informed:
-        raise ValueError(
-            "Cannot recompute PCA and use an informed LOOCV."
-        )
+def _is_unprojected(data):
+    return (
+        not hasattr(data, "projector")
+        or isinstance(data.projector, Identity)
+    )
