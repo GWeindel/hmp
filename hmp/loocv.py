@@ -519,7 +519,7 @@ class LOOCV():
                 name="loo_likelihood"
             )
             likelihoods.attrs['model_class'] = self.model_class
-            likelihoods.attrs['model'] = self.model
+            likelihoods.attrs['base_model'] = self.model
             likelihoods.attrs['dimension'] = self.dimension
             likelihoods.attrs['n_events'] = np.array([modelfit.n_events for modelfit in modelfits])
             if not np.all(likelihoods.n_events==likelihoods.n_events[0]):
