@@ -9,7 +9,7 @@ name = "hmp"
 authors = [
   { name="Gabriel Weindel", email="gabriel.weindel@gmail.com" },
   { name="Leendert van Maanen", email="e@mail.com" },
-  { name="Jelmer Borst", email="e@mail.com" },
+  { name="Jelmer Borst", email="j.p.borst@rug.nl" },
 ]
 description = "Package for fitting Hidden Multivariate pattern model to time-series"
 readme = "README.md"
@@ -69,7 +69,7 @@ version_file = "hmp/_version.py"
 
 
 [tool.ruff]
-exclude = ["_version.py", "experimental.py", "loocv.py"]
+exclude = ["_version.py", "experimental.py"]
 line-length = 100
 lint.select = ["E", "F", "W", "I", "N", "D", "PL", "ARG"]
 lint.ignore = ["PLR2004", "D107", "D105", "D102"]

@@ -354,7 +354,7 @@ class EventModel(BaseModel):
             pattern_data, self.channel_pars, self.time_pars, groups, cpus=cpus
         )
 
-        return likelihoods, xreventprobs
+        return [likelihoods.sum()], xreventprobs
 
     def event_probabilities(
         self,
