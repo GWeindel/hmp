@@ -5,27 +5,6 @@ import numpy as np
 from hmp.patterndata import PatternData
 from hmp.utils import _define_random_state
 
-
-def _recut_data(rand_idx, trial_data):
-    trials = trial_data.durations.trial
-    rand_named_idx = trials[rand_idx]
-    new_dur_sel = trial_data.durations.sel(trial = rand_named_idx)
-    ends = np.cumsum(new_dur_sel.values)
-    starts = np.roll(ends, 1)
-    starts[0] = 0
-    ends -= 1
-    splitted_cross_corr = np.vstack(
-        [trial_data.cross_corr[trial_data.starts[i]:trial_data.ends[i]+1, :] for i in rand_idx]
-    )
-    splitted_trial_data = PatternData(trial_data.durations.sel(trial = rand_named_idx),
-                                             starts = starts,
-                                             ends = ends,
-                                             sfreq = trial_data.sfreq,
-                                             pattern = trial_data.pattern,
-                                             template = trial_data.template,
-                                             cross_corr = splitted_cross_corr)
-    return splitted_trial_data
-
 def pseudo_cv_split(trial_data,
              test_frac: float = 1,
              seed: int | None = None):
@@ -50,7 +29,7 @@ def pseudo_cv_split(trial_data,
     Notes
     -----
     This is not a proper train/test split as the train and test data share
-    the same projection from hmp.preprocessors
+    the same projection from hmp.projectors
     """
     random_state = _define_random_state(seed=seed)
     indices = np.arange(len(trial_data.durations))
@@ -94,7 +73,7 @@ def pseudo_kfold(trial_data: PatternData,
     Notes
     -----
     This is not a proper train/test split as the train and test data share
-    the same projection from hmp.preprocessors.
+    the same projection from hmp.projectors.
     """
     n_trials = len(trial_data.durations)
 

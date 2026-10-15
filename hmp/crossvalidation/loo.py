@@ -301,13 +301,9 @@ class LOOCV():
             print(f"\tEstimating model for all {self.dimension}s except {dim}")
 
         # Extract data without left-out dim
-        if isinstance(data, PatternData):
-            data = hmp.patterndata.get_subset(data, variable=self.dimension,
-                values=self.dimension_idx[self.dimension_idx != dim])
-        elif isinstance(data, BaseData):
-            data = data.select_coord(variable=self.dimension, value=dim,
+        data = data.select_coord(variable=self.dimension, value=dim,
                     method=lambda dim, variable: ~dim.isin(variable))
-            if _is_unprojected(data):
+        if isinstance(data, BaseData) and _is_unprojected(data):
                 data.pca_and_variance(**self.pca_kwargs)
 
         # Fit model on data
@@ -385,18 +381,15 @@ class LOOCV():
             print(f"\tCalculating likelihood for {self.dimension} {dim}")
 
         # Extract data of left-out dim
-        if isinstance(data, PatternData):
-            data = hmp.patterndata.get_subset(data, variable=self.dimension, values=dim)
-        elif isinstance(data, BaseData):
-            data = data.select_coord(variable=self.dimension, value=dim)
+        data = data.select_coord(variable=self.dimension, value=dim)
 
-            if _is_unprojected(data): #pca_cv
-                whiten = self.pca_kwargs.get('whiten', True)
-                common_variance = self.pca_kwargs.get('common_variance', True)
-                standardize_recording = self.pca_kwargs.get('standardize_recording', True)
-                data.project(Custom(weights=modelfit.pca_weights))
-                data.apply_variance_ops(whiten=whiten, common_variance=common_variance,
-                                        standardize_recording=standardize_recording)
+        if isinstance(data, BaseData) and _is_unprojected(data): #pca_cv
+            whiten = self.pca_kwargs.get('whiten', True)
+            common_variance = self.pca_kwargs.get('common_variance', True)
+            standardize_recording = self.pca_kwargs.get('standardize_recording', True)
+            data.project(Custom(weights=modelfit.pca_weights))
+            data.apply_variance_ops(whiten=whiten, common_variance=common_variance,
+                                    standardize_recording=standardize_recording)
 
         # Calculate loglikelihood of model applied on data of participant
         likelihood, _ = modelfit.transform(data, cpus=cpus_model)
