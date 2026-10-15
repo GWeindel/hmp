@@ -10,8 +10,8 @@ LOOCV
 import copy
 import itertools
 import multiprocessing as mp
-from warnings import warn
 from collections.abc import Callable
+from warnings import warn
 
 import numpy as np
 import xarray as xr
@@ -76,11 +76,9 @@ class LOOCV():
     pca_kwargs : dict, optional/required if unprojected base_data is passed during fit
         arguments to be passed to BaseData.pca_and_variance(), n_comp is required.
         Default = None.
-    verbose: bool, optional
-        Default = True
     """
 
-    def __init__( #noqa PLR0912
+    def __init__(
         self,
         model: BaseModel | Callable,
         dimension: str = 'subject',
@@ -89,7 +87,6 @@ class LOOCV():
         pattern: Pattern = None,
         pca_cv: bool = True,
         pca_kwargs : dict = None,
-        verbose: bool = True,
     ):
         self.model = model
         self.dimension = dimension
@@ -110,15 +107,15 @@ class LOOCV():
                 warn(
                     """
                     'informed=True' requests a fast approximate LOOCV procedure.
-                    
+
                     The informed procedure is generally not a statistically valid LOOCV
                     implementation because an initial model fit is used to inform both the
                     left-out participant and the remaining participants.
-                    
+
                     As a result, the fits are not independent and information leakage may
                     occur. This is only acceptable if the initial model fit is based on
                     external information, such as prior literature or an independent task.
-                    
+
                     While computationally efficient, the results should be interpreted as an
                     approximation to proper LOOCV rather than a fully unbiased estimate of
                     out-of-sample performance.
@@ -179,7 +176,7 @@ class LOOCV():
         """Calculate LOOCV.
 
         Rotates over all modalities from the requested dimension.
-        First fits models on data without the given modalities and 
+        First fits models on data without the given modalities and
         then calculates the loglikelihood on the left out modalities.
 
         Parameters
@@ -415,7 +412,7 @@ class LOOCV():
                 raise ValueError(
                     "pca_kwargs must be provided whenever PCA needs to be applied"
                 )
-        
+
             if "n_comp" not in self.pca_kwargs:
                 raise ValueError(
                     "pca_kwargs must contain 'n_comp' when pca_cv=True."
