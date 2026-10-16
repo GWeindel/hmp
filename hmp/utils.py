@@ -415,7 +415,7 @@ def select_coord(data: xr.Dataset | xr.DataArray,
     data : xr.Dataset
         Subset of data.
     """
-    if isinstance(data, (BaseData, PatternData)):
+    if hasattr(data, "select_coord"):
         data = data.select_coord(value, variable, method, copy)
     elif 'epoch' in data.dims and "channel" in data.dims: #Epoch_data stack, select, then unstack
         if copy:
