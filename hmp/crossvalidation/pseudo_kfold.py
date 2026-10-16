@@ -47,9 +47,19 @@ class KFoldCV:
         self.shuffle = shuffle
         self.seed = seed
     
+    def prepare(self, pattern_data):
+        self.folds = list(
+            get_folds(
+                pattern_data,
+                self.n_splits,
+                self.shuffle,
+                self.seed,
+            )
+        )
+
     def fit(self,
             model,
-            pattern_data,
+            pattern_data=None,
             channel_pars=None,
             time_pars=None,
             cpus_cv = 1,
@@ -92,7 +102,13 @@ class KFoldCV:
             Model fitted on the train folds
         """
         self.base_model = model
-        self.folds = list(get_folds(pattern_data, self.n_splits, self.shuffle, self.seed))
+        if not hasattr(self, "folds"):
+            if pattern_data is None:
+                raise ValueError(
+                    "pattern_data must be provided if folds have not been prepared."
+                )
+            self.prepare(pattern_data)
+
         if cpus_cv == 1:
             results = [
                 _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus_model)
@@ -157,7 +173,7 @@ class KFoldCV:
                 name="fold",
             ),
             join='outer'
-        )
+        ).sortby('trial')
     
         return evprobs
 
