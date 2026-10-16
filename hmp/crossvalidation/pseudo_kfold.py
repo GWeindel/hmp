@@ -50,6 +50,8 @@ class KFoldCV:
     def fit(self,
             model,
             pattern_data,
+            channel_pars=None,
+            time_pars=None,
             cpus_cv = 1,
             cpus_model = 1):
 
@@ -84,26 +86,30 @@ class KFoldCV:
     
         Returns
         -------
-        KFoldCV
-            The fitted cross-validation object.
+        test_loglikelihood : np.ndarray
+            Loglikelihood on the test folds
+        train_models : tuple
+            Model fitted on the train folds
         """
         self.base_model = model
         self.folds = list(get_folds(pattern_data, self.n_splits, self.shuffle, self.seed))
         if cpus_cv == 1:
             results = [
-                _per_fold(model, train_pd, test_pd, cpus_model)
+                _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus_model)
                 for train_pd, test_pd in self.folds
             ]
         else:
             with mp.Pool(cpus_cv) as pool:
                 results = pool.starmap(_per_fold,
                     [
-                        (model, train_pd, test_pd, cpus_model)
+                        (model, train_pd, test_pd, channel_pars, time_pars, cpus_model)
                         for train_pd, test_pd in self.folds
                     ],
                 )
-        llk, self.train_models = zip(*results)
+        llk, train_models = zip(*results)
+        self.train_models = train_models
         self.test_loglikelihood = np.array(llk)
+        return self.test_loglikelihood, self.train_models
     
     def get_eventprobs(self, source='train'):
         """Compute event probabilities for each cross-validation fold.
@@ -150,13 +156,14 @@ class KFoldCV:
                 dims="fold",
                 name="fold",
             ),
+            join='outer'
         )
     
         return evprobs
 
 
 
-def get_folds(trial_data: PatternData,
+def get_folds(pattern_data: PatternData,
                  n_splits: int = 5,
                  shuffle: bool = True,
                  seed: int = 1):
@@ -168,7 +175,7 @@ def get_folds(trial_data: PatternData,
 
     Parameters
     ----------
-    trial_data : PatternData
+    pattern_data : PatternData
         The trial data to perform the split on.
     n_splits: int
         Number of split to perform on the data
@@ -184,7 +191,7 @@ def get_folds(trial_data: PatternData,
     test_set: PatternData
         The trial data used for testing the model
     """
-    n_trials = len(trial_data.durations)
+    n_trials = len(pattern_data.durations)
 
     indices = np.arange(n_trials)
     
@@ -201,15 +208,17 @@ def get_folds(trial_data: PatternData,
         test_idx = indices[start:stop]
         train_idx = np.concatenate([indices[:start], indices[stop:]])
         current = stop
-        train_pd = select_indices(train_idx, trial_data)
-        test_pd = select_indices(test_idx, trial_data)
+        train_pd = select_indices(train_idx, pattern_data)
+        test_pd = select_indices(test_idx, pattern_data)
         yield train_pd, test_pd
+    
 
-
-def _per_fold(model, train_pd, test_pd, cpus):
+def _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus):
     train_model = deepcopy(model)
     train_model.fit(
         train_pd,
+        channel_pars=deepcopy(channel_pars),
+        time_pars=deepcopy(time_pars),
         verbose=False,
         cpus=cpus
     )
