@@ -1,4 +1,4 @@
-""" Kfold crossvalidation class.
+"""Kfold crossvalidation class.
 
 Class
 -------
@@ -6,10 +6,11 @@ KFoldCV
 
 """
 
+import multiprocessing as mp
+from copy import deepcopy
+
 import numpy as np
 import xarray as xr
-from copy import deepcopy
-import multiprocessing as mp
 
 from hmp.patterndata import PatternData, select_indices
 from hmp.utils import _define_random_state
@@ -18,11 +19,11 @@ from hmp.utils import _define_random_state
 class KFoldCV:
     """
     K-fold cross-validation for HMP EventModels.
-    
+
     The class partitions PatternData into training and testing folds,
     fits an independent model on each training fold and stores
     out-of-sample log-likelihoods together with the fitted models.
-    
+
     Attributes
     ----------
     llk : np.ndarray
@@ -37,6 +38,7 @@ class KFoldCV:
     This is not a proper train/test split as the train and test data share
     the same projection from hmp.projectors.
     """
+
     def __init__(
         self,
         n_splits: int = 5,
@@ -46,7 +48,7 @@ class KFoldCV:
         self.n_splits = n_splits
         self.shuffle = shuffle
         self.seed = seed
-    
+
     def prepare(self, pattern_data):
         self.folds = list(
             get_folds(
@@ -64,15 +66,14 @@ class KFoldCV:
             time_pars=None,
             cpus_cv = 1,
             cpus_model = 1):
-
         """Fit a model independently on each cross-validation fold.
-    
+
         The provided PatternData object is partitioned into training and
         testing folds according to the class settings. For each fold, a copy
         of the model is fitted on the training data and evaluated on the
         corresponding test data. The fitted models, fold definitions, and
         test log-likelihoods are stored as attributes of the instance.
-    
+
         Parameters
         ----------
         model : EventModel
@@ -84,7 +85,7 @@ class KFoldCV:
             If equal to 1, folds are processed sequentially.
         cpus_model : int
             Number of CPUs used during model fitting within each fold.
-    
+
         Attributes
         ----------
         folds : list[tuple[PatternData, PatternData]]
@@ -93,7 +94,7 @@ class KFoldCV:
             Models fitted on each training fold.
         test_loglikelihood : np.ndarray
             Test log-likelihood for each fold.
-    
+
         Returns
         -------
         test_loglikelihood : np.ndarray
@@ -126,24 +127,24 @@ class KFoldCV:
         self.train_models = train_models
         self.test_loglikelihood = np.array(llk)
         return self.test_loglikelihood, self.train_models
-    
+
     def get_eventprobs(self, source='train'):
         """Compute event probabilities for each cross-validation fold.
-        
+
         The fitted model from each fold is applied either to the training
         data used during fitting or to the corresponding held-out test data.
         Event probabilities are concatenated along a new ``fold`` dimension.
-        
+
         Parameters
         ----------
         source : {"train", "test"}
             Dataset on which to compute event probabilities.
-        
+
             - ``"train"``: compute probabilities on the training data of
               each fold.
             - ``"test"``: compute probabilities on the held-out test data
               of each fold.
-        
+
         Returns
         -------
         xr.DataArray
@@ -221,7 +222,7 @@ def get_folds(pattern_data: PatternData,
     n_trials = len(pattern_data.durations)
 
     indices = np.arange(n_trials)
-    
+
     if shuffle:
         random_state = _define_random_state(seed)
         random_state.shuffle(indices)
@@ -238,7 +239,7 @@ def get_folds(pattern_data: PatternData,
         train_pd = select_indices(train_idx, pattern_data)
         test_pd = select_indices(test_idx, pattern_data)
         yield train_pd, test_pd
-    
+
 
 def _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus):
     train_model = deepcopy(model)

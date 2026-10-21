@@ -78,7 +78,7 @@ class LOOCV():
         Default = None.
     """
 
-    def __init__(
+    def __init__(#noqa: PLR0912
         self,
         model: BaseModel | Callable,
         dimension: str = 'subject',

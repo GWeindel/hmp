@@ -106,7 +106,7 @@ class PatternData:
                     cross_corr=cross_corr, pattern=pattern, template=template,
                     sfreq=data.sfreq)
 
-    
+
     def select_coord(self,
                     value: object,
                     variable: str,
@@ -114,11 +114,11 @@ class PatternData:
                     copy: bool = True
                    ):
         """Select a subset from patterndata using the specified coordinate(s).
-    
+
         The function selects trials where `method(data[variable], value)` is True.
         You can either use functions returning booleans or a custom function
         using lambda, e.g. `method=lambda x, v: ~x.isin(v)`
-    
+
         Parameters
         ----------
         value : str | num
@@ -132,7 +132,7 @@ class PatternData:
             appears in variable (e.g. 'comp' in 'incompatible' and 'compatible')
         copy : bool
             Whether to return a copy (True, Default) or overwrite the current object (False)
-    
+
         Returns
         -------
         data : PatternData
