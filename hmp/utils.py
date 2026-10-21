@@ -415,11 +415,15 @@ def select_coord(data: xr.Dataset | xr.DataArray,
     data : xr.Dataset
         Subset of data.
     """
-    if copy:
-        data = data.copy(deep=True)
-    if 'epoch' in data.dims and "channel" in data.dims: #Epoch_data stack, select, then unstack
+    if hasattr(data, "select_coord"):
+        data = data.select_coord(value, variable, method, copy)
+    elif 'epoch' in data.dims and "channel" in data.dims: #Epoch_data stack, select, then unstack
+        if copy:
+            data = data.copy(deep=True)
         data = _coordsel_data(data, value, variable, method)
     elif 'trial' in data.dims: #HMP outputs, already stacked
+        if copy:
+            data = data.copy(deep=True)
         data = _sel_method(data, value, variable, method).dropna(dim="trial", how="all")
     else:
         raise ValueError('Unexpected data type')

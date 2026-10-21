@@ -1,6 +1,6 @@
 """Builds the data to be used in HMP model estimation."""
-import copy
 from dataclasses import dataclass
+from typing import Callable
 from warnings import warn
 
 import numpy as np
@@ -106,6 +106,48 @@ class PatternData:
                     cross_corr=cross_corr, pattern=pattern, template=template,
                     sfreq=data.sfreq)
 
+
+    def select_coord(self,
+                    value: object,
+                    variable: str,
+                    method: Callable[[xr.DataArray, object], xr.DataArray] = np.equal,
+                    copy: bool = True
+                   ):
+        """Select a subset from patterndata using the specified coordinate(s).
+
+        The function selects trials where `method(data[variable], value)` is True.
+        You can either use functions returning booleans or a custom function
+        using lambda, e.g. `method=lambda x, v: ~x.isin(v)`
+
+        Parameters
+        ----------
+        value : str | num
+            Value to test with method().
+        variable : str
+            coordinate present in data that is used for condition selection
+        method : callable
+            You can use callable resulting in a boolean,
+            e.g. 'np.equal', `np.greater` or lambda s, v: s.str.contains(v)
+            Method also allows for 'contains' that selects trial in which value
+            appears in variable (e.g. 'comp' in 'incompatible' and 'compatible')
+        copy : bool
+            Whether to return a copy (True, Default) or overwrite the current object (False)
+
+        Returns
+        -------
+        data : PatternData
+            Subset of the provided PatternData object.
+        """
+        indices = np.where(method(self.durations[variable], value).values)[0]
+        selected = select_indices(indices, self)
+        if not copy:
+            self.durations = selected.durations
+            self.starts = selected.starts
+            self.ends = selected.ends
+            self.cross_corr = selected.cross_corr
+            return self
+        return selected
+
 def _adjust_template(sfreq, pattern):
     template = pattern.template
     tstep = int(np.rint(1000/sfreq))
@@ -126,7 +168,7 @@ def cross_correlation(
         template: np.ndarray,
         offset_start: int,
         offset_end: int
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, np.ndarray]:
     """Compute the cross-correlation between the data and a given pattern.
 
     This function calculates the correlation of each sample and the next
@@ -190,19 +232,45 @@ def cross_correlation(
     crossc = crossc[~np.isnan(crossc[:,0])]
     return crossc, durations
 
-def get_subset(pattern_data: PatternData, variable: str, values):
-    """Get subset of values of variable."""
-    pattern_data = copy.deepcopy(pattern_data)
-    to_remove = ~np.isin(pattern_data.durations[variable].values, values)
-    to_remove_starts = pattern_data.starts[to_remove]
-    to_remove_ends = pattern_data.ends[to_remove]
+def select_indices(
+        indices: np.ndarray,
+        pattern_data: PatternData,
+    ) -> PatternData:
+    """Select a subset of trials from a PatternData object using trial indices.
 
-    for start, end in zip(to_remove_starts, to_remove_ends):
-        pattern_data.cross_corr[start:end+1,:] = np.nan
-    pattern_data.cross_corr = pattern_data.cross_corr[~np.isnan(pattern_data.cross_corr[:,0]),:]
-    pattern_data.durations = pattern_data.durations.sel(trial=~to_remove)
-    pattern_data.starts = np.roll(np.cumsum(pattern_data.durations),1)
-    pattern_data.starts[0] = 0
-    pattern_data.ends = np.cumsum(pattern_data.durations).data - 1
+    This function subsets the trial metadata and reconstructs the corresponding
+    cross-correlation matrix so that sample indices remain contiguous after
+    selection. Start and end sample positions are recomputed based on the
+    durations of the retained trials.
 
-    return pattern_data
+    Parameters
+    ----------
+    indices : np.ndarray
+        Integer indices of the trials to retain.
+    pattern_data : PatternData
+        PatternData object from which trials are selected.
+
+    Returns
+    -------
+    PatternData
+        A new PatternData object containing only the selected trials, with
+        updated durations, starts, ends, and cross-correlation values.
+    """
+    trials = pattern_data.durations.trial
+    named_idx = trials[indices]
+    new_dur_sel = pattern_data.durations.sel(trial = named_idx)
+    ends = np.cumsum(new_dur_sel.values)
+    starts = np.roll(ends, 1)
+    starts[0] = 0
+    ends -= 1
+    selected_cross_corr = np.vstack(
+        [pattern_data.cross_corr[pattern_data.starts[i]:pattern_data.ends[i]+1, :] for i in indices]
+    )
+    selected_pattern_data = PatternData(new_dur_sel,
+                                             starts = starts,
+                                             ends = ends,
+                                             sfreq = pattern_data.sfreq,
+                                             pattern = pattern_data.pattern,
+                                             template = pattern_data.template,
+                                             cross_corr = selected_cross_corr)
+    return selected_pattern_data
