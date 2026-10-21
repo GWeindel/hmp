@@ -35,7 +35,7 @@ class KFoldCV:
     Notes
     -----
     This is not a proper train/test split as the train and test data share
-    the same projection from hmp.projectors
+    the same projection from hmp.projectors.
     """
     def __init__(
         self,
@@ -119,7 +119,7 @@ class KFoldCV:
                 results = pool.starmap(_per_fold,
                     [
                         (model, train_pd, test_pd, channel_pars, time_pars, cpus_model)
-                        for train_pd, test_pd in self.folds
+                        for i, (train_pd, test_pd) in enumerate(self.folds)
                     ],
                 )
         llk, train_models = zip(*results)
@@ -159,22 +159,33 @@ class KFoldCV:
             raise RuntimeError(
                 "KFoldCV must be fitted before calling get_eventprobs()."
             )
-        evprobs = xr.concat(
-            [
-                model.transform(
-                    train_pd if source == "train" else test_pd
-                )[1]
-                for model, (train_pd, test_pd)
+        if source == 'train':
+            evprobs = xr.concat(
+                [
+                    model.transform(
+                        train_pd if source == "train" else test_pd
+                    )[1]
+                    for model, (train_pd, test_pd)
+                    in zip(self.train_models, self.folds)
+                ],
+                dim=xr.DataArray(
+                    np.arange(len(self.train_models)),
+                    dims="fold",
+                    name="fold",
+                ),
+                join='outer'
+            ).sortby('trial')
+        else:
+            evprobs = [
+                model.transform(test_pd)[1]
+                for model, (_, test_pd)
                 in zip(self.train_models, self.folds)
-            ],
-            dim=xr.DataArray(
-                np.arange(len(self.train_models)),
-                dims="fold",
-                name="fold",
-            ),
-            join='outer'
-        ).sortby('trial')
-    
+            ]
+
+            evprobs = xr.concat(evprobs, dim="trial", join='outer')
+            evprobs = evprobs.sortby("trial")
+            evprobs = evprobs.dropna('trial', how='all')
+            evprobs = evprobs.fillna(0)
         return evprobs
 
 
