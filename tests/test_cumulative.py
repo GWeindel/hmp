@@ -29,7 +29,7 @@ def test_cumulative_simple():
     
     #Try k-fold 
     model = CumulativeMethod(pattern)
-    model.fit(trial_data_c, kfold=2)
+    model.fit(trial_data_c, kfold=4)
 
     # Cumulative estimation
     model = CumulativeMethod(pattern)

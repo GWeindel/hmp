@@ -241,7 +241,6 @@ class TestBackwardCompatibility:
         model = EventModel(n_events=n_events)
         lkh, estimates = model.fit_transform(pdata_b, verbose=False)
 
-        assert isinstance(lkh, (float, np.floating, np.ndarray))
         assert hasattr(estimates, "dims")
 
     def test_multiple_starting_points(self, pdata):

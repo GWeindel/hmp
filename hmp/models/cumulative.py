@@ -7,7 +7,7 @@ import numpy as np
 import xarray as xr
 
 from hmp.basedata import BaseData
-from hmp.crossvalidation import pseudo_kfold
+from hmp.crossvalidation.pseudo_kfold import KFoldCV
 from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
 from hmp.patterndata import PatternData
@@ -125,6 +125,12 @@ class CumulativeMethod(BaseModel):
         None
         """
         pattern_data = self._instantiate_data_pattern(data)
+    
+        if kfold > 1:
+            cv = KFoldCV(kfold)
+            cv.prepare(pattern_data)
+        else:
+            cv = None
 
         end = pattern_data.durations.values.mean() if self.end is None else self.end
         if self.step is None:
@@ -164,7 +170,7 @@ class CumulativeMethod(BaseModel):
             )
             # Estimate model based on these propositions
             channel_pars_res, time_pars_res, llk, max_scale = self._fit_proposition(
-                 pattern_data, n_events, channel_pars_props, time_pars_props, cpus, kfold
+                 pattern_data, n_events, channel_pars_props, time_pars_props, cpus, cv
             )
             # check solution
             diff_llk = llk - llk_prev
@@ -237,22 +243,23 @@ class CumulativeMethod(BaseModel):
 
     def _fit_proposition(self, pattern_data, n_events,
                          channel_pars_props, time_pars_props,
-                         cpus, kfold):
+                         cpus, cv):
 
         event_model = EventModel(n_events=n_events, pattern=self.pattern, location=self.location,
                                  tolerance=self.tolerance, distribution=self.distribution)
-        if kfold > 1:
-            folds = list(pseudo_kfold(pattern_data, kfold))
-            results = [
-                self.run_fold(n_events, train_td, test_td,
-                             channel_pars_props, time_pars_props, cpus)
-                for train_td, test_td in folds
-            ]
-            llk, channel_pars_res, time_pars_res, max_scale = zip(*results)
-            llk = np.array(llk)
-            channel_pars_res = np.median(np.array(channel_pars_res), axis=0)
-            time_pars_res = np.median(np.array(time_pars_res), axis=0)
-            max_scale = np.median(max_scale)
+        if cv is not None:
+            llk, train_models = cv.fit(event_model, None, channel_pars_props, time_pars_props, cpus)
+            evprobs = cv.get_eventprobs().mean('fold')
+            event_model.n_dims = pattern_data.cross_corr.shape[1]
+            channel_pars_res, time_pars_res = event_model.get_channel_time_parameters_expectation(
+                pattern_data, evprobs.values, np.arange(len(pattern_data.starts))
+            )
+            max_scales = max(
+                np.sum(x[0, :n_events-1, 1])
+                for mod in train_models
+                for x in mod.time_pars_dev
+            )
+            max_scale = np.median(max_scales)
         else:
             event_model.fit(
                 pattern_data,
@@ -337,21 +344,3 @@ class CumulativeMethod(BaseModel):
             self._check_fitted(property_list[attr])
             return getattr(self.submodels[-1], attr)
         return super().__getattribute__(attr)
-
-    def run_fold(self, n_events, train_td, test_td, channel_pars_props, time_pars_props, cpus):
-        event_model = EventModel(n_events=n_events, pattern=self.pattern, location=self.location,
-                                 tolerance=self.tolerance, distribution=self.distribution)
-
-        event_model.fit(
-            train_td,
-            channel_pars_props,
-            time_pars_props,
-            verbose=False,
-            cpus=cpus
-        )
-
-        llk = event_model.transform(test_td)[0]
-        max_scale = np.max(
-                    [np.sum(x[0, :n_events-1, 1]) for x in event_model.time_pars_dev]
-                )
-        return llk, event_model.channel_pars, event_model.time_pars, max_scale
