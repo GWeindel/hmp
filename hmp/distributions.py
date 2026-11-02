@@ -14,7 +14,8 @@ class Gamma():
     Parameters
     ----------
     shape : float, optional
-        The shape parameter of the gamma distribution (default is 2).
+        The shape parameter of the gamma distribution (default is 2). Must be >= 1,
+        otherwise the density at a duration of zero is infinite.
 
     Attributes
     ----------
@@ -22,9 +23,6 @@ class Gamma():
         The shape parameter of the gamma distribution.
     pdf : function
         The probability density function from `scipy.stats.gamma`.
-    shift: int
-        An integer by which to shift the distribution so that
-        ``(p(0) <- p(shift), p(1) <- p(1 + shift), ..., p(D) <- p(D + shift)``). Default is 1
 
     Methods
     -------
@@ -35,9 +33,13 @@ class Gamma():
     """
 
     def __init__(self, shape=2):
+        if shape < 1:
+            raise ValueError(
+                f"Gamma shape must be >= 1 (got {shape}), otherwise the density at "
+                "a duration of zero is infinite."
+            )
         self.shape = shape
         self.pdf = gamma.pdf
-        self.shift = 1
 
     def scale_to_mean(self, scale: float) -> float:
         """
@@ -87,9 +89,6 @@ class Lognormal():
         The shape parameter of the distribution.
     pdf : function
         The probability density function from `scipy.stats.lognorm`.
-    shift: int
-        An integer by which to shift the distribution so that
-        ``(p(0) <- p(shift), p(1) <- p(1 + shift), ..., p(D) <- p(D + shift)``). Default is 1
 
     Methods
     -------
@@ -102,7 +101,6 @@ class Lognormal():
     def __init__(self, shape):
         self.shape = shape
         self.pdf = lognorm.pdf
-        self.shift = 1
 
     def scale_to_mean(self, scale: float) -> float:
         """
@@ -151,9 +149,6 @@ class Wald():
         The shape parameter of the distribution.
     pdf : function
         The probability density function from `scipy.stats.invgauss`.
-    shift: int
-        An integer by which to shift the distribution so that
-        ``(p(0) <- p(shift), p(1) <- p(1 + shift), ..., p(D) <- p(D + shift)``). Default is 1
 
     Methods
     -------
@@ -166,7 +161,6 @@ class Wald():
     def __init__(self, shape):
         self.shape = shape
         self.pdf = invgauss.pdf
-        self.shift = 1
 
     def scale_to_mean(self, scale: float) -> float:
         """
@@ -207,7 +201,8 @@ class Weibull():
     Parameters
     ----------
     shape : float
-        The shape parameter of the Wald distribution.
+        The shape parameter of the Weibull distribution. Must be >= 1, otherwise the
+        density at a duration of zero is infinite.
 
     Attributes
     ----------
@@ -215,9 +210,6 @@ class Weibull():
         The shape parameter of the distribution.
     pdf : function
         The probability density function from `scipy.stats.weibull_min`.
-    shift: int
-        An integer by which to shift the distribution so that
-        ``(p(0) <- p(shift), p(1) <- p(1 + shift), ..., p(D) <- p(D + shift)``). Default is 0
 
     Methods
     -------
@@ -228,10 +220,14 @@ class Weibull():
     """
 
     def __init__(self, shape):
+        if shape < 1:
+            raise ValueError(
+                f"Weibull shape must be >= 1 (got {shape}), otherwise the density at "
+                "a duration of zero is infinite."
+            )
         self.shape = shape
         self.pdf = weibull_min.pdf
         self.gamma_func = gamma_func
-        self.shift = 0
 
     def scale_to_mean(self, scale: float) -> float:
         """

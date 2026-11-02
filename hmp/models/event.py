@@ -32,12 +32,16 @@ class EventModel(BaseModel):
         The pattern and properties to use for cross-correlation. Default is
         half sine with 50 ms width.
     location : int | np.ndarray, optional
-        How many milliseconds should be censored in the EM() step of model fitting.
-        Default is width of the pattern template, which by defaul is 50 ms.
+        Minimum duration (in ms) of a stage, i.e. the time between two events.
+        A stage with location ``loc`` lasts ``loc + X`` with ``X`` following ``distribution``,
+        so the stage duration distribution is shifted by ``loc``. By default, the stages between
+        two ``pattern`` peaks have a location equal to the width of the pattern template
+        (by default 50 ms) and the first and last stages have none (time between trial start and
+        first peak and last peak and response onset respectively).
         Shorter values than the width of a pattern allow overlap of neighboring events
         but might result in the same event being duplicated in several events.
         Larger values will prevent duplication at the risk of missing neighboring events.
-        If array, should be length n_events+1, setting location for each event.
+        If array, should be length n_events+1, setting location for each stage.
     fixed_time_pars : list, optional
         List of time parameters to fix during estimation.
         If None, all time parameters are estimated.
@@ -179,16 +183,16 @@ class EventModel(BaseModel):
             for cur_group in range(n_groups):
                 time_group = np.where(self.time_map[cur_group, :] >= 0)[0]
                 n_stage_group = len(time_group)
-                # by default starting point is to split the average duration in equal bins
-                time_pars[cur_group, time_group, :] = np.tile(
-                    [
-                        self.distribution.shape,
-                        self.distribution.mean_to_scale(
-                            np.mean(durations.values[groups == cur_group]) / (n_stage_group)
-                        ),
-                    ],
-                    (n_stage_group, 1),
-                )
+                # by default starting point is to split the average duration in equal bins.
+                # Distribution of each stage covers the part of the bin after correcting for
+                # location
+                stage_duration = np.mean(durations.values[groups == cur_group]) / n_stage_group
+                locations = self._stage_locations(n_stage_group, sfreq)
+                # Got to fix the mean at min 1 to prevent pmf from becoming zero everywhere
+                stage_means = np.maximum(stage_duration - locations, 1)
+
+                time_pars[cur_group, time_group, 0] = self.distribution.shape
+                time_pars[cur_group, time_group, 1] = self.distribution.mean_to_scale(stage_means)
 
             initial_p = time_pars
             time_pars = [initial_p]
@@ -599,7 +603,7 @@ class EventModel(BaseModel):
                 [np.mean(pattern_data.durations.values[subset_epochs]) - 1],
             ]
         )
-        time_pars = self.scale_parameters(averagepos=event_times_mean)
+        time_pars = self.scale_parameters(averagepos=event_times_mean, sfreq=pattern_data.sfreq)
         return channel_pars, time_pars
 
     def gen_random_stages(self, n_events: int, sfreq) -> np.ndarray:
@@ -609,20 +613,24 @@ class EventModel(BaseModel):
         Generates random stage durations between 0 and the mean reaction time (RT) by iteratively
         drawing samples from a uniform distribution. The last stage duration is computed as
         1 minus the cumulative duration of previous stages.
-        The stages are then scaled to the mean RT.
+        The stages are then scaled to the mean RT. The scale parameters describe the part of
+        each stage duration after correcting for the stage location.
 
         Parameters
         ----------
         n_events : int
             The number of events to generate random durations for.
+        sfreq : float
+            The sampling frequency of the data.
 
         Returns
         -------
         np.ndarray
             A 2D array where each row contains the shape and scale parameters for a stage.
         """
+        locations = self._stage_locations(n_events + 1, sfreq)
         rnd_durations = np.zeros(n_events + 1)
-        while any(rnd_durations < max(self._time_to_samples(self.locations, sfreq))):
+        while any(rnd_durations < max(locations)):
             rnd_events = np.random.default_rng().integers(
                 low=0, high=self.max_duration, size=n_events
             )  # n_events between 0 and mean_d
@@ -630,23 +638,29 @@ class EventModel(BaseModel):
             rnd_durations = np.hstack((rnd_events, self.max_duration)) - np.hstack(
                 (0, rnd_events)
             )  # associated durations
+        stage_means = np.maximum(rnd_durations - locations, 1)
         random_stages = np.array(
-            [[self.distribution.shape, self.distribution.mean_to_scale(x)] for x in rnd_durations]
+            [[self.distribution.shape, self.distribution.mean_to_scale(x)] for x in stage_means]
         )
         return random_stages
 
-    def scale_parameters(self, averagepos: np.ndarray) -> np.ndarray:
+    def scale_parameters(self, averagepos: np.ndarray, sfreq: float) -> np.ndarray:
         """
         Scale parameters from the average position of events.
 
         This method is used during the re-estimation step in the EM procedure.
-        It computes the likeliest location of events from `eventprobs` and calculates
-        the scale parameters as the average distance between consecutive events.
+        It takes the expected position of events from `eventprobs` and calculates
+        the scale parameters from the average distance between consecutive events minus
+        the location of the stage (i.e. the mean of the shifted stage duration distribution).
+        For the Gamma distribution with fixed shape this is the exact M step (except for
+        discretization).
 
         Parameters
         ----------
         averagepos : np.ndarray
             A 1D array containing the average positions of events.
+        sfreq : float
+            The sampling frequency of the data.
 
         Returns
         -------
@@ -654,10 +668,12 @@ class EventModel(BaseModel):
             A 2D array where each row contains the shape and scale parameters
             for the corresponding event distribution.
         """
+        locations = self._stage_locations(len(averagepos), sfreq)
+        stage_means = np.diff(averagepos, prepend=0) - locations
+
         params = np.zeros((len(averagepos), 2), dtype=np.float32)
         params[:, 0] = self.distribution.shape
-        params[:, 1] = np.diff(averagepos, prepend=0)
-        params[:, 1] = self.distribution.mean_to_scale(params[:, 1])
+        params[:, 1] = self.distribution.mean_to_scale(stage_means)
         return params
 
     def estim_probs(
@@ -958,11 +974,37 @@ class EventModel(BaseModel):
 
         return [likelihood.sum(), all_xreventprobs]
 
+    def _stage_locations(self, n_stages: int, sfreq: float) -> np.ndarray:
+        """
+        Return the location (in samples) for each stage.
+
+        For the full model this is ``self.locations`` (in samples). **Note**, that groups that have
+        missing events have fewer stages. For those, locations of the first and last stage a kept.
+
+        Parameters
+        ----------
+        n_stages : int
+            The number of stages (number of events + 1).
+        sfreq : float
+            The sampling frequency of the data.
+
+        Returns
+        -------
+        np.ndarray
+            A 1D integer array of length ``n_stages``.
+        """
+        locations = self._time_to_samples(self.locations, sfreq)
+        return np.concatenate([locations[: n_stages - 1], locations[-1:]])
+
     def location_pdf(
         self, time_pars: np.ndarray, max_duration: int, n_stages: int, sfreq: float, dtype: Any
     ) -> np.ndarray:
         """
-        Compute pmf with locations enforced.
+        Compute the pmf of each stage duration, shifted by the stage location.
+
+        A stage with location ``loc`` lasts ``loc + X`` samples where ``X`` follows the
+        (discretized) distribution with the stage's ``time_pars``, so that
+        ``pmf[loc + x, stage] = distribution_pdf(...)[x]``. Each column sums to 1 (valid pmf).
 
         Parameters
         ----------
@@ -981,19 +1023,15 @@ class EventModel(BaseModel):
         Returns
         -------
         pmf : np.ndarray
-            The probability mass function of dimension (max_duration, n_stages) censored
-            appropriately based on the location parameter specified for the model.
+            The probability mass function of dimension (max_duration, n_stages), with zero
+            probability for durations shorter than the stage location.
         """
         pmf = np.zeros([max_duration, n_stages], dtype=dtype)  # Gamma pmf for each stage scale
-        locations_samples = self._time_to_samples(self.locations, sfreq)
+        locations_samples = self._stage_locations(n_stages, sfreq)
         for stage in range(n_stages):
-            pmf[:, stage] = np.concatenate(
-                (
-                    np.repeat(0, locations_samples[stage]),
-                    self.distribution_pdf(time_pars[stage, 0], time_pars[stage, 1], max_duration)[
-                        locations_samples[stage] :
-                    ],
-                )
+            location = locations_samples[stage]
+            pmf[location:, stage] = self.distribution_pdf(
+                time_pars[stage, 0], time_pars[stage, 1], max_duration - location
             )
         return pmf
 
@@ -1001,8 +1039,10 @@ class EventModel(BaseModel):
         """
         Return a discretized probability density function (PDF) for a provided scipy distribution.
 
-        This method computes the PDF using the given shape and scale parameters over a range
-        from 0 to `max_duration`, and normalizes it to ensure the probabilities sum to 1.
+        This method computes the PDF using the given shape and scale parameters at the
+        durations 0 to `max_duration` - 1 (in samples), and normalizes it to ensure the
+        probabilities sum to 1. Distributions for which the density evaluates to zero at a duration
+        of zero (e.g. Gamma with shape > 1) continue to assign no probability to a duration of zero.
 
         Parameters
         ----------
@@ -1019,9 +1059,7 @@ class EventModel(BaseModel):
             A 1D array representing the probability mass function for the distribution
             with the given shape and scale parameters, normalized to sum to 1.
         """
-        shift = self.distribution.shift
         p = self.distribution.pdf(np.arange(max_duration), shape, scale=scale)
-        p[:shift] = 0  # PR-270
         p = p / np.sum(p)
         p[np.isnan(p)] = 0  # remove potential nans
         return p
