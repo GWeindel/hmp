@@ -538,10 +538,14 @@ def simulated_times_and_parameters(
         i += 1
         x += 1
 
-    ## Recover parameters
-    true_time_pars = np.tile(model.distribution.shape, (n_stages, 2))
-    true_time_pars[:, 1] = model.distribution.mean_to_scale(np.mean(random_source_times, axis=0))
-    true_time_pars[true_time_pars[:, 1] <= 0, 1] = 1e-3  # Can happen in corner cases
+    ## Recover parameters, the distributions describe the stage durations after accounting for
+    # locations.
+    stage_means = np.mean(random_source_times, axis=0) - model._stage_locations(n_stages, sfreq)
+    # True mean could be shorter than location (e.g., if events overlap). Got to fix the mean at min
+    # 1 sample to prevent pmf from becoming zero everywhere which would result in an -inf llk
+    stage_means = np.maximum(stage_means, 1)
+    true_time_pars = np.tile(model.distribution.shape, (n_stages, 2)).astype(float)
+    true_time_pars[:, 1] = model.distribution.mean_to_scale(stage_means)
     random_source_times = random_source_times * (1000 / sfreq) / (1000 / resampling_freq)
     ## Recover magnitudes
     sample_times = np.zeros((len(pattern_data.starts), n_events), dtype=int)

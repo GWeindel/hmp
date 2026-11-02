@@ -16,11 +16,11 @@ n_events = len(names)-1 # Last is simulated resp
 # Remove default baseline corr
 epoching=dict(baseline=None)
 
-llks = {(100, 50):-4.918021,
-        (100, 30):-3.8846755,
-        (200, 25):-4.918021,
+llks = {(100, 50):-1.1633047,
+        (100, 30):-1.1632954,
+        (200, 25):-1.1633047,
         (256, 35.5):-4.7588858,
-        (1000,70):-10.125002,
+        (1000,70):-1.1633055,
         }
 
 @pytest.mark.parametrize("sfreq,width",
@@ -35,8 +35,12 @@ def test_basic_operations(sfreq, width):
     n_trials = 1
     cpus=1
     gen_width = width
-    # Minimum possible time with provided halfsine and 3 events
-    times_a = np.array([[1000/sfreq, gen_width, gen_width, 1000/sfreq]], dtype='float64')
+    # Minimum possible time with provided halfsine and 3 events: the Gamma has pmf(0)=0, so
+    # stages last at least one sample beyond their location (= width)
+    sample_ms = 1000 / sfreq
+    times_a = np.array(
+        [[sample_ms, gen_width + sample_ms, gen_width + sample_ms, sample_ms]], dtype="float64"
+    )
     sources = []
     for cur_name in names:
         sources.append([cur_name, 1000/(gen_width*2), 1e-4, None])
@@ -111,3 +115,13 @@ def test_basic_operations(sfreq, width):
         # for each interior stage, enforcing the full minimum inter-event distance (#330).
         assert np.all(pmf[:5,1] == [0 for _ in range(locations_samples[1])])
         assert np.all(pmf[:5,2] == [0 for _ in range(locations_samples[2])])
+
+        # The location shifts the distribution: each pmf is a valid distribution that sums to 1
+        assert np.allclose(pmf.sum(axis=0), 1)
+
+        # and pmf[location + x] is the distribution evaluated at x
+        for stage in range(model.n_events + 1):
+            loc = locations_samples[stage]
+            shape, scale = model.time_pars[0][stage]
+            expected = model.distribution_pdf(shape, scale, max_duration - loc)
+            assert np.allclose(pmf[loc:, stage], expected)
