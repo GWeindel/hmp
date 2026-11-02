@@ -82,12 +82,19 @@ class BaseModel(ABC):
         location : float
             Location in ms.
         """
-        # TODO(#330): `distribution.shift` only zeroes the pdf's first `shift` sample(s), it does
-        # not actually shorten the distribution's support, so why are we subtracting
-        # 2 * self.distribution.shift here?
-        min_dur = np.min(pattern_data.durations.values) - 2 * self.distribution.shift
+        # Get shortest possible duration (non-zero probability under the stage duration
+        # distribution)
+        density_at_zero = self.distribution.pdf(0, self.distribution.shape, scale=1)
+        min_gap = 1 if density_at_zero == 0 else 0
+
+        # Stage durations sum to the trial duration - 1 samples. The first and last stages
+        # last at least min_gap samples, the stages in between location + min_gap samples
+        # (first and last stages have no location, as in models built from a scalar location
+        # which is what happens in cumulative/eliminative)
+        min_dur = np.min(pattern_data.durations.values)
         location_samples = self._time_to_samples(location, pattern_data.sfreq)
-        n = int(np.floor(min_dur / location_samples)) + 1
+        n_inner_stages = np.floor((min_dur - 1 - 2 * min_gap) / (location_samples + min_gap))
+        n = int(n_inner_stages) + 1
         print('Max event that can be fit given minimum duration of '
               f'{min_dur} is {n}')
         return n
