@@ -412,7 +412,7 @@ def default( # noqa: PLR0913, PLR0917
         Default = 0
     center : bool
         Median center the data after cropping including baseline
-        default = False
+        default = True
     min_duration : float, optional
         Minimum duration threshold for keeping epochs.
         Default = 0
