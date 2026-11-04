@@ -14,6 +14,7 @@ import xarray as xr
 
 from hmp.patterndata import PatternData, select_indices
 from hmp.utils import _define_random_state
+from hmp.estimators import EMEstimator
 
 
 class KFoldCV:
@@ -120,12 +121,12 @@ class KFoldCV:
                 results = pool.starmap(_per_fold,
                     [
                         (model, train_pd, test_pd, channel_pars, time_pars, cpus_model)
-                        for i, (train_pd, test_pd) in enumerate(self.folds)
+                        for train_pd, test_pd in self.folds
                     ],
                 )
         llk, train_models = zip(*results)
         self.train_models = train_models
-        self.test_loglikelihood = np.array(llk)
+        self.test_loglikelihood = llk
         return self.test_loglikelihood, self.train_models
 
     def get_eventprobs(self, source='train'):
@@ -248,7 +249,12 @@ def _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus):
         channel_pars=deepcopy(channel_pars),
         time_pars=deepcopy(time_pars),
         verbose=False,
-        cpus=cpus
+        cpus=cpus,
     )
-    test_llk = train_model.transform(test_pd)[0]
+    test_llk = train_model.log_likelihood(
+        test_pd,
+        channel_pars=train_model.channel_pars,
+        time_pars=train_model.time_pars,
+        per_trial=True
+    )
     return test_llk, train_model
