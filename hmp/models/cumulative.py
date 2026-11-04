@@ -38,24 +38,23 @@ class CumulativeMethod(BaseModel):
         but might result in the same event being duplicated in several events.
         Larger values will prevent duplication at the risk of missing neighboring events
     step : float, optional
-        The size of the step from 0 to the mean RT. Defaults to `location`.
+        The size of the step (in milliseconds) from 0 to the mean RT in milliseconds. Defaults to `location`.
         Small values ensure a complete exploration of the parameter space but can be slow.
         Higher values fasten the estimation but risk missing event due to unexplored spaces.
     end : int, optional
-        The maximum time to explore for new solutions. Defaults to the mean duration in the data.
+        The maximum time (in milliseconds) to explore for new solutions. Defaults to the mean duration in the data.
     sequential: bool
         If True, iteratively test all samples from 0 to `end`, retain times at
         which likelihood increased regardless of whether a subsequent event was found.
         If False (Default), Testing new starting point solely starting from the last detected event.
-    fastforward : bool, optional
-        If True when proposal got rejected, start again with the furthest time point explored
-        with previous proposition.
     tolerance : float, optional
         The tolerance used for convergence in the EM() function for the cumulative step.
         Defaults to 1e-4.
-    base_fit: EventModel
-        To start adding events from a specfic model, this argument can
-        be provided with a fitted EventModel. Defaults to None.
+    kfold: float
+        Number of folds in a k-fold scheme to use for the estimation of new events. If kfold > 1
+        performs crossvalidation on deterministically shuffled data.
+    lazy: bool = True,
+        Whether to just test the starting point on left-out data or actually fit it
     max_events: int
         Maximum number of events to be estimated. If None (default) uses the minim RT to estimated
         the maximim possible number of events.
@@ -70,10 +69,11 @@ class CumulativeMethod(BaseModel):
         location: float = None,
         step: float = None,
         end: int = None,
-        sequential: bool = True,
-        fastforward: bool = True,
         tolerance: float = 1e-4,
-        base_fit: EventModel | None = None,
+        consensus: float = .6,
+        kfold: int = 5,
+        lazy: bool = True,
+        sequential: bool = True,
         max_events: int | None = None,
         distribution: Any = None
     ):
@@ -83,18 +83,19 @@ class CumulativeMethod(BaseModel):
         self.location = location
         self.step = step
         self.end = end
-        self.sequential = sequential
-        self.fastforward = fastforward
         self.tolerance = tolerance
-        self.base_fit = base_fit
+        self.consensus = consensus
+        self.kfold = kfold
+        self.lazy = lazy
+        self.sequential = sequential
         self.max_events = max_events
         self.submodels = []
 
-    def fit(# noqa: PLR0912, PLR0915
+    def fit(
         self,
         data: PatternData | BaseData | xr.DataArray,
+        base_fit: EventModel | None = None,
         verbose: bool = True,
-        kfold: int = 1,
         cpus: int = 1,
 
     ) -> None:
@@ -112,13 +113,12 @@ class CumulativeMethod(BaseModel):
             1. data from BasePreprocessor or xr.DataArray containing preprocessed data.
             2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
+        base_fit: EventModel
+            To start adding events from a specfic model, this argument can
+            be provided with a fitted EventModel. Defaults to None.
         verbose : bool, optional
             If True, provides detailed output about the fitting process. Defaults to True.
         cpus : int, optional
-            The number of CPU cores to use for computation. Defaults to 1.
-        kfold: float
-            Number of folds in a k-fold scheme to use for the estimation of new events. If kfold > 1
-            performs crossvalidation on deterministically shuffled data.
 
         Returns
         -------
@@ -126,70 +126,81 @@ class CumulativeMethod(BaseModel):
         """
         pattern_data = self._instantiate_data_pattern(data)
     
-        if kfold > 1:
-            cv = KFoldCV(kfold)
+        if self.kfold > 1:
+            cv = KFoldCV(self.kfold)
             cv.prepare(pattern_data)
         else:
             cv = None
 
-        end = pattern_data.durations.values.mean() if self.end is None else self.end
+        loc_samples = self._time_to_samples(self.location, pattern_data.sfreq)
         if self.step is None:
-            self.step = self._time_to_samples(self.location, pattern_data.sfreq)/2
+            step = loc_samples / 2
+        else:
+            step = self._time_to_samples(self.step, pattern_data.sfreq)
+        
         if self.max_events is None:
             max_events = self._compute_max_events(pattern_data, self.location)
         else:
             max_events = self.max_events
-        #stop when not possible to insert event
-        end = int(np.rint((end - self._time_to_samples(self.location,pattern_data.sfreq) \
-                - 1) / self.step))
+        end = pattern_data.durations.values.mean() if self.end is None else self.end
+        end = int(np.rint(end / step))
 
         pbar = tqdm(total=end)  # progress bar
-        n_events, j = 1, 1 # j = sample after last placed event
-
-        # final time/chan parameters
+        n_events, j = 1, 0 # j = sample after last placed event
+        tolerance=self.tolerance
+        
+        # matrices time/chan parameters
         time_pars = np.zeros((end, 2))
         time_pars[:, 0] = self.distribution.shape
+        
         # Initialize last stage of n=1
         time_pars[0, 1] = self.distribution.mean_to_scale(pattern_data.durations.values.mean())
         channel_pars = np.zeros((end, pattern_data.cross_corr.shape[1]))
-        llk_prev = np.repeat(-np.inf, kfold)
+        llk_prev = -np.inf
 
-        if self.base_fit is not None :
-            n_events = self.base_fit.n_events+1
-            time_pars[:n_events] = self.base_fit.time_pars.copy()
-            channel_pars[:n_events-1] = self.base_fit.channel_pars.copy()
-            llk_prev = self.base_fit.transform(pattern_data)[0]
+        if base_fit is not None :
+            n_events = base_fit.n_events+1
+            time_pars[:n_events] = base_fit.time_pars.copy()
+            channel_pars[:n_events-1] = base_fit.channel_pars.copy()
+            llk_prev = base_fit.transform(pattern_data)[0] #TODO pbm when using CV! llk must be by trial
+            j = self.distribution.scale_to_mean(np.sum(time_pars[:n_events, 1]))/step
 
+        llk_improvement, llk_timecourse = [], []
         # Iterative fit
         while j < end and n_events <= max_events:
             prev_j = j
 
             # get new parameters
             j, channel_pars_props, time_pars_props = self._propose_fit_params(
-                n_events, j, channel_pars, time_pars
+                n_events, j, channel_pars, time_pars, step
             )
-            # Estimate model based on these propositions
-            channel_pars_res, time_pars_res, llk, max_scale = self._fit_proposition(
-                 pattern_data, n_events, channel_pars_props, time_pars_props, cpus, cv
+            if self.lazy:
+                tolerance=1
+            # # Estimate model based on these propositions
+            channel_pars_res, time_pars_res, llk = self._fit_proposition(
+                 pattern_data, n_events, channel_pars_props, time_pars_props, cpus, cv, tolerance
             )
-            # check solution
-            diff_llk = llk - llk_prev
-            if np.all(llk_prev != -np.inf):
-                diff_llk /= np.abs(llk_prev)
-
-            if np.median(diff_llk) > self.tolerance:  # accept solution if likelihood improved
+            llk_improvement.append(np.mean(llk - llk_prev > 0))
+            llk_timecourse.append(llk)
+            if llk_improvement[-1] > self.consensus:
+                
+                if self.lazy:
+                    # Re-estimate good starting points using provided tolerance
+                    channel_pars_res, time_pars_res, llk = self._fit_proposition(
+                         pattern_data, n_events, channel_pars_res, time_pars_res, cpus, cv, self.tolerance
+                    )
                 llk_prev = llk
-
+                
                 # update channel_pars, params,
-                channel_pars[:n_events] = channel_pars_res
-                time_pars[: n_events + 1] = time_pars_res
+                channel_pars[:n_events] = channel_pars_res.copy()
+                time_pars[: n_events + 1] = time_pars_res.copy()
 
                 if verbose:
                     # Just to track advancement
-                    events_so_far = [int(np.round(self.distribution.scale_to_mean(x))
+                    events_so_far = [int((np.round(x))
                                          *(1000/pattern_data.sfreq))
                                          for x in
-                                     np.cumsum(time_pars[:n_events, 1])
+                                     np.cumsum(self.distribution.scale_to_mean(time_pars[:n_events, 1]))
                     ]
                     print(
                         f"{n_events} events found around times "
@@ -197,21 +208,20 @@ class CumulativeMethod(BaseModel):
                     )
                 # Search for additional event
                 n_events += 1
-                if self.sequential:
-                    j += 1
-            elif self.fastforward:
-                # If ffwd, the next sample tested follows the max explored time for the last event
-                max_sample = int(np.round(self.distribution.scale_to_mean(max_scale)))
-                j = np.max([max_sample, (j + 1) * self.step]) / self.step
             else:
                 j += 1
             pbar.update(int(np.rint(j-prev_j)))
-        pbar.update(int(np.rint(end -j)+1))
 
+        pbar.update(1)
         # done estimating
         n_events = n_events - 1
+        if n_events == max_events and verbose:
+            warn("Cumulative reached maximum possible number of event")
         if n_events > 0:
             self._fitted = True
+            self.diagnostic = {}
+            self.diagnostic["llk_improvement"] = np.array(llk_improvement)
+            self.diagnostic["llk_timecourse"] = np.array(llk_timecourse)
             event_model = EventModel(n_events=n_events, pattern=self.pattern,
                                      location=self.location, tolerance=self.tolerance,
                                      distribution=self.distribution)
@@ -243,23 +253,18 @@ class CumulativeMethod(BaseModel):
 
     def _fit_proposition(self, pattern_data, n_events,
                          channel_pars_props, time_pars_props,
-                         cpus, cv):
+                         cpus, cv, tolerance):
 
-        event_model = EventModel(n_events=n_events, pattern=self.pattern, location=self.location,
-                                 tolerance=self.tolerance, distribution=self.distribution)
+        event_model = EventModel(n_events=n_events, pattern=self.pattern, location=self.location, 
+                                 tolerance=tolerance, distribution=self.distribution)
         if cv is not None:
             llk, train_models = cv.fit(event_model, None, channel_pars_props, time_pars_props, cpus)
-            evprobs = cv.get_eventprobs().mean('fold')
+            evprobs = cv.get_eventprobs(source='train').mean('fold').dropna('trial', how='all').fillna(0)
             event_model.n_dims = pattern_data.cross_corr.shape[1]
             channel_pars_res, time_pars_res = event_model.get_channel_time_parameters_expectation(
-                pattern_data, evprobs.values, np.arange(len(pattern_data.starts))
+                pattern_data, evprobs.values, np.arange(evprobs.sizes['trial'])
             )
-            max_scales = max(
-                np.sum(x[0, :n_events-1, 1])
-                for mod in train_models
-                for x in mod.time_pars_dev
-            )
-            max_scale = np.median(max_scales)
+            llk = np.concatenate(llk)
         else:
             event_model.fit(
                 pattern_data,
@@ -270,66 +275,60 @@ class CumulativeMethod(BaseModel):
             )
             channel_pars_res = event_model.channel_pars
             time_pars_res = event_model.time_pars
-            llk = event_model.lkhs
-            max_scale = np.max(
-                [np.sum(x[0, :n_events-1, 1]) for x in event_model.time_pars_dev]
-            )
-        return channel_pars_res, time_pars_res, llk, max_scale
+            llk = np.array([event_model.lkhs.sum()])
+        return channel_pars_res, time_pars_res, llk
 
-    def _propose_fit_params(self, n_events, j, channel_pars, time_pars):
+    def _propose_fit_params(self, n_events, j, channel_pars, time_pars, step):
 
-        if (
-            self.sequential and n_events > 1
-        ):  # go through the whole range sample-by-sample, j is sample since start
-            scale_j = self.distribution.mean_to_scale(self.step * j)
+        # New proposition to be inserted
+        time_pars_props = time_pars[:n_events].copy()
+        # Times retained previously
+        times_so_far = (
+                    self.distribution.scale_to_mean(time_pars_props[:, 1]
+                ))
 
-            # New parameter proposition
-            time_pars_props = time_pars[:n_events].copy()  # time_pars so far
-            # look between which event the next proposition should go
-            n_event_j = np.argwhere(scale_j >= np.cumsum(time_pars_props[:, 1])) + 2
-            n_event_j = np.max(n_event_j) if len(n_event_j) > 0 else 1
-            n_event_j = np.min([n_event_j, n_events])  # do not insert even after last stage
+        if not self.sequential:
+            j = np.max([
+                        np.sum(
+                            times_so_far[:-1] # j is the sum of all times excluding last stage
+                        ) / step + 1, # advance of a step compared to max prev ev.
+                    j #previous rejection
+                ])
 
-            # insert j at right spot, subtract prev scales
-            time_pars_props = np.insert(
-                time_pars_props,
-                n_event_j - 1,
-                [self.distribution.shape,
-                    scale_j - np.sum(time_pars_props[: n_event_j - 1, 1])],
-                axis=0,
-            )
-            # subtract inserted scale from next event
-            time_pars_props[n_event_j, 1] = (time_pars_props[n_event_j, 1]
-                                             - time_pars_props[n_event_j - 1, 1])
-            channel_pars_props = np.zeros((1, n_events, channel_pars.shape[-1]))  # always 0
+        time_j = step * j
+        
+        # look between which event the next proposition should go (always last if not seq)
+        event_j = np.argwhere(time_j >= np.cumsum(times_so_far)) + 1
+        event_j = np.max(event_j) if len(event_j) > 0 else 0
+        event_j = np.min([event_j, n_events-1])  # do not insert even after last stage
 
-            channel_pars_props[:, : n_events - 1, :] = np.tile(
-                channel_pars[: n_events - 1, :], (len(channel_pars_props), 1, 1)
-            )
-            # shift new event to correct position
-            channel_pars_props = np.insert(
-                channel_pars_props[:, :-1, :], n_event_j - 1, channel_pars_props[:, -1, :], axis=1
-            )
-
-            j = self.distribution.scale_to_mean(np.sum(time_pars_props[:n_event_j, 1]))/self.step
-        else:
-            time_pars_props = time_pars[: n_events + 1].copy()
-            time_pars_props[n_events,1] = time_pars_props[n_events-1,1]
-            # New parameter proposition for the new event based on previous run
-            new_event_prop = (np.max([self.distribution.mean_to_scale(j * self.step) -
-                np.sum(time_pars_props[:n_events-1, 1]),self.distribution.mean_to_scale(self.step)])
-            )
-            time_pars_props[n_events-1, 1] = new_event_prop
-            # Subtract new proposition from last stage
-            time_pars_props[-1, 1] -= new_event_prop
-            # Add a neutral event as new proposition
-            channel_pars_props = np.zeros((1, n_events, channel_pars.shape[-1]))
-            channel_pars_props[:, :n_events-1, :] = channel_pars[:n_events-1]
-            j = self.distribution.scale_to_mean(np.sum(time_pars_props[:n_events, 1]))/self.step
-
+        # Time proposition
+        scale_j_prop = self.distribution.mean_to_scale(np.max([
+                j * step - np.sum(times_so_far[:event_j]), step]))
+        time_pars_props = np.insert(
+            time_pars_props,
+            event_j,
+            [self.distribution.shape,
+                scale_j_prop],
+            axis=0,
+        )
+        # subtract inserted scale from next event
+        time_pars_props[event_j+1, 1] -= time_pars_props[event_j, 1]
+        
+        # Ensure valid durations
         time_pars_props[:, 1] = np.maximum(time_pars_props[:, 1],
-                               self.distribution.mean_to_scale(1))
+                       self.distribution.mean_to_scale(1))
 
+        # Channel proposiiton
+        channel_pars_props = np.zeros((1, n_events, channel_pars.shape[-1]))  # always 0
+
+        channel_pars_props[:, : n_events - 1, :] = np.tile(
+            channel_pars[: n_events - 1, :], (len(channel_pars_props), 1, 1)
+        )
+        # shift new event to correct position
+        channel_pars_props = np.insert(
+            channel_pars_props[:, :-1, :], event_j, channel_pars_props[:, -1, :], axis=1
+        )
         return j, channel_pars_props, np.array([time_pars_props])
 
     def __getattribute__(self, attr):
