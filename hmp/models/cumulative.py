@@ -70,7 +70,7 @@ class CumulativeMethod(BaseModel):
         step: float = None,
         end: int = None,
         tolerance: float = 1e-4,
-        consensus: float = .6,
+        consensus: float = .5,
         kfold: int = 5,
         lazy: bool = True,
         sequential: bool = True,
@@ -281,16 +281,14 @@ class CumulativeMethod(BaseModel):
     def _propose_fit_params(self, n_events, j, channel_pars, time_pars, step):
 
         # New proposition to be inserted
-        time_pars_props = time_pars[:n_events].copy()
+        time_pars_props = time_pars[:n_events+1].copy()
+        # Manipulate in sample space
+        times = self.distribution.scale_to_mean(time_pars_props[:-1,1])
         # Times retained previously
-        times_so_far = (
-                    self.distribution.scale_to_mean(time_pars_props[:, 1]
-                ))
-
         if not self.sequential:
             j = np.max([
                         np.sum(
-                            times_so_far[:-1] # j is the sum of all times excluding last stage
+                            times[:-1] # j is the sum of all times excluding last stage
                         ) / step + 1, # advance of a step compared to max prev ev.
                     j #previous rejection
                 ])
@@ -298,38 +296,27 @@ class CumulativeMethod(BaseModel):
         time_j = step * j
         
         # look between which event the next proposition should go (always last if not seq)
-        event_j = np.argwhere(time_j >= np.cumsum(times_so_far)) + 1
+        event_j = np.argwhere(time_j >= np.cumsum(times)) + 1
         event_j = np.max(event_j) if len(event_j) > 0 else 0
         event_j = np.min([event_j, n_events-1])  # do not insert even after last stage
 
         # Time proposition
-        scale_j_prop = self.distribution.mean_to_scale(np.max([
-                j * step - np.sum(times_so_far[:event_j]), step]))
-        time_pars_props = np.insert(
-            time_pars_props,
-            event_j,
-            [self.distribution.shape,
-                scale_j_prop],
-            axis=0,
-        )
-        # subtract inserted scale from next event
-        time_pars_props[event_j+1, 1] -= time_pars_props[event_j, 1]
+        scale_j_prop = np.max([j * step - np.sum(times[:event_j]), step])
+        times = np.insert(times, event_j, scale_j_prop)
+        
+        # subtract inserted proposition from next event
+        times[event_j+1] -= times[event_j]
         
         # Ensure valid durations
-        time_pars_props[:, 1] = np.maximum(time_pars_props[:, 1],
-                       self.distribution.mean_to_scale(1))
+        times = np.maximum(times, 1)
+        # Turn back to scale params
+        time_pars_props[:, 1] = self.distribution.mean_to_scale(times)
 
         # Channel proposiiton
-        channel_pars_props = np.zeros((1, n_events, channel_pars.shape[-1]))  # always 0
-
-        channel_pars_props[:, : n_events - 1, :] = np.tile(
-            channel_pars[: n_events - 1, :], (len(channel_pars_props), 1, 1)
-        )
-        # shift new event to correct position
-        channel_pars_props = np.insert(
-            channel_pars_props[:, :-1, :], event_j, channel_pars_props[:, -1, :], axis=1
-        )
-        return j, channel_pars_props, np.array([time_pars_props])
+        channel_pars_props = channel_pars[:n_events-1,:].copy()
+        # Insert 0 channel event
+        channel_pars_props = np.insert(channel_pars_props, event_j, 0, axis=0)
+        return j, channel_pars_props, time_pars_props
 
     def __getattribute__(self, attr):
         property_list = {
