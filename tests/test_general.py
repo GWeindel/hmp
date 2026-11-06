@@ -76,7 +76,8 @@ def test_basic_operations(sfreq, width):
     sim_source_times = np.ediff1d(events[:,0],to_begin=0)[events[:,2] > 1]
     peaks = sim_source_times[:-1].cumsum()
 
-    model = hmp.models.EventModel(n_events=3, pattern=pattern)
+    # Maximum likelihood (no prior on the stage scales)
+    model = hmp.models.EventModel(n_events=3, pattern=pattern, rho=0)
     llk, estimates = model.fit_transform(trial_data)
     test_topos = hmp.utils.event_channels(epoch_data, estimates, mean=True)
     if (sfreq, width) == (256, 26):

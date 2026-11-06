@@ -42,6 +42,18 @@ class EventModel(BaseModel):
         but might result in the same event being duplicated in several events.
         Larger values will prevent duplication at the risk of missing neighboring events.
         If array, should be length n_events+1, setting location for each stage.
+    rho : float, optional
+        Strength of the prior on the stage scales. Each trial adds
+        ``-rho * sum_j g(l_j / s_j)`` to the log-likelihood, with ``g(r) = r - log(1 + r)``,
+        ``s_j`` the scale of stage ``j`` and ``l_j = max(location_j, soft_min_location)``.
+        Setting this to 0 returns the MLE.
+        Default is 1.
+    soft_min_location : float, optional
+        Minimum location (in ms) used by the prior: stages with a shorter location (first and last
+        by default), are penalized as if their location was ``soft_min_location``. The stage
+        durations themselves keep their location. Without it, the first and last stages have a bias
+        towards shorter durations. Default is None, which sets half the width of ``pattern`` (25 ms
+        by default).
     fixed_time_pars : list, optional
         List of time parameters to fix during estimation.
         If None, all time parameters are estimated.
@@ -86,6 +98,8 @@ class EventModel(BaseModel):
         n_events: int,
         pattern: Pattern = None,
         location: float | np.ndarray = None,
+        rho: float = 1.0,
+        soft_min_location: float = None,
         fixed_time_pars: list = [],
         fixed_channel_pars: list = [],
         channel_map: np.ndarray = None,
@@ -129,6 +143,11 @@ class EventModel(BaseModel):
         super().__init__(pattern, distribution)
         self.n_events = n_events
         self._set_locations(location)
+        if soft_min_location is None:
+            soft_min_location = self.pattern.width / 2
+        assert rho >= 0 and soft_min_location >= 0, "rho and soft_min_location must be >= 0"
+        self.rho = rho
+        self.soft_min_location = soft_min_location
         self.n_dims = None
         self.fixed_time_pars = fixed_time_pars
         self.fixed_channel_pars = fixed_channel_pars
@@ -322,7 +341,9 @@ class EventModel(BaseModel):
 
         self._fitted = True
         self.estimation_result = result
+        # The estimator maximizes lkhs + lprior (see rho), lkhs is the log-likelihood alone
         self.lkhs = result.likelihood
+        self.lprior = result.log_prior
         self.channel_pars = result.channel_pars
         self.time_pars = result.time_pars
         # Iteration traces are specific to iterative estimators; a sampler has none.
@@ -332,7 +353,9 @@ class EventModel(BaseModel):
         self.group = groups
         return result
 
-    def transform(self, data: Any, cpus: int = 1) -> tuple[np.ndarray, xr.DataArray]:
+    def transform(
+        self, data: Any, cpus: int = 1, penalized: bool = False
+    ) -> tuple[np.ndarray, xr.DataArray]:
         """
         Transform the trial data using the fitted model.
 
@@ -343,6 +366,9 @@ class EventModel(BaseModel):
             2. PatternData object.
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
         cpus : int, nr of cpus to use
+        penalized : bool, optional
+            If True, the returned log-likelihood includes the log-prior placed on the stage scales.
+            Default is False.
 
         Returns
         -------
@@ -357,6 +383,8 @@ class EventModel(BaseModel):
         likelihoods, xreventprobs = self._estim_probs_groups(
             pattern_data, self.channel_pars, self.time_pars, groups, cpus=cpus
         )
+        if penalized:
+            likelihoods = likelihoods + self.log_prior(pattern_data, self.time_pars, groups)
 
         return [likelihoods.sum()], xreventprobs
 
@@ -451,16 +479,73 @@ class EventModel(BaseModel):
         )
         return eventprobs.trial_lkh if per_trial else eventprobs.likelihood
 
+    def log_prior(
+        self,
+        pattern_data: PatternData,
+        time_pars: np.ndarray,
+        groups: np.ndarray = None,
+        per_group: bool = False,
+    ) -> float | np.ndarray:
+        """
+        Log-prior placed on the stage scales, summed over trials.
+
+        Each trial contributes ``-rho * sum_j g(l_j / s_j)`` with ``g(r) = r - log(1 + r)``,
+        ``s_j`` the scale of stage ``j`` and ``l_j = max(location_j, soft_min_location)``, see
+        ``rho`` and ``soft_min_location``. An estimator maximizes the log-likelihood plus this
+        term.
+
+        Note, that `exp(-g(l_j / s_j))` is exactly `P(X >= l_j)` where `X` denotes duration of
+        the stage after accounting for location `l_j` and can be written as a proper Bayesian prior
+        on the inverse of the scale (i.e., rate).
+
+        Parameters
+        ----------
+        pattern_data : PatternData
+            Preprocessed data cross-correlated with the pattern of the model.
+        time_pars : np.ndarray
+            3D ndarray (n_groups * n_stages * 2) of time distribution parameters.
+        groups : np.ndarray, optional
+            Array indicating the groups for grouping modeling. Default is None, in which
+            case groups are derived from the durations.
+        per_group : bool, optional
+            If True, return the log-prior of each group (in the order of ``np.unique(groups)``)
+            rather than their sum.
+
+        Returns
+        -------
+        float or np.ndarray
+            Summed log-prior, or a 1D array with one value per group if ``per_group``.
+        """
+        if groups is None:
+            _, groups, _ = self.group_constructor(pattern_data.durations)
+        data_groups = np.unique(groups)
+        log_prior = np.zeros(len(data_groups))
+        if self.rho > 0:
+            for i, cur_group in enumerate(data_groups):
+                scales = time_pars[cur_group, self.time_map[cur_group, :] >= 0, 1]
+                locations = self._prior_locations(len(scales), pattern_data.sfreq)
+                penalized = locations > 0
+                if np.any(scales[penalized] <= 0):
+                    log_prior[i] = -np.inf
+                    continue
+                ratio = locations[penalized] / scales[penalized]
+                log_prior[i] = (
+                    -self.rho * np.sum(groups == cur_group) * np.sum(ratio - np.log1p(ratio))
+                )
+        return log_prior if per_group else log_prior.sum()
+
     @property
     def xrtraces(self):
         """
-        Returns the traces of the log-likelihood for each EM iteration as an xarray DataArray.
+        Returns the traces of the objective for each EM iteration as an xarray DataArray.
+
+        The objective is the log-likelihood plus the log-prior of the stage scales (see ``rho``).
 
         Returns
         -------
         xr.DataArray
             An xarray DataArray with dimensions ("em_iteration", "group") containing
-            the log-likelihood traces.
+            the objective traces.
         """
         self._check_fitted("get traces")
         return xr.DataArray(
@@ -653,7 +738,7 @@ class EventModel(BaseModel):
         the scale parameters from the average distance between consecutive events minus
         the location of the stage (i.e. the mean of the shifted stage duration distribution).
         For the Gamma distribution with fixed shape this is the exact M step (except for
-        discretization).
+        discretization). Corrects M step for a prior on the scales if ``self.rho > 0``.
 
         Parameters
         ----------
@@ -674,6 +759,29 @@ class EventModel(BaseModel):
         params = np.zeros((len(averagepos), 2), dtype=np.float32)
         params[:, 0] = self.distribution.shape
         params[:, 1] = self.distribution.mean_to_scale(stage_means)
+
+        if self.rho > 0:
+            # Derivative of exp. llk + log prior gives k s^2 + (k l - x) s - (x l + rho l^2) = 0
+            # Wolfram gives 3 roots for "solve k s^2 + (k l - x) s - (x l + rho l^2) for s"
+            # One is negative/zero for loc >= 0 and one applies for k=0. Remaining one is
+            # positive and thus optimizes deriv=0.
+            prior_locations = self._prior_locations(len(averagepos), sfreq)
+            penalized = prior_locations > 0
+            # get k (for Gamma and Wald this is simply shape) from the ratio of mean to scale
+            # self.distribution.shape would only be correct for Gamma and Wald, the ratio always
+            # returns the correct term (e.g., exp(shape**2/2) for log-normal)
+            k = self.distribution.scale_to_mean(1.0)
+
+            # Get average stage duration and locations for penalized stages
+            x = np.maximum(stage_means[penalized], 0)
+            loc = prior_locations[penalized]
+
+            # Root from Wolfram is (-k l + x + sqrt(k^2 l^2 + x^2 + 2 k l (x + 2 l ρ)))/(2 k)
+            # can simplify to:
+            b = k * loc - x
+            params[penalized, 1] = (
+                -b + np.sqrt(b**2 + 4 * k * (x * loc + self.rho * loc**2))
+            ) / (2 * k)
         return params
 
     def estim_probs(
@@ -995,6 +1103,30 @@ class EventModel(BaseModel):
         """
         locations = self._time_to_samples(self.locations, sfreq)
         return np.concatenate([locations[: n_stages - 1], locations[-1:]])
+
+    def _prior_locations(self, n_stages: int, sfreq: float) -> np.ndarray:
+        """
+        Return the location (in samples) of each stage used by prior on the scales.
+
+        This is at least ``soft_min_location`` and otherwise just the stage location but not
+        rounded to samples since it does not need to (it only enters through the prior unlike the
+        real location).
+
+        Parameters
+        ----------
+        n_stages : int
+            The number of stages (number of events + 1).
+        sfreq : float
+            The sampling frequency of the data.
+
+        Returns
+        -------
+        np.ndarray
+            A 1D float array of length ``n_stages``.
+        """
+        return np.maximum(
+            self._stage_locations(n_stages, sfreq), self.soft_min_location * sfreq / 1000
+        )
 
     def location_pdf(
         self, time_pars: np.ndarray, max_duration: int, n_stages: int, sfreq: float, dtype: Any
