@@ -80,7 +80,7 @@ class LOOCV():
         If True, the test score is the held-out log-likelihood plus the log-prior of the stage
         scales (see ``EventModel.log_prior``). If False (default), the held-out log-likelihood
         alone.
-        Default = False.
+        Default = True.
     """
 
     def __init__(#noqa: PLR0912
@@ -92,7 +92,7 @@ class LOOCV():
         pattern: Pattern = None,
         pca_cv: bool = True,
         pca_kwargs : dict = None,
-        penalized: bool = False,
+        penalized: bool = True,
     ):
         self.model = model
         self.dimension = dimension

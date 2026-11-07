@@ -36,7 +36,7 @@ class KFoldCV:
         If True, the test score is the held-out log-likelihood plus the log-prior of the stage
         scales (see ``EventModel.log_prior``). If False (default), the held-out log-likelihood
         alone.
-        Default = False.
+        Default = True.
 
     Attributes
     ----------
@@ -58,7 +58,7 @@ class KFoldCV:
         n_splits: int = 5,
         shuffle: bool = True,
         seed: int = 1,
-        penalized: bool = False,
+        penalized: bool = True,
     ):
         self.n_splits = n_splits
         self.shuffle = shuffle
