@@ -34,8 +34,7 @@ class KFoldCV:
         Seed of the shuffle. Default is 1.
     penalized : bool, optional
         If True, the test score is the held-out log-likelihood plus the log-prior of the stage
-        scales (see ``EventModel.log_prior``). If False (default), the held-out log-likelihood
-        alone.
+        scales (see ``EventModel.log_prior``). If False, the held-out log-likelihood alone.
         Default = True.
 
     Attributes
