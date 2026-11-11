@@ -223,7 +223,7 @@ class TestEstimatorInjection:
         model = EventModel(n_events=n_events)
         result = model.fit(pdata_b, verbose=False)
 
-        for key in ("traces", "traces_group", "time_pars_dev", "lkhs"):
+        for key in ("traces", "traces_group", "time_pars_dev", "lkhs", "objectives"):
             assert key in result.diagnostics
 
         traces = result.diagnostics["traces"]
@@ -257,7 +257,12 @@ class TestBackwardCompatibility:
         result = model.fit(pdata_b, verbose=False)
 
         assert len(result.diagnostics["lkhs"]) == model.starting_points
-        assert result.likelihood == np.max(result.diagnostics["lkhs"])
+        # Best start maximizes the objective (log-likelihood plus log-prior)
+        best = np.argmax(result.diagnostics["objectives"])
+        assert result.likelihood == result.diagnostics["lkhs"][best]
+        assert np.isclose(
+            result.diagnostics["objectives"][best], result.likelihood + result.log_prior
+        )
 
 
 class TestLikelihoodSurface:

@@ -23,7 +23,8 @@ def test_fixed_simple():
     # Data b is without noise, recovery should be perfect
     data_b = hmp_data.select_coord('b', 'subject')
     pdata_b = PatternData.from_basedata(data_b)
-    model = EventModel(n_events=n_events)
+    # Maximum likelihood (no prior on the stage scales)
+    model = EventModel(n_events=n_events, rho=0)
     # Recover generating parameters
     sim_source_times, true_pars, true_magnitudes, _ = \
         simulations.simulated_times_and_parameters(event_b, model, pdata_b)
@@ -43,13 +44,13 @@ def test_fixed_simple():
     # test the difference between electrode values at event times
     assert np.isclose(np.sum(np.abs(true_topos.data - test_topos.data)), 0, atol=1e-4, rtol=0)
     # Test whether likelihood is the expected one
-    expected_lkh = np.array(-8.04513)
+    expected_lkh = np.array(-7.589448)
     assert np.isclose(lkh_b, expected_lkh, atol=1e-2, rtol=0)
 
     #locations
-    model = EventModel(n_events=n_events, location=25)
+    model = EventModel(n_events=n_events, location=25, rho=0)
     noloc_loglikelihood, noloc_estimates = model.fit_transform(data_b,)
-    expected_lkh = np.array(-7.974311)
+    expected_lkh = np.array(-7.7359967)
     assert np.isclose(noloc_loglikelihood, expected_lkh, atol=1e-2, rtol=0)
 
     # testing recovery of attributes

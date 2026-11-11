@@ -37,6 +37,13 @@ class CumulativeMethod(BaseModel):
         Shorter values than the width of a pattern allow overlap of neighboring events
         but might result in the same event being duplicated in several events.
         Larger values will prevent duplication at the risk of missing neighboring events
+    rho : float, optional
+        Strength of the prior placed on the stage scales, see ``EventModel``. Default is 1.
+        New events are accepted based on the log-likelihood plus this log-prior, the
+        objective maximized by each fit.
+    soft_min_location : float, optional
+        Minimum location (in ms) used by the prior placed on the stage scales, see ``EventModel``.
+        Default is None, half the width of ``pattern``.
     step : float, optional
         The size of the step from 0 to the mean RT. Defaults to `location`.
         Small values ensure a complete exploration of the parameter space but can be slow.
@@ -64,10 +71,12 @@ class CumulativeMethod(BaseModel):
         one of 'gamma','lognormal','wald', or 'weibull'
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913, PLR0917
         self,
         pattern: Pattern = None,
         location: float = None,
+        rho: float = 1.0,
+        soft_min_location: float = None,
         step: float = None,
         end: int = None,
         sequential: bool = True,
@@ -81,6 +90,8 @@ class CumulativeMethod(BaseModel):
         if location is None:
             location = self.pattern.width
         self.location = location
+        self.rho = rho
+        self.soft_min_location = soft_min_location
         self.step = step
         self.end = end
         self.sequential = sequential
@@ -127,7 +138,7 @@ class CumulativeMethod(BaseModel):
         pattern_data = self._instantiate_data_pattern(data)
     
         if kfold > 1:
-            cv = KFoldCV(kfold)
+            cv = KFoldCV(kfold, penalized=True)
             cv.prepare(pattern_data)
         else:
             cv = None
@@ -158,7 +169,7 @@ class CumulativeMethod(BaseModel):
             n_events = self.base_fit.n_events+1
             time_pars[:n_events] = self.base_fit.time_pars.copy()
             channel_pars[:n_events-1] = self.base_fit.channel_pars.copy()
-            llk_prev = self.base_fit.transform(pattern_data)[0]
+            llk_prev = self.base_fit.transform(pattern_data, penalized=True)[0]
 
         # Iterative fit
         while j < end and n_events <= max_events:
@@ -213,7 +224,9 @@ class CumulativeMethod(BaseModel):
         if n_events > 0:
             self._fitted = True
             event_model = EventModel(n_events=n_events, pattern=self.pattern,
-                                     location=self.location, tolerance=self.tolerance,
+                                     location=self.location, rho=self.rho,
+                                     soft_min_location=self.soft_min_location,
+                                     tolerance=self.tolerance,
                                      distribution=self.distribution)
             event_model.fit(
                 pattern_data,
@@ -246,6 +259,7 @@ class CumulativeMethod(BaseModel):
                          cpus, cv):
 
         event_model = EventModel(n_events=n_events, pattern=self.pattern, location=self.location,
+                                 rho=self.rho, soft_min_location=self.soft_min_location,
                                  tolerance=self.tolerance, distribution=self.distribution)
         if cv is not None:
             llk, train_models = cv.fit(event_model, None, channel_pars_props, time_pars_props, cpus)
@@ -270,7 +284,7 @@ class CumulativeMethod(BaseModel):
             )
             channel_pars_res = event_model.channel_pars
             time_pars_res = event_model.time_pars
-            llk = event_model.lkhs
+            llk = event_model.lkhs + event_model.lprior
             max_scale = np.max(
                 [np.sum(x[0, :n_events-1, 1]) for x in event_model.time_pars_dev]
             )
