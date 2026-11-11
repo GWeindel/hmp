@@ -9,6 +9,7 @@ from typing import Callable, Optional
 
 import mne_bids
 import numpy as np
+import pandas as pd
 from mne import events_from_annotations, set_log_level
 from mne.channels import DigMontage
 from mne_bids.config import ALLOWED_DATATYPE_EXTENSIONS
@@ -213,7 +214,7 @@ def _process_bids_dataset(recording, montage, centering_id, event_id, verbose,
     # original trigger values. The following ensures mapping by matching the
     # description between the events.tsv and the event_from_annotations
     # and uptating the trigger value in the expected stimulus/events dicts
-    new_cent_id, new_resp_id = _bids_to_annot(recording, detected_event_id,
+    new_cent_id, new_resp_id, extras = _bids_to_annot(recording, detected_event_id,
                                                centering_id, event_id, verbose)
     # User level preprocessing, should include: re-referencing, channel selection
     # filtering and resampling if needed and take data, events, preprocessing_kwargs
@@ -227,12 +228,15 @@ def _process_bids_dataset(recording, montage, centering_id, event_id, verbose,
 
     # Epoching + resampling + metadata creation
     epochs, valid_epoch_index = utils._epoching_raw(
-        data, events, new_cent_id, new_resp_id, verbose, epoching_kwargs)
-
+        data, events, new_cent_id, new_resp_id, verbose, epoching_kwargs, extras)
     return epochs, valid_epoch_index
 
 def _bids_to_annot(path, detected_event_id, centering_id, event_id, verbose):
     path_to_tsv = path.copy().update(suffix="events", extension=".tsv")
+    event_file = pd.read_csv(path_to_tsv, sep="\t")
+    if not all(col in event_file.columns for col in ["trial_type", "value"]):
+        raise ValueError("Missing expected columns 'trial_type' and/or 'value'"
+                        f"got {event_file.columns}")
     events_dict = mne_bids.events_file_to_annotation_kwargs(path_to_tsv)
     read_event_id = events_dict['event_id']
     # Remap based on user requested dict
@@ -257,7 +261,11 @@ def _bids_to_annot(path, detected_event_id, centering_id, event_id, verbose):
     if len(not_found)>0:
         print(f"Did not found equivalence of triggers {not_found} "
             "in provided centered_id/event_id")
-    return new_stim_id, new_resp_id
+    extras = event_file[event_file["value"].isin(centering_id.values())]
+    extras = extras.drop(columns=["trial_type", "value"]).reset_index(names="event_number")
+    if "sample" in extras.columns:
+        extras = extras.rename(columns={"sample": "sample_continuous"})
+    return new_stim_id, new_resp_id, extras
 
 def _check_bids_kwargs(bids_kwargs):
     if 'root' not in bids_kwargs:

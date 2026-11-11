@@ -3,6 +3,7 @@ import inspect
 from warnings import warn
 
 import numpy as np
+import pandas as pd
 import xarray as xr
 from mne import Epochs, create_info
 from mne.channels import DigMontage
@@ -67,7 +68,7 @@ def _format_trigger_description(stimulus_id, event_id):
         stimulus_id = {f"stimulus/{k}": v for k, v in stimulus_id.items()}
     return stimulus_id, event_id
 
-def _epoching_raw(data, events, stimulus_id, event_id, verbose, epoching_kwargs):
+def _epoching_raw(data, events, stimulus_id, event_id, verbose, epoching_kwargs, extras=None):
     if len(stimulus_id) == 0:
         raise ValueError("No valid centering_id found in the data "
                          f"detected triggers : {np.unique(events[:,2])}")
@@ -90,6 +91,9 @@ def _epoching_raw(data, events, stimulus_id, event_id, verbose, epoching_kwargs)
     cols_to_keep = [col for col in metadata_i if col not in [*stim,*list(event_id.keys())]]
     metadata_i = metadata_i[cols_to_keep]  # only keep event_names and rts
     metadata_i['event_name'] = ["/".join(x.split("/")[1:]) for x in metadata_i['event_name']]
+    if extras is not None:
+        # Comes from BIDS .tsv
+        metadata_i = pd.concat([metadata_i.reset_index(drop=True), extras], axis=1)
     epochs = Epochs(
         data,
         meta_events,
