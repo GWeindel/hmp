@@ -3,8 +3,8 @@ import inspect
 from warnings import warn
 
 import numpy as np
-import xarray as xr
 import pandas as pd
+import xarray as xr
 from mne import Epochs, create_info
 from mne.channels import DigMontage
 from mne.epochs import make_metadata

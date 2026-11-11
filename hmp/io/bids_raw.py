@@ -4,12 +4,12 @@ This module provides functions for reading BIDS data format
 """
 
 import re
-import pandas as pd
 from copy import deepcopy
 from typing import Callable, Optional
 
 import mne_bids
 import numpy as np
+import pandas as pd
 from mne import events_from_annotations, set_log_level
 from mne.channels import DigMontage
 from mne_bids.config import ALLOWED_DATATYPE_EXTENSIONS
@@ -236,7 +236,7 @@ def _bids_to_annot(path, detected_event_id, centering_id, event_id, verbose):
     event_file = pd.read_csv(path_to_tsv, sep="\t")
     if not all(col in event_file.columns for col in ["trial_type", "value"]):
         raise ValueError("Missing expected columns 'trial_type' and/or 'value'"
-                        f"got {check_cols.columns}") 
+                        f"got {event_file.columns}")
     events_dict = mne_bids.events_file_to_annotation_kwargs(path_to_tsv)
     read_event_id = events_dict['event_id']
     # Remap based on user requested dict
