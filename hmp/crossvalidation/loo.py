@@ -76,6 +76,10 @@ class LOOCV():
     pca_kwargs : dict, optional/required if unprojected base_data is passed during fit
         arguments to be passed to BaseData.pca_and_variance(), n_comp is required.
         Default = None.
+    penalized : bool, optional
+        If True, the test score is the held-out log-likelihood plus the log-prior of the stage
+        scales (see ``EventModel.log_prior``). If False, the held-out log-likelihood alone.
+        Default = True.
     """
 
     def __init__(#noqa: PLR0912
@@ -87,6 +91,7 @@ class LOOCV():
         pattern: Pattern = None,
         pca_cv: bool = True,
         pca_kwargs : dict = None,
+        penalized: bool = True,
     ):
         self.model = model
         self.dimension = dimension
@@ -94,6 +99,7 @@ class LOOCV():
         self.informed = informed
         self.pca_cv = pca_cv
         self.pca_kwargs = pca_kwargs
+        self.penalized = penalized
 
         #instance of an hmp model
         if isinstance(model, BaseModel):
@@ -392,7 +398,7 @@ class LOOCV():
                                     standardize_recording=standardize_recording)
 
         # Calculate loglikelihood of model applied on data of participant
-        likelihood, _ = modelfit.transform(data, cpus=cpus_model)
+        likelihood, _ = modelfit.transform(data, cpus=cpus_model, penalized=self.penalized)
 
         if len(likelihood) == 1:
             return likelihood[0]
@@ -515,6 +521,7 @@ class LOOCV():
             if not np.all(likelihoods.n_events==likelihoods.n_events[0]):
                 likelihoods['n_event'] = 'variable'
             likelihoods.attrs['informed'] = self.informed
+            likelihoods.attrs['penalized'] = self.penalized
 
             modelfits_xr = likelihoods.copy()
             modelfits_xr.data = np.expand_dims(np.array(modelfits), axis=0)

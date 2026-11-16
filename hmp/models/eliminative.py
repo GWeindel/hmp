@@ -25,11 +25,16 @@ class EliminativeMethod(BaseModel):
         The pattern and properties to use for cross-correlation. Default is
         half sine with 50 ms width.
     location : int, optional
-        How many milliseconds should be censored in the EM() step of model fitting.
+        Minimum duration (in ms) of the stages between two events, see ``EventModel``.
         Default is width of the event, which is by default 50 ms.
         Shorter values than the width of a pattern allow overlap of neighboring events
         but might result in the same event being duplicated in several events.
         Larger values will prevent duplication at the risk of missing neighboring events
+    rho : float, optional
+        Strength of the prior placed on the stage scales, see ``EventModel``. Default is 1.
+    soft_min_location : float, optional
+        Minimum location (in ms) used by the prior placed on the stage scales, see ``EventModel``.
+        Default is None, half the width of ``pattern``.
     max_events : int, optional
         Maximum number of events to be estimated. By default, it is inferred using
         `compute_max_events()` if not provided.
@@ -51,6 +56,8 @@ class EliminativeMethod(BaseModel):
         self,
         pattern: Pattern = None,
         location: float = None,
+        rho: float = 1.0,
+        soft_min_location: float = None,
         max_events: int | None = None,
         min_events: int = 1,
         base_fit: EventModel | None = None,
@@ -62,6 +69,8 @@ class EliminativeMethod(BaseModel):
         if location is None:
             location = self.pattern.width
         self.location = location
+        self.rho = rho
+        self.soft_min_location = soft_min_location
         self.max_events: int = max_events
         self.min_events: int = min_events
         self.base_fit: EventModel | None = base_fit
@@ -123,17 +132,32 @@ class EliminativeMethod(BaseModel):
 
             time_pars_prev = self.submodels[n_events+1].xrtime_pars.dropna("stage").values
             channel_pars_prev = self.submodels[n_events+1].xrchannel_pars.dropna("event").values
+            # Get Mean stage durations (in samples) of the previous model, i.e. location + mean of
+            # the distribution
+            durations_prev = self.submodels[n_events+1]._stage_locations(
+                n_events + 2, pattern_data.sfreq
+            ) + self.distribution.scale_to_mean(time_pars_prev[:, :, 1])
+            # Now get stage locations of the new model
+            locations = event_model._stage_locations(n_events + 1, pattern_data.sfreq)
 
             events_temp, pars_temp = [], []
 
             for event in np.arange(n_events + 1):  # creating all possible starting points
                 events_temp.append(channel_pars_prev[:, np.arange(n_events + 1) != event,])
 
-                temp_pars = np.copy(time_pars_prev)
-                temp_pars[:, event, 1] = (
-                    temp_pars[:, event, 1] + temp_pars[:, event + 1, 1]
+                durations = np.copy(durations_prev)
+                # Full stage duration including locations get's moved into event
+                durations[:, event] = (
+                    durations[:, event] + durations[:, event + 1]
                 )  # combine two stages into one
-                temp_pars = np.delete(temp_pars, event + 1, axis=1)
+                # Drop event + 1 now
+                durations = np.delete(durations, event + 1, axis=1)
+                temp_pars = np.delete(np.copy(time_pars_prev), event + 1, axis=1)
+                # Got to fix the mean at min 1 to prevent pmf from becoming zero everywhere
+                # and need to evaluate scale at full duration - location (but only subtracted once)
+                temp_pars[:, :, 1] = self.distribution.mean_to_scale(
+                    np.maximum(durations - locations, 1)
+                )
                 pars_temp.append(temp_pars)
             event_model.fit(data=pattern_data,
                             channel_pars=np.array(events_temp),
@@ -148,7 +172,8 @@ class EliminativeMethod(BaseModel):
 
     def transform(self,
                   data: PatternData | BaseData | xr.DataArray,
-                  cpus: int = 1
+                  cpus: int = 1,
+                  penalized: bool = False,
                   ):
         """
         Apply all fitted submodels to the provided data.
@@ -161,6 +186,9 @@ class EliminativeMethod(BaseModel):
             In case of option 1, data is cross-correlated with the pattern in self.pattern.
         cpus : int
             nr of cpus to use
+        penalized : bool, optional
+            If True, the log-likelihoods include the log-prior placed on the stage scales,
+            see ``EventModel.transform``. Default is False.
 
         Returns
         -------
@@ -176,7 +204,7 @@ class EliminativeMethod(BaseModel):
         likelihoods = []
         event_probs = []
         for _, event_model in self.submodels.items():
-            lkh, prob = event_model.transform(pattern_data, cpus=cpus)
+            lkh, prob = event_model.transform(pattern_data, cpus=cpus, penalized=penalized)
             likelihoods.append(lkh)
             event_probs.append(prob)
         xr_eventprobs = xr.concat(event_probs, dim=pd.Index(list(self.submodels), name="n_events"))
@@ -191,6 +219,8 @@ class EliminativeMethod(BaseModel):
             n_events=n_events,
             pattern=self.pattern,
             location=self.location,
+            rho=self.rho,
+            soft_min_location=self.soft_min_location,
             starting_points=starting_points,
             tolerance=self.tolerance,
             max_iteration=self.max_iteration,

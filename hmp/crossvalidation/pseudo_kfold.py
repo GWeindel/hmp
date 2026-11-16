@@ -24,6 +24,19 @@ class KFoldCV:
     fits an independent model on each training fold and stores
     out-of-sample log-likelihoods together with the fitted models.
 
+    Parameters
+    ----------
+    n_splits : int, optional
+        Number of folds. Default is 5.
+    shuffle : bool, optional
+        Whether to shuffle the trials before splitting. Default is True.
+    seed : int, optional
+        Seed of the shuffle. Default is 1.
+    penalized : bool, optional
+        If True, the test score is the held-out log-likelihood plus the log-prior of the stage
+        scales (see ``EventModel.log_prior``). If False, the held-out log-likelihood alone.
+        Default = True.
+
     Attributes
     ----------
     llk : np.ndarray
@@ -43,11 +56,13 @@ class KFoldCV:
         self,
         n_splits: int = 5,
         shuffle: bool = True,
-        seed: int = 1
+        seed: int = 1,
+        penalized: bool = True,
     ):
         self.n_splits = n_splits
         self.shuffle = shuffle
         self.seed = seed
+        self.penalized = penalized
 
     def prepare(self, pattern_data):
         self.folds = list(
@@ -112,14 +127,16 @@ class KFoldCV:
 
         if cpus_cv == 1:
             results = [
-                _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus_model)
+                _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus_model,
+                          self.penalized)
                 for train_pd, test_pd in self.folds
             ]
         else:
             with mp.Pool(cpus_cv) as pool:
                 results = pool.starmap(_per_fold,
                     [
-                        (model, train_pd, test_pd, channel_pars, time_pars, cpus_model)
+                        (model, train_pd, test_pd, channel_pars, time_pars, cpus_model,
+                         self.penalized)
                         for i, (train_pd, test_pd) in enumerate(self.folds)
                     ],
                 )
@@ -241,7 +258,7 @@ def get_folds(pattern_data: PatternData,
         yield train_pd, test_pd
 
 
-def _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus):
+def _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus, penalized=False):
     train_model = deepcopy(model)
     train_model.fit(
         train_pd,
@@ -250,5 +267,5 @@ def _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus):
         verbose=False,
         cpus=cpus
     )
-    test_llk = train_model.transform(test_pd)[0]
+    test_llk = train_model.transform(test_pd, penalized=penalized)[0]
     return test_llk, train_model

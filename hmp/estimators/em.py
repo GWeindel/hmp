@@ -30,8 +30,10 @@ def worker_estim_probs(channel_pars, time_pars, chunk, max_duration):
 class EMEstimator(BaseEstimator):
     """Expectation-Maximization parameter estimator.
 
-    Implements the EM algorithm for HMP models, providing maximum likelihood
-    estimates of channel contributions and time distribution parameters.
+    Implements the EM algorithm for HMP models, providing estimates of channel
+    contributions and time distribution parameters that maximize the
+    log-likelihood plus the model's log-prior on the time parameters
+    (which is the log-likelihood if the prior is turned off. See ``EventModel.log_prior``).
 
     The estimator owns the optimization: the loop over starting points, its
     parallelization, the EM iterations themselves, and the selection of the
@@ -41,7 +43,8 @@ class EMEstimator(BaseEstimator):
     Parameters
     ----------
     tolerance : float, optional
-        Relative likelihood improvement below which estimation stops.
+        Relative improvement of the objective (log-likelihood plus log-prior)
+        below which estimation stops.
         Default is 1e-4.
     max_iteration : int, optional
         Maximum number of EM iterations. Default is 1e3.
@@ -93,9 +96,11 @@ class EMEstimator(BaseEstimator):
         Returns
         -------
         EstimationResult
-            Best solution across starting points. ``diagnostics`` carries the
-            per-iteration ``traces``, ``traces_group`` and ``time_pars_dev``,
-            plus the likelihood of every starting point under ``lkhs``.
+            Best solution across starting points, i.e. with the highest objective
+            (log-likelihood plus log-prior). ``diagnostics`` carries the
+            per-iteration objective in ``traces`` and ``traces_group``, the
+            ``time_pars_dev``, plus the log-likelihood and the objective of every
+            starting point under ``lkhs`` and ``objectives``.
         """
         pool = None
         try:
@@ -123,13 +128,14 @@ class EMEstimator(BaseEstimator):
 
         resetwarnings()
 
-        lkhs = np.array([x[0] for x in estimates])
-        best = int(np.argmax(lkhs))
+        objectives = np.array([x[0] for x in estimates])
+        lkhs = np.array([x[1] for x in estimates])
+        best = int(np.argmax(objectives))
 
-        if np.isneginf(lkhs.sum()):
+        if np.isneginf(objectives.sum()):
             warn("Fit failed, inspect provided starting points")
 
-        lkh, channel_pars, time_pars, traces, traces_group, time_pars_dev, n_iter = \
+        _, lkh, channel_pars, time_pars, traces, traces_group, time_pars_dev, n_iter = \
             estimates[best]
 
         self.fitted = True
@@ -137,6 +143,7 @@ class EMEstimator(BaseEstimator):
             channel_pars=channel_pars,
             time_pars=time_pars,
             likelihood=lkh,
+            log_prior=model.log_prior(pattern_data, time_pars, groups),
             converged=n_iter < self.max_iteration,
             n_iterations=n_iter,
             diagnostics={
@@ -144,6 +151,7 @@ class EMEstimator(BaseEstimator):
                 "traces_group": traces_group,
                 "time_pars_dev": time_pars_dev,
                 "lkhs": lkhs,
+                "objectives": objectives,
             },
         )
 
@@ -182,31 +190,38 @@ class EMEstimator(BaseEstimator):
         Returns
         -------
         tuple
-            ``(lkh, channel_pars, time_pars, traces, traces_group,
-            time_pars_dev, n_iterations)``.
+            ``(objective, lkh, channel_pars, time_pars, traces, traces_group,
+            time_pars_dev, n_iterations)``, with ``objective`` the log-likelihood
+            ``lkh`` plus the log-prior.
         """
         eventprobs = model.event_probabilities(
             pattern_data,
             initial_channel_pars, initial_time_pars,
             groups, cpus=cpus, pool=pool,
         )
+        # EM maximizes thellk + log prior
+        group_objective = eventprobs.group_lkh + model.log_prior(
+            pattern_data, initial_time_pars, groups, per_group=True
+        )
+        objective = group_objective.sum()
         lkh = eventprobs.likelihood
         data_groups = np.unique(groups)
         channel_pars = initial_channel_pars.copy()
         time_pars = initial_time_pars.copy()
-        traces = [lkh]
-        traces_group = [eventprobs.group_lkh]
+        traces = [objective]
+        traces_group = [group_objective]
         time_pars_dev = [time_pars.copy()]
         i = 0
 
-        lkh_prev = lkh.copy()
+        objective_prev = objective.copy()
         while i < self.max_iteration:  # Expectation-Maximization algorithm
             if i >= self.min_iteration and (
-                np.isneginf(lkh) or self.tolerance > (lkh - lkh_prev) / np.abs(lkh_prev)):
+                np.isneginf(objective)
+                or self.tolerance > (objective - objective_prev) / np.abs(objective_prev)):
                 break
 
-            # As long as new run gives better likelihood, go on
-            lkh_prev = lkh.copy()
+            # As long as new run gives better objective, go on
+            objective_prev = objective.copy()
 
             # Storage for step-length control
             new_channel_pars = channel_pars.copy()
@@ -246,7 +261,7 @@ class EMEstimator(BaseEstimator):
                             new_time_pars[model.time_map[:, p] == p_set, p, :], axis=0
                         )
 
-            # Step length control to ensure parameter updates result in valid llk
+            # Step length control to ensure parameter updates result in valid objective
             for icor in range(self.n_cor + 1):
                 if icor == self.n_cor:  # just reset
                     warn(
@@ -259,21 +274,25 @@ class EMEstimator(BaseEstimator):
                     new_channel_pars = channel_pars
                     new_time_pars = time_pars
 
-                # Compute llk under new parameters
+                # Compute objective under new parameters
                 with np.errstate(divide='ignore', invalid='ignore'):
                     eventprobs = model.event_probabilities(
                         pattern_data,
                         new_channel_pars, new_time_pars,
                         groups, cpus=cpus, pool=pool
                     )
+                    group_objective = eventprobs.group_lkh + model.log_prior(
+                        pattern_data, new_time_pars, groups, per_group=True
+                    )
+                    objective = group_objective.sum()
                     lkh = eventprobs.likelihood
 
                 # Stop if no update
                 if np.isclose((new_time_pars - time_pars).sum(), 0):
                     break
 
-                # Half step in case the llk is ill-defined
-                if np.isneginf(lkh):
+                # Half step in case the objective is ill-defined
+                if np.isneginf(objective):
                     new_channel_pars = (new_channel_pars + channel_pars)/2
                     new_time_pars = (new_time_pars + time_pars)/2
                 else:
@@ -284,8 +303,8 @@ class EMEstimator(BaseEstimator):
             time_pars = new_time_pars
             channel_pars = new_channel_pars
 
-            traces.append(lkh)
-            traces_group.append(eventprobs.group_lkh)
+            traces.append(objective)
+            traces_group.append(group_objective)
             time_pars_dev.append(time_pars.copy())
             i += 1
 
@@ -295,5 +314,5 @@ class EMEstimator(BaseEstimator):
                 f"({int(self.max_iteration)})",
                 RuntimeWarning,
             )
-        return lkh, channel_pars, time_pars, np.array(traces), \
+        return objective, lkh, channel_pars, time_pars, np.array(traces), \
             np.array(traces_group), np.array(time_pars_dev), i

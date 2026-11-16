@@ -29,6 +29,9 @@ class EstimationResult:
         Estimation-specific diagnostic information
     uncertainty : dict, optional
         Parameter uncertainty measures (for Bayesian methods)
+    log_prior : float, optional
+        Final log-prior value (see ``EventModel.log_prior``).
+        Estimate maximizes ``log-likelihood + log_prior``. Default is 0.
     """
 
     channel_pars: np.ndarray
@@ -38,6 +41,7 @@ class EstimationResult:
     n_iterations: int
     diagnostics: dict[str, Any] = field(default_factory=dict)
     uncertainty: Optional[dict[str, Any]] = None
+    log_prior: float = 0.0
 
 
 class BaseEstimator(ABC):
