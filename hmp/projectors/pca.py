@@ -58,7 +58,7 @@ class PCA(Projector):
             self.n_comp = np.where(np.cumsum(explained_variance_ratio) >= self.n_comp)[0][0] + 1
             if self.verbose:
                 print(f"{self.n_comp} components retained, explaining "
-                      f"{np.cumsum(explained_variance_ratio)[self.n_comp]:.5f}% variance")
+                      f"{np.cumsum(explained_variance_ratio)[self.n_comp - 1]:.5f}% variance")
         self.weights = pca_weights[:,:self.n_comp]
 
     def transform(self,
@@ -109,7 +109,7 @@ class PCA(Projector):
             eigvals = eigvals[ix]
         elif self.method_pca == 'svd':
             _, s, evecs = np.linalg.svd(vcov_mat, full_matrices=False)
-            eigvals = (s**2) / (vcov_mat.shape[0] - 1)
+            eigvals = s
             evecs = evecs.T[:, :n_comp]
 
         # Rebuilding as xarray to ease computation
