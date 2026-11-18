@@ -12,6 +12,8 @@ from hmp.models.base import BaseModel
 from hmp.models.event import EventModel
 from hmp.patterndata import PatternData
 from hmp.patterns import Pattern
+from hmp.estimators.base import BaseEstimator
+from hmp.estimators.em import EMEstimator, worker_estim_probs
 
 try:
     __IPYTHON__
@@ -71,9 +73,9 @@ class CumulativeMethod(BaseModel):
         end: int = None,
         tolerance: float = 1e-4,
         consensus: float = .5,
-        kfold: int = 5,
+        kfold: int = 3,
         lazy: bool = True,
-        sequential: bool = True,
+        sequential: bool = False,
         max_events: int | None = None,
         distribution: Any = None
     ):
@@ -175,10 +177,16 @@ class CumulativeMethod(BaseModel):
                 n_events, j, channel_pars, time_pars, step
             )
             if self.lazy:
-                tolerance=1
+                estimator = EMEstimator(
+                    tolerance=0,
+                    max_iteration=1,
+                    min_iteration=1,
+                )
+            else:
+                estimator=None
             # # Estimate model based on these propositions
             channel_pars_res, time_pars_res, llk = self._fit_proposition(
-                 pattern_data, n_events, channel_pars_props, time_pars_props, cpus, cv, tolerance
+                 pattern_data, n_events, channel_pars_props, time_pars_props, cpus, cv, estimator
             )
             llk_improvement.append(np.mean(llk - llk_prev > 0))
             llk_timecourse.append(llk)
@@ -187,7 +195,7 @@ class CumulativeMethod(BaseModel):
                 if self.lazy:
                     # Re-estimate good starting points using provided tolerance
                     channel_pars_res, time_pars_res, llk = self._fit_proposition(
-                         pattern_data, n_events, channel_pars_res, time_pars_res, cpus, cv, self.tolerance
+                         pattern_data, n_events, channel_pars_res, time_pars_res, cpus, cv, None
                     )
                 llk_prev = llk
                 
@@ -253,12 +261,12 @@ class CumulativeMethod(BaseModel):
 
     def _fit_proposition(self, pattern_data, n_events,
                          channel_pars_props, time_pars_props,
-                         cpus, cv, tolerance):
+                         cpus, cv, estimator):
 
         event_model = EventModel(n_events=n_events, pattern=self.pattern, location=self.location, 
-                                 tolerance=tolerance, distribution=self.distribution)
+                                 tolerance=self.tolerance, distribution=self.distribution)
         if cv is not None:
-            llk, train_models = cv.fit(event_model, None, channel_pars_props, time_pars_props, cpus)
+            llk, train_models = cv.fit(event_model, None, channel_pars_props, time_pars_props, cpus, 1, estimator)
             evprobs = cv.get_eventprobs(source='train').mean('fold').dropna('trial', how='all').fillna(0)
             event_model.n_dims = pattern_data.cross_corr.shape[1]
             channel_pars_res, time_pars_res = event_model.get_channel_time_parameters_expectation(
@@ -271,7 +279,8 @@ class CumulativeMethod(BaseModel):
                 channel_pars_props,
                 time_pars_props,
                 verbose=False,
-                cpus=cpus
+                cpus=cpus,
+                estimator=estimator
             )
             channel_pars_res = event_model.channel_pars
             time_pars_res = event_model.time_pars

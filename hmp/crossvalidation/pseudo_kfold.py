@@ -66,7 +66,8 @@ class KFoldCV:
             channel_pars=None,
             time_pars=None,
             cpus_cv = 1,
-            cpus_model = 1):
+            cpus_model = 1,
+            estimator = None):
         """Fit a model independently on each cross-validation fold.
 
         The provided PatternData object is partitioned into training and
@@ -86,6 +87,10 @@ class KFoldCV:
             If equal to 1, folds are processed sequentially.
         cpus_model : int
             Number of CPUs used during model fitting within each fold.
+        estimator : BaseEstimator, optional
+            Estimation method used to optimize the parameters. Defaults to
+            :class:`~hmp.estimators.em.EMEstimator` built from the tolerance and
+            iteration limits given to the model.
 
         Attributes
         ----------
@@ -113,14 +118,14 @@ class KFoldCV:
 
         if cpus_cv == 1:
             results = [
-                _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus_model)
+                _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus_model, estimator)
                 for train_pd, test_pd in self.folds
             ]
         else:
             with mp.Pool(cpus_cv) as pool:
                 results = pool.starmap(_per_fold,
                     [
-                        (model, train_pd, test_pd, channel_pars, time_pars, cpus_model)
+                        (model, train_pd, test_pd, channel_pars, time_pars, cpus_model, estimator)
                         for train_pd, test_pd in self.folds
                     ],
                 )
@@ -242,7 +247,7 @@ def get_folds(pattern_data: PatternData,
         yield train_pd, test_pd
 
 
-def _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus):
+def _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus, estimator):
     train_model = deepcopy(model)
     train_model.fit(
         train_pd,
@@ -250,6 +255,7 @@ def _per_fold(model, train_pd, test_pd, channel_pars, time_pars, cpus):
         time_pars=deepcopy(time_pars),
         verbose=False,
         cpus=cpus,
+        estimator=estimator
     )
     test_llk = train_model.log_likelihood(
         test_pd,
