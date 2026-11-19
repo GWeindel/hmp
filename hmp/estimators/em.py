@@ -289,7 +289,7 @@ class EMEstimator(BaseEstimator):
             time_pars_dev.append(time_pars.copy())
             i += 1
 
-        if i == self.max_iteration:
+        if i == self.max_iteration and self.max_iteration > 1:
             warn(
                 f"Convergence failed, estimation hit the maximum number of iterations: "
                 f"({int(self.max_iteration)})",

@@ -28,11 +28,11 @@ def test_cumulative_simple():
     true_loglikelihood, true_estimates = true_model.transform(trial_data_c)
     
     #Try k-fold 
-    model = CumulativeMethod(pattern)
-    model.fit(trial_data_c, kfold=4)
+    model = CumulativeMethod(pattern, kfold=4)
+    model.fit(trial_data_c)
 
     # Cumulative estimation
-    model = CumulativeMethod(pattern)
+    model = CumulativeMethod(pattern, kfold=1, lazy=False)
     model.fit(trial_data_c)
 
     # Testing estimates

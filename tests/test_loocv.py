@@ -96,7 +96,7 @@ def test_loocv():
     # visu.plot_loocv(lkh_loocv_elim,pvals=True, test="sign",mean=True)
 
     #cumulative
-    model_cumulative = CumulativeMethod()
+    model_cumulative = CumulativeMethod(kfold=1)
     loocv_cumu = LOOCV(model_cumulative, pca_cv=False)
     lkh_loocv_cumu, modelfits_loocv_cumu = loocv_cumu.fit(pattern_data)
     assert lkh_loocv_cumu is not None
