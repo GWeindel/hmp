@@ -14,7 +14,6 @@ import xarray as xr
 
 from hmp.patterndata import PatternData, select_indices
 from hmp.utils import _define_random_state
-from hmp.estimators import EMEstimator
 
 
 class KFoldCV:
