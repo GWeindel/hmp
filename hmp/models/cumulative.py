@@ -75,7 +75,7 @@ class CumulativeMethod(BaseModel):
         consensus: float = .5,
         kfold: int = 3,
         lazy: bool = True,
-        sequential: bool = False,
+        sequential: bool = True,
         max_events: int | None = None,
         distribution: Any = None
     ):
