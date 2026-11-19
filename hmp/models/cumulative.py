@@ -40,7 +40,7 @@ class CumulativeMethod(BaseModel):
         Larger values will prevent duplication at the risk of missing neighboring events
     step : float, optional
         The size of the step (in milliseconds) from 0 to the mean RT in milliseconds.
-        Defaults to `location`.
+        Defaults to half of `location`.
         Small values ensure a complete exploration of the parameter space but can be slow.
         Higher values fasten the estimation but risk missing event due to unexplored spaces.
     end : int, optional
