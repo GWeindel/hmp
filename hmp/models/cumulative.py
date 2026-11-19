@@ -76,7 +76,7 @@ class CumulativeMethod(BaseModel):
         consensus: float = .5,
         kfold: int = 3,
         lazy: bool = True,
-        sequential: bool = True,
+        sequential: bool = False,
         max_events: int | None = None,
         distribution: Any = None
     ):
@@ -173,8 +173,10 @@ class CumulativeMethod(BaseModel):
             prev_j = j
 
             # get new parameters
+            location_vec = np.zeros(n_events+1)
+            location_vec[1:-1] = loc_samples
             j, channel_pars_props, time_pars_props = self._propose_fit_params(
-                n_events, j, channel_pars, time_pars, step
+                n_events, j, channel_pars, time_pars, step, location_vec
             )
             if self.lazy:
                 estimator = EMEstimator(
@@ -208,7 +210,8 @@ class CumulativeMethod(BaseModel):
                     events_so_far = [int((np.round(x))
                                          *(1000/pattern_data.sfreq))
                                          for x in
-                        np.cumsum(self.distribution.scale_to_mean(time_pars[:n_events, 1]))
+                        np.cumsum(self.distribution.scale_to_mean(time_pars[:n_events, 1]
+                                                                 )+location_vec[:-1])
                     ]
                     print(
                         f"{n_events} events found around times "
@@ -289,12 +292,14 @@ class CumulativeMethod(BaseModel):
             llk = np.array([event_model.lkhs.sum()])
         return channel_pars_res, time_pars_res, llk
 
-    def _propose_fit_params(self, n_events, j, channel_pars, time_pars, step):
+    def _propose_fit_params(self, n_events, j, channel_pars, time_pars, step, location_vec):
 
         # New proposition to be inserted
         time_pars_props = time_pars[:n_events+1].copy()
         # Manipulate in sample space
         times = self.distribution.scale_to_mean(time_pars_props[:-1,1])
+        # Include locations for inner durations
+        times += location_vec[:-1]
         # Times retained previously
         if not self.sequential:
             j = np.max([
@@ -318,8 +323,12 @@ class CumulativeMethod(BaseModel):
         # subtract inserted proposition from next event
         times[event_j+1] -= times[event_j]
 
+        # Account back for locations
+        times -= location_vec
+        
         # Ensure valid durations
         times = np.maximum(times, 1)
+        
         # Turn back to scale params
         time_pars_props[:, 1] = self.distribution.mean_to_scale(times)
 
