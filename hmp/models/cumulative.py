@@ -46,18 +46,21 @@ class CumulativeMethod(BaseModel):
     end : int, optional
         The maximum time (in milliseconds) to explore for new solutions.
         Defaults to the mean duration in the data.
-    sequential: bool
-        If True, iteratively test all samples from 0 to `end`, retain times at
-        which likelihood increased regardless of whether a subsequent event was found.
-        If False (Default), Testing new starting point solely starting from the last detected event.
     tolerance : float, optional
         The tolerance used for convergence in the EM() function for the cumulative step.
         Defaults to 1e-4.
+    consensus : float, optional
+        The consensus threshold for retaining new events, proportion of trials for which likelihood must improve.
+        Defaults to 0.5.
     kfold: float
         Number of folds in a k-fold scheme to use for the estimation of new events. If kfold > 1
         performs crossvalidation on deterministically shuffled data.
     lazy: bool = True,
         Whether to just test the starting point on left-out data or actually fit it
+    sequential: bool
+        If True, iteratively test all samples from 0 to `end`, retain times at
+        which likelihood increased regardless of whether a subsequent event was found.
+        If False (Default), Testing new starting point solely starting from the last detected event.
     max_events: int
         Maximum number of events to be estimated. If None (default) uses the minim RT to estimated
         the maximim possible number of events.
