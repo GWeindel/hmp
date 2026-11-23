@@ -698,10 +698,189 @@ class EventModel(BaseModel):
             A 1D array of length n_trials with the log probability of each trial, before
             summing. Needed for pointwise model comparison such as LOO/WAIC.
         """
+        forward, backward, _, _, _ = self._forward_backward(
+            pattern_data, channel_pars, time_pars, subset_epochs, max_duration
+        )
+        eventprobs = forward * backward
+        eventprobs = np.clip(eventprobs, 0, None)
+        trial_likelihood = np.log(
+            eventprobs[:, :, 0].sum(axis=0)
+        )
+        likelihood = np.sum(trial_likelihood)
+        eventprobs = eventprobs / eventprobs.sum(axis=0)
+        eventprobs[np.isnan(eventprobs)] = 0
+        eventprobs = eventprobs.transpose((1, 0, 2))
+        return [likelihood, eventprobs, trial_likelihood]
+
+    def estim_duration_probs(
+        self,
+        pattern_data: PatternData,
+        channel_pars: np.ndarray,
+        time_pars: np.ndarray,
+        subset_epochs: list[int] | None = None,
+        max_duration: int | None = None,
+    ) -> np.ndarray:
+        """
+        Posterior probability of each peak-to-peak interval duration.
+
+        For each trial and each of the ``n_events + 1`` intervals (stages), computes
+        ``P(d_j = d | data, parameters)``, the probability that interval ``j`` lasts
+        exactly ``d`` samples. This is the E-step quantity needed by an exact M-step for
+        duration distributions other than the Gamma (whose M-step only needs the mean).
+
+        Intervals are peak-to-peak: ``d_0 = t_0`` (stimulus to first event),
+        ``d_j = t_j - t_{j-1}`` and ``d_n = T - 1 - t_{n-1}`` (last event to response),
+        with ``T`` the trial duration in samples, so the durations of a trial always sum
+        to ``T - 1``.
+
+        For an internal interval the probability requires the joint posterior of two
+        consecutive events, which is not the product of their marginals (positions are
+        dependent a posteriori). It is obtained from the forward and backward variables:
+
+        ``P(d_j = d) = sum_t alpha_{j-1}(t) p_j(d) g_j(t + d) beta_j(t + d) / L``
+
+        where ``alpha`` includes the gain of its own event and ``beta`` does not.
+
+        Parameters
+        ----------
+        pattern_data : PatternData
+            Preprocessed data cross-correlated with the pattern of the model.
+        channel_pars : np.ndarray
+            A 2D array of shape (n_events, n_channels) of channel contributions.
+        time_pars : np.ndarray
+            A 2D array of shape (n_stages, n_parameters) of distribution parameters.
+        subset_epochs : list[int] or None, optional
+            Trial indices (or boolean mask of full length) to consider. If None, all
+            trials are used.
+        max_duration : int or None, optional
+            Size of the duration axis. Defaults to the longest selected trial.
+
+        Returns
+        -------
+        np.ndarray
+            A 3D array of shape (n_trials, max_duration, n_events + 1). Entry
+            ``[s, d, j]`` is the probability that interval ``j`` of trial ``s`` lasts
+            ``d`` samples. Each ``[s, :, j]`` sums to 1.
+        """
+        forward, backward, probs, pmf, durations = self._forward_backward(
+            pattern_data, channel_pars, time_pars, subset_epochs, max_duration
+        )
+        n_events = channel_pars.shape[0]
+        n_trials = len(durations)
+        trial_lkh = np.sum(forward[:, :, 0] * backward[:, :, 0], axis=0)
+        eventprobs = np.clip(forward * backward, 0, None) / trial_lkh[np.newaxis, :, np.newaxis]
+
+        dprobs = np.zeros((n_trials, forward.shape[0], n_events + 1), dtype=forward.dtype)
+        for trial in range(n_trials):
+            dur = durations[trial]
+            d_idx = np.arange(dur)
+            dprobs[trial, :dur, 0] = eventprobs[d_idx, trial, 0]
+            dprobs[trial, :dur, n_events] = eventprobs[dur - 1 - d_idx, trial, n_events - 1]
+            for stage in range(1, n_events):
+                a = forward[:dur, trial, stage - 1]
+                b = probs[:dur, trial, stage] * backward[:dur, trial, stage]
+                corr = np.correlate(b, a, mode="full")[dur - 1:]
+                dprobs[trial, :dur, stage] = corr * pmf[:dur, stage] / trial_lkh[trial]
+        dprobs = np.clip(dprobs, 0, None)
+        dprobs[np.isnan(dprobs)] = 0
+        return dprobs
+
+    def duration_probabilities(
+        self,
+        pattern_data: PatternData,
+        channel_pars: np.ndarray,
+        time_pars: np.ndarray,
+        groups: np.ndarray = None,
+    ) -> xr.DataArray:
+        """
+        Posterior probability of each interval duration, handling groups.
+
+        Group-aware wrapper around :meth:`estim_duration_probs`, with the same
+        parameter layout as :meth:`event_probabilities`.
+
+        Parameters
+        ----------
+        pattern_data : PatternData
+            Preprocessed data cross-correlated with the pattern of the model.
+        channel_pars : np.ndarray
+            3D ndarray (n_groups * n_events * n_channels) of channel contributions.
+        time_pars : np.ndarray
+            3D ndarray (n_groups * n_stages * 2) of time distribution parameters.
+        groups : np.ndarray, optional
+            Group of each trial. Default is None, in which case groups are derived
+            from the durations.
+
+        Returns
+        -------
+        xr.DataArray
+            Probabilities with dimensions ("trial", "duration", "stage"), in the trial
+            order of ``pattern_data``. Stages that do not exist in a trial's group
+            (negative entries in ``time_map``) are NaN.
+        """
+        if groups is None:
+            _, groups, _ = self.group_constructor(pattern_data.durations)
+        max_dur = int(np.max(pattern_data.durations.values))
+        out = xr.DataArray(
+            np.full((len(pattern_data.durations), max_dur, self.n_events + 1), np.nan),
+            dims=("trial", "duration", "stage"),
+            coords=pattern_data.durations.coords,
+        )
+        out = out.assign_coords(
+            group=("trial", groups),
+            duration=("duration", np.arange(max_dur)),
+            stage=("stage", np.arange(self.n_events + 1)),
+        )
+        for cur_group in np.unique(groups):
+            stages = self.time_map[cur_group, :] >= 0
+            dprobs = self.estim_duration_probs(
+                pattern_data,
+                channel_pars[cur_group, self.channel_map[cur_group, :] >= 0, :],
+                time_pars[cur_group, stages, :],
+                subset_epochs=np.where(groups == cur_group)[0],
+                max_duration=max_dur,
+            )
+            out.data[np.ix_(groups == cur_group, np.arange(max_dur), np.where(stages)[0])] = (
+                dprobs
+            )
+        out.attrs["sfreq"] = pattern_data.sfreq
+        return out
+
+    def _forward_backward(
+        self,
+        pattern_data: PatternData,
+        channel_pars: np.ndarray,
+        time_pars: np.ndarray,
+        subset_epochs: list[int] | None = None,
+        max_duration: int | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Forward and backward variables of the HMP model.
+
+        Shared by :meth:`estim_probs` and :meth:`estim_duration_probs`.
+
+        Returns
+        -------
+        forward : np.ndarray
+            (max_duration, n_trials, n_events), alpha_e(t): probability of the data up to
+            t and of event e at t (includes the gain of event e at t).
+        backward : np.ndarray
+            (max_duration, n_trials, n_events), beta_e(t): probability of the data after t
+            given event e at t (excludes the gain of event e at t). Only the first
+            ``durations[trial]`` samples of each trial are meaningful.
+        probs : np.ndarray
+            (max_duration, n_trials, n_events), gains of each event at each sample.
+        pmf : np.ndarray
+            (max_duration, n_stages), probability mass function of each stage duration.
+        durations : np.ndarray
+            Duration in samples of each selected trial.
+        """
         n_events = channel_pars.shape[0]
         n_stages = n_events + 1
-        if subset_epochs is not None:
-            if len(subset_epochs) == len(pattern_data.starts):  # boolean indices
+        if subset_epochs is None:
+            subset_epochs = np.arange(len(pattern_data.starts))
+        elif len(subset_epochs) == len(pattern_data.starts):  # possibly boolean indices
+            subset_epochs = np.asarray(subset_epochs)
+            if subset_epochs.dtype == bool:
                 subset_epochs = np.where(subset_epochs)[0]
         n_trials = len(subset_epochs)
         starts = pattern_data.starts[subset_epochs]
@@ -768,16 +947,7 @@ class EventModel(BaseModel):
         backward = backward[:, :, ::-1]  # undoes stage inversion
         for trial in np.arange(n_trials):  # Undoes sample inversion
             backward[: durations[trial], trial, :] = backward[: durations[trial], trial, :][::-1]
-        eventprobs = forward * backward
-        eventprobs = np.clip(eventprobs, 0, None)  # floating point precision error
-        trial_likelihood = np.log(
-            eventprobs[:, :, 0].sum(axis=0)
-        )  # sum over max_samples to avoid 0s in log
-        likelihood = np.sum(trial_likelihood)
-        eventprobs = eventprobs / eventprobs.sum(axis=0)
-        eventprobs[np.isnan(eventprobs)] = 0
-        eventprobs = eventprobs.transpose((1, 0, 2))
-        return [likelihood, eventprobs, trial_likelihood]
+        return forward, backward, probs, pmf, durations
 
     def chunked_estim_probs(
         self,
