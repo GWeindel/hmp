@@ -219,8 +219,7 @@ class CumulativeMethod(BaseModel):
                     )
                 # Search for additional event
                 n_events += 1
-            else:
-                j += 1
+            j += 1
             pbar.update(int(np.rint(j-prev_j)))
 
         pbar.update(1)
@@ -299,13 +298,13 @@ class CumulativeMethod(BaseModel):
         # Manipulate in sample space
         times = self.distribution.scale_to_mean(time_pars_props[:-1,1])
         # Include locations for inner durations
-        times += location_vec[:-1]
+        times[:-1] += location_vec[:-2]
         # Times retained previously
         if not self.sequential:
             j = np.max([
                         np.sum(
                             times[:-1] # j is the sum of all times excluding last stage
-                        ) / step + 1, # advance of a step compared to max prev ev.
+                        ) / step,
                     j #previous rejection
                 ])
 
@@ -317,7 +316,7 @@ class CumulativeMethod(BaseModel):
         event_j = np.min([event_j, n_events-1])  # do not insert even after last stage
 
         # Time proposition
-        scale_j_prop = np.max([j * step - np.sum(times[:event_j]), step])
+        scale_j_prop = time_j - np.sum(times[:event_j]) + step + location_vec[event_j]
         times = np.insert(times, event_j, scale_j_prop)
 
         # subtract inserted proposition from next event
