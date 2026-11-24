@@ -1,0 +1,7 @@
+amplitude,version,fit_s,n_iterations,identical_to_devel
+1e-08,devel,1.1452591000015673,33,True
+1e-08,branch,1.1667532999999821,33,True
+2e-08,devel,2.6345813000007183,76,True
+2e-08,branch,2.666138000000501,76,True
+5e-08,devel,0.40277210000022023,11,True
+5e-08,branch,0.40498049999951036,11,True
